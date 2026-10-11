@@ -11,7 +11,7 @@ everything the app sends over the network, and to whom.
 | Your resume | `profile/resume.md`, gitignored |
 | Telegram bot token and chat id | `profile/secrets.json` (gitignored), or the `TELEGRAM_BOT_TOKEN` / `TELEGRAM_CHAT_ID` environment variables |
 | Run history, jobs found, scan results | `data/`, gitignored |
-| Statuses, notes, saved and applied jobs | your browser's storage (export them in Settings for a backup) |
+| Statuses, notes, saved and applied jobs, Radar views and hidden companies | `profile/tracking.json` (gitignored), with a copy in your browser's storage (export them in Settings for a backup) |
 
 Scoring and filtering happen on your computer. Nothing above is uploaded by the app.
 

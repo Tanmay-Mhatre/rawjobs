@@ -2,11 +2,14 @@ import { spawn, type ChildProcess } from "node:child_process";
 import { readFileSync, statSync, writeFileSync } from "node:fs";
 import type { IncomingMessage, ServerResponse } from "node:http";
 import { resolve } from "node:path";
+import { readTracking, saveTracking } from "../../core/src/tracking";
 import { refuse } from "./guard";
 
 export type ApiOptions = {
-  /** Where rawjobs.config.local.yaml and profile/ live; the CLI runs here. */
+  /** Where RawJobs' code is (package.json, node_modules/tsx, the CLI). */
   repoRoot: string;
+  /** Your RawJobs folder: rawjobs.config.local.yaml and profile/. The CLI runs here. Default: repoRoot. */
+  home?: string;
   /** The run output folder (jobs.json, meta.json, catalog/…). */
   dataDir: string;
   /** How to start the CLI: a program and the arguments before the command. Default: node + tsx + the CLI source. */
@@ -19,6 +22,7 @@ type Line = string;
 /**
  * The dashboard's API: everything it needs to set up and run RawJobs on this computer.
  *   GET  /api/health          { ok, version, scanning }: is the server up, and which version
+ *   GET/PUT /api/tracking     your statuses, notes and Radar preferences (profile/tracking.json)
  *   GET  /api/setup           setup status (+ current config)
  *   POST /api/setup/config    validate and save rawjobs.config.local.yaml
  *   POST /api/setup/reset     start setup over: move the config to rawjobs.config.local.backup.yaml
@@ -42,6 +46,7 @@ type Line = string;
  */
 export function createApi(opts: ApiOptions) {
   const { repoRoot, dataDir } = opts;
+  const home = opts.home ?? repoRoot;
   const cliCmd = opts.cli ?? {
     command: process.execPath,
     args: [resolve(repoRoot, "node_modules/tsx/dist/cli.mjs"), resolve(repoRoot, "packages/cli/src/index.ts")],
@@ -50,7 +55,7 @@ export function createApi(opts: ApiOptions) {
 
   /** Run `rawjobs <args>` from the repo root (no shell, so no quoting issues). */
   function cli(args: string[], stdin?: string): ChildProcess {
-    const child = spawn(cliCmd.command, [...cliCmd.args, ...args], { cwd: repoRoot, windowsHide: true });
+    const child = spawn(cliCmd.command, [...cliCmd.args, ...args], { cwd: home, windowsHide: true });
     if (stdin !== undefined) child.stdin!.end(stdin);
     else child.stdin!.end();
     return child;
@@ -94,7 +99,7 @@ export function createApi(opts: ApiOptions) {
         return 0;
       }
     };
-    const stamp = [resolve(dataDir, "catalog/index.json"), resolve(dataDir, "catalog/directory.json"), resolve(dataDir, "catalog/additions.json"), resolve(repoRoot, "profile/resume.md")].map(mtime).join(":");
+    const stamp = [resolve(dataDir, "catalog/index.json"), resolve(dataDir, "catalog/directory.json"), resolve(dataDir, "catalog/additions.json"), resolve(home, "profile/resume.md")].map(mtime).join(":");
     const key = `${stamp}|${body}`;
     let hit = suggestCache.get(key);
     if (!hit) {
@@ -187,6 +192,17 @@ export function createApi(opts: ApiOptions) {
 
   async function route(url: string, req: IncomingMessage, res: ServerResponse): Promise<void> {
     if (url === "/api/health" && req.method === "GET") return json(res, { ok: true, version, scanning: busy() });
+    if (url === "/api/tracking" && req.method === "GET") return json(res, { tracking: readTracking(home) });
+    if (url === "/api/tracking" && req.method === "PUT") {
+      let body: unknown;
+      try {
+        body = JSON.parse(await readBody(req, 20_000_000));
+      } catch (err) {
+        return json(res, { ok: false, errors: (err as Error).message }, 400);
+      }
+      const r = saveTracking(body, home);
+      return r.ok ? json(res, { ok: true, updatedAt: r.tracking.updatedAt }) : json(res, { ok: false, errors: r.error }, 400);
+    }
     if (url === "/api/setup" && req.method === "GET") return await respondJson(res, ["setup", "status", "--data", dataDir]);
     if (url === "/api/setup/config" && req.method === "POST") return await respondJson(res, ["setup", "save"], await readBody(req));
     if (url === "/api/setup/reset" && req.method === "POST") {
@@ -273,11 +289,17 @@ export function createApi(opts: ApiOptions) {
   return { handle, startBackground, version, scanning: busy };
 }
 
-function readBody(req: IncomingMessage): Promise<string> {
+function readBody(req: IncomingMessage, maxBytes = 5_000_000): Promise<string> {
   return new Promise((done, fail) => {
     let body = "";
     req.setEncoding("utf8");
-    req.on("data", (d) => (body += d));
+    req.on("data", (d: string) => {
+      body += d;
+      if (body.length > maxBytes) {
+        fail(new Error("Request too large."));
+        req.destroy();
+      }
+    });
     req.on("end", () => done(body));
     req.on("error", fail);
   });

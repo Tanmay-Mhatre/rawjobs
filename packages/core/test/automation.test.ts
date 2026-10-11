@@ -156,6 +156,12 @@ describe("schedule", () => {
     expect(script).toContain(`-WorkingDirectory '${repo.replace(/'/g, "''")}'`);
     expect(JSON.parse(readFileSync(join(dataDir, "schedule.json"), "utf8"))).toEqual({ times: ["08:00", "20:00"], scope: "all" });
 
+    // An installed copy keeps your config elsewhere: the scan runs there, the code stays where it is.
+    const mine = join(tmpdir(), "My RawJobs");
+    installSchedule({ repoRoot: repo, workDir: mine, dataDir, exec, platform: "win32" }, { times: ["08:00"], scope: "mine" });
+    expect(scripts.at(-2)).toContain(`-WorkingDirectory '${mine}'`);
+    expect(scripts.at(-2)).toContain(join(repo, "packages/cli/src/index.ts").replace(/'/g, "''"));
+
     removeSchedule({ repoRoot: repo, dataDir, exec, platform: "win32" });
     expect(scripts.slice(-2)).toEqual([expect.stringContaining("-TaskName 'RawJobs Scan'"), expect.stringContaining("-TaskName 'JobHunter Scan'")]);
     expect(existsSync(join(dataDir, "schedule.json"))).toBe(false);

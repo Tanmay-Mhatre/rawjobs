@@ -1,6 +1,6 @@
 # Local install and updates: one line to install, updates by themselves (plan v1)
 
-Status: **planned on 2026-10-11; step 1 built the same day**. Written from the decisions made with the user on 2026-10-10/11, after a review of the code, of how competitors ship, and of signing rules on Windows and macOS.
+Status: **planned on 2026-10-11; steps 1 and 2 built the same day**. Written from the decisions made with the user on 2026-10-10/11, after a review of the code, of how competitors ship, and of signing rules on Windows and macOS.
 
 ## Goal
 Anyone on Windows or macOS installs RawJobs by pasting one line, with no Node, pnpm, git or Claude needed. The dashboard is always there while the computer is on, without a terminal. New versions reach every user by themselves, safely. Nothing is hosted and nothing costs money.
@@ -40,14 +40,16 @@ RAWJOBS_HOME/
     current.txt              "0.4.0" — which version runs (a file, not a symlink: works on Windows)
     previous.txt             the version to roll back to
     versions/0.3.2/  0.4.0/  at most two kept
-  data/                      everything the user owns: config, profile/, jobs, tracking.json, secrets
+  rawjobs.config.local.yaml  your profile
+  profile/                   resume.md, secrets.json, tracking.json (statuses, notes, Radar preferences)
+  data/                      scan output: jobs, history, the company directory
     backups/                 a copy before every migration
   logs/                      server.log, update.log (rotated)
   state.json                 port, token, update settings, last check
 ```
 
 - The OS task and the shortcut both run `bin/rawjobs`, which reads `current.txt`. **An update never re-registers anything with the OS.**
-- The app reads and writes only `data/`, `logs/` and `state.json`; `app/` and `runtime/` are replaced, never edited.
+- The app reads and writes only `rawjobs.config.local.yaml`, `profile/`, `data/`, `logs/` and `state.json`; `app/` and `runtime/` are replaced, never edited. Updates and uninstall treat all of the first three as the user's data.
 
 ## 3. Install
 **macOS**
@@ -108,7 +110,7 @@ The app reads `https://github.com/Tanmay-Mhatre/rawjobs/releases/latest/download
 1. **Check** at server start and every 24 h (Settings → Updates: Automatic (default: patch and minor install themselves, major asks), Ask me, Off; channel Stable or Beta).
 2. **Download** the bundle into `versions/0.4.0.partial`. Verify the SHA-256 and the signature against the public key built into the installed version. If either fails, drop the download and log it. If the Node version changed, download and verify Node too.
 3. **Wait** until no scan is running (the scan lock already exists) and no setup is half done.
-4. **Back up** `data/` (config, profile, tracking, history; not caches) to `data/backups/pre-0.4.0/` when the new version has migrations. Keep the last 3.
+4. **Back up** your data (the config, `profile/`, and `data/` without caches) to `backups/pre-0.4.0/` when the new version has migrations. Keep the last 3.
 5. **Switch**: `previous.txt` = old version, `current.txt` = new version, then the server exits and the OS starts it again on the new version.
 6. **Health check**: the new version must answer `/api/health` within 60 s. If it doesn't, or it crashes 3 times in 5 minutes, the launcher switches back to `previous.txt`, restores the backup if migrations ran, and the dashboard says "Update to 0.4.0 failed, still on 0.3.2", with a link to `logs/update.log`.
 7. **Tell the user**: a quiet "Updated to 0.4.0 — what's new" note; with Ask me, an "Update available" banner with an **Update now** button.
@@ -169,7 +171,7 @@ Adoption can be read from the release assets' download counts on GitHub. There i
 | Step | What | Effort (one person) |
 |---|---|---|
 | 1 | **Production server** `packages/server`: the 16 routes on `node:http`, the built dashboard and `data/` served from it, scans owned by the server (closing or reloading the tab never stops one; `GET /api/run` follows it again), Host + Origin check, `/api/health`, `pnpm start`. The Vite dev server reuses it. **Built 2026-10-11.** Calling the core in-process instead of starting the CLI per request moves to step 3, where tsx goes away. | 2–3 days |
-| 2 | **Data folder and tracking on disk**: `RAWJOBS_HOME` for every path; statuses and notes to `data/tracking.json` with a one-time import from `localStorage`; repo checkouts keep working as today | 2–3 days |
+| 2 | **Data folder and tracking on disk**: `RAWJOBS_HOME` (core `rawjobsHome()`, default: the folder RawJobs runs in, so a checkout works as before) for the config, `profile/` and `data/`; the server and scheduled scans run the CLI there. Statuses, notes, saved views, hidden companies and rules saved in `profile/tracking.json` (`GET/PUT /api/tracking`), with the browser copy kept for an instant first paint; the first page opened with this version uploads what its browser had. **Built 2026-10-11.** | 2–3 days |
 | 3 | **Bundle and launcher**: esbuild for the server and CLI, `bin/rawjobs`, `schedule.ts` points at the launcher | 2 days |
 | 4 | **Install scripts and the release workflow**: `install.sh`, `install.ps1`, uninstall, `latest.json` signing, install test on CI | 3–4 days |
 | 5 | **Updater**: check, verify, switch, health check, rollback, migrations framework, Settings → Updates, upgrade and rollback tests on CI | 3–4 days |

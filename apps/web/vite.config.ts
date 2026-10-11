@@ -4,11 +4,14 @@ import { fileURLToPath } from "node:url";
 import tailwindcss from "@tailwindcss/vite";
 import react from "@vitejs/plugin-react";
 import { defineConfig, type Plugin } from "vite";
+import { defaultDataDir } from "../../packages/core/src/paths";
 import { createApi } from "../../packages/server/src/api";
 
 const repoRoot = fileURLToPath(new URL("../..", import.meta.url));
+/** Your RawJobs folder (RAWJOBS_HOME), else this checkout, as before. */
+const home = process.env.RAWJOBS_HOME ? resolve(process.env.RAWJOBS_HOME) : repoRoot;
 /** The run output folder is served as the site root: /jobs.json, /meta.json. */
-const dataDir = resolve(repoRoot, process.env.RAWJOBS_DATA ?? process.env.JOBHUNTER_DATA ?? "data");
+const dataDir = defaultDataDir(home);
 // Vite only serves a public dir that exists at startup; the first scan creates the files later.
 mkdirSync(dataDir, { recursive: true });
 
@@ -21,7 +24,7 @@ function localApi(): Plugin {
     name: "rawjobs-local-api",
     apply: "serve",
     configureServer(server) {
-      const api = createApi({ repoRoot, dataDir });
+      const api = createApi({ repoRoot, home, dataDir });
       api.startBackground();
       server.middlewares.use((req, res, next) => {
         void api.handle(req, res).then((handled) => {

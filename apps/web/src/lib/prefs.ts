@@ -2,11 +2,12 @@ import { useCallback, useEffect, useState } from "react";
 import type { Filters, Sort } from "./filters";
 import { ruleKey, type HideRule } from "./notForMe";
 import { load, save } from "./storage";
+import { useSavedOnDisk } from "./tracking";
 
 /** A named filter + sort combination the user saved on the Radar. */
 export type SavedView = { id: string; name: string; filters: Filters; sort: Sort };
 
-/** Radar preferences that live in this browser and travel with the tracking export. */
+/** Radar preferences, saved with your tracking (on this computer and in this browser) and in its export. */
 export type Prefs = {
   views: SavedView[];
   /** Company names whose jobs are hidden from the Radar. */
@@ -33,6 +34,7 @@ export const removeRule = (rules: HideRule[], rule: HideRule) => rules.filter((r
 export function usePrefs() {
   const [prefs, setPrefs] = useState<Prefs>(() => withDefaults(load<Partial<Prefs>>(KEY, {})));
   useEffect(() => save(KEY, prefs), [prefs]);
+  useSavedOnDisk<Prefs>("prefs", prefs, (p) => setPrefs(withDefaults(p)));
 
   const saveView = useCallback((name: string, filters: Filters, sort: Sort) => {
     const view: SavedView = { id: `v${Date.now().toString(36)}`, name: name.trim(), filters, sort };

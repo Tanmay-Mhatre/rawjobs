@@ -1,5 +1,7 @@
 export * from "./schema";
 export * from "./config";
+export * from "./paths";
+export * from "./tracking";
 export * from "./http";
 export * from "./http-cache";
 export * from "./job-feed";

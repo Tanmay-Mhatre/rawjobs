@@ -1,4 +1,4 @@
-import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, realpathSync, writeFileSync } from "node:fs";
 import { createServer, request, type IncomingMessage, type Server } from "node:http";
 import type { AddressInfo } from "node:net";
 import { tmpdir } from "node:os";
@@ -49,7 +49,7 @@ describe("findFile", () => {
   });
 });
 
-describe("the scan", () => {
+describe("the API", () => {
   let server: Server | undefined;
   afterEach(() => server?.close());
 
@@ -62,7 +62,7 @@ describe("the scan", () => {
     writeFileSync(
       fake,
       `const args = process.argv.slice(2);
-if (args[0] !== "scan") { console.log("{}"); process.exit(0); }
+if (args[0] !== "scan") { console.log(JSON.stringify({ cwd: process.cwd() })); process.exit(0); }
 const wait = (ms) => new Promise((r) => setTimeout(r, ms));
 console.log(JSON.stringify({ type: "start", companies: ["A", "B"], total: 2 }));
 await wait(150);
@@ -70,11 +70,13 @@ console.log(JSON.stringify({ type: "progress", done: 1 }));
 await wait(150);
 console.log(JSON.stringify({ type: "done", scope: args[args.indexOf("--scope") + 1] }));`,
     );
-    const api = createApi({ repoRoot: dir, dataDir: join(dir, "data"), cli: { command: process.execPath, args: [fake] } });
+    const home = join(dir, "home");
+    mkdirSync(home);
+    const api = createApi({ repoRoot: dir, home, dataDir: join(dir, "data"), cli: { command: process.execPath, args: [fake] } });
     server = createServer((rq, rs) => void api.handle(rq, rs));
     await new Promise<void>((r) => server!.listen(0, "127.0.0.1", r));
     const port = (server!.address() as AddressInfo).port;
-    return { api, port };
+    return { api, port, home };
   }
 
   function call(port: number, method: string, path: string, body?: string, onFirstChunk?: (abort: () => void) => void) {
@@ -104,6 +106,25 @@ console.log(JSON.stringify({ type: "done", scope: args[args.indexOf("--scope") +
     const { port } = await start();
     const r = await call(port, "GET", "/api/health");
     expect(JSON.parse(r.text)).toEqual({ ok: true, version: "9.9.9", scanning: false });
+  });
+
+  it("runs the CLI in your RawJobs folder", async () => {
+    const { port, home } = await start();
+    expect(realpathSync(JSON.parse((await call(port, "GET", "/api/setup")).text).cwd)).toBe(realpathSync(home));
+  });
+
+  it("saves your tracking in profile/tracking.json and reads it back", async () => {
+    const { port, home } = await start();
+    expect(JSON.parse((await call(port, "GET", "/api/tracking")).text)).toEqual({ tracking: null });
+    const put = await call(port, "PUT", "/api/tracking", JSON.stringify({ state: { j1: { status: "applied" } } }));
+    expect(JSON.parse(put.text).ok).toBe(true);
+    await call(port, "PUT", "/api/tracking", JSON.stringify({ prefs: { views: [] } }));
+    const got = JSON.parse((await call(port, "GET", "/api/tracking")).text).tracking;
+    expect(got.state).toEqual({ j1: { status: "applied" } });
+    expect(got.prefs).toEqual({ views: [] });
+    expect(existsSync(join(home, "profile/tracking.json"))).toBe(true);
+    expect((await call(port, "PUT", "/api/tracking", "{ nope")).status).toBe(400);
+    expect((await call(port, "PUT", "/api/tracking", JSON.stringify({ state: [] }))).status).toBe(400);
   });
 
   it("refuses a POST from another site", async () => {

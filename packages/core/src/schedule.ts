@@ -73,8 +73,10 @@ export function recordScheduledRun(dataDir: string, run: ScheduledRun): void {
 // ---------- the command the scheduler runs ----------
 
 export type ScheduleContext = {
-  /** The repo folder (the scan runs from here, so it finds your config and resume). */
+  /** Where RawJobs' code is (node_modules/tsx and the CLI). */
   repoRoot: string;
+  /** Your RawJobs folder: the scan runs from here, so it finds your config and resume. Default: repoRoot. */
+  workDir?: string;
   dataDir: string;
   /** Run a program; tests pass a fake. */
   exec?: (cmd: string, args: string[]) => { status: number | null; stdout: string; stderr: string };
@@ -86,6 +88,8 @@ const defaultExec = (cmd: string, args: string[]) => {
   const r = spawnSync(cmd, args, { encoding: "utf8", windowsHide: true });
   return { status: r.status, stdout: r.stdout ?? "", stderr: r.stderr ?? (r.error ? String(r.error) : "") };
 };
+
+const workDir = (ctx: ScheduleContext) => resolve(ctx.workDir ?? ctx.repoRoot);
 
 /** node + tsx + the CLI, with absolute paths (the scheduler starts with no PATH or working folder of ours). */
 export function scanCommand(ctx: ScheduleContext, scope: ScanScope): string[] {
@@ -122,7 +126,7 @@ function installWindows(ctx: ScheduleContext, s: ScheduleSettings, n: SchedulerN
   const argument = ["--headless", exe!, ...args].map(winArg).join(" ");
   const triggers = s.times.map((t) => `(New-ScheduledTaskTrigger -Daily -At ${psq(t)})`).join(",");
   const script = [
-    `$a = New-ScheduledTaskAction -Execute 'conhost.exe' -Argument ${psq(argument)} -WorkingDirectory ${psq(resolve(ctx.repoRoot))}`,
+    `$a = New-ScheduledTaskAction -Execute 'conhost.exe' -Argument ${psq(argument)} -WorkingDirectory ${psq(workDir(ctx))}`,
     `$t = @(${triggers})`,
     // StartWhenAvailable: a scan missed while the PC was off runs once it's back on. WakeToRun: wake from sleep.
     `$s = New-ScheduledTaskSettingsSet -StartWhenAvailable -WakeToRun -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -MultipleInstances IgnoreNew -ExecutionTimeLimit (New-TimeSpan -Hours ${timeLimitHours(s.scope)})`,
@@ -174,7 +178,7 @@ function installMac(ctx: ScheduleContext, s: ScheduleSettings, n: SchedulerNames
   <array>
 ${args}
   </array>
-  <key>WorkingDirectory</key><string>${xml(resolve(ctx.repoRoot))}</string>
+  <key>WorkingDirectory</key><string>${xml(workDir(ctx))}</string>
   <key>StartCalendarInterval</key>
   <array>
 ${times}
@@ -214,7 +218,7 @@ function installLinux(ctx: ScheduleContext, s: ScheduleSettings, n: SchedulerNam
     .join(" ");
   writeFileSync(
     join(dir, `${n.unit}.service`),
-    `[Unit]\nDescription=RawJobs scan\n\n[Service]\nType=oneshot\nWorkingDirectory=${resolve(ctx.repoRoot)}\nExecStart=${cmd}\nTimeoutStartSec=${timeLimitHours(s.scope)}h\n`,
+    `[Unit]\nDescription=RawJobs scan\n\n[Service]\nType=oneshot\nWorkingDirectory=${workDir(ctx)}\nExecStart=${cmd}\nTimeoutStartSec=${timeLimitHours(s.scope)}h\n`,
   );
   // Persistent: a run missed while the computer was off happens at the next boot.
   writeFileSync(join(dir, `${n.unit}.timer`), `[Unit]\nDescription=RawJobs scan\n\n[Timer]\n${s.times.map((t) => `OnCalendar=*-*-* ${t}:00`).join("\n")}\nPersistent=true\n\n[Install]\nWantedBy=timers.target\n`);
