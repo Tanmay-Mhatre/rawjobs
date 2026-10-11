@@ -96,7 +96,10 @@ export type CrawlRun = {
   http: HttpClient;
   out: string;
   index?: string;
-  /** About two years of crawls: boards seen once in that window may still be live. */
+  /**
+   * How many of the newest crawls to read (default 24, about two years). The workflows read the 12
+   * newest first (`--crawls 12`); go further back only if older crawls still turn up live boards.
+   */
   crawlsToUse?: number;
   perRun?: number;
   maxMs?: number;
