@@ -64,4 +64,6 @@ jobs:
         run: |
           pre=""
           case "$GITHUB_REF_NAME" in *-*) pre="--prerelease" ;; esac
-          gh release create "$GITHUB_REF_NAME" release/* --repo "$GITHUB_REPOSITORY" --title "RawJobs ${GITHUB_REF_NAME#v}" --generate-notes $pre
+          # The tag's message (also in latest.json, for the dashboard), then GitHub's list of changes.
+          jq -r .notes release/latest.json > "$RUNNER_TEMP/notes.md"
+          gh release create "$GITHUB_REF_NAME" release/* --repo "$GITHUB_REPOSITORY" --title "RawJobs ${GITHUB_REF_NAME#v}" --notes-file "$RUNNER_TEMP/notes.md" --generate-notes $pre
