@@ -88,8 +88,8 @@ for (const c of cryptoJobs.companies) {
   const found = detectCompany(c.jobs_url);
   if (found) tag(companyKey(found), industriesForLabel(c.category), "crypto-jobs list");
 }
-const curated = readJson<{ companies: { ats?: string; slug?: string; segment?: string }[] }>(join(here, "..", "curate", "out", "curated.json"), { companies: [] });
-for (const c of curated.companies) if (c.ats && c.slug) tag(companyKey({ ats: c.ats, slug: c.slug }), industriesForLabel(c.segment), "curated list");
+const curated = readJson<{ companies: { key: string; segment?: string }[] }>(join(here, "seeds", "curated-boards.json"), { companies: [] });
+for (const c of curated.companies) tag(c.key, industriesForLabel(c.segment), "curated list");
 // 2. The seed list, through the boards found for each seed.
 const seeds = readJson<{ companies: Seed[] }>(join(here, "seeds", "industries.json"), { companies: [] }).companies;
 const resolved = readJson<{ companies: Resolved[] }>(join(here, "out", "resolved.json"), { companies: [] }).companies;

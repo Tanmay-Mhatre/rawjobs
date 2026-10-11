@@ -34,17 +34,15 @@ for (const line of checkFiles.flatMap((f) => readFileSync(join(here, "out", f), 
   if (!prev || c.status !== "error" || prev.status === "error") checks.set(c.key, c);
 }
 
-// The hand-reviewed list is the curated tier.
+// The hand-reviewed boards (seeds/curated-boards.json) are the curated tier.
 const curated = new Set<string>();
 /** Hand-picked display names from the curated list (e.g. "Crypto.com", "talabat"). */
 const curatedNames = new Map<string, string>();
-const curatedFile = join(here, "..", "curate", "out", "curated.json");
+const curatedFile = join(here, "seeds", "curated-boards.json");
 if (existsSync(curatedFile)) {
-  for (const c of (JSON.parse(readFileSync(curatedFile, "utf8")) as { companies: { name: string; ats?: string; slug?: string; status: string }[] }).companies) {
-    if (c.status !== "live" || !c.ats || !c.slug) continue;
-    const key = `${c.ats}:${c.slug}`.toLowerCase();
-    curated.add(key);
-    curatedNames.set(key, c.name);
+  for (const c of (JSON.parse(readFileSync(curatedFile, "utf8")) as { companies: { key: string; name: string }[] }).companies) {
+    curated.add(c.key);
+    curatedNames.set(c.key, c.name);
   }
 }
 

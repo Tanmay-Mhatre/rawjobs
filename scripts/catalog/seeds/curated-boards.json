@@ -1,0 +1,1355 @@
+{
+ "_about": "Hand-reviewed boards: the curated tier. Each was found and checked live from scripts/curate/candidates.json and the crypto-jobs-fyi list (scripts/curate/sources). Only the board, a fallback display name and the segment (for industry tags); nothing about anyone's own search.",
+ "companies": [
+  {
+   "key": "ashby:0x",
+   "name": "0x",
+   "segment": "crypto"
+  },
+  {
+   "key": "ashby:9fin",
+   "name": "9fin",
+   "segment": "fintech"
+  },
+  {
+   "key": "ashby:airgarage",
+   "name": "Airgarage",
+   "segment": "ai"
+  },
+  {
+   "key": "ashby:airwallex",
+   "name": "Airwallex",
+   "segment": "payments"
+  },
+  {
+   "key": "ashby:alchemy",
+   "name": "Alchemy",
+   "segment": "crypto"
+  },
+  {
+   "key": "ashby:ambient.ai",
+   "name": "Ambient.Ai",
+   "segment": "ai"
+  },
+  {
+   "key": "ashby:ami",
+   "name": "Amilabs",
+   "segment": "ai"
+  },
+  {
+   "key": "ashby:anrok",
+   "name": "Anrok.Com",
+   "segment": "ai"
+  },
+  {
+   "key": "ashby:applied",
+   "name": "Applied_intuition",
+   "segment": "ai"
+  },
+  {
+   "key": "ashby:ashby",
+   "name": "Ashby",
+   "segment": "tech"
+  },
+  {
+   "key": "ashby:atticus",
+   "name": "Atticus.Com",
+   "segment": "fintech"
+  },
+  {
+   "key": "ashby:augustus",
+   "name": "Augustus",
+   "segment": "fintech"
+  },
+  {
+   "key": "ashby:aven",
+   "name": "Aven",
+   "segment": "fintech"
+  },
+  {
+   "key": "ashby:baseten",
+   "name": "Baseten",
+   "segment": "ai"
+  },
+  {
+   "key": "ashby:basis-ai",
+   "name": "Basis.Ai",
+   "segment": "ai"
+  },
+  {
+   "key": "ashby:bastion",
+   "name": "Bastion",
+   "segment": "crypto"
+  },
+  {
+   "key": "ashby:black-forest-labs",
+   "name": "Blackforestlabs",
+   "segment": "ai"
+  },
+  {
+   "key": "ashby:blitzy",
+   "name": "Blitzy",
+   "segment": "ai"
+  },
+  {
+   "key": "ashby:block-labs",
+   "name": "Block-Labs",
+   "segment": "crypto"
+  },
+  {
+   "key": "ashby:blockdaemon",
+   "name": "Blockdaemon",
+   "segment": "crypto"
+  },
+  {
+   "key": "ashby:blockstream",
+   "name": "Blockstream",
+   "segment": "crypto"
+  },
+  {
+   "key": "ashby:blockworks",
+   "name": "Blockworks",
+   "segment": "crypto"
+  },
+  {
+   "key": "ashby:browserbase",
+   "name": "Browserbase",
+   "segment": "ai"
+  },
+  {
+   "key": "ashby:cerebras",
+   "name": "Cerebras.Ai",
+   "segment": "ai"
+  },
+  {
+   "key": "ashby:chainalysis-careers",
+   "name": "Chainalysis",
+   "segment": "crypto infrastructure"
+  },
+  {
+   "key": "ashby:character",
+   "name": "Characterai",
+   "segment": "ai"
+  },
+  {
+   "key": "ashby:cleo-2",
+   "name": "Cleo",
+   "segment": "fintech"
+  },
+  {
+   "key": "ashby:coderabbit",
+   "name": "Coderabbit",
+   "segment": "ai"
+  },
+  {
+   "key": "ashby:cognition",
+   "name": "Cognition",
+   "segment": "ai"
+  },
+  {
+   "key": "ashby:cohere",
+   "name": "Cohere",
+   "segment": "ai"
+  },
+  {
+   "key": "ashby:coinflow",
+   "name": "Coinflow.Cash",
+   "segment": "crypto"
+  },
+  {
+   "key": "ashby:conduit",
+   "name": "Conduit",
+   "segment": "crypto"
+  },
+  {
+   "key": "ashby:cradlebio",
+   "name": "Cradle.Bio",
+   "segment": "ai"
+  },
+  {
+   "key": "ashby:crusoe",
+   "name": "Crusoe",
+   "segment": "ai"
+  },
+  {
+   "key": "ashby:cryptio",
+   "name": "Cryptio",
+   "segment": "crypto"
+  },
+  {
+   "key": "ashby:dourolabs.xyz",
+   "name": "Dourolabs",
+   "segment": "crypto"
+  },
+  {
+   "key": "ashby:dune",
+   "name": "Dune",
+   "segment": "crypto"
+  },
+  {
+   "key": "ashby:dust",
+   "name": "Dust",
+   "segment": "ai"
+  },
+  {
+   "key": "ashby:edisyl",
+   "name": "Edisyl.Com",
+   "segment": "ai"
+  },
+  {
+   "key": "ashby:eigen-labs",
+   "name": "Eigenlabs",
+   "segment": "crypto"
+  },
+  {
+   "key": "ashby:elevenlabs",
+   "name": "Elevenlabs",
+   "segment": "ai"
+  },
+  {
+   "key": "ashby:eliseai",
+   "name": "Eliseai",
+   "segment": "ai"
+  },
+  {
+   "key": "ashby:ellipsislabs",
+   "name": "Ellipsislabs",
+   "segment": "crypto"
+  },
+  {
+   "key": "ashby:encord",
+   "name": "Encord.Com",
+   "segment": "ai"
+  },
+  {
+   "key": "ashby:ether.fi",
+   "name": "Ether-Fi",
+   "segment": "crypto"
+  },
+  {
+   "key": "ashby:everai",
+   "name": "Everai",
+   "segment": "ai"
+  },
+  {
+   "key": "ashby:exa",
+   "name": "Exa.Ai",
+   "segment": "ai"
+  },
+  {
+   "key": "ashby:fanvue.com",
+   "name": "Fanvue.Com",
+   "segment": "ai"
+  },
+  {
+   "key": "ashby:far.ai",
+   "name": "Far.Ai",
+   "segment": "ai"
+  },
+  {
+   "key": "ashby:firecrawl",
+   "name": "Firecrawl",
+   "segment": "ai"
+  },
+  {
+   "key": "ashby:fireworks",
+   "name": "Fireworks.Ai",
+   "segment": "ai"
+  },
+  {
+   "key": "ashby:flock safety",
+   "name": "Flocksafety.Com",
+   "segment": "ai"
+  },
+  {
+   "key": "ashby:freetrade",
+   "name": "Freetrade",
+   "segment": "brokerage"
+  },
+  {
+   "key": "ashby:fyxer",
+   "name": "Fyxer.Ai",
+   "segment": "ai"
+  },
+  {
+   "key": "ashby:genspark",
+   "name": "Genspark.Ai",
+   "segment": "ai"
+  },
+  {
+   "key": "ashby:gptzero",
+   "name": "GPTZero",
+   "segment": "ai"
+  },
+  {
+   "key": "ashby:granola",
+   "name": "Granola.Ai",
+   "segment": "ai"
+  },
+  {
+   "key": "ashby:harmattan-ai",
+   "name": "Harmattan-Ai",
+   "segment": "ai"
+  },
+  {
+   "key": "ashby:harrison.ai",
+   "name": "Harrison",
+   "segment": "ai"
+  },
+  {
+   "key": "ashby:harvey",
+   "name": "Harvey",
+   "segment": "ai"
+  },
+  {
+   "key": "ashby:interface-ai",
+   "name": "Interface.Ai",
+   "segment": "ai"
+  },
+  {
+   "key": "ashby:inworld-ai",
+   "name": "Inworld-Ai",
+   "segment": "ai"
+  },
+  {
+   "key": "ashby:jua",
+   "name": "Jua.Ai",
+   "segment": "ai"
+  },
+  {
+   "key": "ashby:julius",
+   "name": "Julius.Ai",
+   "segment": "ai"
+  },
+  {
+   "key": "ashby:kalshi",
+   "name": "Kalshi",
+   "segment": "fintech"
+  },
+  {
+   "key": "ashby:keyrock",
+   "name": "Keyrock",
+   "segment": "crypto"
+  },
+  {
+   "key": "ashby:kong",
+   "name": "Kong",
+   "segment": "tech"
+  },
+  {
+   "key": "ashby:kraken.com",
+   "name": "Kraken",
+   "segment": "crypto exchange"
+  },
+  {
+   "key": "ashby:lambda",
+   "name": "Lambda",
+   "segment": "ai"
+  },
+  {
+   "key": "ashby:langchain",
+   "name": "Langchain",
+   "segment": "ai"
+  },
+  {
+   "key": "ashby:leantech",
+   "name": "Lean Technologies",
+   "segment": "open banking"
+  },
+  {
+   "key": "ashby:ledger",
+   "name": "Ledger",
+   "segment": "crypto infrastructure"
+  },
+  {
+   "key": "ashby:legora",
+   "name": "Legora.Com",
+   "segment": "ai"
+  },
+  {
+   "key": "ashby:llamaindex",
+   "name": "Llamaindex",
+   "segment": "ai"
+  },
+  {
+   "key": "ashby:lovable",
+   "name": "Lovable",
+   "segment": "ai"
+  },
+  {
+   "key": "ashby:lumaai",
+   "name": "Lumalabs.Ai",
+   "segment": "ai"
+  },
+  {
+   "key": "ashby:luxor",
+   "name": "Luxor",
+   "segment": "crypto"
+  },
+  {
+   "key": "ashby:magiceden",
+   "name": "Magiceden",
+   "segment": "crypto"
+  },
+  {
+   "key": "ashby:matter-labs",
+   "name": "Matterlabs",
+   "segment": "crypto"
+  },
+  {
+   "key": "ashby:mistral.ai",
+   "name": "Mistral",
+   "segment": "ai"
+  },
+  {
+   "key": "ashby:modal",
+   "name": "Modal.Com",
+   "segment": "ai"
+  },
+  {
+   "key": "ashby:multiverse",
+   "name": "Multiverse",
+   "segment": "ai"
+  },
+  {
+   "key": "ashby:mystenlabs",
+   "name": "Mystenlabs",
+   "segment": "crypto"
+  },
+  {
+   "key": "ashby:n8n",
+   "name": "N8n",
+   "segment": "ai"
+  },
+  {
+   "key": "ashby:nethermind",
+   "name": "Nethermind",
+   "segment": "crypto"
+  },
+  {
+   "key": "ashby:nomic.foundation",
+   "name": "Nomic.Foundation",
+   "segment": "crypto"
+  },
+  {
+   "key": "ashby:nooks",
+   "name": "Nooks.Ai",
+   "segment": "ai"
+  },
+  {
+   "key": "ashby:oneapp",
+   "name": "Onepay.Com",
+   "segment": "fintech"
+  },
+  {
+   "key": "ashby:openai",
+   "name": "OpenAI",
+   "segment": "AI"
+  },
+  {
+   "key": "ashby:openrouter",
+   "name": "Openrouter.Ai",
+   "segment": "ai"
+  },
+  {
+   "key": "ashby:opensea",
+   "name": "OpenSea",
+   "segment": "crypto"
+  },
+  {
+   "key": "ashby:oplabs",
+   "name": "Oplabs",
+   "segment": "crypto"
+  },
+  {
+   "key": "ashby:orca",
+   "name": "Orca",
+   "segment": "crypto"
+  },
+  {
+   "key": "ashby:outtake",
+   "name": "Outtake",
+   "segment": "ai"
+  },
+  {
+   "key": "ashby:pangramlabs",
+   "name": "Pangram.Com",
+   "segment": "ai"
+  },
+  {
+   "key": "ashby:paradigm",
+   "name": "Paradigm.Xyz",
+   "segment": "crypto"
+  },
+  {
+   "key": "ashby:parity",
+   "name": "Parity.Io",
+   "segment": "crypto"
+  },
+  {
+   "key": "ashby:paxoslabs",
+   "name": "Paxoslabs",
+   "segment": "crypto"
+  },
+  {
+   "key": "ashby:perplexity",
+   "name": "Perplexityai",
+   "segment": "ai"
+  },
+  {
+   "key": "ashby:phantom",
+   "name": "Phantom",
+   "segment": "crypto"
+  },
+  {
+   "key": "ashby:polygon-labs",
+   "name": "Polygon",
+   "segment": "crypto"
+  },
+  {
+   "key": "ashby:polymarket",
+   "name": "Polymarket",
+   "segment": "crypto"
+  },
+  {
+   "key": "ashby:poolside",
+   "name": "Poolside.Ai",
+   "segment": "ai"
+  },
+  {
+   "key": "ashby:primeintellect",
+   "name": "PrimeIntellect",
+   "segment": "ai"
+  },
+  {
+   "key": "ashby:quicknode",
+   "name": "Quiknodeinc",
+   "segment": "crypto"
+  },
+  {
+   "key": "ashby:radai",
+   "name": "Radai",
+   "segment": "ai"
+  },
+  {
+   "key": "ashby:rain",
+   "name": "Rain",
+   "segment": "crypto exchange"
+  },
+  {
+   "key": "ashby:recall",
+   "name": "Recall.Ai",
+   "segment": "ai"
+  },
+  {
+   "key": "ashby:reflectionai",
+   "name": "Reflection.Ai",
+   "segment": "ai"
+  },
+  {
+   "key": "ashby:reka",
+   "name": "Reka",
+   "segment": "ai"
+  },
+  {
+   "key": "ashby:replit",
+   "name": "Replit",
+   "segment": "ai"
+  },
+  {
+   "key": "ashby:retell-ai",
+   "name": "Retellai",
+   "segment": "ai"
+  },
+  {
+   "key": "ashby:rillet",
+   "name": "Rillet.Com",
+   "segment": "fintech"
+  },
+  {
+   "key": "ashby:risklabs",
+   "name": "Risklabs",
+   "segment": "crypto"
+  },
+  {
+   "key": "ashby:rwa.xyz",
+   "name": "RWA.Xyz",
+   "segment": "crypto"
+  },
+  {
+   "key": "ashby:sahara",
+   "name": "Saharaai",
+   "segment": "crypto"
+  },
+  {
+   "key": "ashby:scribe",
+   "name": "Scribe.Com",
+   "segment": "ai"
+  },
+  {
+   "key": "ashby:sei-labs",
+   "name": "SeiLabs",
+   "segment": "crypto"
+  },
+  {
+   "key": "ashby:sentry",
+   "name": "Sentry.Io",
+   "segment": "ai"
+  },
+  {
+   "key": "ashby:sesame",
+   "name": "Sesame",
+   "segment": "ai"
+  },
+  {
+   "key": "ashby:shiftkey",
+   "name": "Shiftkey",
+   "segment": "tech"
+  },
+  {
+   "key": "ashby:solana foundation",
+   "name": "Solanafoundation",
+   "segment": "crypto"
+  },
+  {
+   "key": "ashby:sound.xyz",
+   "name": "Sound.Xyz",
+   "segment": "crypto"
+  },
+  {
+   "key": "ashby:stellar",
+   "name": "Stellar",
+   "segment": "crypto"
+  },
+  {
+   "key": "ashby:succinct",
+   "name": "Succinct",
+   "segment": "crypto"
+  },
+  {
+   "key": "ashby:sui foundation",
+   "name": "Sui.Foundation",
+   "segment": "crypto"
+  },
+  {
+   "key": "ashby:symbiotic",
+   "name": "Symbiotic.Fi",
+   "segment": "crypto"
+  },
+  {
+   "key": "ashby:syndica",
+   "name": "Syndica",
+   "segment": "crypto"
+  },
+  {
+   "key": "ashby:talos-trading",
+   "name": "Talos",
+   "segment": "trading tech"
+  },
+  {
+   "key": "ashby:tenderly",
+   "name": "Tenderly",
+   "segment": "crypto"
+  },
+  {
+   "key": "ashby:thndr",
+   "name": "Thndr",
+   "segment": "brokerage"
+  },
+  {
+   "key": "ashby:trading212",
+   "name": "Trading 212",
+   "segment": "brokerage"
+  },
+  {
+   "key": "ashby:traversal",
+   "name": "Traversal",
+   "segment": "ai"
+  },
+  {
+   "key": "ashby:trm-labs",
+   "name": "Trmlabs",
+   "segment": "crypto"
+  },
+  {
+   "key": "ashby:trust-wallet",
+   "name": "Trust-Wallet",
+   "segment": "crypto"
+  },
+  {
+   "key": "ashby:typesafe-ai",
+   "name": "Typesafe.Ai",
+   "segment": "ai"
+  },
+  {
+   "key": "ashby:uipath",
+   "name": "Uipath",
+   "segment": "ai"
+  },
+  {
+   "key": "ashby:uniswap",
+   "name": "Uniswaplabs",
+   "segment": "crypto"
+  },
+  {
+   "key": "ashby:v7labs.com",
+   "name": "V7labs",
+   "segment": "ai"
+  },
+  {
+   "key": "ashby:windranger",
+   "name": "Windranger",
+   "segment": "crypto"
+  },
+  {
+   "key": "ashby:wormholelabs",
+   "name": "Wormholefoundation",
+   "segment": "crypto"
+  },
+  {
+   "key": "ashby:ziina",
+   "name": "Ziina",
+   "segment": "payments"
+  },
+  {
+   "key": "ashby:zodl",
+   "name": "Zodl",
+   "segment": "crypto"
+  },
+  {
+   "key": "ashby:zus-health",
+   "name": "Zushealth",
+   "segment": "ai"
+  },
+  {
+   "key": "greenhouse:addepar1",
+   "name": "Addepar",
+   "segment": "fintech"
+  },
+  {
+   "key": "greenhouse:affirm",
+   "name": "Affirm",
+   "segment": "fintech"
+  },
+  {
+   "key": "greenhouse:anthropic",
+   "name": "Anthropic",
+   "segment": "AI"
+  },
+  {
+   "key": "greenhouse:aperaaiinc",
+   "name": "Aperaai",
+   "segment": "ai"
+  },
+  {
+   "key": "greenhouse:aptoslabs",
+   "name": "Aptoslabs",
+   "segment": "crypto"
+  },
+  {
+   "key": "greenhouse:arizeai",
+   "name": "Arizeai",
+   "segment": "ai"
+  },
+  {
+   "key": "greenhouse:assemblyai",
+   "name": "Assemblyai",
+   "segment": "ai"
+  },
+  {
+   "key": "greenhouse:b2c2",
+   "name": "B2C2",
+   "segment": "market making"
+  },
+  {
+   "key": "greenhouse:bitgo",
+   "name": "Bitgo",
+   "segment": "crypto"
+  },
+  {
+   "key": "greenhouse:bitpanda",
+   "name": "Bitpanda",
+   "segment": "brokerage"
+  },
+  {
+   "key": "greenhouse:blockchain",
+   "name": "Blockchain",
+   "segment": "crypto"
+  },
+  {
+   "key": "greenhouse:boxinc",
+   "name": "Box",
+   "segment": "ai"
+  },
+  {
+   "key": "greenhouse:brave",
+   "name": "Brave",
+   "segment": "crypto"
+  },
+  {
+   "key": "greenhouse:bvnk",
+   "name": "Bvnk",
+   "segment": "crypto"
+  },
+  {
+   "key": "greenhouse:bybit",
+   "name": "Bybit",
+   "segment": "crypto exchange"
+  },
+  {
+   "key": "greenhouse:capitalontap",
+   "name": "Capitalontap",
+   "segment": "fintech"
+  },
+  {
+   "key": "greenhouse:careem",
+   "name": "Careem",
+   "segment": "super app"
+  },
+  {
+   "key": "greenhouse:clearstreet",
+   "name": "Clearstreet",
+   "segment": "fintech"
+  },
+  {
+   "key": "greenhouse:consensys",
+   "name": "Consensys",
+   "segment": "web3"
+  },
+  {
+   "key": "greenhouse:copperco",
+   "name": "Copper",
+   "segment": "custody"
+  },
+  {
+   "key": "greenhouse:cosmoslabs",
+   "name": "Cosmoslabs",
+   "segment": "crypto"
+  },
+  {
+   "key": "greenhouse:cresta",
+   "name": "Cresta",
+   "segment": "ai"
+  },
+  {
+   "key": "greenhouse:earnin",
+   "name": "Earnin",
+   "segment": "fintech"
+  },
+  {
+   "key": "greenhouse:eve",
+   "name": "Eve.Legal",
+   "segment": "ai"
+  },
+  {
+   "key": "greenhouse:figure",
+   "name": "Figure",
+   "segment": "crypto"
+  },
+  {
+   "key": "greenhouse:filecoinfoundation",
+   "name": "Filecoinfoundation",
+   "segment": "crypto"
+  },
+  {
+   "key": "greenhouse:fireblocks",
+   "name": "Fireblocks",
+   "segment": "crypto infrastructure"
+  },
+  {
+   "key": "greenhouse:flex",
+   "name": "Flex",
+   "segment": "fintech"
+  },
+  {
+   "key": "greenhouse:fxpro",
+   "name": "FxPro",
+   "segment": "brokerage"
+  },
+  {
+   "key": "greenhouse:galaxydigitalservices",
+   "name": "Galaxy",
+   "segment": "digital assets"
+  },
+  {
+   "key": "greenhouse:gleanwork",
+   "name": "Glean",
+   "segment": "ai"
+  },
+  {
+   "key": "greenhouse:graphcore",
+   "name": "Graphcore.Io",
+   "segment": "ai"
+  },
+  {
+   "key": "greenhouse:grayscaleinvestments",
+   "name": "Grayscaleinvestments",
+   "segment": "crypto"
+  },
+  {
+   "key": "greenhouse:gsrmarkets",
+   "name": "GSR",
+   "segment": "market making"
+  },
+  {
+   "key": "greenhouse:hpiq",
+   "name": "Hpiq",
+   "segment": "ai"
+  },
+  {
+   "key": "greenhouse:iftother",
+   "name": "Iftother",
+   "segment": "crypto"
+  },
+  {
+   "key": "greenhouse:imc",
+   "name": "Imc.Com",
+   "segment": "fintech"
+  },
+  {
+   "key": "greenhouse:immunefi",
+   "name": "Immunefi",
+   "segment": "crypto"
+  },
+  {
+   "key": "greenhouse:invisibletech",
+   "name": "Invisibletech",
+   "segment": "ai"
+  },
+  {
+   "key": "greenhouse:isomorphiclabs",
+   "name": "Isomorphiclabs",
+   "segment": "ai"
+  },
+  {
+   "key": "greenhouse:jumpcrypto",
+   "name": "Jumpcrypto",
+   "segment": "crypto"
+  },
+  {
+   "key": "greenhouse:layerzerolabs",
+   "name": "Layerzerolabs",
+   "segment": "crypto"
+  },
+  {
+   "key": "greenhouse:life360",
+   "name": "Life360",
+   "segment": "tech"
+  },
+  {
+   "key": "greenhouse:machinifyinc",
+   "name": "Machinify",
+   "segment": "ai"
+  },
+  {
+   "key": "greenhouse:mesh",
+   "name": "Meshpay",
+   "segment": "crypto"
+  },
+  {
+   "key": "greenhouse:ninjatrader",
+   "name": "Ninjatrader",
+   "segment": "crypto"
+  },
+  {
+   "key": "greenhouse:nomina",
+   "name": "Nomina.Io",
+   "segment": "crypto"
+  },
+  {
+   "key": "greenhouse:numus",
+   "name": "Numeus",
+   "segment": "crypto"
+  },
+  {
+   "key": "greenhouse:okx",
+   "name": "OKX",
+   "segment": "crypto exchange"
+  },
+  {
+   "key": "greenhouse:ondofinance",
+   "name": "Ondo Finance",
+   "segment": "tokenization"
+  },
+  {
+   "key": "greenhouse:orderly",
+   "name": "Orderlynetwork",
+   "segment": "crypto"
+  },
+  {
+   "key": "greenhouse:payoneer",
+   "name": "Payoneer",
+   "segment": "payments"
+  },
+  {
+   "key": "greenhouse:polyai",
+   "name": "Polyai",
+   "segment": "ai"
+  },
+  {
+   "key": "greenhouse:public",
+   "name": "Public.com",
+   "segment": "brokerage"
+  },
+  {
+   "key": "greenhouse:recall",
+   "name": "Recall",
+   "segment": "crypto"
+  },
+  {
+   "key": "greenhouse:ritual",
+   "name": "Ritual",
+   "segment": "crypto"
+  },
+  {
+   "key": "greenhouse:scaleai",
+   "name": "Scaleai",
+   "segment": "ai"
+  },
+  {
+   "key": "greenhouse:securitize",
+   "name": "Securitize",
+   "segment": "tokenization"
+  },
+  {
+   "key": "greenhouse:skildai-careers",
+   "name": "Skildai",
+   "segment": "ai"
+  },
+  {
+   "key": "greenhouse:smartasset",
+   "name": "Smartasset",
+   "segment": "fintech"
+  },
+  {
+   "key": "greenhouse:snorkelai",
+   "name": "Snorkelai",
+   "segment": "ai"
+  },
+  {
+   "key": "greenhouse:stackblitz",
+   "name": "Stackblitz",
+   "segment": "ai"
+  },
+  {
+   "key": "greenhouse:strike",
+   "name": "Strike.Me",
+   "segment": "crypto"
+  },
+  {
+   "key": "greenhouse:stripe",
+   "name": "Stripe",
+   "segment": "payments"
+  },
+  {
+   "key": "greenhouse:tamara",
+   "name": "Tamara",
+   "segment": "fintech"
+  },
+  {
+   "key": "greenhouse:taxbit",
+   "name": "Taxbit",
+   "segment": "crypto"
+  },
+  {
+   "key": "greenhouse:tenableinc",
+   "name": "Tenable",
+   "segment": "tech"
+  },
+  {
+   "key": "greenhouse:thunes",
+   "name": "Thunes",
+   "segment": "payments"
+  },
+  {
+   "key": "greenhouse:truelayer",
+   "name": "Truelayer",
+   "segment": "fintech"
+  },
+  {
+   "key": "greenhouse:vectara",
+   "name": "Vectara.Com",
+   "segment": "ai"
+  },
+  {
+   "key": "greenhouse:veeamsoftware",
+   "name": "Veeam",
+   "segment": "tech"
+  },
+  {
+   "key": "greenhouse:vercel",
+   "name": "Vercel",
+   "segment": "tech"
+  },
+  {
+   "key": "greenhouse:wise",
+   "name": "Wise",
+   "segment": "payments"
+  },
+  {
+   "key": "greenhouse:workato",
+   "name": "Workato",
+   "segment": "ai"
+  },
+  {
+   "key": "greenhouse:xai",
+   "name": "Xai",
+   "segment": "ai"
+  },
+  {
+   "key": "greenhouse:xapo61",
+   "name": "Xapo",
+   "segment": "crypto"
+  },
+  {
+   "key": "greenhouse:youcom",
+   "name": "You.Com",
+   "segment": "ai"
+  },
+  {
+   "key": "greenhouse:yugabyte",
+   "name": "Yugabyte",
+   "segment": "tech"
+  },
+  {
+   "key": "greenhouse:zetachain",
+   "name": "Zetachain",
+   "segment": "crypto"
+  },
+  {
+   "key": "lever:1inch",
+   "name": "1inch",
+   "segment": "crypto"
+  },
+  {
+   "key": "lever:ambergroup",
+   "name": "Amber Group",
+   "segment": "digital assets"
+  },
+  {
+   "key": "lever:anchorage",
+   "name": "Anchorage",
+   "segment": "crypto"
+  },
+  {
+   "key": "lever:animocabrands",
+   "name": "Animoca Brands",
+   "segment": "web3"
+  },
+  {
+   "key": "lever:anybotics",
+   "name": "Anybotics",
+   "segment": "ai"
+  },
+  {
+   "key": "lever:arbitrumfoundation",
+   "name": "Arbitrumfoundation",
+   "segment": "crypto"
+  },
+  {
+   "key": "lever:aurora-dev",
+   "name": "Auroralabs",
+   "segment": "crypto"
+  },
+  {
+   "key": "lever:binance",
+   "name": "Binance",
+   "segment": "crypto exchange"
+  },
+  {
+   "key": "lever:capital",
+   "name": "Capital.com",
+   "segment": "brokerage"
+  },
+  {
+   "key": "lever:centrifuge",
+   "name": "Centrifuge",
+   "segment": "tokenization"
+  },
+  {
+   "key": "lever:cmgx",
+   "name": "Cmgx",
+   "segment": "fintech"
+  },
+  {
+   "key": "lever:coingecko",
+   "name": "Coingecko",
+   "segment": "crypto"
+  },
+  {
+   "key": "lever:coinmarketcap",
+   "name": "Coinmarketcap",
+   "segment": "crypto"
+  },
+  {
+   "key": "lever:coinspaid",
+   "name": "Coinspaid",
+   "segment": "crypto"
+  },
+  {
+   "key": "lever:connext-network",
+   "name": "Connext-Network",
+   "segment": "crypto"
+  },
+  {
+   "key": "lever:crypto",
+   "name": "Crypto.com",
+   "segment": "crypto exchange"
+  },
+  {
+   "key": "lever:ethena",
+   "name": "Ethena",
+   "segment": "ai"
+  },
+  {
+   "key": "lever:fuellabs",
+   "name": "Fuellabs",
+   "segment": "crypto"
+  },
+  {
+   "key": "lever:gate",
+   "name": "Gate.io",
+   "segment": "crypto exchange"
+  },
+  {
+   "key": "lever:gauntlet",
+   "name": "Gauntlet",
+   "segment": "crypto"
+  },
+  {
+   "key": "lever:grape-health",
+   "name": "Grape-Health",
+   "segment": "fintech"
+  },
+  {
+   "key": "lever:harmony",
+   "name": "Harmony",
+   "segment": "crypto"
+  },
+  {
+   "key": "lever:immutable",
+   "name": "Immutable",
+   "segment": "crypto"
+  },
+  {
+   "key": "lever:impossiblecloud",
+   "name": "Impossiblecloud",
+   "segment": "crypto"
+  },
+  {
+   "key": "lever:meili",
+   "name": "Meilisearch",
+   "segment": "ai"
+  },
+  {
+   "key": "lever:moneyboxapp",
+   "name": "Moneybox",
+   "segment": "fintech"
+  },
+  {
+   "key": "lever:moonpay",
+   "name": "MoonPay",
+   "segment": "crypto infrastructure"
+  },
+  {
+   "key": "lever:netomi",
+   "name": "Netomi",
+   "segment": "ai"
+  },
+  {
+   "key": "lever:offchainlabs",
+   "name": "Offchainlabs",
+   "segment": "crypto"
+  },
+  {
+   "key": "lever:oxylabs",
+   "name": "Oxylabs",
+   "segment": "ai"
+  },
+  {
+   "key": "lever:palantir",
+   "name": "Palantir",
+   "segment": "ai"
+  },
+  {
+   "key": "lever:pigment",
+   "name": "Pigment",
+   "segment": "ai"
+  },
+  {
+   "key": "lever:pioneer-services",
+   "name": "Asterdex",
+   "segment": "crypto"
+  },
+  {
+   "key": "lever:qonto",
+   "name": "Qonto",
+   "segment": "fintech"
+  },
+  {
+   "key": "lever:radicalai",
+   "name": "RadicalAI",
+   "segment": "ai"
+  },
+  {
+   "key": "lever:rivr",
+   "name": "Rivr",
+   "segment": "ai"
+  },
+  {
+   "key": "lever:serotonin",
+   "name": "Serotonin",
+   "segment": "crypto"
+  },
+  {
+   "key": "lever:shieldai",
+   "name": "Shieldai",
+   "segment": "ai"
+  },
+  {
+   "key": "lever:snaplogic",
+   "name": "Snaplogic",
+   "segment": "tech"
+  },
+  {
+   "key": "lever:swingdev",
+   "name": "Swingdev",
+   "segment": "fintech"
+  },
+  {
+   "key": "lever:swissborg",
+   "name": "Swissborg",
+   "segment": "crypto"
+  },
+  {
+   "key": "lever:toku",
+   "name": "Toku",
+   "segment": "crypto"
+  },
+  {
+   "key": "lever:wintermute-trading",
+   "name": "Wintermute",
+   "segment": "market making"
+  },
+  {
+   "key": "lever:xm",
+   "name": "XM",
+   "segment": "brokerage"
+  },
+  {
+   "key": "lever:yuno",
+   "name": "Yuno",
+   "segment": "fintech"
+  },
+  {
+   "key": "smartrecruiters:deliveryhero",
+   "name": "talabat",
+   "segment": "e-commerce"
+  },
+  {
+   "key": "smartrecruiters:swissquote",
+   "name": "Swissquote",
+   "segment": "brokerage"
+  }
+ ]
+}
