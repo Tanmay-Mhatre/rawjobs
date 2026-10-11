@@ -441,10 +441,10 @@ label.rj-chip:has(input:focus-visible) { outline: 2px solid var(--focus-ring); o
           Set up RawJobs
           <svg class="rj-icon rj-icon--nudge" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></svg>
         <span class="rj-sr"> (opens in a new tab)</span></a>
-        <a class="rj-btn btn-lg" href="#download">Not a developer? One-file setup</a>
+        <a class="rj-btn btn-lg" href="#install">Install in one line</a>
       </div>
       <p class="hero__note" data-step style="--i:5">
-        <span>Needs Node 22+ and a terminal today</span>
+        <span>Windows, macOS and Linux</span>
         <span><i class="rj-glyph rj-glyph--full" style="color:var(--success-text)" aria-hidden="true"></i>No account</span>
         <span><i class="rj-glyph rj-glyph--full" style="color:var(--success-text)" aria-hidden="true"></i>No AI scoring</span>
       </p>
@@ -702,29 +702,28 @@ label.rj-chip:has(input:focus-visible) { outline: 2px solid var(--focus-ring); o
     <div class="split__head">
       <p class="eyebrow">Get it</p>
       <h2 id="get-title">Two ways to run it, both on your computer</h2>
-      <p class="prose">The developer setup works today. A one-file setup for everyone else is on the way.</p>
+      <p class="prose">Install it with one line, or run it from the source code. Either way it runs on your computer, and nothing about you is uploaded.</p>
     </div>
     <div class="split__body">
       <div class="ways">
+        <div class="panel way" id="install">
+          <div class="way__head"><h3>Install in one line</h3><span class="soon"><i class="rj-glyph rj-glyph--full" style="color:var(--success-text)" aria-hidden="true"></i>Works today</span></div>
+          <p>No Node, git, account or admin rights needed. Paste one line into a terminal: it installs RawJobs in your user folder, starts it when you log in, keeps it up to date, and opens your dashboard in the browser.</p>
+          <ol class="way__cmds">
+            <li><b>Windows</b>, in PowerShell: <code>irm https://github.com/Tanmay-Mhatre/rawjobs/releases/latest/download/install.ps1 | iex</code></li>
+            <li><b>macOS, Linux</b>, in Terminal: <code>curl -fsSL https://github.com/Tanmay-Mhatre/rawjobs/releases/latest/download/install.sh | sh</code></li>
+          </ol>
+          <a class="rj-btn rj-btn--primary" href="https://github.com/Tanmay-Mhatre/rawjobs/blob/main/docs/install.md" target="_blank" rel="noopener">Install guide<svg class="rj-icon rj-icon--nudge" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></svg><span class="rj-sr"> (opens in a new tab)</span></a>
+        </div>
         <div class="panel way" id="developer">
-          <div class="way__head"><h3>Developer setup</h3><span class="soon"><i class="rj-glyph rj-glyph--full" style="color:var(--success-text)" aria-hidden="true"></i>Works today</span></div>
+          <div class="way__head"><h3>From the source code</h3><span class="soon"><i class="rj-glyph rj-glyph--full" style="color:var(--success-text)" aria-hidden="true"></i>Works today</span></div>
           <p>Needs Node 22+, pnpm and a terminal. The dashboard opens in your browser and walks you through setup in about 3 minutes.</p>
           <ol class="way__cmds">
             <li><code>git clone https://github.com/Tanmay-Mhatre/rawjobs.git</code></li>
             <li><code>cd rawjobs &amp;&amp; pnpm install</code></li>
-            <li><code>pnpm dev</code></li>
+            <li><code>pnpm start</code></li>
           </ol>
-          <a class="rj-btn rj-btn--primary" href="https://github.com/Tanmay-Mhatre/rawjobs#getting-started" target="_blank" rel="noopener">Set up RawJobs<svg class="rj-icon rj-icon--nudge" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></svg><span class="rj-sr"> (opens in a new tab)</span></a>
-        </div>
-        <div class="panel way" id="download">
-          <div class="way__head"><h3>Not a developer? One file will set it all up</h3><span class="soon"><i class="rj-glyph rj-glyph--empty" aria-hidden="true"></i>Coming soon</span></div>
-          <p>A setup file for Mac and Windows is on the way. Download it, open it, and it installs everything RawJobs needs, then opens your dashboard in the browser. It all runs on your computer.</p>
-          <ol class="way__steps">
-            <li><b>Download one file.</b> For Mac or Windows.</li>
-            <li><b>Open it.</b> It installs what RawJobs needs (Node, pnpm and RawJobs) and keeps it up to date.</li>
-            <li><b>Pick your roles.</b> The dashboard opens in your browser. Setup takes about 3 minutes.</li>
-          </ol>
-          <a class="rj-btn" href="https://github.com/Tanmay-Mhatre/rawjobs/releases" target="_blank" rel="noopener">Watch releases on GitHub<svg class="rj-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M7 7h10v10"/><path d="M7 17 17 7"/></svg><span class="rj-sr"> (opens in a new tab)</span></a>
+          <a class="rj-btn" href="https://github.com/Tanmay-Mhatre/rawjobs#getting-started" target="_blank" rel="noopener">Read the README<svg class="rj-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M7 7h10v10"/><path d="M7 17 17 7"/></svg><span class="rj-sr"> (opens in a new tab)</span></a>
         </div>
       </div>
       <div class="cli" id="cli">
@@ -837,7 +836,7 @@ label.rj-chip:has(input:focus-visible) { outline: 2px solid var(--focus-ring); o
         <details><summary>Where do the jobs come from?<svg class="rj-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14"/><path d="M12 5v14"/></svg></summary><p class="ans">From each company's own careers page on its hiring system, like Greenhouse, Lever or Workday, plus 4 public job boards. A shared directory of __COMPANIES_ROUND__ companies, rebuilt weekly, tells RawJobs where to look.</p></details>
         <details><summary>Is my data sent anywhere?<svg class="rj-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14"/><path d="M12 5v14"/></svg></summary><p class="ans">Only one thing, and you can turn it off: when you add a company by link, its careers board is shared with the directory so everyone can find it. Your resume, roles and alert settings stay on your computer, and the app has no telemetry. It talks only to the job boards it scans, GitHub for the shared directory, the project's company inbox when you add a company (optional), and Telegram if you turn on alerts.</p></details>
         <details><summary>How fresh are the jobs?<svg class="rj-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14"/><path d="M12 5v14"/></svg></summary><p class="ans">As fresh as your last scan. Scan whenever you like, or schedule 1 or 2 scans a day and get new matches on Telegram.</p></details>
-        <details><summary>How do I run it?<svg class="rj-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14"/><path d="M12 5v14"/></svg></summary><p class="ans">You need Node 22+ and pnpm. Clone the repo, run <code>pnpm install</code>, then <code>pnpm dev</code>. The dashboard opens and walks you through setup. A one-file setup for Mac and Windows is on the way.</p></details>
+        <details><summary>How do I run it?<svg class="rj-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14"/><path d="M12 5v14"/></svg></summary><p class="ans">Paste one line into a terminal (PowerShell on Windows, Terminal on macOS and Linux): it installs RawJobs, starts it when you log in and opens the dashboard, which walks you through setup. The lines are in <a href="#install">Get it</a> and the <a href="https://github.com/Tanmay-Mhatre/rawjobs/blob/main/docs/install.md" target="_blank" rel="noopener">install guide</a>. Developers can also run it from the source code with Node 22+ and pnpm.</p></details>
       </div>
     </div>
   </div>

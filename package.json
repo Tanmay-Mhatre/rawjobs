@@ -1,6 +1,6 @@
 {
   "name": "rawjobs",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "private": true,
   "description": "Self-hosted job radar: scans company careers pages, scores openings against your profile, alerts you on new matches. Built by Tanmay Mhatre.",
   "author": "Tanmay Mhatre",
