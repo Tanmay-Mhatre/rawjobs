@@ -8,6 +8,8 @@ export * from "./http-cache";
 export * from "./job-feed";
 export * from "./job-feed-diff";
 export * from "./score";
+export * from "./dealbreakers";
+export * from "./posting";
 export * from "./run";
 export * from "./diff";
 export * from "./store";

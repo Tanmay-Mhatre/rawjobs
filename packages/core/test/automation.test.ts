@@ -36,6 +36,13 @@ describe("digest", () => {
     expect(text).not.toContain("⭐");
   });
 
+  it("says which dealbreaker a job breaks, in place of strong fit", () => {
+    const why = { title: 30, location: 20, keywords: [], keywordPoints: 0, industry: 10, dealbreakers: ["Pay below your floor: up to AED 18k vs your 25k a month"] };
+    const text = digest([job("SMB AE", 48, { why })], { minScore: 40 })!;
+    expect(text).toContain("score 48/100 · Pay below your floor: up to AED 18k vs your 25k a month");
+    expect(text).not.toContain("strong fit");
+  });
+
   it("stars jobs at your companies, as the Radar does", () => {
     const text = digest([job("Yours", 50, { id: "greenhouse:acme:1" }), job("Other", 50, { id: "lever:else:1" })], { minScore: 70, yours: new Set(["greenhouse:acme"]) })!;
     expect(text).toContain('⭐ <a href="https://example.com/Yours">Yours</a>');

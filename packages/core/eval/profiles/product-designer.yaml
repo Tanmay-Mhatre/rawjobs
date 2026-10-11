@@ -23,3 +23,7 @@ profile:
   industries: [saas, devtools, fintech]
   keywords: { design systems: 5, figma: 4, user research: 4, prototyping: 3, b2b: 3, accessibility: 2 }
   min_score: 70
+  # From `about`: floor, work authorisation, dealbreakers.
+  salary_floor: { amount: 60000, currency: EUR, period: year }
+  work_authorization: [eu]
+  avoid: [marketing website, marketing design, brand design, graphic design, agency]

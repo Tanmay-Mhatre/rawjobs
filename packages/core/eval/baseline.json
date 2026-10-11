@@ -1,14 +1,14 @@
 {
   "overall": {
-    "ndcg5": 0.712,
-    "ndcg10": 0.789,
-    "p5": 0.367,
-    "spearman": 0.632,
+    "ndcg5": 0.908,
+    "ndcg10": 0.919,
+    "p5": 0.5,
+    "spearman": 0.691,
     "confusion": {
       "strong": {
-        "strong": 11,
+        "strong": 12,
         "good": 4,
-        "weak": 4
+        "weak": 3
       },
       "good": {
         "strong": 4,
@@ -16,9 +16,9 @@
         "weak": 1
       },
       "weak": {
-        "strong": 15,
+        "strong": 2,
         "good": 4,
-        "weak": 250
+        "weak": 263
       }
     },
     "pairs": 294
@@ -26,10 +26,10 @@
   "profiles": [
     {
       "id": "b2b-ae",
-      "ndcg5": 0.793,
-      "ndcg10": 0.804,
+      "ndcg5": 0.819,
+      "ndcg10": 0.83,
       "p5": 0.4,
-      "spearman": 0.648,
+      "spearman": 0.667,
       "confusion": {
         "strong": {
           "strong": 1,
@@ -42,18 +42,18 @@
           "weak": 0
         },
         "weak": {
-          "strong": 1,
-          "good": 2,
-          "weak": 43
+          "strong": 0,
+          "good": 1,
+          "weak": 45
         }
       }
     },
     {
       "id": "finance-analyst",
-      "ndcg5": 0.635,
-      "ndcg10": 0.724,
-      "p5": 0.4,
-      "spearman": 0.524,
+      "ndcg5": 0.985,
+      "ndcg10": 0.986,
+      "p5": 0.6,
+      "spearman": 0.581,
       "confusion": {
         "strong": {
           "strong": 2,
@@ -66,18 +66,18 @@
           "weak": 0
         },
         "weak": {
-          "strong": 3,
-          "good": 1,
-          "weak": 42
+          "strong": 0,
+          "good": 2,
+          "weak": 44
         }
       }
     },
     {
       "id": "fintech-pm",
-      "ndcg5": 0.731,
-      "ndcg10": 0.833,
-      "p5": 0.4,
-      "spearman": 0.574,
+      "ndcg5": 0.902,
+      "ndcg10": 0.897,
+      "p5": 0.6,
+      "spearman": 0.619,
       "confusion": {
         "strong": {
           "strong": 2,
@@ -90,18 +90,18 @@
           "weak": 0
         },
         "weak": {
-          "strong": 3,
+          "strong": 0,
           "good": 0,
-          "weak": 41
+          "weak": 44
         }
       }
     },
     {
       "id": "ml-ds",
-      "ndcg5": 0.831,
-      "ndcg10": 0.869,
+      "ndcg5": 0.882,
+      "ndcg10": 0.877,
       "p5": 0.4,
-      "spearman": 0.805,
+      "spearman": 0.82,
       "confusion": {
         "strong": {
           "strong": 2,
@@ -114,23 +114,23 @@
           "weak": 0
         },
         "weak": {
-          "strong": 2,
+          "strong": 1,
           "good": 0,
-          "weak": 42
+          "weak": 43
         }
       }
     },
     {
       "id": "platform-eng",
-      "ndcg5": 0.375,
-      "ndcg10": 0.593,
-      "p5": 0.2,
-      "spearman": 0.637,
+      "ndcg5": 0.908,
+      "ndcg10": 0.967,
+      "p5": 0.6,
+      "spearman": 0.841,
       "confusion": {
         "strong": {
-          "strong": 2,
+          "strong": 3,
           "good": 1,
-          "weak": 1
+          "weak": 0
         },
         "good": {
           "strong": 1,
@@ -138,18 +138,18 @@
           "weak": 0
         },
         "weak": {
-          "strong": 4,
-          "good": 0,
-          "weak": 40
+          "strong": 1,
+          "good": 1,
+          "weak": 42
         }
       }
     },
     {
       "id": "product-designer",
-      "ndcg5": 0.907,
-      "ndcg10": 0.91,
+      "ndcg5": 0.953,
+      "ndcg10": 0.956,
       "p5": 0.4,
-      "spearman": 0.603,
+      "spearman": 0.621,
       "confusion": {
         "strong": {
           "strong": 2,
@@ -162,113 +162,113 @@
           "weak": 1
         },
         "weak": {
-          "strong": 2,
-          "good": 1,
-          "weak": 42
+          "strong": 0,
+          "good": 0,
+          "weak": 45
         }
       }
     }
   ],
   "worst": [
     {
+      "profile": "b2b-ae",
+      "job": "ae-06",
+      "title": "Partnerships Manager, GCC",
+      "company": "Payloop",
+      "score": 0,
+      "label": 3,
+      "why": "Partnerships is an adjacent function, but the must-haves accept 5+ years B2B sales, which he has; Dubai hybrid, AED 30-35k; GCC tech-partner network only partly there.",
+      "gap": -3
+    },
+    {
+      "profile": "fintech-pm",
+      "job": "pm-07",
+      "title": "Product Owner, Open Banking",
+      "company": "Sterling & Moor Bank",
+      "score": 0,
+      "label": 3,
+      "why": "Product Owner (same job) for open banking and pay-by-bank, London hybrid, GBP 90-105k straddles the floor; PSD2 met via 3DS/SCA, UK open banking standards only partly (adjacent domain).",
+      "gap": -3
+    },
+    {
+      "profile": "ml-ds",
+      "job": "ml-06",
+      "title": "Machine Learning Scientist",
+      "company": "Meridian Labs",
+      "score": 0,
+      "label": 3,
+      "why": "Title only: ML Scientist in NYC; must-haves, salary and sponsorship all unknown (cap 3; unknowns don't stack).",
+      "gap": -3
+    },
+    {
+      "profile": "ml-ds",
+      "job": "ml-05",
+      "title": "Staff Applied Scientist",
+      "company": "Glyphic AI",
+      "score": 92,
+      "label": 1,
+      "why": "Staff Applied Scientist leading four: PhD, 10+ years post-PhD and publications required; she has an MS and 4 years (far level).",
+      "gap": 2.68
+    },
+    {
+      "profile": "finance-analyst",
+      "job": "fin-06",
+      "title": "Senior Business Analyst",
+      "company": "Halcyon Bank",
+      "score": 57,
+      "label": 0,
+      "why": "Core-banking IT business analyst (requirements, UAT, BPMN, 5+ years BA): a different job from FP&A; only the title word matches.",
+      "gap": 2.28
+    },
+    {
       "profile": "finance-analyst",
       "job": "fin-04",
       "title": "Senior Financial Analyst, Credit Risk",
       "company": "Brindle Lending",
-      "score": 100,
+      "score": 50,
       "label": 0,
       "why": "Credit risk and IFRS 9 provisioning: credit/lending risk is her stated dealbreaker.",
-      "gap": 4
+      "gap": 2
     },
     {
       "profile": "platform-eng",
       "job": "eng-05",
       "title": "Senior Software Engineer (Web)",
       "company": "Pixelmint",
-      "score": 100,
+      "score": 50,
       "label": 0,
       "why": "React/TypeScript canvas editor: a frontend role, his dealbreaker; the Go/Kubernetes mentions are about other teams.",
-      "gap": 4
+      "gap": 2
     },
     {
-      "profile": "platform-eng",
-      "job": "eng-09",
-      "title": "Senior DevOps Engineer",
-      "company": "Lagerwerk",
+      "profile": "product-designer",
+      "job": "des-06",
+      "title": "Senior UX Researcher",
+      "company": "Quorra Analytics",
       "score": 0,
-      "label": 4,
-      "why": "DevOps title, same work: Kubernetes on AWS, Terraform, Argo CD, Postgres, Go, Berlin hybrid, EUR 82-96k straddles the floor.",
-      "gap": -4
+      "label": 2,
+      "why": "UX researcher: an adjacent function; she runs research as a designer but lacks the required 5+ years dedicated research. Design background is a plus there.",
+      "gap": -2
     },
     {
       "profile": "b2b-ae",
       "job": "ae-02",
       "title": "Account Executive, SMB",
       "company": "Peoplegrid",
-      "score": 95,
+      "score": 48,
       "label": 0,
       "why": "SMB AE for 1-2 year sellers; base AED 15-18k tops out 28% under the 25k floor (salary blocker), and a step down.",
-      "gap": 3.8
+      "gap": 1.92
     },
     {
       "profile": "finance-analyst",
       "job": "fin-02",
       "title": "Financial Analyst",
       "company": "Cartwheel",
-      "score": 95,
+      "score": 48,
       "label": 0,
       "why": "SGD 5-6k tops out 8% under her 6.5k floor (more than 5%: salary blocker); also a 1-2 year support role.",
-      "gap": 3.8
-    },
-    {
-      "profile": "finance-analyst",
-      "job": "fin-05",
-      "title": "Finance Operations Analyst (AP/AR)",
-      "company": "Cartwheel",
-      "score": 95,
-      "label": 0,
-      "why": "AP/AR finance operations: her stated dealbreaker (and SGD 3.8-4.5k is far under the floor).",
-      "gap": 3.8
-    },
-    {
-      "profile": "fintech-pm",
-      "job": "pm-05",
-      "title": "Senior Product Manager, Card Issuing",
-      "company": "Kroonpay",
-      "score": 95,
-      "label": 0,
-      "why": "On-site in Amsterdam, must already live in NL, no relocation: on-site outside the UK is her dealbreaker.",
-      "gap": 3.8
-    },
-    {
-      "profile": "platform-eng",
-      "job": "eng-02",
-      "title": "Platform Engineer",
-      "company": "Cloudyard",
-      "score": 95,
-      "label": 0,
-      "why": "EUR 65-78k tops out 8% under his 85k floor (more than 5%: salary blocker); also a level down (2+ years).",
-      "gap": 3.8
-    },
-    {
-      "profile": "platform-eng",
-      "job": "eng-07",
-      "title": "Senior Platform Engineer",
-      "company": "Northbeam Systems",
-      "score": 95,
-      "label": 0,
-      "why": "Remote for US residents only, no sponsorship: US-only remote is his dealbreaker.",
-      "gap": 3.8
-    },
-    {
-      "profile": "product-designer",
-      "job": "des-04",
-      "title": "Senior UX Designer, Marketing Website",
-      "company": "Pixelmint",
-      "score": 95,
-      "label": 0,
-      "why": "Marketing website and campaign pages for Growth Marketing: marketing-only design is her dealbreaker.",
-      "gap": 3.8
+      "gap": 1.92
     }
   ],
   "scores": {
@@ -315,9 +315,9 @@
     "b2b-ae/pm-10": 0,
     "b2b-ae/pm-11": 0,
     "b2b-ae/ae-01": 100,
-    "b2b-ae/ae-02": 95,
+    "b2b-ae/ae-02": 48,
     "b2b-ae/ae-03": 62,
-    "b2b-ae/ae-04": 58,
+    "b2b-ae/ae-04": 29,
     "b2b-ae/ae-05": 60,
     "b2b-ae/ae-06": 0,
     "b2b-ae/ae-07": 0,
@@ -345,10 +345,10 @@
     "finance-analyst/eng-08": 0,
     "finance-analyst/eng-09": 0,
     "finance-analyst/fin-01": 100,
-    "finance-analyst/fin-02": 95,
+    "finance-analyst/fin-02": 48,
     "finance-analyst/fin-03": 77,
-    "finance-analyst/fin-04": 100,
-    "finance-analyst/fin-05": 95,
+    "finance-analyst/fin-04": 50,
+    "finance-analyst/fin-05": 48,
     "finance-analyst/fin-06": 57,
     "finance-analyst/fin-07": 60,
     "finance-analyst/fin-08": 0,
@@ -402,16 +402,16 @@
     "fintech-pm/fin-07": 0,
     "fintech-pm/fin-08": 0,
     "fintech-pm/pm-01": 100,
-    "fintech-pm/pm-02": 88,
+    "fintech-pm/pm-02": 44,
     "fintech-pm/pm-03": 0,
     "fintech-pm/pm-04": 0,
-    "fintech-pm/pm-05": 95,
+    "fintech-pm/pm-05": 48,
     "fintech-pm/pm-06": 0,
     "fintech-pm/pm-07": 0,
     "fintech-pm/pm-08": 95,
     "fintech-pm/pm-09": 60,
     "fintech-pm/pm-10": 63,
-    "fintech-pm/pm-11": 87,
+    "fintech-pm/pm-11": 44,
     "fintech-pm/ae-01": 0,
     "fintech-pm/ae-02": 0,
     "fintech-pm/ae-03": 0,
@@ -421,7 +421,7 @@
     "fintech-pm/ae-07": 0,
     "ml-ds/ml-01": 100,
     "ml-ds/ml-02": 95,
-    "ml-ds/ml-03": 90,
+    "ml-ds/ml-03": 45,
     "ml-ds/ml-04": 87,
     "ml-ds/ml-05": 92,
     "ml-ds/ml-06": 0,
@@ -483,14 +483,14 @@
     "platform-eng/des-06": 0,
     "platform-eng/des-07": 0,
     "platform-eng/eng-01": 100,
-    "platform-eng/eng-02": 95,
+    "platform-eng/eng-02": 48,
     "platform-eng/eng-03": 95,
     "platform-eng/eng-04": 85,
-    "platform-eng/eng-05": 100,
+    "platform-eng/eng-05": 50,
     "platform-eng/eng-06": 73,
-    "platform-eng/eng-07": 95,
+    "platform-eng/eng-07": 48,
     "platform-eng/eng-08": 55,
-    "platform-eng/eng-09": 0,
+    "platform-eng/eng-09": 100,
     "platform-eng/fin-01": 0,
     "platform-eng/fin-02": 0,
     "platform-eng/fin-03": 0,
@@ -525,10 +525,10 @@
     "product-designer/ml-06": 0,
     "product-designer/ml-07": 0,
     "product-designer/des-01": 95,
-    "product-designer/des-02": 73,
+    "product-designer/des-02": 37,
     "product-designer/des-03": 100,
-    "product-designer/des-04": 95,
-    "product-designer/des-05": 63,
+    "product-designer/des-04": 48,
+    "product-designer/des-05": 32,
     "product-designer/des-06": 0,
     "product-designer/des-07": 73,
     "product-designer/eng-01": 0,

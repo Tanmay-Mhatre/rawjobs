@@ -67,6 +67,15 @@ export const JobCard = forwardRef<HTMLLIElement, Props>(function JobCard({ group
   if (evergreen === "reposted") meta.push(<span className="text-warning-text" title="Taken down and posted again: dated from the first posting">Reposted</span>);
   if (job.status === "closed") meta.push(<span className="text-danger-text">Closed</span>);
   if (job.why.gate) meta.push(<span className="text-warning-text">Failed your {job.why.gate} filter</span>);
+  // A dealbreaker never hides a job: it shows why it scored low.
+  const broken = job.why.dealbreakers ?? [];
+  if (broken.length)
+    meta.push(
+      <span className="text-warning-text" title={broken.length > 1 ? broken.join(". ") : undefined}>
+        {broken[0]}
+        {broken.length > 1 && ` +${broken.length - 1}`}
+      </span>,
+    );
 
   return (
     <li ref={ref} className={cx("rj-row", muted && "opacity-60")} aria-current={selected ? "true" : undefined}>

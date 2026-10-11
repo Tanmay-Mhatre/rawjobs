@@ -192,6 +192,15 @@ No AI, fully explainable. Every job is scored 0–100:
 
 With no `keywords` at all, title + location + industry (out of 60) are scaled to 0–100.
 
+**Dealbreakers** (optional, in Settings → Profile → Dealbreakers or the config) are what a posting says that rules it out, whatever else fits:
+
+- `salary_floor` (`{ amount, currency, period }`): the posted range tops out more than 5% under it, same currency. Pay is read from the hiring system, or from the description ("base AED 28,000 - 32,000 per month").
+- `work_authorization` (countries you can work in without a visa sponsor; `eu` for the EU/EEA, `none` if you need one everywhere): the posting says it won't sponsor ("unable to sponsor", "must be authorised to work in the US") for a country not on your list.
+- `avoid` (work you won't do: `frontend`, `credit risk`): it's in the title, or the description keeps coming back to it (three mentions, or two with the first in the opening), not a passing mention.
+- Always, when your places name a country: the posting is only for people already living in another one ("US residents only", "must already live in the Netherlands").
+
+A job that breaks one keeps showing, with the reason on its row and in its detail, but its score is halved and kept under `min_score`, so it's never a strong match and never alerts as one. Pay or sponsorship a posting doesn't mention never counts against it.
+
 The score says how well a job fits, not how old it is. The Radar's **Best match** order adds freshness when you look: score + 15 × 0.5^(age in days ÷ 3), +10 for your companies. So a strong job posted today beats an equal one from last week, and a weak new job never leaps a strong one.
 
 Sandbox, training and test boards (e.g. "Lever Implementation Training Environment") are left out of the directory and never scanned.

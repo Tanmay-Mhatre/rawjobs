@@ -3,6 +3,7 @@ import { groupPlaces } from "@rawjobs/core/catalog/places";
 import { ArrowRight, Download, RefreshCw, RotateCcw, Save, Upload, X } from "lucide-react";
 import { useEffect, useRef, useState, type MouseEvent, type ReactNode } from "react";
 import { canRunLocally, useDirectorySize } from "../lib/data";
+import { DealbreakersStep } from "./Dealbreakers";
 import { displayPlace, roughCount } from "../lib/format";
 import { draftToConfig, officePlaces, saveBlockers, saveConfig, type Draft } from "../lib/setup";
 import type { Suggestions } from "../lib/suggest";
@@ -74,8 +75,14 @@ export function Settings({ draft, update, revert, dirty, onSaved, onScan, scanni
     locations: list([...groupPlaces(officePlaces(draft)).map((g) => displayPlace(g.name)), ...(draft.remote ? ["Remote"] : [])]),
     industries: list(draft.industries.map((id) => INDUSTRY_BY_ID.get(id)?.label ?? id)),
     keywords: list(Object.keys(draft.keywords)),
+    dealbreakers: list([
+      ...(draft.salaryFloor?.amount ? [`${draft.salaryFloor.currency} ${draft.salaryFloor.amount.toLocaleString()} a ${draft.salaryFloor.period}`] : []),
+      ...(draft.workAuthorization ?? []),
+      ...(draft.avoid ?? []),
+    ]),
   };
-  const [open, setOpen] = useState<Set<string>>(() => new Set(Object.keys(summaries).filter((k) => !summaries[k])));
+  // Dealbreakers are optional, so they start folded even when empty.
+  const [open, setOpen] = useState<Set<string>>(() => new Set(Object.keys(summaries).filter((k) => !summaries[k] && k !== "dealbreakers")));
   const toggle = (id: string) =>
     setOpen((o) => {
       const next = new Set(o);
@@ -135,6 +142,7 @@ export function Settings({ draft, update, revert, dirty, onSaved, onScan, scanni
           {profile("locations", "Locations", "Jobs outside these places are hidden.", <LocationsStep draft={draft} update={update} suggest={suggest} />)}
           {profile("industries", "Industries", "Industries decide which companies are scanned and suggested.", <IndustriesStep draft={draft} update={update} suggest={suggest} />)}
           {profile("keywords", "Topics", "Topics rank jobs higher when they mention them.", <KeywordsStep draft={draft} update={update} suggest={suggest} resumeText={resumeText} />)}
+          {profile("dealbreakers", "Dealbreakers", "A job that breaks one stays on your Radar with the reason, at half its score and under your threshold.", <DealbreakersStep draft={draft} update={update} />)}
         </Group>
 
         <Group id="my-companies" label="My companies">
