@@ -1,8 +1,10 @@
 /**
  * Live-check every merged board with the cheapest call each ATS offers. No AI, no descriptions.
  * Resumable: results are appended to out/checks.jsonl; boards already checked are skipped.
- * Boards users shared ("contrib") go first. `--max-minutes N` stops starting new checks after N
- * minutes (the rest wait for the next run), so a big backlog can't stall a short run.
+ * Order: boards users shared ("contrib"), then boards never checked, then monthly rechecks, then
+ * retries of boards that failed (each retried after a growing wait: 1, 2, 4… up to 30 days).
+ * `--max-minutes N` stops starting new checks after N minutes (the rest wait for the next run), so
+ * a big backlog can't stall a short run.
  *
  *   pnpm exec tsx scripts/catalog/check.ts [--max-minutes 30] [--recheck-days 30] [--ats greenhouse,lever]
  *
@@ -12,6 +14,7 @@ import { appendFileSync, readdirSync, readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { HttpClient } from "../../packages/core/src/index";
+import { dueKind, isCurrent, mergeCheck, type CheckRow, type Due } from "./lib/checks";
 import { checkBoard } from "./lib/live-check";
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -22,22 +25,6 @@ const OUT_DIR = join(here, "out");
 const recheckArg = process.argv.indexOf("--recheck-days");
 /** Results older than this are checked again (default: never, i.e. only unchecked boards). */
 const RECHECK_DAYS = recheckArg > 0 ? Number(process.argv[recheckArg + 1]) : Infinity;
-const DAY_MS = 86_400_000;
-
-/**
- * 0-6 extra days per board, fixed by its key (FNV-1a). Boards first checked together (some 40,000
- * between 4 and 10 Oct 2026) then come due over a week instead of in one run, so a monthly recheck
- * can't move the live count by 10% at once and trip the release gate.
- */
-export const spreadDays = (key: string): number => {
-  let h = 0x811c9dc5;
-  for (const ch of key) h = Math.imul(h ^ ch.charCodeAt(0), 0x01000193) >>> 0;
-  return h % 7;
-};
-
-/** A definite result stays good for --recheck-days plus the board's spread; an error is always due. */
-export const isCurrent = (r: { key: string; status: string; checked_at: string }, recheckDays: number, now = Date.now()): boolean =>
-  r.status !== "error" && (recheckDays === Infinity || now - Date.parse(r.checked_at) < (recheckDays + spreadDays(r.key)) * DAY_MS);
 const maxArg = process.argv.indexOf("--max-minutes");
 /** Stop starting new checks after this long (default: no limit). */
 const MAX_MS = maxArg > 0 ? Number(process.argv[maxArg + 1]) * 60_000 : Infinity;
@@ -51,26 +38,35 @@ const http = new HttpClient({ retries: 2, hostDelayMs: 200, timeoutMs: 20_000, b
  */
 const WORKERS: Record<string, number> = { workday: 4, greenhouse: 2, lever: 2 };
 
-type Board = { key: string; ats: string; slug: string; region?: string; shard?: string; site?: string; confidence: "high" | "single"; sources?: string[] };
-/** Shared by users first, then boards more than one source agrees on. */
+type Board = { key: string; ats: string; slug: string; region?: string; shard?: string; site?: string; confidence: "high" | "single"; sources?: string[]; due?: Due };
+const DUE_ORDER: Record<Due, number> = { new: 0, recheck: 1, retry: 2 };
+/** Shared by users first; then never checked, monthly rechecks, retries; then boards more than one source agrees on. */
 export const checkOrder = (a: Board, c: Board) =>
-  Number(!!c.sources?.includes("contrib")) - Number(!!a.sources?.includes("contrib")) || (a.confidence === c.confidence ? 0 : a.confidence === "high" ? -1 : 1);
-type Result = { key: string; status: "live" | "dormant" | "dead" | "error"; jobs: number | null; name?: string; http?: number; error?: string; checked_at: string };
+  Number(!!c.sources?.includes("contrib")) - Number(!!a.sources?.includes("contrib")) ||
+  DUE_ORDER[a.due ?? "new"] - DUE_ORDER[c.due ?? "new"] ||
+  (a.confidence === c.confidence ? 0 : a.confidence === "high" ? -1 : 1);
+type Result = { key: string; status: "live" | "dormant" | "dead" | "error"; jobs: number | null; name?: string; http?: number; error?: string; checked_at: string; errors?: number };
 
 async function main() {
   const merged = JSON.parse(readFileSync(join(here, "out", "merged.json"), "utf8")) as { boards: Board[] };
-  const done = new Set<string>();
-  // Results from every process (checks.jsonl and checks-*.jsonl) count as done.
+  // What's known per board, from every process's results (checks.jsonl and checks-*.jsonl).
+  const known = new Map<string, CheckRow>();
   for (const f of readdirSync(OUT_DIR).filter((n) => /^checks(-.+)?\.jsonl$/.test(n))) {
     for (const line of readFileSync(join(OUT_DIR, f), "utf8").split("\n")) {
       if (!line) continue;
-      const r = JSON.parse(line) as Result;
-      // Errors get another go; so does anything older than --recheck-days (monthly refresh).
-      if (isCurrent(r, RECHECK_DAYS)) done.add(r.key);
+      let r: CheckRow;
+      try {
+        r = JSON.parse(line) as CheckRow;
+      } catch {
+        continue; // a line cut off by a kill
+      }
+      known.set(r.key, mergeCheck(known.get(r.key), r));
     }
   }
-  const todo = merged.boards.filter((b) => !done.has(b.key) && (!ONLY || ONLY.has(b.ats)));
-  console.error(`${merged.boards.length} boards, ${done.size} already checked, ${todo.length} to go`);
+  const done = new Set([...known.values()].filter((r) => isCurrent(r, RECHECK_DAYS)).map((r) => r.key));
+  const todo = merged.boards.filter((b) => !done.has(b.key) && (!ONLY || ONLY.has(b.ats))).map((b): Board => ({ ...b, due: dueKind(known.get(b.key)) }));
+  const dueCount = (d: Due) => todo.filter((b) => b.due === d).length;
+  console.error(`${merged.boards.length} boards, ${done.size} already checked, ${todo.length} to go (${dueCount("new")} new, ${dueCount("recheck")} rechecks, ${dueCount("retry")} retries)`);
 
   const lanes = new Map<string, Board[]>();
   for (const b of todo.sort(checkOrder)) {
@@ -87,7 +83,9 @@ async function main() {
       while (list.length && Date.now() - started < MAX_MS) {
         const b = list.shift()!;
         const r = await checkBoard(http, b);
-        const row: Result = { key: b.key, ...r, checked_at: new Date().toISOString() };
+        const checked_at = new Date().toISOString();
+        // An error extends the board's streak, which sets how long until its next retry.
+        const row: Result = { key: b.key, ...r, checked_at, ...(r.status === "error" ? { errors: mergeCheck(known.get(b.key), { key: b.key, ...r, checked_at }).errors } : {}) };
         appendFileSync(OUT, `${JSON.stringify(row)}\n`);
         tally[r.status] = (tally[r.status] ?? 0) + 1;
         if (++n % 500 === 0) {
