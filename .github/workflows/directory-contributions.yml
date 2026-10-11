@@ -14,6 +14,7 @@ concurrency:
 
 permissions:
   contents: read
+  issues: write
 
 env:
   DATA_REPO: ${{ vars.DATA_REPO || 'Tanmay-Mhatre/rawjobs-directory' }}
@@ -75,9 +76,8 @@ jobs:
           echo "accepted=$(jq .accepted "$RUNNER_TEMP/summary.json")" >> "$GITHUB_OUTPUT"
 
       - if: steps.accept.outputs.accepted != '0' && steps.accept.outputs.accepted != '' && steps.state.outputs.restored == 'true'
-        name: Publish an updated directory
+        name: Build an updated directory
         env:
-          GH_TOKEN: ${{ secrets.DATA_REPO_TOKEN }}
           CONTRIBUTIONS_FILE: ${{ github.workspace }}/directory-repo/contributions.json
           DENYLIST_FILE: ${{ github.workspace }}/directory-repo/denylist.json
         run: |
@@ -90,8 +90,28 @@ jobs:
           pnpm exec tsx scripts/catalog/index.ts --max-age-days 9999
           pnpm exec tsx scripts/catalog/publish.ts --data dist-data
           pnpm exec tsx scripts/catalog/release.ts --data dist-data --out dist
+
+      # A refused release must not stop the rest: contributions are still committed, acknowledged
+      # and saved, and go out with the next release that passes. No allow_shrink here: an owner
+      # who means a shrink re-runs the weekly rebuild with it, which sets a new baseline.
+      - if: steps.accept.outputs.accepted != '0' && steps.accept.outputs.accepted != '' && steps.state.outputs.restored == 'true'
+        name: Release gate
+        id: gate
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ secrets.DATA_REPO_TOKEN }}
+        run: bash scripts/catalog/gate.sh
+
+      - if: steps.gate.outcome == 'success'
+        name: Publish the updated directory
+        env:
+          GH_TOKEN: ${{ secrets.DATA_REPO_TOKEN }}
+        run: |
           tag=$(gh release view -R "$DATA_REPO" --json tagName -q .tagName)
-          gh release upload "$tag" dist/* -R "$DATA_REPO" --clobber
+          # Data files first, manifest last: an install that reads in between finds files that don't
+          # match its manifest's SHA-256 and keeps the copy it has.
+          gh release upload "$tag" dist/*.gz -R "$DATA_REPO" --clobber
+          gh release upload "$tag" dist/manifest.json -R "$DATA_REPO" --clobber
 
       - if: always() && steps.accept.outputs.accepted != '0' && steps.accept.outputs.accepted != '' && steps.state.outputs.restored == 'true'
         name: Save the working state
@@ -119,3 +139,15 @@ jobs:
         run: |
           jq '{ids: .processed}' "$RUNNER_TEMP/summary.json" > "$RUNNER_TEMP/ack.json"
           curl -fsS -X POST -H "Authorization: Bearer $INBOX_TOKEN" -H "content-type: application/json" --data @"$RUNNER_TEMP/ack.json" "$INBOX_URL/v1/ack"
+
+      - if: always() && steps.gate.outcome == 'failure'
+        name: Report a refused release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          title="Directory release refused"
+          run_url="${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+          body=$(printf 'The release gate refused the updated directory (see the run summary for why). Installs keep the current release; the shared companies are saved and go out with the next release that passes.\n\nRun: %s\n\nIf the shrink is deliberate (a purge), publish it with: gh workflow run directory-rebuild.yml -f allow_shrink=true' "$run_url")
+          open=$(gh issue list -R "${{ github.repository }}" --state open --search "\"$title\" in:title" --json number -q '.[0].number')
+          if [ -n "$open" ]; then gh issue comment "$open" -R "${{ github.repository }}" --body "$body"; else gh issue create -R "${{ github.repository }}" --title "$title" --body "$body"; fi
+          exit 1

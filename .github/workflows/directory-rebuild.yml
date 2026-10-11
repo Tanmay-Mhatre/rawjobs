@@ -1,12 +1,31 @@
 # Every Monday: rebuild the whole shared directory from the public lists plus users'
 # contributions, re-check boards, refresh the job index, and publish a new release.
 # Setup: docs/shared-directory.md
+#
+# Time budget (minutes; soft cap = the script's --max-minutes, hard cap = capped.sh, which runs it
+# under `timeout`). Collectors may fail or run out of time without stopping the rebuild: each saves
+# what it found, the next run continues, and build + publish always get their turn. The steps on
+# the publish path (sources, merge, build, package, gate, publish) must succeed.
+#
+#   stage            soft  hard     stage          soft  hard
+#   Common Crawl       60    70     crossprobe       20    25
+#   Wayback            25    50     check 2          10    15
+#   industry resolve   10    15     index            30    40
+#   bulk resolve       28    40     the rest          –   ~45 (setup, sources, merges, build, package, gate, publish)
+#   check 1            25    30
+#
+# Hard caps add up to about 330 of the job's 350. A typical run takes about 3.5 hours.
 name: Directory · weekly rebuild
 
 on:
   schedule:
     - cron: "0 3 * * 1"
   workflow_dispatch:
+    inputs:
+      allow_shrink:
+        description: "Publish even if the directory shrank more than the release gate allows (a deliberate purge)"
+        type: boolean
+        default: false
 
 concurrency:
   group: directory
@@ -14,6 +33,7 @@ concurrency:
 
 permissions:
   contents: read
+  issues: write
 
 env:
   DATA_REPO: ${{ vars.DATA_REPO || 'Tanmay-Mhatre/rawjobs-directory' }}
@@ -22,6 +42,9 @@ jobs:
   rebuild:
     runs-on: ubuntu-24.04
     timeout-minutes: 350
+    env:
+      CONTRIBUTIONS_FILE: ${{ github.workspace }}/directory-repo/contributions.json
+      DENYLIST_FILE: ${{ github.workspace }}/directory-repo/denylist.json
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4
@@ -44,39 +67,105 @@ jobs:
           GH_TOKEN: ${{ secrets.DATA_REPO_TOKEN }}
         run: bash scripts/catalog/state.sh restore
 
-      - name: Build the directory
-        env:
-          CONTRIBUTIONS_FILE: ${{ github.workspace }}/directory-repo/contributions.json
-          DENYLIST_FILE: ${{ github.workspace }}/directory-repo/denylist.json
+      - name: Download the public lists
+        timeout-minutes: 5
         run: |
           [ -f directory-repo/contributions.json ] || echo '{"companies":[]}' > directory-repo/contributions.json
           pnpm catalog:sources
-          # Our own URL lists: new Common Crawl crawls, and the next stretch of the Wayback index (time-boxed).
-          pnpm exec tsx scripts/catalog/commoncrawl.ts --per-run 3 || echo "Common Crawl step failed; using the saved list."
-          pnpm exec tsx scripts/catalog/wayback.ts --max-minutes 60 || echo "Wayback step failed; using the saved list."
-          # Company-first: industry seeds, then the next batch of Wikidata companies (the coverage sample).
-          pnpm exec tsx scripts/catalog/resolve.ts
-          pnpm exec tsx scripts/catalog/seeds-bulk.ts && pnpm exec tsx scripts/catalog/resolve.ts --bulk --limit 1500 || echo "Bulk seeds step failed; using saved results."
-          pnpm exec tsx scripts/catalog/merge.ts
-          pnpm exec tsx scripts/catalog/check.ts --recheck-days 30
-          # Known companies tried on other systems (needs fresh check results), then merge and check what it found.
-          pnpm exec tsx scripts/catalog/crossprobe.ts --max-minutes 45
-          pnpm exec tsx scripts/catalog/merge.ts
-          pnpm exec tsx scripts/catalog/check.ts --recheck-days 30
-          pnpm exec tsx scripts/catalog/build.ts
-          pnpm exec tsx scripts/catalog/index.ts --max-age-days 7
+
+      # Our own URL lists: new Common Crawl crawls, and the next stretch of the Wayback index.
+      - name: Common Crawl
+        id: commoncrawl
+        continue-on-error: true
+        timeout-minutes: 72
+        run: bash scripts/catalog/capped.sh "Common Crawl" 70 pnpm exec tsx scripts/catalog/commoncrawl.ts --per-run 1 --max-minutes 60
+
+      - name: Wayback
+        id: wayback
+        continue-on-error: true
+        timeout-minutes: 52
+        # A query in flight can run ~22 min past the soft cap (retries on a slow index).
+        run: bash scripts/catalog/capped.sh "Wayback" 50 pnpm exec tsx scripts/catalog/wayback.ts --max-minutes 25
+
+      # Company-first: industry seeds, then the next batch of Wikidata companies (the coverage sample).
+      - name: Resolve industry seeds
+        id: seeds
+        continue-on-error: true
+        timeout-minutes: 17
+        run: bash scripts/catalog/capped.sh "Industry seeds" 15 pnpm exec tsx scripts/catalog/resolve.ts --max-minutes 10
+
+      - name: Resolve Wikidata companies
+        id: bulk
+        continue-on-error: true
+        timeout-minutes: 42
+        run: bash scripts/catalog/capped.sh "Wikidata companies" 40 bash -c "pnpm exec tsx scripts/catalog/seeds-bulk.ts && pnpm exec tsx scripts/catalog/resolve.ts --bulk --limit 1500 --max-minutes 28"
+
+      - name: Merge
+        timeout-minutes: 5
+        run: pnpm exec tsx scripts/catalog/merge.ts
+
+      - name: Check boards
+        id: check1
+        continue-on-error: true
+        timeout-minutes: 32
+        run: bash scripts/catalog/capped.sh "Check boards" 30 pnpm exec tsx scripts/catalog/check.ts --recheck-days 30 --max-minutes 25
+
+      # Known companies tried on other systems (needs fresh check results), then merge and check what it found.
+      - name: Cross-probe
+        id: crossprobe
+        continue-on-error: true
+        timeout-minutes: 27
+        run: bash scripts/catalog/capped.sh "Cross-probe" 25 pnpm exec tsx scripts/catalog/crossprobe.ts --max-minutes 20
+
+      - name: Merge again
+        timeout-minutes: 5
+        run: pnpm exec tsx scripts/catalog/merge.ts
+
+      - name: Check new boards
+        id: check2
+        continue-on-error: true
+        timeout-minutes: 17
+        run: bash scripts/catalog/capped.sh "Check new boards" 15 pnpm exec tsx scripts/catalog/check.ts --recheck-days 30 --max-minutes 10
+
+      - name: Build
+        timeout-minutes: 5
+        run: pnpm exec tsx scripts/catalog/build.ts
+
+      - name: Index open jobs
+        id: index
+        continue-on-error: true
+        timeout-minutes: 42
+        run: bash scripts/catalog/capped.sh "Index open jobs" 40 pnpm exec tsx scripts/catalog/index.ts --max-age-days 7 --max-minutes 30
+
+      - name: Package
+        timeout-minutes: 10
+        run: |
           pnpm exec tsx scripts/catalog/publish.ts --data dist-data
           pnpm exec tsx scripts/catalog/coverage.ts --data dist-data
           pnpm exec tsx scripts/catalog/release.ts --data dist-data --out dist
 
+      - name: Release gate
+        timeout-minutes: 5
+        env:
+          GH_TOKEN: ${{ secrets.DATA_REPO_TOKEN }}
+          ALLOW_SHRINK: ${{ inputs.allow_shrink && '1' || '' }}
+        run: bash scripts/catalog/gate.sh
+
       - name: Publish the release
+        id: publish
+        timeout-minutes: 5
         env:
           GH_TOKEN: ${{ secrets.DATA_REPO_TOKEN }}
         run: |
-          tag="directory-$(date -u +%Y-%m-%d)"
+          day=$(date -u +%Y-%m-%d)
+          tag="directory-$day"
+          # A second run on the same day gets its own release instead of failing on the tag.
+          if gh release view "$tag" -R "$DATA_REPO" > /dev/null 2>&1; then tag="$tag-$(date -u +%H%M)"; fi
           version=$(jq -r .version dist/manifest.json)
           companies=$(jq -r .companies dist/manifest.json)
-          gh release create "$tag" dist/* -R "$DATA_REPO" --latest --title "Directory $(date -u +%Y-%m-%d)" \
+          # gh creates the release as a draft, uploads every file, then publishes it, so no install
+          # ever sees a latest release with files missing.
+          gh release create "$tag" dist/* -R "$DATA_REPO" --latest --title "Directory $day" \
             --notes "Version $version · $companies companies. Download manifest.json first; files are checked against its SHA-256."
 
       - name: Save the working state
@@ -96,3 +185,25 @@ jobs:
           git config user.email "rawjobs-bot@users.noreply.github.com"
           git add coverage.md manifest.json
           git diff --cached --quiet || (git commit -m "Weekly directory $(date -u +%Y-%m-%d)" && git push)
+
+      - name: Report a run that didn't publish
+        # Keyed on the publish step, not on failure()/cancelled(): a timeout, a failed step and a
+        # refused release all land here.
+        if: always() && steps.publish.outcome != 'success'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          OUTCOMES: ${{ toJSON(steps) }}
+        run: |
+          title="Directory rebuild did not publish"
+          run_url="${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+          steps=$(echo "$OUTCOMES" | jq -r 'to_entries | map("- \(.key): \(.value.outcome)") | join("\n")')
+          body=$(printf 'The weekly rebuild ended without a new release. Installs keep the current one.\n\nRun: %s\n\nSteps:\n%s\n\nIf the release gate refused a deliberate shrink, re-run with: gh workflow run directory-rebuild.yml -f allow_shrink=true' "$run_url" "$steps")
+          open=$(gh issue list -R "${{ github.repository }}" --state open --search "\"$title\" in:title" --json number -q '.[0].number')
+          if [ -n "$open" ]; then gh issue comment "$open" -R "${{ github.repository }}" --body "$body"; else gh issue create -R "${{ github.repository }}" --title "$title" --body "$body"; fi
+
+      - name: Warn about collectors that didn't finish
+        if: always()
+        env:
+          OUTCOMES: ${{ toJSON(steps) }}
+        run: |
+          echo "$OUTCOMES" | jq -r 'to_entries[] | select(.value.outcome == "failure" and .value.conclusion == "success") | "::warning::\(.key) did not finish; the rebuild went on without it."'
