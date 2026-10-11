@@ -2,7 +2,7 @@ import { existsSync, mkdtempSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-import { newCrawlClient, readCrawls } from "./commoncrawl";
+import { newCrawlClient, queriesFor, readCrawls } from "./commoncrawl";
 
 const INDEX = "https://cc-index.test";
 const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: { "content-type": "application/json" } });
@@ -19,7 +19,7 @@ function fakeIndex(answer: (url: string) => Response) {
 }
 
 const outFile = () => join(mkdtempSync(join(tmpdir(), "cc-")), "boards.json");
-const saved = (out: string) => JSON.parse(readFileSync(out, "utf8")) as { crawls: string[]; boards: { ats: string; slug: string }[] };
+const saved = (out: string) => JSON.parse(readFileSync(out, "utf8")) as { crawls: string[]; partial?: Record<string, string[]>; boards: { ats: string; slug: string }[] };
 
 describe("readCrawls", () => {
   it("stops after 4 failed queries in a row when the index answers 503, and keeps the crawl for next run", async () => {
@@ -57,5 +57,30 @@ describe("readCrawls", () => {
     const out = outFile();
     expect(await readCrawls({ http: newCrawlClient({ fetchImpl, sleep: async () => {}, hostDelayMs: 0 }), out, index: INDEX })).toBe("index unavailable");
     expect(existsSync(out)).toBe(false);
+  });
+
+  it("records each finished query, so the next run continues where this one stopped", async () => {
+    const healthy = (url: string) => (url.includes("showNumPages") ? json({ pages: 1 }) : new Response(`{"url": "https://jobs.lever.co/acme/1"}
+`));
+    // Run 1: the first two queries answer, then the index goes down.
+    let answered = 0;
+    const first = fakeIndex((url) => (url.includes("showNumPages") && ++answered > 2 ? new Response("busy", { status: 503 }) : healthy(url)));
+    const out = outFile();
+    expect(await readCrawls({ http: first.http, out, index: INDEX })).toBe("index unavailable");
+    expect(saved(out).partial).toEqual({ "CC-MAIN-2026-30": ["boards.greenhouse.io/*|", "job-boards.greenhouse.io/*|"] });
+    expect(saved(out).crawls).toEqual([]);
+    // Run 2: starts at the third query and finishes the crawl.
+    const second = fakeIndex(healthy);
+    expect(await readCrawls({ http: second.http, out, index: INDEX })).toBe("done");
+    const counted = second.urls.filter((u) => u.includes("showNumPages"));
+    expect(counted[0]).toContain(encodeURIComponent("job-boards.eu.greenhouse.io/*"));
+    expect(saved(out).crawls).toEqual(["CC-MAIN-2026-30"]);
+    expect(saved(out).partial).toEqual({});
+  });
+
+  it("queriesFor leaves out the queries already read", () => {
+    const qs = [{ url: "a/*" }, { url: "b", matchType: "domain" }, { url: "c/*" }];
+    expect(queriesFor(qs, ["a/*|", "b|domain"])).toEqual([{ url: "c/*" }]);
+    expect(queriesFor(qs, undefined)).toEqual(qs);
   });
 });

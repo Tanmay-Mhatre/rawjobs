@@ -3,6 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { compact, keepCheck, keepIndex } from "./compact";
+import { writeFileAtomic } from "./lib/fs";
 import { nextInTime } from "./lib/time-box";
 
 const dir = () => mkdtempSync(join(tmpdir(), "compact-"));
@@ -46,5 +47,16 @@ describe("nextInTime", () => {
     expect(nextInTime(queue, 0, 1000, 1000)).toBeUndefined();
     expect(queue).toEqual([3]);
     expect(nextInTime(queue, 0, Infinity, 10 ** 12)).toBe(3);
+  });
+});
+
+describe("writeFileAtomic", () => {
+  it("replaces the file whole, creates its folder and leaves no temporary file", () => {
+    const d = dir();
+    const path = join(d, "raw", "boards.json");
+    writeFileAtomic(path, '{"a":1}');
+    writeFileAtomic(path, '{"a":2}');
+    expect(JSON.parse(readFileSync(path, "utf8"))).toEqual({ a: 2 });
+    expect(readdirSync(join(d, "raw"))).toEqual(["boards.json"]);
   });
 });

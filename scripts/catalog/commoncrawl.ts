@@ -4,6 +4,8 @@
  *
  * Incremental: crawls already read are listed in boards.json and skipped, so the first run reads
  * the last CRAWLS_TO_USE crawls (slow, once) and each weekly run reads only crawls published since.
+ * Within a crawl, each finished query is recorded (`partial`), so a run that stops part-way
+ * continues with the next query instead of starting the crawl again.
  *
  * --per-run caps how many new crawls one run reads, and --max-minutes how long it reads: past it,
  * no new query starts and the crawl is read again next run (boards already found are kept). When
@@ -12,10 +14,11 @@
  *
  *   pnpm catalog:crawl [--crawls 24] [--per-run 3] [--max-minutes 60]   -> scripts/catalog/raw/commoncrawl/boards.json
  */
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { HttpClient } from "../../packages/core/src/index";
+import { writeFileAtomic } from "./lib/fs";
 import { BoardSet, type SeenBoard } from "./lib/url-boards";
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -75,10 +78,19 @@ const QUERIES: { url: string; matchType?: "domain" }[] = [
   { url: "fa.ca2.oraclecloud.com", matchType: "domain" },
 ];
 
-/** `queries`: the URL patterns those crawls were read with; a pattern added later is read in them too. */
-type Saved = { generated_at: string; crawls: string[]; queries?: string[]; index_lines: number; boards: (SeenBoard & { crawls?: string[] })[] };
+/**
+ * `queries`: the URL patterns those crawls were read with; a pattern added later is read in them too.
+ * `partial`: per crawl not done yet, the queries already read in full (every page).
+ */
+type Saved = { generated_at: string; crawls: string[]; queries?: string[]; partial?: Record<string, string[]>; index_lines: number; boards: (SeenBoard & { crawls?: string[] })[] };
 
 const queryId = (q: { url: string; matchType?: string }) => `${q.url}|${q.matchType ?? ""}`;
+
+/** The queries a crawl still needs: all of them (or only new patterns, for a crawl read before), minus those finished. */
+export const queriesFor = <Q extends { url: string; matchType?: string }>(planned: Q[], finished: string[] | undefined): Q[] => {
+  const skip = new Set(finished ?? []);
+  return planned.filter((q) => !skip.has(queryId(q)));
+};
 
 export type CrawlRun = {
   http: HttpClient;
@@ -102,6 +114,7 @@ export async function readCrawls({ http, out, index = "https://index.commoncrawl
   // Older files listed crawls per board as `crawls`.
   const boards = new BoardSet((prev?.boards ?? []).map(({ crawls, seen, ...b }) => ({ ...b, seen: seen ?? crawls ?? [] })));
   const done = new Set(prev?.crawls ?? []);
+  const partial: Record<string, string[]> = { ...prev?.partial };
   const readBefore = new Set(done);
   // Files from before `queries` was recorded were read with the first 13 patterns.
   const knownQueries = new Set(prev?.queries ?? (prev ? QUERIES.slice(0, 13).map(queryId) : []));
@@ -121,18 +134,17 @@ export async function readCrawls({ http, out, index = "https://index.commoncrawl
   let lines = prev?.index_lines ?? 0;
 
   const save = () => {
-    mkdirSync(dirname(out), { recursive: true });
     // New patterns count as known once every recent crawl has been read with them.
     const queries = recent.filter((c) => readBefore.has(c)).every((c) => backfilled.has(c)) ? QUERIES.map(queryId) : [...knownQueries];
-    const saved: Saved = { generated_at: new Date().toISOString(), crawls: [...done].sort().reverse(), queries, index_lines: lines, boards: boards.list() };
-    writeFileSync(out, JSON.stringify(saved));
+    const saved: Saved = { generated_at: new Date().toISOString(), crawls: [...done].sort().reverse(), queries, partial, index_lines: lines, boards: boards.list() };
+    writeFileAtomic(out, JSON.stringify(saved));
   };
 
   let end: CrawlEnd = "done";
   for (const crawl of todo) {
     let complete = true;
     const backfill = done.has(crawl);
-    for (const q of backfill ? newQueries : QUERIES) {
+    for (const q of queriesFor(backfill ? newQueries : QUERIES, partial[crawl])) {
       const stop = stopReason();
       if (stop) {
         end = stop;
@@ -148,11 +160,13 @@ export async function readCrawls({ http, out, index = "https://index.commoncrawl
         complete = false;
         continue;
       }
+      let queryDone = true;
       for (let page = 0; page < pages; page++) {
         const stop = stopReason();
         if (stop) {
           end = stop;
           complete = false;
+          queryDone = false;
           break;
         }
         let text = "";
@@ -161,6 +175,7 @@ export async function readCrawls({ http, out, index = "https://index.commoncrawl
         } catch (err) {
           console.error(`  ${crawl} ${q.url} page ${page}: ${(err as Error).message}`);
           complete = false;
+          queryDone = false;
           continue;
         }
         // output=json gives one {"url": …} object per line.
@@ -175,11 +190,16 @@ export async function readCrawls({ http, out, index = "https://index.commoncrawl
         }
         console.error(`  ${crawl} ${q.url} page ${page + 1}/${pages}: ${boards.size} boards so far`);
       }
+      if (queryDone) {
+        partial[crawl] = [...(partial[crawl] ?? []), queryId(q)];
+        save();
+      }
     }
     // A crawl with failed pages is read again next run (boards already found are kept).
     if (complete) {
       if (backfill) backfilled.add(crawl);
       done.add(crawl);
+      delete partial[crawl];
     }
     save();
     if (end !== "done") break;
