@@ -12,6 +12,7 @@
 // No dependencies: plain Node, so it runs in CI without installing the workspace.
 import { copyFileSync, cpSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
+import { gunzipSync } from "node:zlib";
 import { fileURLToPath } from "node:url";
 
 const SITE = dirname(fileURLToPath(import.meta.url));
@@ -35,7 +36,7 @@ const read = (p) => readFileSync(p, "utf8");
 
 // ---------- numbers from the directory's releases ----------
 // Last known values, used only when GitHub can't be reached (and the build log says so).
-const FALLBACK = { companies: 21485, indexed: 13962, builtAt: "2026-10-06T10:05:24Z", feedJobs: 1338418, feedAt: "2026-10-10T10:42:06Z" };
+const FALLBACK = { companies: 47737, liveBoards: 37004, indexed: 16997, builtAt: "2026-10-11T12:22:00Z", feedJobs: 1338418, feedAt: "2026-10-10T10:42:06Z" };
 
 async function getJson(url) {
   const res = await fetch(url, { redirect: "follow", signal: AbortSignal.timeout(15_000) });
@@ -43,13 +44,26 @@ async function getJson(url) {
   return res.json();
 }
 
+/** Directory companies whose job board answered at the last check (status "live"; the rest are dormant). */
+async function liveBoardCount(url) {
+  const res = await fetch(url, { redirect: "follow", signal: AbortSignal.timeout(30_000) });
+  if (!res.ok) throw new Error(`${url}: HTTP ${res.status}`);
+  const d = JSON.parse(gunzipSync(Buffer.from(await res.arrayBuffer())).toString("utf8"));
+  const list = Array.isArray(d) ? d : (d.companies ?? []);
+  return list.filter((c) => c.status === "live").length;
+}
+
 async function directoryNumbers() {
   const base = `https://github.com/${DATA_REPO}/releases`;
   try {
-    const [dir, feed] = await Promise.all([getJson(`${base}/latest/download/manifest.json`), getJson(`${base}/download/jobs/jobs-manifest.json`)]);
+    const [dir, feed, liveBoards] = await Promise.all([
+      getJson(`${base}/latest/download/manifest.json`),
+      getJson(`${base}/download/jobs/jobs-manifest.json`),
+      liveBoardCount(`${base}/latest/download/directory.json.gz`),
+    ]);
     const feedJobs = Object.values(feed.shards ?? {}).reduce((sum, s) => sum + (s.jobs ?? 0), 0);
-    if (!(dir.companies > 0 && dir.indexed > 0 && feedJobs > 0)) throw new Error("manifest without counts");
-    return { companies: dir.companies, indexed: dir.indexed, builtAt: dir.generated_at, feedJobs, feedAt: feed.generated_at, live: true };
+    if (!(dir.companies > 0 && dir.indexed > 0 && feedJobs > 0 && liveBoards > 0)) throw new Error("manifest without counts");
+    return { companies: dir.companies, liveBoards, indexed: dir.indexed, builtAt: dir.generated_at, feedJobs, feedAt: feed.generated_at, live: true };
   } catch (err) {
     console.warn(`Directory numbers: ${err.message}. Using the last known ones.`);
     return { ...FALLBACK, live: false };
@@ -64,6 +78,7 @@ const atLeast = (x) => (x >= 1e6 ? `${Math.floor(x / 1e5) / 10}M+` : `${int(Math
 const NUMBERS = {
   __COMPANIES__: int(n.companies),
   __COMPANIES_ROUND__: atLeast(n.companies),
+  __LIVE_ROUND__: atLeast(n.liveBoards),
   __INDEXED__: int(n.indexed),
   __FEED_JOBS__: atLeast(n.feedJobs),
   __DIR_DATE__: day(n.builtAt),
