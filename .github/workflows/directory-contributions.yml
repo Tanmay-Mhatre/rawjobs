@@ -116,12 +116,16 @@ jobs:
         name: Publish the updated directory
         env:
           GH_TOKEN: ${{ secrets.DATA_REPO_TOKEN }}
+        # A new dated release each time (never overwriting the last one), so any earlier directory
+        # can be made the latest again: gh release edit <tag> -R "$DATA_REPO" --latest
         run: |
-          tag=$(gh release view -R "$DATA_REPO" --json tagName -q .tagName)
-          # Data files first, manifest last: an install that reads in between finds files that don't
-          # match its manifest's SHA-256 and keeps the copy it has.
-          gh release upload "$tag" dist/*.gz -R "$DATA_REPO" --clobber
-          gh release upload "$tag" dist/manifest.json -R "$DATA_REPO" --clobber
+          base=$(gh release view -R "$DATA_REPO" --json tagName -q .tagName)
+          tag="directory-$(date -u +%Y-%m-%d-%H%M)-shared"
+          version=$(jq -r .version dist/manifest.json)
+          companies=$(jq -r .companies dist/manifest.json)
+          # gh creates it as a draft, uploads every file, then publishes it as the latest.
+          gh release create "$tag" dist/* -R "$DATA_REPO" --latest --title "Directory $(date -u +%Y-%m-%d) + shared companies" \
+            --notes "$base plus ${{ steps.accept.outputs.accepted }} companies users shared. Version $version · $companies companies. Download manifest.json first; files are checked against its SHA-256."
 
       - if: always() && steps.state.outputs.restored == 'true'
         name: Save the working state
