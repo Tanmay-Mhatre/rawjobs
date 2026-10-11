@@ -1,19 +1,20 @@
 import { spawn, type ChildProcess } from "node:child_process";
-import { readFileSync, statSync, writeFileSync } from "node:fs";
+import { statSync, writeFileSync } from "node:fs";
 import type { IncomingMessage, ServerResponse } from "node:http";
 import { resolve } from "node:path";
+import { APP_VERSION, cliCommand, type Command } from "../../core/src/runtime";
 import { readTracking, saveTracking } from "../../core/src/tracking";
 import { refuse } from "./guard";
 
 export type ApiOptions = {
-  /** Where RawJobs' code is (package.json, node_modules/tsx, the CLI). */
-  repoRoot: string;
-  /** Your RawJobs folder: rawjobs.config.local.yaml and profile/. The CLI runs here. Default: repoRoot. */
-  home?: string;
+  /** Your RawJobs folder: rawjobs.config.local.yaml and profile/. The CLI runs here. */
+  home: string;
   /** The run output folder (jobs.json, meta.json, catalog/…). */
   dataDir: string;
-  /** How to start the CLI: a program and the arguments before the command. Default: node + tsx + the CLI source. */
-  cli?: { command: string; args: string[] };
+  /** How to start the CLI. Default: this copy's own (runtime's cliCommand()). */
+  cli?: Command;
+  /** Reported by /api/health. Default: this copy's version. */
+  version?: string;
 };
 
 /** One line of the scan's NDJSON progress. */
@@ -45,13 +46,9 @@ type Line = string;
  * never stops it, and GET /api/run picks it up again.
  */
 export function createApi(opts: ApiOptions) {
-  const { repoRoot, dataDir } = opts;
-  const home = opts.home ?? repoRoot;
-  const cliCmd = opts.cli ?? {
-    command: process.execPath,
-    args: [resolve(repoRoot, "node_modules/tsx/dist/cli.mjs"), resolve(repoRoot, "packages/cli/src/index.ts")],
-  };
-  const version = readVersion(repoRoot);
+  const { home, dataDir } = opts;
+  const cliCmd = opts.cli ?? cliCommand();
+  const version = opts.version ?? APP_VERSION;
 
   /** Run `rawjobs <args>` from the repo root (no shell, so no quoting issues). */
   function cli(args: string[], stdin?: string): ChildProcess {
@@ -303,12 +300,4 @@ function readBody(req: IncomingMessage, maxBytes = 5_000_000): Promise<string> {
     req.on("end", () => done(body));
     req.on("error", fail);
   });
-}
-
-function readVersion(repoRoot: string): string {
-  try {
-    return (JSON.parse(readFileSync(resolve(repoRoot, "package.json"), "utf8")) as { version?: string }).version ?? "0.0.0";
-  } catch {
-    return "0.0.0";
-  }
 }

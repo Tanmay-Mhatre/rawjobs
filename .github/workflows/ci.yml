@@ -24,3 +24,16 @@ jobs:
       - run: pnpm test
       - name: Example config is valid
         run: pnpm rawjobs validate --config rawjobs.config.example.yaml
+      - name: The bundle runs through its launcher (an installed copy, without pnpm or tsx)
+        run: |
+          pnpm bundle --try "$RUNNER_TEMP/rawjobs"
+          cd "$RUNNER_TEMP"
+          rawjobs/bin/rawjobs --help
+          rawjobs/bin/rawjobs validate --config "$GITHUB_WORKSPACE/rawjobs.config.example.yaml"
+          rawjobs/bin/rawjobs setup status | grep -F "\"configPath\":\"$RUNNER_TEMP/rawjobs/rawjobs.config.local.yaml\""
+          rawjobs/bin/rawjobs serve --port 4399 &
+          for i in $(seq 1 20); do curl -fs http://127.0.0.1:4399/api/health && break; sleep 1; done
+          curl -fs http://127.0.0.1:4399/api/health | grep -F '"ok":true'
+          curl -fs http://127.0.0.1:4399/ | grep -qi "<!doctype html>"
+          curl -fs http://127.0.0.1:4399/api/setup | grep -F '"isPersonal":false'
+          kill $!

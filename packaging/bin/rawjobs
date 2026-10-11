@@ -1,0 +1,11 @@
+#!/bin/sh
+# RawJobs launcher (macOS, Linux). It never changes between versions: it runs the version named in
+# app/current.txt with the Node named in runtime/current.txt, both inside this RawJobs folder.
+set -e
+ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+NODE="$ROOT/runtime/$(cat "$ROOT/runtime/current.txt")/bin/node"
+APP="$ROOT/app/versions/$(cat "$ROOT/app/current.txt")"
+RAWJOBS_HOME="$ROOT"
+RAWJOBS_LAUNCHER="$ROOT/bin/rawjobs"
+export RAWJOBS_HOME RAWJOBS_LAUNCHER
+exec "$NODE" "$APP/cli.mjs" "$@"

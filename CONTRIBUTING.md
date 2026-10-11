@@ -13,6 +13,10 @@ pnpm hooks:install   # once per clone: no direct pushes to main, and pnpm check 
 pnpm check           # design tokens + design lint + typecheck + tests
 ```
 
+The copy people install is a bundle that needs only Node: `pnpm bundle` builds it in
+`dist/bundle/`, and `pnpm bundle --try <folder>` lays it out as an installed copy so you can run
+`<folder>/bin/rawjobs serve`. CI does that on every push. See `docs/plans/local-install.md`.
+
 The contribution inbox (`services/contribute`) is a Cloudflare Worker with its own `package.json`.
 Its tests run with the rest (`pnpm test`); typecheck it with `npm install && npm run typecheck`
 in that folder.

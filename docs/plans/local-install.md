@@ -1,6 +1,6 @@
 # Local install and updates: one line to install, updates by themselves (plan v1)
 
-Status: **planned on 2026-10-11; steps 1 and 2 built the same day**. Written from the decisions made with the user on 2026-10-10/11, after a review of the code, of how competitors ship, and of signing rules on Windows and macOS.
+Status: **planned on 2026-10-11; steps 1–3 built the same day**. Written from the decisions made with the user on 2026-10-10/11, after a review of the code, of how competitors ship, and of signing rules on Windows and macOS.
 
 ## Goal
 Anyone on Windows or macOS installs RawJobs by pasting one line, with no Node, pnpm, git or Claude needed. The dashboard is always there while the computer is on, without a terminal. New versions reach every user by themselves, safely. Nothing is hosted and nothing costs money.
@@ -172,7 +172,7 @@ Adoption can be read from the release assets' download counts on GitHub. There i
 |---|---|---|
 | 1 | **Production server** `packages/server`: the 16 routes on `node:http`, the built dashboard and `data/` served from it, scans owned by the server (closing or reloading the tab never stops one; `GET /api/run` follows it again), Host + Origin check, `/api/health`, `pnpm start`. The Vite dev server reuses it. **Built 2026-10-11.** Calling the core in-process instead of starting the CLI per request moves to step 3, where tsx goes away. | 2–3 days |
 | 2 | **Data folder and tracking on disk**: `RAWJOBS_HOME` (core `rawjobsHome()`, default: the folder RawJobs runs in, so a checkout works as before) for the config, `profile/` and `data/`; the server and scheduled scans run the CLI there. Statuses, notes, saved views, hidden companies and rules saved in `profile/tracking.json` (`GET/PUT /api/tracking`), with the browser copy kept for an instant first paint; the first page opened with this version uploads what its browser had. **Built 2026-10-11.** | 2–3 days |
-| 3 | **Bundle and launcher**: esbuild for the server and CLI, `bin/rawjobs`, `schedule.ts` points at the launcher | 2 days |
+| 3 | **Bundle and launcher**: `pnpm bundle` builds `dist/bundle/rawjobs-<version>/` (one `cli.mjs` with the CLI, the server and every dependency, 1.3 MB; `web/`; `bin/`; `package.json`). `rawjobs serve` runs the dashboard. `packaging/bin/rawjobs` and `rawjobs.cmd` run the version in `app/current.txt` with the Node in `runtime/current.txt` and set `RAWJOBS_HOME`; scheduled scans from an installed copy go through the launcher. `pnpm bundle --try <dir>` lays out a trial install; CI runs it on every push. **Built 2026-10-11.** A command starts in 0.3 s from the bundle (1.3 s through tsx), so calling the core in-process isn't needed. | 2 days |
 | 4 | **Install scripts and the release workflow**: `install.sh`, `install.ps1`, uninstall, `latest.json` signing, install test on CI | 3–4 days |
 | 5 | **Updater**: check, verify, switch, health check, rollback, migrations framework, Settings → Updates, upgrade and rollback tests on CI | 3–4 days |
 | 6 | **Docs**: README getting started (one line per OS, with screenshots), SECURITY, PRIVACY, a troubleshooting page | 1 day |

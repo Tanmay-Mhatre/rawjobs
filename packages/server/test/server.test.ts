@@ -57,7 +57,6 @@ describe("the API", () => {
   async function start() {
     const dir = mkdtempSync(join(tmpdir(), "rawjobs-api-"));
     mkdirSync(join(dir, "data"));
-    writeFileSync(join(dir, "package.json"), JSON.stringify({ version: "9.9.9" }));
     const fake = join(dir, "fake-cli.mjs");
     writeFileSync(
       fake,
@@ -72,7 +71,7 @@ console.log(JSON.stringify({ type: "done", scope: args[args.indexOf("--scope") +
     );
     const home = join(dir, "home");
     mkdirSync(home);
-    const api = createApi({ repoRoot: dir, home, dataDir: join(dir, "data"), cli: { command: process.execPath, args: [fake] } });
+    const api = createApi({ home, dataDir: join(dir, "data"), cli: { command: process.execPath, args: [fake] }, version: "9.9.9" });
     server = createServer((rq, rs) => void api.handle(rq, rs));
     await new Promise<void>((r) => server!.listen(0, "127.0.0.1", r));
     const port = (server!.address() as AddressInfo).port;

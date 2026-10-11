@@ -77,6 +77,8 @@ export type ScheduleContext = {
   repoRoot: string;
   /** Your RawJobs folder: the scan runs from here, so it finds your config and resume. Default: repoRoot. */
   workDir?: string;
+  /** How the scheduler starts the CLI (runtime's schedulerCommand()). Default: node + tsx + the sources in repoRoot. */
+  launch?: { command: string; args: string[] };
   dataDir: string;
   /** Run a program; tests pass a fake. */
   exec?: (cmd: string, args: string[]) => { status: number | null; stdout: string; stderr: string };
@@ -91,12 +93,15 @@ const defaultExec = (cmd: string, args: string[]) => {
 
 const workDir = (ctx: ScheduleContext) => resolve(ctx.workDir ?? ctx.repoRoot);
 
-/** node + tsx + the CLI, with absolute paths (the scheduler starts with no PATH or working folder of ours). */
+/** The scan command, with absolute paths (the scheduler starts with no PATH or working folder of ours). */
 export function scanCommand(ctx: ScheduleContext, scope: ScanScope): string[] {
+  const launch = ctx.launch ?? {
+    command: process.execPath,
+    args: [resolve(ctx.repoRoot, "node_modules/tsx/dist/cli.mjs"), resolve(ctx.repoRoot, "packages/cli/src/index.ts")],
+  };
   return [
-    process.execPath,
-    resolve(ctx.repoRoot, "node_modules/tsx/dist/cli.mjs"),
-    resolve(ctx.repoRoot, "packages/cli/src/index.ts"),
+    launch.command,
+    ...launch.args,
     "scan",
     "--scope",
     scope,

@@ -1,11 +1,12 @@
 #!/usr/bin/env -S npx tsx
 import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
-import { fileURLToPath } from "node:url";
 import { parseArgs } from "node:util";
 import {
   defaultDataDir,
   rawjobsHome,
+  CODE_ROOT,
+  schedulerCommand,
   checkCompanies,
   directoryIndustryCounts,
   companyKey,
@@ -74,9 +75,6 @@ import {
   type Job,
 } from "@rawjobs/core";
 import { ATS_TYPES } from "@rawjobs/core";
-
-/** Where RawJobs' code is (scheduled scans start node + tsx + this CLI from here). */
-const CODE_ROOT = fileURLToPath(new URL("../../..", import.meta.url));
 
 /** A company's own hiring system, not a job board (JOB_BOARDS): boards are never shared or put in the directory. */
 const isAts = (ats: string | undefined) => (ATS_TYPES as readonly string[]).includes(ats ?? "");
@@ -220,6 +218,7 @@ async function cmdCompanies(args: string[]): Promise<number> {
 const HELP = `RawJobs: self-hosted job radar
 
 Usage:
+  rawjobs serve [--port <n>] [--open]   Run the dashboard on http://127.0.0.1:4317
   rawjobs scan [options]      Sync the directory, fetch your companies (and more, by scope) live, score them
   rawjobs schedule <status|install|remove>   Scan on a schedule on this computer (--time 08:00 [--time 20:00] [--scope mine|all], default mine)
   rawjobs alerts telegram <status|token|connect|test|on|off|forget>   Telegram alerts
@@ -274,6 +273,9 @@ async function main(argv: string[]): Promise<number> {
       return cmdAlerts(rest);
     case "schedule":
       return cmdSchedule(rest);
+    case "serve":
+      // Loaded only when asked for, so other commands start as fast as before.
+      return (await import("../../server/src/serve")).serve(rest);
     case undefined:
     case "help":
     case "-h":
@@ -647,7 +649,7 @@ async function cmdSchedule(args: string[]): Promise<number> {
       stdin: { type: "boolean", default: false },
     },
   });
-  const ctx = { repoRoot: CODE_ROOT, workDir: rawjobsHome(), dataDir: resolve(values.data) };
+  const ctx = { repoRoot: CODE_ROOT, workDir: rawjobsHome(), launch: schedulerCommand(), dataDir: resolve(values.data) };
   const out = (o: Record<string, unknown>) => console.log(JSON.stringify(o));
   try {
     const action = positionals[0] ?? "status";
