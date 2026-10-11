@@ -146,7 +146,19 @@ describe("updating an installed copy", () => {
     switchTo(home, v.version, v.node);
     writeFileSync(join(home, "profile/resume.md"), "changed by a broken migration");
     const starts: string[] = [];
-    const record = await finishUpdate({ home, from: "0.1.0", to: "0.2.0", backup, timeoutMs: 1500, start: () => starts.push(installedVersions(home)!.current) });
+    const record = await finishUpdate({
+      home,
+      from: "0.1.0",
+      to: "0.2.0",
+      backup,
+      timeoutMs: 2500,
+      // The new version never answers; the old one does once it's started again.
+      start: () => {
+        const v = installedVersions(home)!.current;
+        starts.push(v);
+        if (v === "0.1.0") void serve((_q, res) => res.end(JSON.stringify({ ok: true, version: "0.1.0" }))).then((port) => writeFileSync(join(home, "state.json"), JSON.stringify({ port })));
+      },
+    });
     expect(record.ok).toBe(false);
     expect(record.error).toMatch(/0\.1\.0 is back/);
     expect(installedVersions(home)?.current).toBe("0.1.0");

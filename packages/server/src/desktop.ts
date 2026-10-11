@@ -249,7 +249,7 @@ export async function updateCommand(args: string[]): Promise<number> {
     }
   }
   // The old version's helper now starts the new one and gives it a minute; wait for its verdict.
-  for (let i = 0; i < 300; i++) {
+  for (let i = 0; i < 400; i++) {
     await sleep(500);
     const r = readLastUpdate(home);
     if (r && r.to === m.version && Date.parse(r.at) >= started) {

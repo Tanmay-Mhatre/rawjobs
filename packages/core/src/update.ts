@@ -285,7 +285,8 @@ export function startServer(home: string): void {
   };
   let started = false;
   if (process.platform === "win32") started = run("powershell.exe", ["-NoProfile", "-NonInteractive", "-Command", `Start-ScheduledTask -TaskName '${AUTOSTART.windowsTask}'`]);
-  else if (process.platform === "darwin") started = run("launchctl", ["kickstart", "-k", `gui/${process.getuid?.() ?? 501}/${AUTOSTART.macLabel}`]);
+  // No -k: the old server has already stopped, and kickstart -k takes about 20 s to return.
+  else if (process.platform === "darwin") started = run("launchctl", ["kickstart", `gui/${process.getuid?.() ?? 501}/${AUTOSTART.macLabel}`]);
   else started = run("systemctl", ["--user", "restart", AUTOSTART.linuxUnit]);
   if (started) return;
   console.log("Starting the server from the launcher instead.");
@@ -319,6 +320,16 @@ const alive = (pid: number) => {
     return false;
   }
 };
+
+/** Wait until this folder's server answers as `version`; false when it hasn't within `ms`. */
+async function waitFor(home: string, version: string, ms: number): Promise<boolean> {
+  const deadline = Date.now() + ms;
+  while (Date.now() < deadline) {
+    await sleep(1000);
+    if ((await runningVersion(home)) === version) return true;
+  }
+  return false;
+}
 
 export type FinishOptions = {
   home: string;
@@ -354,12 +365,7 @@ export async function finishUpdate(o: FinishOptions): Promise<UpdateRecord> {
   }
   console.log("The old server has stopped; starting the new version.");
   start(o.home);
-  const deadline = Date.now() + (o.timeoutMs ?? START_TIMEOUT_MS);
-  let running: string | null = null;
-  while (Date.now() < deadline && running !== o.to) {
-    await sleep(1000);
-    running = await runningVersion(o.home);
-  }
+  const running = (await waitFor(o.home, o.to, o.timeoutMs ?? START_TIMEOUT_MS)) ? o.to : await runningVersion(o.home);
   console.log(running === o.to ? `${o.to} answers.` : `${o.to} didn't answer (last seen: ${running ?? "nothing"}); going back to ${o.from}.`);
   let record: UpdateRecord;
   if (running === o.to) {
@@ -380,7 +386,19 @@ export async function finishUpdate(o: FinishOptions): Promise<UpdateRecord> {
     const f = readUpdateFile(o.home);
     writeUpdateFile(o.home, { skip: [...new Set([...(f.skip ?? []), o.to])] });
     start(o.home);
-    record = { from: o.from, to: o.to, ok: false, at: new Date().toISOString(), error: `RawJobs ${o.to} didn't start within ${Math.round((o.timeoutMs ?? START_TIMEOUT_MS) / 1000)} seconds, so ${o.from} is back. See logs/server.log.` };
+    // Only say it's back once it answers (macOS spaces out restarts by a few seconds).
+    const back = await waitFor(o.home, o.from, o.timeoutMs ?? START_TIMEOUT_MS);
+    console.log(back ? `${o.from} answers again.` : `${o.from} didn't answer yet either.`);
+    const secs = Math.round((o.timeoutMs ?? START_TIMEOUT_MS) / 1000);
+    record = {
+      from: o.from,
+      to: o.to,
+      ok: false,
+      at: new Date().toISOString(),
+      error: back
+        ? `RawJobs ${o.to} didn't start within ${secs} seconds, so ${o.from} is back. See logs/server.log.`
+        : `RawJobs ${o.to} didn't start within ${secs} seconds, so RawJobs went back to ${o.from}, which hasn't answered yet either. Open the RawJobs shortcut to start it, or see logs/server.log.`,
+    };
   }
   writeJson(join(o.home, "app/last-update.json"), record);
   return record;
