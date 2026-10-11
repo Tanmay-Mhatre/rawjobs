@@ -1,5 +1,5 @@
 import { ArrowRight, KanbanSquare, StickyNote } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { Job } from "../lib/data";
 import { timeAgo } from "../lib/format";
 import { PIPELINE, STATUS_LABEL, type Entry, type PipelineStatus, type Status, type UserState } from "../lib/userState";
@@ -22,6 +22,18 @@ export function Pipeline({ user, jobsById, min, onOpen, onMove, onSetup, goRadar
   const [dragOver, setDragOver] = useState<PipelineStatus | null>(null);
   /** Phones show one column at a time, picked from the status chips. */
   const [mobileCol, setMobileCol] = useState<PipelineStatus | null>(null);
+  /** What the last keyboard move did, for screen readers (design/components/Pipeline: a polite live region). */
+  const [announce, setAnnounce] = useState("");
+  /** The card just moved with [ or ]: it re-renders in its new column, then gets focus back. */
+  const refocus = useRef<string | null>(null);
+  const boardRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const id = refocus.current;
+    if (!id) return;
+    refocus.current = null;
+    const card = [...(boardRef.current?.querySelectorAll<HTMLElement>("[data-card-id]") ?? [])].find((el) => el.dataset.cardId === id);
+    card?.querySelector<HTMLElement>("[data-card-title]")?.focus();
+  });
   const entries = Object.entries(user).filter(([, e]) => e.status && e.status !== "dismissed");
   const total = entries.length;
 
@@ -59,8 +71,26 @@ export function Pipeline({ user, jobsById, min, onOpen, onMove, onSetup, goRadar
   // Default to the first column with cards in it.
   const shown = mobileCol ?? columns.find((c) => c.items.length)?.col ?? PIPELINE[0];
 
+  /** [ and ] move a card one column back or forward; focus stays on it and the move is announced. */
+  const moveBy = (id: string, entry: Entry, d: -1 | 1) => {
+    const at = PIPELINE.indexOf(entry.status as PipelineStatus);
+    const to = PIPELINE[at + d];
+    if (at < 0 || !to) return;
+    refocus.current = id;
+    // Phones show one column: follow the card into its new one.
+    setMobileCol(to);
+    setAnnounce(`Moved ${entry.snapshot.title} to ${STATUS_LABEL[to]}`);
+    onMove(id, entry, to);
+  };
+
   return (
-    <div className="pb-2 md:overflow-x-auto">
+    <div ref={boardRef} className="pb-2 md:overflow-x-auto">
+      <p id="pipeline-move-help" className="sr-only">
+        Press [ or ] to move this job to the previous or next stage.
+      </p>
+      <p className="sr-only" role="status" aria-live="polite">
+        {announce}
+      </p>
       <div className="-mx-4 mb-3 overflow-x-auto px-4 md:hidden [mask-image:linear-gradient(to_right,transparent,black_1rem,black_calc(100%-1.5rem),transparent)]">
         <ChipGroup label="Pipeline column" className="w-max pr-4">
           {columns.map(({ col, items }) => (
@@ -103,6 +133,7 @@ export function Pipeline({ user, jobsById, min, onOpen, onMove, onSetup, goRadar
                   return (
                     <li
                       key={id}
+                      data-card-id={id}
                       draggable
                       onDragStart={(ev) => ev.dataTransfer.setData("text/plain", id)}
                       // Mouse shortcut: the whole card opens the job; the title button is the keyboard / screen-reader way in.
@@ -116,10 +147,18 @@ export function Pipeline({ user, jobsById, min, onOpen, onMove, onSetup, goRadar
                         {job ? (
                           <button
                             type="button"
+                            data-card-title
+                            aria-describedby="pipeline-move-help"
+                            aria-keyshortcuts="[ ]"
                             className="text-left type-small font-semibold leading-5 hover:underline"
                             onClick={(ev) => {
                               ev.stopPropagation();
                               onOpen(job);
+                            }}
+                            onKeyDown={(ev) => {
+                              if ((ev.key !== "[" && ev.key !== "]") || ev.metaKey || ev.ctrlKey || ev.altKey) return;
+                              ev.preventDefault();
+                              moveBy(id, e, ev.key === "[" ? -1 : 1);
                             }}
                           >
                             {s.title}

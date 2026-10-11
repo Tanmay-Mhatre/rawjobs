@@ -31,6 +31,7 @@ import type { FilterPicks } from "../../lib/profileSync";
 import { postedOrSeen, timeAgo } from "../../lib/format";
 import { newSinceLastVisit } from "../../lib/newSince";
 import { useDensity, useMaxAge } from "../../lib/theme";
+import { ignoreShortcut } from "../../lib/keys";
 import { load, save } from "../../lib/storage";
 import type { Status, UserState } from "../../lib/userState";
 import { JobDetail } from "../JobDetail";
@@ -42,7 +43,7 @@ import { FilterSheet, SheetSection, SORTS, SortOptions } from "./FilterSheet";
 import { JobCard } from "./JobCard";
 import { ageLimit, MoreMenu, MoreToggles } from "./MoreFilters";
 import { ProfileBar } from "./ProfileBar";
-import { ViewsBar } from "./ViewsBar";
+import { builtInViews, ViewsBar } from "./ViewsBar";
 
 type Props = {
   jobs: Job[];
@@ -307,7 +308,7 @@ export function RadarPage(p: Props) {
     [navGroups, rows, index, limit, wide, p],
   );
 
-  // ----- keyboard: j/k move, s/a/x status, Enter opens (phones), "/" search -----
+  // ----- keyboard: j/k move, s/a/x status, Enter opens (phones), "/" search, 1-6 views -----
   const searchRef = useRef<HTMLInputElement>(null);
   // One listener for the page's life; it calls the latest handler (props change on every render).
   const onKeyRef = useRef<(e: KeyboardEvent) => void>(() => {});
@@ -319,13 +320,18 @@ export function RadarPage(p: Props) {
   useEffect(() => {
     onKeyRef.current = (e: KeyboardEvent) => {
       const t = e.target as HTMLElement | null;
-      if (t?.closest?.("input, textarea, select") || e.metaKey || e.ctrlKey || e.altKey) return;
+      if (ignoreShortcut(e)) return;
+      const phoneJob = !wide && p.overlayOpen;
+      // Not under some other dialog (the shortcut sheet, "Did you apply?"): the page behind it is inert.
+      if (!phoneJob && document.querySelector("dialog[open]")) return;
       if (e.key === "/") {
         e.preventDefault();
         searchRef.current?.focus();
         return;
       }
-      if (!wide && p.overlayOpen && !["j", "k", "ArrowDown", "ArrowUp"].includes(e.key)) return;
+      if (phoneJob && !["j", "k", "ArrowDown", "ArrowUp"].includes(e.key)) return;
+      const view = /^[1-6]$/.test(e.key) ? builtInViews(firstScan)[Number(e.key) - 1] : undefined;
+      if (view) return replace({ ...base, ...view.filters }, sort);
       if (e.key === "Enter" && t?.closest?.("button, a, [role=button]")) return;
       if (e.key === "j" || e.key === "ArrowDown") (e.preventDefault(), move(1));
       else if (e.key === "k" || e.key === "ArrowUp") (e.preventDefault(), move(-1));
