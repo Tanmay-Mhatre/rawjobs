@@ -1,6 +1,6 @@
 # RawJobs
 
-**Jobs, straight from the source.**
+**Jobs, straight from the source.** · [rawjobs.workers.dev](https://www.rawjobs.workers.dev)
 
 [![CI](https://github.com/Tanmay-Mhatre/rawjobs/actions/workflows/ci.yml/badge.svg)](https://github.com/Tanmay-Mhatre/rawjobs/actions/workflows/ci.yml) [![License: MIT](https://img.shields.io/badge/license-MIT-blue)](LICENSE) ![Node 22+](https://img.shields.io/badge/node-22%2B-informational)
 
@@ -23,7 +23,7 @@ Requires Node 22+ and [pnpm](https://pnpm.io).
 
 ```bash
 pnpm install
-pnpm dev                # opens http://127.0.0.1:5173
+pnpm dev                # opens http://127.0.0.1:5173 in your browser
 ```
 
 The dashboard walks you through setup the first time (about 3 minutes; you can skip it and come back from any page):
