@@ -10,8 +10,9 @@
 import { readdirSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { mergeCheck, type CheckRow } from "./lib/checks";
 
-type Row = { key: string; status?: string; error?: string; fetched_at?: string };
+type Row = { key: string; status?: string; error?: string; fetched_at?: string; [field: string]: unknown };
 
 /** The rows of a JSONL log; a line that isn't JSON (cut off by a kill) is skipped. */
 export function readRows(path: string): { rows: Row[]; skipped: number } {
@@ -28,7 +29,8 @@ export function readRows(path: string): { rows: Row[]; skipped: number } {
   return { rows, skipped };
 }
 
-export function compact(dir: string, pattern: RegExp, target: string, keep: (prev: Row | undefined, next: Row) => boolean) {
+/** `merge` folds a board's next row into what's kept for it so far. */
+export function compact(dir: string, pattern: RegExp, target: string, merge: (prev: Row | undefined, next: Row) => Row) {
   const files = readdirSync(dir).filter((n) => pattern.test(n));
   const latest = new Map<string, Row>();
   let before = 0;
@@ -38,7 +40,7 @@ export function compact(dir: string, pattern: RegExp, target: string, keep: (pre
     skipped += read.skipped;
     for (const r of read.rows) {
       before++;
-      if (keep(latest.get(r.key), r)) latest.set(r.key, r);
+      latest.set(r.key, merge(latest.get(r.key), r));
     }
   }
   const tmp = join(dir, `${target}.tmp`);
@@ -48,10 +50,11 @@ export function compact(dir: string, pattern: RegExp, target: string, keep: (pre
   console.error(`${target}: ${before} lines -> ${latest.size}${skipped ? ` (${skipped} unreadable lines skipped)` : ""}`);
 }
 
-/** Checks: the latest result wins, but a definite answer beats a later error (as in build.ts). */
-export const keepCheck = (prev: Row | undefined, next: Row) => !prev || next.status !== "error" || prev.status === "error";
+/** Checks: the latest result wins, but a definite answer beats a later error (as in build.ts), which only extends its error streak. */
+export const mergeCheckRow = (prev: Row | undefined, next: Row): Row => mergeCheck(prev as CheckRow | undefined, next as CheckRow);
 /** Index: the newest successful fetch wins; an error only when there's nothing better. */
-export const keepIndex = (prev: Row | undefined, next: Row) => {
+export const mergeIndexRow = (prev: Row | undefined, next: Row): Row => (keepIndex(prev, next) ? next : prev!);
+const keepIndex = (prev: Row | undefined, next: Row) => {
   if (!prev) return true;
   if (next.error && !prev.error) return false;
   if (prev.error && !next.error) return true;
@@ -60,6 +63,6 @@ export const keepIndex = (prev: Row | undefined, next: Row) => {
 
 if (process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1]) {
   const OUT = join(dirname(fileURLToPath(import.meta.url)), "out");
-  compact(OUT, /^checks(-.+)?\.jsonl$/, "checks.jsonl", keepCheck);
-  compact(OUT, /^index-.+\.jsonl$/, "index-all.jsonl", keepIndex);
+  compact(OUT, /^checks(-.+)?\.jsonl$/, "checks.jsonl", mergeCheckRow);
+  compact(OUT, /^index-.+\.jsonl$/, "index-all.jsonl", mergeIndexRow);
 }
