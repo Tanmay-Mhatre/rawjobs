@@ -24,7 +24,7 @@ function localApi(): Plugin {
     name: "rawjobs-local-api",
     apply: "serve",
     configureServer(server) {
-      const api = createApi({ repoRoot, home, dataDir });
+      const api = createApi({ home, dataDir });
       api.startBackground();
       server.middlewares.use((req, res, next) => {
         void api.handle(req, res).then((handled) => {

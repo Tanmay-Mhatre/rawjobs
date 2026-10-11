@@ -1,0 +1,94 @@
+import { spawnSync } from "node:child_process";
+import { chmodSync, copyFileSync, cpSync, existsSync, mkdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { dirname, join, resolve } from "node:path";
+import { parseArgs } from "node:util";
+import { build } from "esbuild";
+
+/**
+ * Build the copy of RawJobs that gets installed: it needs only Node, no pnpm or tsx.
+ *   cli.mjs        the CLI and the dashboard's server, with every dependency (`node cli.mjs serve`)
+ *   web/           the built dashboard
+ *   bin/           the launchers (copied into the install's own bin/)
+ *   package.json   the version
+ *
+ *   pnpm bundle                 → dist/bundle/rawjobs-<version>/
+ *   pnpm bundle --skip-web      reuse apps/web/dist as it is
+ *   pnpm bundle --try <dir>     also lay it out as an installed copy in <dir> (bin/, app/, runtime/
+ *                               with this computer's Node) to try the launcher: <dir>/bin/rawjobs serve
+ */
+const root = resolve(import.meta.dirname, "../..");
+const { values } = parseArgs({ options: { "skip-web": { type: "boolean", default: false }, try: { type: "string" } } });
+
+const version = (JSON.parse(readFileSync(join(root, "package.json"), "utf8")) as { version: string }).version;
+const out = join(root, "dist/bundle", `rawjobs-${version}`);
+
+if (!values["skip-web"]) run("pnpm", ["build"]);
+if (!existsSync(join(root, "apps/web/dist/index.html"))) fail("apps/web/dist is missing: run without --skip-web.");
+
+rmSync(out, { recursive: true, force: true });
+mkdirSync(out, { recursive: true });
+
+const started = Date.now();
+await build({
+  entryPoints: [join(root, "packages/cli/src/index.ts")],
+  outfile: join(out, "cli.mjs"),
+  bundle: true,
+  platform: "node",
+  format: "esm",
+  target: "node22",
+  // Tells the code it runs from the bundle (packages/core/src/runtime.ts).
+  define: { __RAWJOBS_BUNDLE__: "true" },
+  // Some dependencies still call require(); give the ES module one.
+  banner: { js: 'import { createRequire as __rawjobsRequire } from "node:module"; const require = __rawjobsRequire(import.meta.url);' },
+  legalComments: "linked",
+  logLevel: "warning",
+});
+
+cpSync(join(root, "apps/web/dist"), join(out, "web"), { recursive: true });
+cpSync(join(root, "packaging/bin"), join(out, "bin"), { recursive: true });
+chmodSync(join(out, "bin/rawjobs"), 0o755);
+writeFileSync(join(out, "package.json"), `${JSON.stringify({ name: "rawjobs", version, type: "module", license: "MIT" }, null, 2)}\n`);
+copyFileSync(join(root, "LICENSE"), join(out, "LICENSE"));
+
+const mb = (statSync(join(out, "cli.mjs")).size / 1e6).toFixed(1);
+console.log(`Bundled RawJobs ${version} in ${Date.now() - started} ms: ${out} (cli.mjs ${mb} MB)`);
+
+if (values.try) tryInstall(resolve(values.try));
+
+/**
+ * Lay the bundle out the way an install does (docs/plans/local-install.md, section 2), using this
+ * computer's Node as the runtime. Your config, profile/ and data/ in that folder are left alone.
+ */
+function tryInstall(home: string) {
+  const nodeName = `node-${process.version}-${process.platform}-${process.arch}`;
+  const nodeDir = join(home, "runtime", nodeName);
+  const nodeTarget = process.platform === "win32" ? join(nodeDir, "node.exe") : join(nodeDir, "bin/node");
+  if (!existsSync(nodeTarget)) {
+    mkdirSync(dirname(nodeTarget), { recursive: true });
+    copyFileSync(process.execPath, nodeTarget);
+    chmodSync(nodeTarget, 0o755);
+  }
+  writeFileSync(join(home, "runtime/current.txt"), nodeName);
+
+  const app = join(home, "app/versions", version);
+  rmSync(app, { recursive: true, force: true });
+  cpSync(out, app, { recursive: true });
+  writeFileSync(join(home, "app/current.txt"), version);
+
+  mkdirSync(join(home, "bin"), { recursive: true });
+  for (const f of ["rawjobs", "rawjobs.cmd"]) copyFileSync(join(out, "bin", f), join(home, "bin", f));
+  chmodSync(join(home, "bin/rawjobs"), 0o755);
+
+  const launcher = join(home, "bin", process.platform === "win32" ? "rawjobs.cmd" : "rawjobs");
+  console.log(`Installed as a trial in ${home}. Try:\n  "${launcher}" serve --open\n  "${launcher}" scan --plan`);
+}
+
+function run(cmd: string, args: string[]) {
+  const r = spawnSync([cmd, ...args].join(" "), { cwd: root, stdio: "inherit", shell: true });
+  if (r.status !== 0) fail(`${cmd} ${args.join(" ")} failed.`);
+}
+
+function fail(message: string): never {
+  console.error(message);
+  process.exit(1);
+}
