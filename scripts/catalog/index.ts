@@ -6,11 +6,14 @@
  *   pnpm exec tsx scripts/catalog/index.ts --ats greenhouse
  *   pnpm exec tsx scripts/catalog/index.ts --ats lever,ashby,smartrecruiters
  *   --max-age-days 7   re-fetch companies indexed more than 7 days ago
+ *   --max-minutes 30   stop starting new companies after 30 minutes (rows are appended as they
+ *                      come, and publish keeps each company's newest row, so stopping loses nothing)
  */
 import { appendFileSync, readdirSync, readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { getConnector, HttpClient, HttpError, inferWorkplace, type CompanyRef, type NormalizedJob } from "../../packages/core/src/index";
+import { maxMsFromArgs, nextInTime } from "./lib/time-box";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const OUT_DIR = join(here, "out");
@@ -20,6 +23,7 @@ const arg = (name: string) => {
 };
 const ONLY = new Set((arg("--ats") ?? "greenhouse,lever,ashby,smartrecruiters").split(","));
 const MAX_AGE_DAYS = Number(arg("--max-age-days") ?? 30);
+const MAX_MS = maxMsFromArgs();
 const OUT = join(OUT_DIR, `index-${[...ONLY].sort().join("-")}.jsonl`);
 /** Rows kept per company after merging duplicates (newest first). */
 const MAX_ROWS = 300;
@@ -87,7 +91,7 @@ async function main() {
   await Promise.all(
     [...lanes.entries()].flatMap(([ats, list]) =>
       Array.from({ length: WORKERS[ats] ?? 1 }, async () => {
-        for (let e = list.shift(); e; e = list.shift()) {
+        for (let e = nextInTime(list, started, MAX_MS); e; e = nextInTime(list, started, MAX_MS)) {
           let line: Record<string, unknown>;
           try {
             const jobs = await fetchJobs(e);
@@ -105,7 +109,8 @@ async function main() {
       }),
     ),
   );
-  console.error("Done.");
+  const left = [...lanes.values()].reduce((sum, list) => sum + list.length, 0);
+  console.error(left ? `Stopped after ${MAX_MS / 60_000} min: ${left} left for the next run.` : "Done.");
 }
 
 main().catch((err) => {

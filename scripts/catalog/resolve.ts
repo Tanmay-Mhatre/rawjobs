@@ -11,11 +11,15 @@
  * (--limit, default 2000): never-resolved companies first, in a fixed pseudo-random order so every
  * batch is a fair sample, then the oldest results. Results are reused for 90 days.
  *     -> scripts/catalog/out/resolved-bulk.json
+ *
+ * --max-minutes N stops starting new companies after N minutes and saves what was resolved; the
+ * rest are due again next run.
  */
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { atsHints, careersLinks, findBoards, HttpClient, HttpError, type FoundBoard } from "../../packages/core/src/index";
+import { maxMsFromArgs, nextInTime } from "./lib/time-box";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const BULK = process.argv.includes("--bulk");
@@ -24,6 +28,7 @@ const SEEDS = BULK ? join(here, "raw", "wikidata", "companies.json") : join(here
 const limitArg = process.argv.indexOf("--limit");
 const LIMIT = limitArg > 0 ? Number(process.argv[limitArg + 1]) : BULK ? 2000 : Infinity;
 const FORCE = process.argv.includes("--force");
+const MAX_MS = maxMsFromArgs();
 const onlyArg = process.argv.indexOf("--only");
 const ONLY = onlyArg > 0 ? new Set(process.argv[onlyArg + 1]!.split(",").map((s) => s.trim().toLowerCase())) : null;
 const MAX_PAGES = 8;
@@ -174,9 +179,10 @@ async function main() {
   console.error(`${seeds.length} seeds, ${due.length} due, resolving ${todo.length}`);
   let done = 0;
   const queue = [...todo];
+  const started = Date.now();
   await Promise.all(
     Array.from({ length: WORKERS }, async () => {
-      for (let s = queue.shift(); s; s = queue.shift()) {
+      for (let s = nextInTime(queue, started, MAX_MS); s; s = nextInTime(queue, started, MAX_MS)) {
         const r = await resolveSeed(s).catch((err): Resolved => ({ name: s!.name, website: s!.website, industries: s!.industries, status: "error", error: String(err).slice(0, 160), pages: 0, resolved_at: new Date().toISOString() }));
         byName.set(s.name.toLowerCase(), r);
         done++;
@@ -190,7 +196,7 @@ async function main() {
   writeFileSync(OUT, JSON.stringify({ generated_at: new Date().toISOString(), companies }, null, 1));
   const tally: Record<string, number> = {};
   for (const r of companies) tally[r.status] = (tally[r.status] ?? 0) + 1;
-  console.error("Done.", tally);
+  console.error(queue.length ? `Stopped after ${MAX_MS / 60_000} min: ${queue.length} left for the next run.` : "Done.", tally);
 }
 
 main().catch((err) => {

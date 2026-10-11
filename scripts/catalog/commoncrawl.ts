@@ -5,10 +5,12 @@
  * Incremental: crawls already read are listed in boards.json and skipped, so the first run reads
  * the last CRAWLS_TO_USE crawls (slow, once) and each weekly run reads only crawls published since.
  *
- * --per-run caps how many new crawls one run reads (the weekly rebuild uses 3, so the first
- * full backlog spreads over a few weeks).
+ * --per-run caps how many new crawls one run reads, and --max-minutes how long it reads: past it,
+ * no new query starts and the crawl is read again next run (boards already found are kept). When
+ * the index keeps failing (4 queries in a row) the run stops at once instead of retrying every
+ * query: on 10 Oct 2026 an outage cost 2h50m of 2.5-minute retries.
  *
- *   pnpm catalog:crawl [--crawls 24] [--per-run 3]   -> scripts/catalog/raw/commoncrawl/boards.json
+ *   pnpm catalog:crawl [--crawls 24] [--per-run 3] [--max-minutes 60]   -> scripts/catalog/raw/commoncrawl/boards.json
  */
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
@@ -17,14 +19,14 @@ import { HttpClient } from "../../packages/core/src/index";
 import { BoardSet, type SeenBoard } from "./lib/url-boards";
 
 const here = dirname(fileURLToPath(import.meta.url));
-const OUT = join(here, "raw", "commoncrawl", "boards.json");
-const http = new HttpClient({ retries: 4, hostDelayMs: 1500, timeoutMs: 120_000, backoffMs: 10_000 });
-const INDEX = "https://index.commoncrawl.org";
-const crawlsArg = process.argv.indexOf("--crawls");
-/** About two years of crawls: boards seen once in that window may still be live. */
-const CRAWLS_TO_USE = crawlsArg > 0 ? Number(process.argv[crawlsArg + 1]) : 24;
-const perRunArg = process.argv.indexOf("--per-run");
-const PER_RUN = perRunArg > 0 ? Number(process.argv[perRunArg + 1]) : Infinity;
+const OUT_FILE = join(here, "raw", "commoncrawl", "boards.json");
+const arg = (name: string) => {
+  const i = process.argv.indexOf(name);
+  return i > 0 ? Number(process.argv[i + 1]) : undefined;
+};
+/** Few retries and a breaker: a 503 from an overloaded index is a reason to back off, not to insist. */
+export const newCrawlClient = (opts: Partial<ConstructorParameters<typeof HttpClient>[0]> = {}) =>
+  new HttpClient({ retries: 2, hostDelayMs: 1500, timeoutMs: 90_000, backoffMs: 10_000, breakAfter: 4, userAgent: "RawJobs-catalog/0.1 (open-source job radar; reads the CC URL index only)", ...opts });
 
 /** URL patterns per host, including the boards' public APIs; workday tenants are subdomains so they use a domain match. */
 const QUERIES: { url: string; matchType?: "domain" }[] = [
@@ -78,8 +80,25 @@ type Saved = { generated_at: string; crawls: string[]; queries?: string[]; index
 
 const queryId = (q: { url: string; matchType?: string }) => `${q.url}|${q.matchType ?? ""}`;
 
-async function main() {
-  const prev: Saved | undefined = existsSync(OUT) ? JSON.parse(readFileSync(OUT, "utf8")) : undefined;
+export type CrawlRun = {
+  http: HttpClient;
+  out: string;
+  index?: string;
+  /** About two years of crawls: boards seen once in that window may still be live. */
+  crawlsToUse?: number;
+  perRun?: number;
+  maxMs?: number;
+  now?: () => number;
+};
+
+/** Why a run ended: everything planned was read, the time ran out, or the index stopped answering. */
+export type CrawlEnd = "done" | "out of time" | "index unavailable";
+
+export async function readCrawls({ http, out, index = "https://index.commoncrawl.org", crawlsToUse = 24, perRun = Infinity, maxMs = Infinity, now = Date.now }: CrawlRun): Promise<CrawlEnd> {
+  const started = now();
+  const indexHost = new URL(index).host;
+  const stopReason = (): CrawlEnd | undefined => (http.stats.brokenHosts.includes(indexHost) ? "index unavailable" : now() - started >= maxMs ? "out of time" : undefined);
+  const prev: Saved | undefined = existsSync(out) ? JSON.parse(readFileSync(out, "utf8")) : undefined;
   // Older files listed crawls per board as `crawls`.
   const boards = new BoardSet((prev?.boards ?? []).map(({ crawls, seen, ...b }) => ({ ...b, seen: seen ?? crawls ?? [] })));
   const done = new Set(prev?.crawls ?? []);
@@ -87,27 +106,40 @@ async function main() {
   // Files from before `queries` was recorded were read with the first 13 patterns.
   const knownQueries = new Set(prev?.queries ?? (prev ? QUERIES.slice(0, 13).map(queryId) : []));
   const newQueries = QUERIES.filter((q) => !knownQueries.has(queryId(q)));
-  const recent = (await http.getJson<{ id: string }[]>(`${INDEX}/collinfo.json`)).slice(0, CRAWLS_TO_USE).map((c) => c.id);
+  let recent: string[];
+  try {
+    recent = (await http.getJson<{ id: string }[]>(`${index}/collinfo.json`)).slice(0, crawlsToUse).map((c) => c.id);
+  } catch (err) {
+    console.error(`Crawl list failed (${(err as Error).message})`);
+    return "index unavailable";
+  }
   // Newest first, so a capped run always picks up the latest crawl.
   // Crawls not read yet (every pattern), then crawls read before new patterns were added (those only).
-  const todo = [...recent.filter((c) => !done.has(c)), ...(newQueries.length ? recent.filter((c) => done.has(c)) : [])].slice(0, PER_RUN);
+  const todo = [...recent.filter((c) => !done.has(c)), ...(newQueries.length ? recent.filter((c) => done.has(c)) : [])].slice(0, perRun);
   const backfilled = new Set<string>();
   console.error(`Crawls: ${recent.length} recent, reading ${todo.length} this run${todo.length ? `: ${todo.join(", ")}` : ""}`);
   let lines = prev?.index_lines ?? 0;
 
   const save = () => {
-    mkdirSync(dirname(OUT), { recursive: true });
+    mkdirSync(dirname(out), { recursive: true });
     // New patterns count as known once every recent crawl has been read with them.
     const queries = recent.filter((c) => readBefore.has(c)).every((c) => backfilled.has(c)) ? QUERIES.map(queryId) : [...knownQueries];
     const saved: Saved = { generated_at: new Date().toISOString(), crawls: [...done].sort().reverse(), queries, index_lines: lines, boards: boards.list() };
-    writeFileSync(OUT, JSON.stringify(saved));
+    writeFileSync(out, JSON.stringify(saved));
   };
 
+  let end: CrawlEnd = "done";
   for (const crawl of todo) {
     let complete = true;
     const backfill = done.has(crawl);
     for (const q of backfill ? newQueries : QUERIES) {
-      const base = `${INDEX}/${crawl}-index?url=${encodeURIComponent(q.url)}${q.matchType ? `&matchType=${q.matchType}` : ""}&fl=url&filter=!status:404&output=json`;
+      const stop = stopReason();
+      if (stop) {
+        end = stop;
+        complete = false;
+        break;
+      }
+      const base = `${index}/${crawl}-index?url=${encodeURIComponent(q.url)}${q.matchType ? `&matchType=${q.matchType}` : ""}&fl=url&filter=!status:404&output=json`;
       let pages = 1;
       try {
         pages = (await http.getJson<{ pages: number }>(`${base}&showNumPages=true`)).pages;
@@ -117,6 +149,12 @@ async function main() {
         continue;
       }
       for (let page = 0; page < pages; page++) {
+        const stop = stopReason();
+        if (stop) {
+          end = stop;
+          complete = false;
+          break;
+        }
         let text = "";
         try {
           text = await http.getText(`${base}&page=${page}`);
@@ -144,12 +182,22 @@ async function main() {
       done.add(crawl);
     }
     save();
+    if (end !== "done") break;
   }
   save();
   console.error(`Done: ${lines} index lines -> ${boards.size} boards`, boards.byAts());
+  return end;
 }
 
-main().catch((err) => {
-  console.error(err);
-  process.exit(1);
-});
+async function main() {
+  const end = await readCrawls({ http: newCrawlClient(), out: OUT_FILE, crawlsToUse: arg("--crawls"), perRun: arg("--per-run"), maxMs: (arg("--max-minutes") ?? Infinity) * 60_000 });
+  if (end === "out of time") console.error("Out of time; continues next run.");
+  if (end === "index unavailable") console.error("Common Crawl index unavailable; continues next run.");
+}
+
+if (process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1]) {
+  main().catch((err) => {
+    console.error(err);
+    process.exit(1);
+  });
+}
