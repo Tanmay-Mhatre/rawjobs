@@ -63,8 +63,18 @@ jobs:
             fs.writeFileSync(process.env.RUNNER_TEMP + "/key.pem", privateKey.export({ type: "pkcs8", format: "pem" }));
             fs.appendFileSync(process.env.GITHUB_OUTPUT, "public-key=" + publicKey.export({ type: "spki", format: "der" }).toString("base64") + "\n");
           '
-      - run: pnpm bundle
-      - run: pnpm release:files --key "$RUNNER_TEMP/key.pem" --public-key "${{ steps.key.outputs.public-key }}"
+      - name: This version's release, a newer one and a broken one (for the update test)
+        run: |
+          key=(--key "$RUNNER_TEMP/key.pem" --public-key "${{ steps.key.outputs.public-key }}")
+          v="$(node -p 'require("./package.json").version')"
+          bump() { node -p "const [a,b,c]='$v'.split('.').map(Number); [a,b,c+$1].join('.')"; }
+          pnpm bundle
+          pnpm release:files "${key[@]}"
+          echo "A newer version, for the update test." > "$RUNNER_TEMP/notes.md"
+          pnpm bundle --skip-web --version "$(bump 1)"
+          pnpm release:files "${key[@]}" --version "$(bump 1)" --notes-file "$RUNNER_TEMP/notes.md" --out dist/release/next
+          pnpm bundle --skip-web --version "$(bump 2)" --broken
+          pnpm release:files "${key[@]}" --version "$(bump 2)" --out dist/release/broken
       - uses: actions/upload-artifact@v7
         with:
           name: release-test
@@ -78,3 +88,4 @@ jobs:
     with:
       artifact: release-test
       public-key: ${{ needs.release-files.outputs.public-key }}
+      update-test: true

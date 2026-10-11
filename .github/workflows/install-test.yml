@@ -13,6 +13,10 @@ on:
         description: Public key the release was signed with, when it isn't the real release key
         type: string
         default: ""
+      update-test:
+        description: The artifact also has next/ (a newer version) and broken/ (one that can't start); update to each
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -58,11 +62,30 @@ jobs:
           # Installing again repairs it and keeps your data.
           curl -fsSL http://127.0.0.1:8765/install.sh | sh
           grep -qx "my resume" "$RAWJOBS_HOME/profile/resume.md"
+          if [ "${{ inputs.update-test }}" = true ]; then
+            next="$(sed -n 's/^  "version": "\(.*\)",$/\1/p' release/next/latest.json)"
+            RAWJOBS_RELEASE_URL=http://127.0.0.1:8765/next "$RAWJOBS_HOME/bin/rawjobs" update
+            cat "$RAWJOBS_HOME/logs/update.log"
+            curl -fs http://127.0.0.1:4317/api/health | grep -F "\"version\":\"$next\""
+            # A version that can't start: the update goes back by itself.
+            if RAWJOBS_RELEASE_URL=http://127.0.0.1:8765/broken "$RAWJOBS_HOME/bin/rawjobs" update; then echo "::error::the broken update reported success"; exit 1; fi
+            cat "$RAWJOBS_HOME/logs/update.log"
+            curl -fs http://127.0.0.1:4317/api/health | grep -F "\"version\":\"$next\""
+            test "$(cat "$RAWJOBS_HOME/app/current.txt")" = "$next"
+            grep -qx "my resume" "$RAWJOBS_HOME/profile/resume.md"
+          fi
           "$RAWJOBS_HOME/bin/rawjobs" uninstall --keep-data
           sleep 2
           test ! -e "$RAWJOBS_HOME/app" && test ! -e "$RAWJOBS_HOME/runtime" && test ! -e "$RAWJOBS_HOME/bin"
           grep -qx "my resume" "$RAWJOBS_HOME/profile/resume.md"
           ! curl -fs --max-time 2 http://127.0.0.1:4317/api/health
+
+      - name: The logs, when something failed (macOS, Linux)
+        if: failure() && runner.os != 'Windows'
+        shell: bash
+        run: |
+          for f in "$RUNNER_TEMP/Raw Jobs/logs/"*; do echo "=== $f"; tail -n 80 "$f"; done || true
+          [ "$RUNNER_OS" = macOS ] && launchctl print "gui/$(id -u)/com.rawjobs.server" | head -n 40 || true
 
       - name: Install, repair, uninstall (Windows PowerShell)
         if: runner.os == 'Windows'
@@ -79,8 +102,28 @@ jobs:
           New-Item -ItemType Directory -Force (Join-Path $env:RAWJOBS_HOME 'profile') | Out-Null
           Set-Content (Join-Path $env:RAWJOBS_HOME 'profile\resume.md') 'my resume'
           irm http://127.0.0.1:8765/install.ps1 | iex
+          if ('${{ inputs.update-test }}' -eq 'true') {
+            $next = (Get-Content -Raw 'release/next/latest.json' | ConvertFrom-Json).version
+            $env:RAWJOBS_RELEASE_URL = 'http://127.0.0.1:8765/next'
+            & $launcher update
+            if ($LASTEXITCODE -ne 0) { throw 'update failed' }
+            if ((Invoke-RestMethod http://127.0.0.1:4317/api/health).version -ne $next) { throw "not on $next" }
+            # A version that can't start: the update goes back by itself.
+            $env:RAWJOBS_RELEASE_URL = 'http://127.0.0.1:8765/broken'
+            & $launcher update
+            if ($LASTEXITCODE -eq 0) { throw 'the broken update reported success' }
+            if ((Invoke-RestMethod http://127.0.0.1:4317/api/health).version -ne $next) { throw "not back on $next" }
+            if ((Get-Content (Join-Path $env:RAWJOBS_HOME 'profile/resume.md')) -ne 'my resume') { throw 'data was lost' }
+            $env:RAWJOBS_RELEASE_URL = 'http://127.0.0.1:8765'
+          }
           & $launcher uninstall --keep-data
           Start-Sleep -Seconds 6
           foreach ($p in 'app', 'runtime', 'bin') { if (Test-Path (Join-Path $env:RAWJOBS_HOME $p)) { throw "$p is still there" } }
           if ((Get-Content (Join-Path $env:RAWJOBS_HOME 'profile\resume.md')) -ne 'my resume') { throw 'data was lost' }
           if (Get-ScheduledTask -TaskName 'RawJobs Server' -ErrorAction SilentlyContinue) { throw 'task still there' }
+
+      - name: The logs, when something failed (Windows)
+        if: failure() && runner.os == 'Windows'
+        shell: powershell
+        run: |
+          Get-ChildItem (Join-Path $env:RUNNER_TEMP 'Raw Jobs\logs') -ErrorAction SilentlyContinue | ForEach-Object { "=== $($_.FullName)"; Get-Content $_.FullName -Tail 80 }

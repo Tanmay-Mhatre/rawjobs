@@ -67,6 +67,14 @@ Alerts are sent through Telegram's API (`api.telegram.org`) with your own bot. T
 titles, companies and links. Once it's set up, scheduled scans and every scan you start from the dashboard send one
 message when they finish.
 
+### Installing and updating (installed copies only)
+The install line downloads RawJobs from this repository's GitHub Releases and Node from
+`nodejs.org`. An installed copy then checks once a day for a newer version by downloading
+`latest.json` from the latest release (with "test versions" on, it lists releases through
+`api.github.com`), and downloads the new version when there is one. GitHub and nodejs.org see your
+IP address, as with any download. Nothing about you is sent. Turn the checks off in Settings →
+Updates. A copy run from the source code (`pnpm start`) never checks.
+
 ### No telemetry
 The app has no analytics, no crash reporting and no usage tracking. The web dashboard loads no
 outside scripts or fonts.

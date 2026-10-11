@@ -7,16 +7,14 @@ import { parseArgs } from "node:util";
 import { defaultDataDir, rawjobsHome } from "../../core/src/paths";
 import { APP_VERSION, BUNDLED, CODE_ROOT, cliCommand } from "../../core/src/runtime";
 import { removeSchedule } from "../../core/src/schedule";
+import { compareVersions } from "../../core/src/release";
+import { AUTOSTART, fetchManifest, finishPendingUpdate, installedVersions, judge, readLastUpdate, readUpdateFile, releaseBase, releaseBaseFor, startUpdate } from "../../core/src/update";
 
 /**
  * The parts of an installed copy that live outside the code: the server's state file, its log, how
  * it starts at login, and the shortcut. packaging/install.sh and install.ps1 create the same names.
  */
-export const AUTOSTART = {
-  windowsTask: "RawJobs Server",
-  macLabel: "com.rawjobs.server",
-  linuxUnit: "rawjobs.service",
-};
+export { AUTOSTART } from "../../core/src/update";
 export const DEFAULT_PORT = 4317;
 
 /** What the running server wrote about itself (RAWJOBS_HOME/state.json). */
@@ -164,7 +162,7 @@ export async function uninstall(args: string[]): Promise<number> {
     }
   }
 
-  const program = ["app", "runtime", "bin", "logs", "state.json"];
+  const program = ["app", "runtime", "bin", "logs", "state.json", "updates.json"];
   const data = ["rawjobs.config.local.yaml", "rawjobs.config.local.backup.yaml", "profile", "data", "backups"];
   const targets = (deleteData ? [...program, ...data] : program).map((p) => join(home, p));
   if (process.platform === "win32") {
@@ -180,4 +178,86 @@ export async function uninstall(args: string[]): Promise<number> {
   }
   console.log(deleteData ? `RawJobs is uninstalled, and ${home} is deleted.` : `RawJobs is uninstalled. Your profile, tracking and scan data are still in ${home}.`);
   return 0;
+}
+
+/**
+ * `rawjobs update`: install the newest version now (an installed copy; the dashboard does the same,
+ * and with updates on Automatic it happens by itself).
+ *   --check      only say whether a newer version is out
+ *   --to <v>     install this version, also an older one
+ *   --finish     (used by an update itself) start the new version, and go back if it doesn't answer
+ */
+export async function updateCommand(args: string[]): Promise<number> {
+  const { values } = parseArgs({ args, options: { check: { type: "boolean", default: false }, to: { type: "string" }, finish: { type: "boolean", default: false } } });
+  const home = rawjobsHome();
+  if (values.finish) {
+    logTo(join(home, "logs/update.log"));
+    const r = await finishPendingUpdate(home);
+    return r?.ok === false ? 1 : 0;
+  }
+  if (!BUNDLED || !process.env.RAWJOBS_LAUNCHER || !installedVersions(home)) {
+    console.error("This is a copy of the RawJobs source: update it with git pull (then pnpm install).");
+    return 2;
+  }
+  const settings = readUpdateFile(home);
+  const base = values.to ? releaseBaseFor(values.to) : await releaseBase(settings.channel);
+  const m = await fetchManifest(base);
+  if (values.to && m.version !== values.to.replace(/^v/, "")) {
+    console.error(`${base} has version ${m.version}, not ${values.to}.`);
+    return 1;
+  }
+  const c = judge(APP_VERSION, m, values.to ? [] : settings.skip);
+  if (values.check || (!values.to && !c.available)) {
+    if (c.available) console.log(`RawJobs ${m.version} is out (you have ${APP_VERSION}). Run: rawjobs update`);
+    else if (compareVersions(m.version, APP_VERSION) > 0) console.log(`RawJobs ${m.version} didn't start here before, so it isn't installed automatically. Install it with: rawjobs update --to ${m.version}`);
+    else console.log(`RawJobs ${APP_VERSION} is the newest version.`);
+    if (c.tooOld) console.log("This version is too old to update by itself: run the install line again.");
+    return 0;
+  }
+  if (m.version === APP_VERSION) {
+    console.log(`RawJobs ${APP_VERSION} is already installed.`);
+    return 0;
+  }
+  if (c.tooOld && !values.to) {
+    console.error("This version is too old to update by itself. Run the install line again to get the newest one.");
+    return 1;
+  }
+
+  const state = readServerState(home);
+  let serverPid: number | undefined;
+  if (state && (await healthy(`http://127.0.0.1:${state.port}`))) {
+    try {
+      const h = (await (await fetch(`http://127.0.0.1:${state.port}/api/health`)).json()) as { scanning?: boolean };
+      if (h.scanning) {
+        console.error("A scan is running. Update when it's done (it can also be stopped, and resumed later).");
+        return 1;
+      }
+    } catch {
+      // went away: nothing to wait for
+    }
+    serverPid = state.pid;
+  }
+
+  console.log(`Updating RawJobs ${APP_VERSION} to ${m.version}...`);
+  const started = Date.now();
+  await startUpdate({ home, base, manifest: m, serverPid });
+  if (serverPid) {
+    try {
+      process.kill(serverPid);
+    } catch {
+      // already stopped
+    }
+  }
+  // The old version's helper now starts the new one and gives it a minute; wait for its verdict.
+  for (let i = 0; i < 400; i++) {
+    await sleep(500);
+    const r = readLastUpdate(home);
+    if (r && r.to === m.version && Date.parse(r.at) >= started) {
+      if (r.ok) console.log(`RawJobs ${m.version} is running.`);
+      else console.error(r.error);
+      return r.ok ? 0 : 1;
+    }
+  }
+  console.error(`The update is taking longer than expected. See ${join(home, "logs/update.log")}.`);
+  return 1;
 }

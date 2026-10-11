@@ -25,10 +25,12 @@ const { values } = parseArgs({
     key: { type: "string" },
     "public-key": { type: "string" },
     out: { type: "string", default: "dist/release" },
+    /** The bundle's version when it isn't package.json's (pnpm bundle --version; update tests). */
+    version: { type: "string" },
   },
 });
 
-const version = (JSON.parse(readFileSync(join(root, "package.json"), "utf8")) as { version: string }).version;
+const version = values.version ?? (JSON.parse(readFileSync(join(root, "package.json"), "utf8")) as { version: string }).version;
 const bundleName = `rawjobs-${version}`;
 const bundleDir = join(root, "dist/bundle", bundleName);
 if (!existsSync(join(bundleDir, "cli.mjs"))) fail(`${bundleDir} is missing: run pnpm bundle first.`);

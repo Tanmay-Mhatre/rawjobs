@@ -11,6 +11,7 @@ import { Pipeline } from "./components/Pipeline";
 import { FeedSkeleton } from "./components/radar/FeedSkeleton";
 import { RadarPage } from "./components/radar/RadarPage";
 import { NotifyBell, NotifyFailed, notifyLine, telegramReady } from "./components/NotifyWhenDone";
+import { ServerNotices } from "./components/Updates";
 import { ScanButton, ScanChooser } from "./components/ScanButton";
 import { Settings } from "./components/Settings";
 import { toast, Toaster } from "./components/Toast";
@@ -437,6 +438,7 @@ export function App() {
           radarFits && "lg:flex lg:h-[calc(100dvh-3.5rem)] lg:flex-col lg:pb-4",
         )}
       >
+        <ServerNotices />
         {status === undefined || state.kind === "loading" ? (
           <FeedSkeleton />
         ) : inSetup ? (

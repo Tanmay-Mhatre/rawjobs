@@ -4,6 +4,7 @@ import { parseArgs } from "node:util";
 import { defaultDataDir, rawjobsHome } from "../../core/src/paths";
 import { APP_VERSION, BUNDLED, WEB_DIR } from "../../core/src/runtime";
 import { createApi } from "./api";
+import { createUpdater } from "./updater";
 import { DEFAULT_PORT, healthy, logTo, openBrowser, readServerState, writeServerState } from "./desktop";
 import { serveStatic } from "./static";
 
@@ -39,7 +40,9 @@ export async function serve(args: string[]): Promise<number> {
     return 2;
   }
 
-  const api = createApi({ home, dataDir });
+  let shutdown: () => void = () => process.exit(0);
+  const updater = createUpdater({ home, isBusy: () => api.scanning(), exit: () => shutdown() });
+  const api = createApi({ home, dataDir, updater });
   const server = createServer((req, res) => {
     void api.handle(req, res).then((handled) => {
       if (handled || serveStatic([WEB_DIR, dataDir], req, res)) return;
@@ -63,6 +66,7 @@ export async function serve(args: string[]): Promise<number> {
   }
 
   api.startBackground();
+  updater.start();
   // Where the shortcut (rawjobs open) finds the dashboard, also when 4317 was taken.
   writeServerState(port, home);
   const url = `http://127.0.0.1:${port}`;
@@ -71,12 +75,12 @@ export async function serve(args: string[]): Promise<number> {
   if (values.open) openBrowser(url);
 
   return new Promise((done) => {
-    for (const signal of ["SIGINT", "SIGTERM"] as const) {
-      process.once(signal, () => {
-        server.close();
-        done(0);
-      });
-    }
+    // An update stops this server; the old version's helper starts the new one.
+    shutdown = () => {
+      server.close();
+      done(0);
+    };
+    for (const signal of ["SIGINT", "SIGTERM"] as const) process.once(signal, () => shutdown());
   });
 }
 

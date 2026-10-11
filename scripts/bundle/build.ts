@@ -13,13 +13,16 @@ import { build } from "esbuild";
  *
  *   pnpm bundle                 → dist/bundle/rawjobs-<version>/
  *   pnpm bundle --skip-web      reuse apps/web/dist as it is
+ *   pnpm bundle --version <v>   label it as another version (update tests); --broken: one that can't start
  *   pnpm bundle --try <dir>     also lay it out as an installed copy in <dir> (bin/, app/, runtime/
  *                               with this computer's Node) to try the launcher: <dir>/bin/rawjobs serve
  */
 const root = resolve(import.meta.dirname, "../..");
-const { values } = parseArgs({ options: { "skip-web": { type: "boolean", default: false }, try: { type: "string" } } });
+const { values } = parseArgs({
+  options: { "skip-web": { type: "boolean", default: false }, try: { type: "string" }, version: { type: "string" }, broken: { type: "boolean", default: false } },
+});
 
-const version = (JSON.parse(readFileSync(join(root, "package.json"), "utf8")) as { version: string }).version;
+const version = values.version ?? (JSON.parse(readFileSync(join(root, "package.json"), "utf8")) as { version: string }).version;
 const out = join(root, "dist/bundle", `rawjobs-${version}`);
 
 if (!values["skip-web"]) run("pnpm", ["build"]);
@@ -48,6 +51,8 @@ await build({
   logLevel: "warning",
 });
 
+// Update tests: a version that fails at once, so the update has to go back.
+if (values.broken) writeFileSync(join(out, "cli.mjs"), 'console.error("This test build never starts."); process.exit(3);\n');
 cpSync(join(root, "apps/web/dist"), join(out, "web"), { recursive: true });
 cpSync(join(root, "packaging/bin"), join(out, "bin"), { recursive: true });
 chmodSync(join(out, "bin/rawjobs"), 0o755);
