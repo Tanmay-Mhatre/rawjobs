@@ -16,6 +16,7 @@
     "start": "pnpm build && pnpm serve",
     "serve": "tsx packages/server/src/main.ts --open",
     "bundle": "tsx scripts/bundle/build.ts",
+    "release:files": "tsx scripts/release/manifest.ts",
     "site:build": "node apps/site/build.mjs",
     "site:og": "tsx scripts/site/og.ts",
     "site:dev": "node apps/site/build.mjs && npx wrangler@4.141.0 dev --config apps/site/wrangler.toml",

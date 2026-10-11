@@ -218,7 +218,9 @@ async function cmdCompanies(args: string[]): Promise<number> {
 const HELP = `RawJobs: self-hosted job radar
 
 Usage:
-  rawjobs serve [--port <n>] [--open]   Run the dashboard on http://127.0.0.1:4317
+  rawjobs serve [--port <n>] [--open] [--log <file>]   Run the dashboard on http://127.0.0.1:4317
+  rawjobs open                Open the dashboard (starting it if it isn't running)
+  rawjobs uninstall [--keep-data|--delete-data]   Remove an installed copy (your data is kept unless you say)
   rawjobs scan [options]      Sync the directory, fetch your companies (and more, by scope) live, score them
   rawjobs schedule <status|install|remove>   Scan on a schedule on this computer (--time 08:00 [--time 20:00] [--scope mine|all], default mine)
   rawjobs alerts telegram <status|token|connect|test|on|off|forget>   Telegram alerts
@@ -276,6 +278,10 @@ async function main(argv: string[]): Promise<number> {
     case "serve":
       // Loaded only when asked for, so other commands start as fast as before.
       return (await import("../../server/src/serve")).serve(rest);
+    case "open":
+      return (await import("../../server/src/desktop")).openDashboard(rest);
+    case "uninstall":
+      return (await import("../../server/src/desktop")).uninstall(rest);
     case undefined:
     case "help":
     case "-h":

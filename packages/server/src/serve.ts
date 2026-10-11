@@ -1,19 +1,13 @@
-import { spawn } from "node:child_process";
 import { existsSync, mkdirSync } from "node:fs";
 import { createServer, type Server } from "node:http";
 import { parseArgs } from "node:util";
 import { defaultDataDir, rawjobsHome } from "../../core/src/paths";
 import { APP_VERSION, BUNDLED, WEB_DIR } from "../../core/src/runtime";
 import { createApi } from "./api";
+import { DEFAULT_PORT, healthy, logTo, openBrowser, readServerState, writeServerState } from "./desktop";
 import { serveStatic } from "./static";
 
-export const DEFAULT_PORT = 4317;
 const TRIES = 10;
-
-export const SERVE_HELP = `rawjobs serve [--port <n>] [--open]
-  Run the dashboard on http://127.0.0.1:4317 (only this computer can reach it).
-  --port <n>   start here (default 4317, or RAWJOBS_PORT); the next free port is used if it's taken
-  --open       open the dashboard in your browser once it's up`;
 
 /**
  * The dashboard and its API, without the dev server (`rawjobs serve`, `pnpm start`). Runs until
@@ -21,13 +15,22 @@ export const SERVE_HELP = `rawjobs serve [--port <n>] [--open]
  * resumed next time.
  */
 export async function serve(args: string[]): Promise<number> {
-  const { values } = parseArgs({ args, options: { port: { type: "string" }, open: { type: "boolean", default: false } } });
+  const { values } = parseArgs({ args, options: { port: { type: "string" }, open: { type: "boolean", default: false }, log: { type: "string" } } });
+  if (values.log) logTo(values.log);
   const home = rawjobsHome();
   const dataDir = defaultDataDir(home);
   mkdirSync(dataDir, { recursive: true });
   if (!existsSync(`${WEB_DIR}/index.html`)) {
     console.error(BUNDLED ? `This copy of RawJobs is missing its dashboard (${WEB_DIR}). Run the install line again to repair it.` : "The dashboard isn't built yet. Run `pnpm build` first (or `pnpm start`, which builds it).");
     return 1;
+  }
+
+  // One server per RawJobs folder: starting it again (at login, from the shortcut) finds the running one.
+  const running = readServerState(home);
+  if (!values.port && running && (await healthy(`http://127.0.0.1:${running.port}`))) {
+    console.log(`RawJobs is already running at http://127.0.0.1:${running.port}`);
+    if (values.open) openBrowser(`http://127.0.0.1:${running.port}`);
+    return 0;
   }
 
   const first = Number(values.port ?? process.env.RAWJOBS_PORT ?? DEFAULT_PORT);
@@ -60,6 +63,8 @@ export async function serve(args: string[]): Promise<number> {
   }
 
   api.startBackground();
+  // Where the shortcut (rawjobs open) finds the dashboard, also when 4317 was taken.
+  writeServerState(port, home);
   const url = `http://127.0.0.1:${port}`;
   console.log(`RawJobs ${APP_VERSION} is running at ${url}`);
   console.log(`Your RawJobs folder: ${home}`);
@@ -89,10 +94,4 @@ function listen(srv: Server, port: number): Promise<number> {
     srv.once("listening", onListening);
     srv.listen(port, "127.0.0.1");
   });
-}
-
-function openBrowser(target: string) {
-  const [cmd, args] =
-    process.platform === "win32" ? ["cmd", ["/c", "start", "", target]] : process.platform === "darwin" ? ["open", [target]] : ["xdg-open", [target]];
-  spawn(cmd, args as string[], { stdio: "ignore", detached: true, windowsHide: true }).on("error", () => {}).unref();
 }

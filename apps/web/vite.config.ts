@@ -35,10 +35,12 @@ function localApi(): Plugin {
   };
 }
 
-export default defineConfig({
+export default defineConfig(({ command }) => ({
   base: "./",
-  publicDir: dataDir,
+  // The dev server serves your run output at the site root. A build never copies it: the built
+  // dashboard is shipped to other people, and the server serves data/ live next to it.
+  publicDir: command === "serve" ? dataDir : false,
   plugins: [react(), tailwindcss(), localApi()],
   // open: `pnpm dev` opens the dashboard in your browser (BROWSER=none turns that off).
   server: { port: 5173, host: "127.0.0.1", open: true },
-});
+}));

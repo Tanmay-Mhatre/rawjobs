@@ -33,3 +33,6 @@ directory-repo/
 
 # Design screenshots and axe reports (pnpm design:shots)
 .design-shots/
+# The local server's port and logs (rawjobs serve)
+state.json
+logs/
