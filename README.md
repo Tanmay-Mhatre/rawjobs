@@ -19,14 +19,30 @@ Built by Tanmay Mhatre.
 
 ## Getting started
 
-Requires Node 22+ and [pnpm](https://pnpm.io).
+Paste one line into a terminal. No Node, git, account or admin rights needed.
+
+**Windows** (PowerShell):
+
+```powershell
+irm https://github.com/Tanmay-Mhatre/rawjobs/releases/latest/download/install.ps1 | iex
+```
+
+**macOS and Linux** (Terminal):
+
+```bash
+curl -fsSL https://github.com/Tanmay-Mhatre/rawjobs/releases/latest/download/install.sh | sh
+```
+
+It installs RawJobs in your user folder, starts it now and every time you log in, adds a **RawJobs** shortcut, and opens the dashboard at http://127.0.0.1:4317. It keeps itself up to date (Settings → Updates). What it changes on your computer, how to uninstall, and troubleshooting: [docs/install.md](docs/install.md).
+
+**From the source code** (needs Node 22+ and [pnpm](https://pnpm.io)):
 
 ```bash
 pnpm install
 pnpm start              # builds the dashboard and opens http://127.0.0.1:4317 in your browser
 ```
 
-`pnpm start` runs the dashboard and its local API without the dev server; only this computer can reach it. A scan keeps going if you close or reload the tab, and the dashboard picks it up again when you come back. Working on RawJobs itself? `pnpm dev` (http://127.0.0.1:5173) reloads as you edit.
+`pnpm start` runs the dashboard and its local API; only this computer can reach it. A scan keeps going if you close or reload the tab, and the dashboard picks it up again when you come back. Working on RawJobs itself? `pnpm dev` (http://127.0.0.1:5173) reloads as you edit.
 
 The dashboard walks you through setup the first time (about 3 minutes; you can skip it and come back from any page):
 
@@ -117,7 +133,13 @@ rawjobs detect <url>...                          careers URLs → config lines
 rawjobs validate                                 check your config file
 rawjobs companies suggest                        directory companies that fit your profile
 rawjobs directory <status|update|share>          the shared company directory
+rawjobs serve [--port <n>] [--open]              run the dashboard (pnpm start does this)
+rawjobs open                                     open the dashboard, starting it if needed
+rawjobs update [--check] [--to <version>]        install the newest version (installed copies)
+rawjobs uninstall [--keep-data|--delete-data]    remove an installed copy
 ```
+
+From an install, the `rawjobs` command is in its `bin` folder (see [docs/install.md](docs/install.md#using-it)); from the source code, run `pnpm rawjobs …`.
 
 ### Adding companies
 
@@ -231,15 +253,21 @@ pnpm test:watch
 pnpm hooks:install  # once per clone: no direct pushes to main, and pnpm check before every push
 ```
 
-See [CONTRIBUTING.md](CONTRIBUTING.md). Changes go through pull requests. `main` is protected: a pull request can only merge once CI's `check` passes on its latest commit. To merge it as soon as CI goes green, run `gh pr merge --auto --merge`.
+See [CONTRIBUTING.md](CONTRIBUTING.md). Changes go through pull requests. `main` is protected: a pull request can only merge once CI passes on its latest commit: `check`, and the install test on Windows, macOS and Linux.
+
+**Releasing:** set the version in `package.json` (and the packages), merge, then push an annotated tag: `git tag -a v0.3.0 -m "What's new…"` and `git push origin v0.3.0`. The [release workflow](.github/workflows/release.yml) builds the bundle, signs it with the `RAWJOBS_SIGNING_KEY` secret, installs and updates it on all three systems, and publishes it. The tag's message is the "What's new" installed copies show. To merge it as soon as CI goes green, run `gh pr merge --auto --merge`.
 
 ```
 packages/core       connectors, normalise, score, scan scopes, job feed, directory sync,
                     history, schedule, Telegram (shared Job types)
 packages/cli        rawjobs scan | schedule | alerts | detect | validate | companies | directory
                     | setup (JSON API used by the dashboard)
-apps/web            React + Vite + Tailwind dashboard (reads data/). In dev, a local API lets it
-                    save your config and run scans; the static build has no server.
+packages/server     the local server: the dashboard's API, the built dashboard, updates,
+                    rawjobs serve | open | update | uninstall
+apps/web            React + Vite + Tailwind dashboard (reads data/ and the local API)
+packaging/          the installers (install.ps1, install.sh) and the launchers in bin/
+scripts/bundle      pnpm bundle: the copy that installs, needing only Node
+scripts/release     pnpm release:files: the signed release (see .github/workflows/release.yml)
 scripts/catalog     builds the shared directory and the daily job feed
 scripts/design      design tokens, design lint, screenshots (pnpm design:build | design:lint | design:shots)
 services/contribute the contribution inbox (Cloudflare Worker)
@@ -257,6 +285,7 @@ Connector tests use saved feed responses in `packages/core/test/fixtures`, so te
 | 1. Daily radar | ✅ 23 hiring systems, shared directory and daily job feed, run history, scheduled scans on your computer, Telegram alerts. To do: scheduled scans in your own GitHub Actions |
 | 2. Dashboard | ✅ Radar, job detail, pipeline, companies, settings, light and dark themes, each with an increased-contrast version. To do: hosted deploy |
 | 3. Open-source launch | ✅ Setup wizard, contributor docs, privacy page, self-hosting guide. To do: more README screenshots |
+| 3b. Install for everyone | ✅ One-line install for Windows, macOS and Linux, start at log in, signed releases, updates that go back if a new version doesn't start ([plan](docs/plans/local-install.md)) |
 | 4. Later | GitHub status sync, optional AI re-rank (your own key), email alerts |
 
 ## License
