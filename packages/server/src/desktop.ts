@@ -191,6 +191,7 @@ export async function updateCommand(args: string[]): Promise<number> {
   const { values } = parseArgs({ args, options: { check: { type: "boolean", default: false }, to: { type: "string" }, finish: { type: "boolean", default: false } } });
   const home = rawjobsHome();
   if (values.finish) {
+    logTo(join(home, "logs/update.log"));
     const r = await finishPendingUpdate(home);
     return r?.ok === false ? 1 : 0;
   }
@@ -247,8 +248,8 @@ export async function updateCommand(args: string[]): Promise<number> {
       // already stopped
     }
   }
-  // The old version's helper now starts the new one; wait for its verdict.
-  for (let i = 0; i < 180; i++) {
+  // The old version's helper now starts the new one and gives it a minute; wait for its verdict.
+  for (let i = 0; i < 300; i++) {
     await sleep(500);
     const r = readLastUpdate(home);
     if (r && r.to === m.version && Date.parse(r.at) >= started) {
@@ -257,6 +258,6 @@ export async function updateCommand(args: string[]): Promise<number> {
       return r.ok ? 0 : 1;
     }
   }
-  console.error("The update is taking longer than expected. Check the dashboard in a minute.");
+  console.error(`The update is taking longer than expected. See ${join(home, "logs/update.log")}.`);
   return 1;
 }

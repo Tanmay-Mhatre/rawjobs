@@ -277,16 +277,18 @@ export const AUTOSTART = { windowsTask: "RawJobs Server", macLabel: "com.rawjobs
  * if it stops), or straight from the launcher when that isn't set up.
  */
 export function startServer(home: string): void {
-  const ok = (r: ReturnType<typeof spawnSync>) => r.status === 0;
+  // A scheduler that hangs (launchctl waiting on a job that keeps failing) mustn't stall the update.
+  const run = (cmd: string, args: string[]) => {
+    const r = spawnSync(cmd, args, { windowsHide: true, timeout: 20_000, encoding: "utf8" });
+    console.log(`${cmd} ${args.join(" ")}: ${r.status === 0 ? "ok" : `failed (${r.status ?? r.signal ?? r.error}) ${(r.stderr ?? "").trim()}`}`);
+    return r.status === 0;
+  };
   let started = false;
-  if (process.platform === "win32") {
-    started = ok(spawnSync("powershell.exe", ["-NoProfile", "-NonInteractive", "-Command", `Start-ScheduledTask -TaskName '${AUTOSTART.windowsTask}'`], { windowsHide: true }));
-  } else if (process.platform === "darwin") {
-    started = ok(spawnSync("launchctl", ["kickstart", "-k", `gui/${process.getuid?.() ?? 501}/${AUTOSTART.macLabel}`]));
-  } else {
-    started = ok(spawnSync("systemctl", ["--user", "restart", AUTOSTART.linuxUnit]));
-  }
+  if (process.platform === "win32") started = run("powershell.exe", ["-NoProfile", "-NonInteractive", "-Command", `Start-ScheduledTask -TaskName '${AUTOSTART.windowsTask}'`]);
+  else if (process.platform === "darwin") started = run("launchctl", ["kickstart", "-k", `gui/${process.getuid?.() ?? 501}/${AUTOSTART.macLabel}`]);
+  else started = run("systemctl", ["--user", "restart", AUTOSTART.linuxUnit]);
   if (started) return;
+  console.log("Starting the server from the launcher instead.");
   const log = join(home, "logs/server.log");
   const child =
     process.platform === "win32"
@@ -338,6 +340,7 @@ export type FinishOptions = {
  */
 export async function finishUpdate(o: FinishOptions): Promise<UpdateRecord> {
   const start = o.start ?? startServer;
+  console.log(`Finishing the update from ${o.from} to ${o.to}.`);
   if (o.pid) {
     for (let i = 0; i < 40 && alive(o.pid); i++) await sleep(250);
     if (alive(o.pid)) {
@@ -349,6 +352,7 @@ export async function finishUpdate(o: FinishOptions): Promise<UpdateRecord> {
       await sleep(500);
     }
   }
+  console.log("The old server has stopped; starting the new version.");
   start(o.home);
   const deadline = Date.now() + (o.timeoutMs ?? START_TIMEOUT_MS);
   let running: string | null = null;
@@ -356,6 +360,7 @@ export async function finishUpdate(o: FinishOptions): Promise<UpdateRecord> {
     await sleep(1000);
     running = await runningVersion(o.home);
   }
+  console.log(running === o.to ? `${o.to} answers.` : `${o.to} didn't answer (last seen: ${running ?? "nothing"}); going back to ${o.from}.`);
   let record: UpdateRecord;
   if (running === o.to) {
     record = { from: o.from, to: o.to, ok: true, at: new Date().toISOString(), notes: o.notes };
@@ -408,5 +413,15 @@ export async function finishPendingUpdate(home: string, start?: (home: string) =
   const p = read<Pending>(join(home, "app/pending-update.json"));
   if (!p) return null;
   rmSync(join(home, "app/pending-update.json"), { force: true });
-  return finishUpdate({ home, from: p.from, to: p.to, pid: p.pid, backup: p.backup, notes: p.notes, start });
+  try {
+    return await finishUpdate({ home, from: p.from, to: p.to, pid: p.pid, backup: p.backup, notes: p.notes, start });
+  } catch (err) {
+    // Whatever went wrong, don't leave the computer on a version nobody checked.
+    console.error(`The update failed: ${(err as Error).stack ?? err}`);
+    if (installedVersions(home)?.current === p.to) switchBack(home, p.from, p.to);
+    (start ?? startServer)(home);
+    const record: UpdateRecord = { from: p.from, to: p.to, ok: false, at: new Date().toISOString(), error: `The update to ${p.to} failed (${(err as Error).message}), so ${p.from} is back. See logs/update.log.` };
+    writeJson(join(home, "app/last-update.json"), record);
+    return record;
+  }
 }
