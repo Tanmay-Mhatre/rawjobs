@@ -1,6 +1,7 @@
 import type { NormalizedJob } from "../schema";
 import { htmlToText, inferWorkplace } from "../text";
-import { detectAs, isoDate, joinParts } from "./parse";
+import { HttpError } from "../http";
+import { BoardClosedError, detectAs, isoDate, joinParts } from "./parse";
 import { jobId, type Connector } from "./types";
 
 /** {company}.bamboohr.com/careers/list: the careers page's own JSON (no descriptions). */
@@ -22,7 +23,25 @@ export const bamboohr: Connector<BambooJob> = {
   detect: detectAs("bamboohr"),
 
   async fetch(ref, { http }) {
-    const data = await http.getJson<{ result?: BambooJob[] }>(`https://${ref.slug}.bamboohr.com/careers/list`);
+    let res: Response;
+    try {
+      res = await http.request(`https://${ref.slug}.bamboohr.com/careers/list`, { headers: { accept: "application/json" } });
+    } catch (err) {
+      // The account exists but its careers page is switched off (the page sends you to the login).
+      if (err instanceof HttpError && err.status === 401) throw new BoardClosedError("BambooHR", ref.slug, "has its careers page switched off");
+      throw err;
+    }
+    const body = await res.text();
+    let data: { result?: BambooJob[] };
+    try {
+      data = JSON.parse(body) as { result?: BambooJob[] };
+    } catch {
+      // A web page instead of the list: BambooHR's home page (no such account) or the login page.
+      const to = res.url ? new URL(res.url) : undefined;
+      if (to?.hostname === "www.bamboohr.com" || to?.hostname === "bamboohr.com") throw new BoardClosedError("BambooHR", ref.slug, "no longer exists");
+      if (to?.pathname.startsWith("/login")) throw new BoardClosedError("BambooHR", ref.slug, "has its careers page switched off");
+      throw new Error(`unexpected BambooHR response: not JSON (${res.url || "no URL"})`);
+    }
     if (!Array.isArray(data.result)) throw new Error("unexpected BambooHR response: no result array");
     return data.result;
   },

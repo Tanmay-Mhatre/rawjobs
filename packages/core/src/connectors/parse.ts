@@ -161,3 +161,15 @@ export function workplaceFrom(hint: string | null | undefined): "remote" | "hybr
   if (/on.?site|office/.test(h)) return "onsite";
   return undefined;
 }
+
+/**
+ * The hiring system says this company has no public board any more: the account is gone, blocked,
+ * or its careers page is switched off. Its message says "board not found", which the directory's
+ * check (scripts/catalog/lib/live-check.ts) records as dead instead of an error to retry.
+ */
+export class BoardClosedError extends Error {
+  override name = "BoardClosedError";
+  constructor(system: string, slug: string, why: string) {
+    super(`${system} board not found: "${slug}" ${why}`);
+  }
+}
