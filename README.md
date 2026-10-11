@@ -54,7 +54,7 @@ Prefer the terminal? Copy `rawjobs.config.example.yaml` to `rawjobs.config.local
 
 Statuses and notes live in your browser (export them for backup). **Scan now** in the header scans on your machine and shows its progress there (hover it for details); with Telegram set up, you get a message when it's done.
 
-Keyboard: `j`/`k` move, `Enter` open, `s` save, `a` applied, `x` not interested, `c` copy description, `f` full window, `r` scan now, `/` search, `1`–`6` Radar views (`1`–`4` switch sections elsewhere), `[`/`]` move a pipeline card, `?` help, `Esc` close.
+Keyboard: `j`/`k` move, `Enter` open, `s` save, `a` applied, `x` not interested, `c` copy description, `f` full window, `r` scan now, `/` search, `1`–`6` Radar views (`1`–`4` switch sections elsewhere), `g` then `r`/`p`/`c`/`s` go to Radar, Pipeline, Companies or Settings from anywhere, `[`/`]` move a pipeline card, `?` help, `Esc` close.
 
 ## Scans
 
