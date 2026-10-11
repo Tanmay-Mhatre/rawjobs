@@ -97,6 +97,8 @@ importers:
         specifier: ^4.1.0
         version: 4.6.5
 
+  packages/server: {}
+
 packages:
 
   '@babel/code-frame@7.29.7':

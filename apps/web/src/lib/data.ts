@@ -129,7 +129,11 @@ export function useDescription(job: Job | undefined): string | null | undefined 
   return text && job && text.id === job.id ? text.value : undefined;
 }
 
-export const canRunLocally = import.meta.env.DEV;
+/**
+ * This dashboard is served by RawJobs on this computer (`pnpm dev`, `pnpm start`), so it can set up
+ * and run scans. A copy built to host somewhere else is built with VITE_RAWJOBS_HOSTED=1.
+ */
+export const canRunLocally = import.meta.env.DEV || import.meta.env.VITE_RAWJOBS_HOSTED !== "1";
 
 /**
  * Live companies to scan per industry id, as the directory build counted them. Null on the hosted

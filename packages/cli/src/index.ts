@@ -418,7 +418,7 @@ async function cmdRun(args: string[]): Promise<number> {
       if (failed.length > 50) console.log(`  …and ${failed.length - 50} more`);
     }
 
-    if (summary) console.error(`\nSaved to ${dataDir} (${merged.jobs.length} jobs tracked, ${summary.closed} closed this run). Open the dashboard with: pnpm dev`);
+    if (summary) console.error(`\nSaved to ${dataDir} (${merged.jobs.length} jobs tracked, ${summary.closed} closed this run). Open the dashboard with: pnpm start`);
 
     if (values.json) {
       const out = resolve(values.json);
