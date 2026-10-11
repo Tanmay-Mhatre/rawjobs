@@ -2,6 +2,7 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import type { Job } from "./schema";
 import { rankScore } from "./score";
+import { rawjobsHome } from "./paths";
 
 /**
  * Telegram alerts: one message per scan with the new matches. The bot is the user's own (made with
@@ -13,7 +14,7 @@ export const SECRETS_PATH = "profile/secrets.json";
 export type TelegramSecrets = { token?: string; chatId?: string; /** The bot's @name (not secret; shown in Settings). */ bot?: string };
 type Secrets = { telegram?: TelegramSecrets };
 
-function readSecrets(cwd = process.cwd()): Secrets {
+function readSecrets(cwd = rawjobsHome()): Secrets {
   const path = resolve(cwd, SECRETS_PATH);
   try {
     return existsSync(path) ? (JSON.parse(readFileSync(path, "utf8")) as Secrets) : {};
@@ -23,12 +24,12 @@ function readSecrets(cwd = process.cwd()): Secrets {
 }
 
 /** The bot token and chat id: environment first (servers), then profile/secrets.json. */
-export function telegramSecrets(cwd = process.cwd()): TelegramSecrets {
+export function telegramSecrets(cwd = rawjobsHome()): TelegramSecrets {
   const saved = readSecrets(cwd).telegram ?? {};
   return { token: process.env.TELEGRAM_BOT_TOKEN || saved.token, chatId: process.env.TELEGRAM_CHAT_ID || saved.chatId, bot: saved.bot };
 }
 
-export function saveTelegramSecrets(patch: TelegramSecrets, cwd = process.cwd()): TelegramSecrets {
+export function saveTelegramSecrets(patch: TelegramSecrets, cwd = rawjobsHome()): TelegramSecrets {
   const path = resolve(cwd, SECRETS_PATH);
   const all = readSecrets(cwd);
   const next = { ...all.telegram, ...patch };

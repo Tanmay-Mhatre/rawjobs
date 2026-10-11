@@ -4,6 +4,7 @@ import { createServer, type Server } from "node:http";
 import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { parseArgs } from "node:util";
+import { defaultDataDir } from "../../core/src/paths";
 import { createApi } from "./api";
 import { serveStatic } from "./static";
 
@@ -24,7 +25,9 @@ const { values } = parseArgs({
 });
 
 const repoRoot = fileURLToPath(new URL("../../..", import.meta.url));
-const dataDir = resolve(repoRoot, process.env.RAWJOBS_DATA ?? process.env.JOBHUNTER_DATA ?? "data");
+/** Your RawJobs folder (RAWJOBS_HOME), else this checkout, as before. */
+const home = process.env.RAWJOBS_HOME ? resolve(process.env.RAWJOBS_HOME) : repoRoot;
+const dataDir = defaultDataDir(home);
 const webDist = resolve(repoRoot, "apps/web/dist");
 mkdirSync(dataDir, { recursive: true });
 if (!existsSync(resolve(webDist, "index.html"))) {
@@ -32,7 +35,7 @@ if (!existsSync(resolve(webDist, "index.html"))) {
   process.exit(1);
 }
 
-const api = createApi({ repoRoot, dataDir });
+const api = createApi({ repoRoot, home, dataDir });
 const server = createServer((req, res) => {
   void api.handle(req, res).then((handled) => {
     if (handled || serveStatic([webDist, dataDir], req, res)) return;

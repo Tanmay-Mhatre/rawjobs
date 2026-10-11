@@ -9,12 +9,13 @@ import { RESUME_PATH } from "./resume";
 import { ConfigSchema, type AtsType, type Config, type Profile } from "./schema";
 import { passesGates } from "./score";
 import { configToYaml } from "./yaml-writer";
+import { defaultDataDir, rawjobsHome } from "./paths";
 
 /** The user's own config. The shipped rawjobs.config.example.yaml is only an example. */
 export const PERSONAL_CONFIG = CONFIG_CANDIDATES[0]!;
 
 /** The personal config file: rawjobs.config.local.yaml, or the pre-rename jobhunter one while that's the only one there. */
-export function personalConfigPath(cwd = process.cwd()): string {
+export function personalConfigPath(cwd = rawjobsHome()): string {
   const path = resolve(cwd, PERSONAL_CONFIG);
   const legacy = resolve(cwd, LEGACY_CONFIG_CANDIDATES[0]!);
   return !existsSync(path) && existsSync(legacy) ? legacy : path;
@@ -36,7 +37,7 @@ export type SetupStatus = {
   hasResume: boolean;
 };
 
-export function setupStatus(cwd = process.cwd(), dataDir = resolve(cwd, "data")): SetupStatus {
+export function setupStatus(cwd = rawjobsHome(), dataDir = defaultDataDir(cwd)): SetupStatus {
   const configPath = personalConfigPath(cwd);
   const hasData = existsSync(join(dataDir, "jobs.json"));
   const hasResume = existsSync(resolve(cwd, RESUME_PATH));
@@ -57,7 +58,7 @@ export function setupStatus(cwd = process.cwd(), dataDir = resolve(cwd, "data"))
 export type SaveResult = { ok: true; path: string } | { ok: false; errors: string; issues: { path: string; message: string }[] };
 
 /** Validate a config object (from the wizard) and write it as commented YAML. */
-export function saveConfig(input: unknown, cwd = process.cwd()): SaveResult {
+export function saveConfig(input: unknown, cwd = rawjobsHome()): SaveResult {
   const parsed = ConfigSchema.safeParse(input);
   if (!parsed.success) {
     return {
@@ -75,7 +76,7 @@ export function saveConfig(input: unknown, cwd = process.cwd()): SaveResult {
 export const CONFIG_BACKUP = "rawjobs.config.local.backup.yaml";
 
 /** Start setup over: move the personal config aside (replacing an older backup). Resume and secrets stay. */
-export function resetConfig(cwd = process.cwd()): { ok: true; backup: string | null } {
+export function resetConfig(cwd = rawjobsHome()): { ok: true; backup: string | null } {
   const path = personalConfigPath(cwd);
   if (!existsSync(path)) return { ok: true, backup: null };
   const backup = resolve(cwd, CONFIG_BACKUP);

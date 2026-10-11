@@ -3,6 +3,7 @@ import { basename, resolve } from "node:path";
 import { parse as parseYaml } from "yaml";
 import { z } from "zod";
 import { ConfigSchema, type Config } from "./schema";
+import { rawjobsHome } from "./paths";
 
 /** Looked up in this order when no --config is given. The .local file is gitignored. */
 export const CONFIG_CANDIDATES = ["rawjobs.config.local.yaml", "rawjobs.config.yaml"];
@@ -16,7 +17,7 @@ export class ConfigError extends Error {
   override name = "ConfigError";
 }
 
-export function findConfigPath(cwd = process.cwd()): string {
+export function findConfigPath(cwd = rawjobsHome()): string {
   for (const name of [...CONFIG_CANDIDATES, ...LEGACY_CONFIG_CANDIDATES]) {
     const p = resolve(cwd, name);
     if (existsSync(p)) return p;

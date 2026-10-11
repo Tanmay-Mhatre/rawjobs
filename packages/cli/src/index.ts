@@ -1,8 +1,11 @@
 #!/usr/bin/env -S npx tsx
 import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 import { parseArgs } from "node:util";
 import {
+  defaultDataDir,
+  rawjobsHome,
   checkCompanies,
   directoryIndustryCounts,
   companyKey,
@@ -71,6 +74,9 @@ import {
   type Job,
 } from "@rawjobs/core";
 import { ATS_TYPES } from "@rawjobs/core";
+
+/** Where RawJobs' code is (scheduled scans start node + tsx + this CLI from here). */
+const CODE_ROOT = fileURLToPath(new URL("../../..", import.meta.url));
 
 /** A company's own hiring system, not a job board (JOB_BOARDS): boards are never shared or put in the directory. */
 const isAts = (ats: string | undefined) => (ATS_TYPES as readonly string[]).includes(ats ?? "");
@@ -154,7 +160,7 @@ async function cmdCompanies(args: string[]): Promise<number> {
     allowPositionals: true,
     options: {
       config: { type: "string", short: "c" },
-      data: { type: "string", short: "d", default: "data" },
+      data: { type: "string", short: "d", default: defaultDataDir() },
       limit: { type: "string", short: "n", default: "30" },
       json: { type: "boolean", default: false },
       stdin: { type: "boolean", default: false },
@@ -336,7 +342,7 @@ async function cmdRun(args: string[]): Promise<number> {
       all: { type: "boolean", short: "a", default: false },
       limit: { type: "string", short: "n", default: "50" },
       json: { type: "string" },
-      data: { type: "string", short: "d", default: "data" },
+      data: { type: "string", short: "d", default: defaultDataDir() },
       "dry-run": { type: "boolean", default: false },
       progress: { type: "string" },
       /** Check just this directory company now ("ats:slug"); repeatable. */
@@ -637,11 +643,11 @@ async function cmdSchedule(args: string[]): Promise<number> {
     options: {
       time: { type: "string", multiple: true },
       scope: { type: "string" },
-      data: { type: "string", short: "d", default: "data" },
+      data: { type: "string", short: "d", default: defaultDataDir() },
       stdin: { type: "boolean", default: false },
     },
   });
-  const ctx = { repoRoot: process.cwd(), dataDir: resolve(values.data) };
+  const ctx = { repoRoot: CODE_ROOT, workDir: rawjobsHome(), dataDir: resolve(values.data) };
   const out = (o: Record<string, unknown>) => console.log(JSON.stringify(o));
   try {
     const action = positionals[0] ?? "status";
@@ -679,7 +685,7 @@ async function cmdDirectory(args: string[]): Promise<number> {
     args,
     allowPositionals: true,
     options: {
-      data: { type: "string", short: "d", default: "data" },
+      data: { type: "string", short: "d", default: defaultDataDir() },
       json: { type: "boolean", default: false },
       force: { type: "boolean", default: false },
       "if-older": { type: "string" },
@@ -748,10 +754,10 @@ async function cmdDirectory(args: string[]): Promise<number> {
 
 /** JSON in (stdin) / JSON out (stdout), for the dashboard's local setup API. */
 async function cmdSetup(args: string[]): Promise<number> {
-  const { values, positionals } = parseArgs({ args, allowPositionals: true, options: { data: { type: "string", short: "d", default: "data" } } });
+  const { values, positionals } = parseArgs({ args, allowPositionals: true, options: { data: { type: "string", short: "d", default: defaultDataDir() } } });
   switch (positionals[0]) {
     case "status":
-      console.log(JSON.stringify(setupStatus(process.cwd(), resolve(values.data))));
+      console.log(JSON.stringify(setupStatus(rawjobsHome(), resolve(values.data))));
       return 0;
     case "save": {
       const result = saveConfig(JSON.parse(await readStdin()));
@@ -778,7 +784,7 @@ async function cmdSetup(args: string[]): Promise<number> {
     case "check": {
       const body = JSON.parse(await readStdin()) as { urls?: string[] };
       // Your saved profile (to count matching jobs) and the directory (to mark known companies).
-      const status = setupStatus(process.cwd(), resolve(values.data));
+      const status = setupStatus(rawjobsHome(), resolve(values.data));
       const directory = new Map(readDirectory(values.data).map((c) => [c.key, c]));
       const results = await checkCompanies(body.urls ?? [], { profile: status.config?.profile, directory });
       recordAdditions(values.data, results);

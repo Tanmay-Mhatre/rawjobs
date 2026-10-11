@@ -480,8 +480,8 @@ function TrackingData({
     <Card id="settings-tracking" className="scroll-mt-32 p-5 sm:p-6 md:scroll-mt-20">
       <h3 className="type-body font-semibold">Your tracking data</h3>
       <p className="mt-0.5 type-small text-muted">
-        Statuses and notes for <b className="tabular text-ink">{tracked}</b> jobs, plus your saved Radar views, hidden companies and Not interested rules, are saved in this
-        browser only. Export a backup or move them to another device.
+        Statuses and notes for <b className="tabular text-ink">{tracked}</b> jobs, plus your saved Radar views, hidden companies and Not interested rules, are saved{" "}
+        {canRunLocally ? "on this computer" : "in this browser only"}. Export a backup or move them to another device.
       </p>
       <div className="mt-3 flex flex-wrap gap-2">
         <Button onClick={() => exportState(user, prefs)} disabled={!tracked && !prefs.views.length && !prefs.hiddenCompanies.length && !prefs.hideRules.length}>

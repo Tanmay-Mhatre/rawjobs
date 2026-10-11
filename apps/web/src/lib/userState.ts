@@ -3,6 +3,7 @@ import type { Job } from "./data";
 import type { Reason } from "./notForMe";
 import type { Prefs } from "./prefs";
 import { load, save } from "./storage";
+import { useSavedOnDisk } from "./tracking";
 
 export const PIPELINE = ["saved", "applied", "interviewing", "offer", "rejected"] as const;
 export type PipelineStatus = (typeof PIPELINE)[number];
@@ -17,7 +18,7 @@ export const STATUS_LABEL: Record<Status, string> = {
   dismissed: "Not interested",
 };
 
-/** Your own tracking for one job. Lives in this browser (export/import to move it). */
+/** Your own tracking for one job. Saved on this computer (profile/tracking.json) and in this browser; export/import to move it. */
 export type Entry = {
   status?: Status;
   note?: string;
@@ -39,6 +40,7 @@ export function useUserState() {
   const [state, setState] = useState<UserState>(() => load<UserState>(KEY, {}));
 
   useEffect(() => save(KEY, state), [state]);
+  useSavedOnDisk("state", state, setState);
 
   // Keep tabs in sync.
   useEffect(() => {
