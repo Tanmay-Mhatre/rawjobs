@@ -189,7 +189,28 @@ export async function runScan(onEvent: (e: RunEvent) => void, opts: { scope?: Sc
     onEvent({ type: "error", message: `Couldn't start the scan (HTTP ${res.status}).` });
     return;
   }
-  const reader = res.body.pipeThrough(new TextDecoderStream()).getReader();
+  await readEvents(res.body, onEvent);
+}
+
+/**
+ * Follow the scan the server is already running (started before this page was opened or reloaded),
+ * from its first event. False when no scan is running; `started` gets the scope before any event.
+ */
+export async function followScan(started: (scope: ScanScope) => void, onEvent: (e: RunEvent) => void): Promise<boolean> {
+  let res: Response;
+  try {
+    res = await fetch("/api/run", { cache: "no-store" });
+  } catch {
+    return false;
+  }
+  if (res.status !== 200 || !res.body) return false;
+  started(res.headers.get("x-rawjobs-scope") === "all" ? "all" : "mine");
+  await readEvents(res.body, onEvent);
+  return true;
+}
+
+async function readEvents(body: ReadableStream<BufferSource>, onEvent: (e: RunEvent) => void): Promise<void> {
+  const reader = body.pipeThrough(new TextDecoderStream()).getReader();
   let buf = "";
   for (;;) {
     const { value, done } = await reader.read();

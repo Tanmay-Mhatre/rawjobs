@@ -23,8 +23,10 @@ Requires Node 22+ and [pnpm](https://pnpm.io).
 
 ```bash
 pnpm install
-pnpm dev                # opens http://127.0.0.1:5173 in your browser
+pnpm start              # builds the dashboard and opens http://127.0.0.1:4317 in your browser
 ```
+
+`pnpm start` runs the dashboard and its local API without the dev server; only this computer can reach it. A scan keeps going if you close or reload the tab, and the dashboard picks it up again when you come back. Working on RawJobs itself? `pnpm dev` (http://127.0.0.1:5173) reloads as you edit.
 
 The dashboard walks you through setup the first time (about 3 minutes; you can skip it and come back from any page):
 

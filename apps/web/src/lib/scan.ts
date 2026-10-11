@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { CompanyHealth } from "./data";
-import { notifyWhenDone, runScan, stopScan, type RunEvent, type ScanScope } from "./setup";
+import { followScan, notifyWhenDone, runScan, stopScan, type RunEvent, type ScanScope } from "./setup";
 import { load, save } from "./storage";
 
 export type ScanState = {
@@ -99,6 +99,30 @@ export function progressRows(scan: ScanState): { ats: string; done: number; tota
 export function useScan(onFinished: () => void | Promise<void>) {
   const [scan, setScan] = useState<ScanState>(IDLE);
   const busy = useRef(false);
+  const finished = useRef(onFinished);
+  finished.current = onFinished;
+
+  /** Show a scan's events as they arrive, then refresh the page's data when it ends. */
+  const watch = useCallback(
+    async (stream: (onEvent: (e: RunEvent) => void) => Promise<boolean | void>) => {
+      let failed: string | undefined;
+      let followed: boolean | void = true;
+      try {
+        followed = await stream((e) => {
+          if (e.type === "error") failed = e.message;
+          else setScan((s) => applyScanEvent(s, e));
+        });
+      } catch (err) {
+        failed = (err as Error).message;
+      }
+      if (followed !== false) {
+        await finished.current();
+        setScan((s) => (failed && !s.summary ? { ...s, phase: "error", error: failed } : { ...s, phase: "done", stopping: false }));
+      }
+      busy.current = false;
+    },
+    [],
+  );
 
   const start = useCallback(
     async (scope: ScanScope = lastScope(), opts: { fresh?: boolean } = {}) => {
@@ -106,24 +130,17 @@ export function useScan(onFinished: () => void | Promise<void>) {
       busy.current = true;
       save(SCOPE_KEY, scope);
       setScan({ ...IDLE, phase: "running", scope });
-      let failed: string | undefined;
-      try {
-        await runScan(
-          (e) => {
-            if (e.type === "error") failed = e.message;
-            else setScan((s) => applyScanEvent(s, e));
-          },
-          { scope, fresh: opts.fresh },
-        );
-      } catch (err) {
-        failed = (err as Error).message;
-      }
-      await onFinished();
-      setScan((s) => (failed && !s.summary ? { ...s, phase: "error", error: failed } : { ...s, phase: "done", stopping: false }));
-      busy.current = false;
+      await watch((onEvent) => runScan(onEvent, { scope, fresh: opts.fresh }));
     },
-    [onFinished],
+    [watch],
   );
+
+  // A scan keeps running when the page is closed or reloaded: pick it up again when the page opens.
+  useEffect(() => {
+    if (busy.current) return;
+    busy.current = true;
+    void watch((onEvent) => followScan((scope) => setScan({ ...IDLE, phase: "running", scope }), onEvent));
+  }, [watch]);
 
   const stop = useCallback(async () => {
     if (!busy.current) return;
