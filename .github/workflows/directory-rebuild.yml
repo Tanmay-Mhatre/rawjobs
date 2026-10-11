@@ -53,16 +53,16 @@ jobs:
       CONTRIBUTIONS_FILE: ${{ github.workspace }}/directory-repo/contributions.json
       DENYLIST_FILE: ${{ github.workspace }}/directory-repo/denylist.json
     steps:
-      - uses: actions/checkout@v4
-      - uses: pnpm/action-setup@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v7
         with:
           node-version: 22
           cache: pnpm
       - run: pnpm install --frozen-lockfile
 
       - name: Check out the public directory repo
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           repository: ${{ env.DATA_REPO }}
           token: ${{ secrets.DATA_REPO_TOKEN }}
@@ -231,7 +231,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           OUTCOMES: ${{ toJSON(steps) }}
         run: |
-          echo "$OUTCOMES" | jq -r 'to_entries[] | select(.value.outcome == "failure" and .value.conclusion == "success") | "::warning::\(.key) did not finish; the rebuild went on without it."'
+          echo "$OUTCOMES" | jq -r 'to_entries[] | select(.key != "canary" and .value.outcome == "failure" and .value.conclusion == "success") | "::warning::\(.key) did not finish; the rebuild went on without it."'
           {
             echo "### Weekly rebuild${{ inputs.smoke && ' (smoke test)' || '' }}"
             echo

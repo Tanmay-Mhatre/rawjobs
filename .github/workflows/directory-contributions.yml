@@ -1,5 +1,7 @@
 # Every 3 hours: take companies users shared from the inbox, live-check them, add the good ones to
 # the public directory repo's contributions.json, and publish an updated directory right away.
+# With nothing in the inbox, spend up to 30 minutes on the board-check backlog instead, so it
+# drains between weekly rebuilds (the results ship with the next release).
 # Setup: docs/shared-directory.md
 name: Directory · contributions
 
@@ -33,31 +35,25 @@ jobs:
           curl -fsS -H "Authorization: Bearer $INBOX_TOKEN" "$INBOX_URL/v1/pending" -o "$RUNNER_TEMP/inbox.json"
           echo "count=$(jq '.items | length' "$RUNNER_TEMP/inbox.json")" >> "$GITHUB_OUTPUT"
 
-      - if: steps.inbox.outputs.count != '0'
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
-      - if: steps.inbox.outputs.count != '0'
-        uses: pnpm/action-setup@v4
+      - uses: pnpm/action-setup@v6
 
-      - if: steps.inbox.outputs.count != '0'
-        uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version: 22
           cache: pnpm
 
-      - if: steps.inbox.outputs.count != '0'
-        run: pnpm install --frozen-lockfile
+      - run: pnpm install --frozen-lockfile
 
-      - if: steps.inbox.outputs.count != '0'
-        name: Check out the public directory repo
-        uses: actions/checkout@v4
+      - name: Check out the public directory repo
+        uses: actions/checkout@v7
         with:
           repository: ${{ env.DATA_REPO }}
           token: ${{ secrets.DATA_REPO_TOKEN }}
           path: directory-repo
 
-      - if: steps.inbox.outputs.count != '0'
-        name: Restore the catalog's working state
+      - name: Restore the catalog's working state
         id: state
         env:
           GH_TOKEN: ${{ secrets.DATA_REPO_TOKEN }}
@@ -91,6 +87,20 @@ jobs:
           pnpm exec tsx scripts/catalog/publish.ts --data dist-data
           pnpm exec tsx scripts/catalog/release.ts --data dist-data --out dist
 
+      - if: steps.state.outputs.restored == 'true' && (steps.accept.outputs.accepted == '0' || steps.accept.outputs.accepted == '')
+        name: Check boards (backlog)
+        id: backlog
+        continue-on-error: true
+        timeout-minutes: 40
+        env:
+          CONTRIBUTIONS_FILE: ${{ github.workspace }}/directory-repo/contributions.json
+          DENYLIST_FILE: ${{ github.workspace }}/directory-repo/denylist.json
+        run: |
+          [ -f directory-repo/contributions.json ] || echo '{"companies":[]}' > directory-repo/contributions.json
+          pnpm catalog:sources
+          pnpm exec tsx scripts/catalog/merge.ts
+          bash scripts/catalog/capped.sh "Check boards" 35 pnpm exec tsx scripts/catalog/check.ts --max-minutes 30
+
       # A refused release must not stop the rest: contributions are still committed, acknowledged
       # and saved, and go out with the next release that passes. No allow_shrink here: an owner
       # who means a shrink re-runs the weekly rebuild with it, which sets a new baseline.
@@ -113,7 +123,7 @@ jobs:
           gh release upload "$tag" dist/*.gz -R "$DATA_REPO" --clobber
           gh release upload "$tag" dist/manifest.json -R "$DATA_REPO" --clobber
 
-      - if: always() && steps.accept.outputs.accepted != '0' && steps.accept.outputs.accepted != '' && steps.state.outputs.restored == 'true'
+      - if: always() && steps.state.outputs.restored == 'true'
         name: Save the working state
         # Also after a failure or timeout, so the checks done so far aren't lost. The same files every
         # run saves, so this never wipes the weekly rebuild's progress.
