@@ -4,12 +4,12 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>RawJobs: jobs, straight from the source</title>
-<meta name="description" content="RawJobs reads jobs straight from the careers pages of __COMPANIES_ROUND__ companies and scores each one with rules you can read. Free, open source, runs on your computer.">
+<meta name="description" content="RawJobs reads jobs straight from companies' own careers pages (a directory of __COMPANIES_ROUND__ companies, __LIVE_ROUND__ with live job boards) and scores each one with rules you can read. Free, open source, runs on your computer.">
 <link rel="canonical" href="__SITE_URL__/">
 <meta property="og:type" content="website">
 <meta property="og:site_name" content="RawJobs">
 <meta property="og:title" content="RawJobs: jobs, straight from the source">
-<meta property="og:description" content="Free, open-source job radar. Reads the careers pages of __COMPANIES_ROUND__ companies directly and scores every job with rules you can read.">
+<meta property="og:description" content="Free, open-source job radar. Reads jobs straight from companies' careers pages (__COMPANIES_ROUND__ companies, __LIVE_ROUND__ with live job boards) and scores every job with rules you can read.">
 <meta property="og:url" content="__SITE_URL__/">
 <meta property="og:image" content="__SITE_URL__/og.png">
 <meta property="og:image:width" content="1200">
@@ -422,7 +422,7 @@ label.rj-chip:has(input:focus-visible) { outline: 2px solid var(--focus-ring); o
         <svg class="rj-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M15 22v-4a4.8 4.8 0 0 0-1-3.5c3 0 6-2 6-5.5.08-1.25-.27-2.48-1-3.5.28-1.15.28-2.35 0-3.5 0 0-1 0-3 1.5-2.64-.5-5.36-.5-8 0C6 2 5 2 5 2c-.3 1.15-.3 2.35 0 3.5A5.403 5.403 0 0 0 4 9c0 3.5 3 5.5 6 5.5-.39.49-.68 1.05-.85 1.65-.17.6-.22 1.23-.15 1.85v4"/><path d="M9 18c-4.51 2-5-2-7-2"/></svg>
         Star on GitHub
       <span class="rj-sr"> (opens in a new tab)</span></a>
-      <a class="rj-btn rj-btn--primary" href="https://github.com/Tanmay-Mhatre/rawjobs#getting-started" target="_blank" rel="noopener">Set up RawJobs<span class="rj-sr"> (opens in a new tab)</span></a>
+      <a class="rj-btn rj-btn--primary" href="#install">Set up RawJobs</a>
     </div>
   </div>
 </header>
@@ -435,13 +435,13 @@ label.rj-chip:has(input:focus-visible) { outline: 2px solid var(--focus-ring); o
       <p class="eyebrow" data-step style="--i:0">Free and open source · MIT</p>
       <h1 id="hero-title" data-step style="--i:1">Jobs, straight from the source.<span class="cursor" aria-hidden="true"></span></h1>
       <p class="hero__sub" data-step style="--i:2">See it before LinkedIn does.</p>
-      <p class="hero__lede" data-step style="--i:3">RawJobs reads jobs straight from the careers pages of __COMPANIES_ROUND__ companies and scores each one with rules you can read. It runs on your computer.</p>
+      <p class="hero__lede" data-step style="--i:3">RawJobs reads jobs straight from companies' own careers pages, from a directory of __COMPANIES_ROUND__ companies, __LIVE_ROUND__ with live job boards, and scores each one with rules you can read. It runs on your computer.</p>
       <div class="hero__ctas" data-step style="--i:4">
-        <a class="rj-btn rj-btn--primary btn-lg" href="https://github.com/Tanmay-Mhatre/rawjobs#getting-started" target="_blank" rel="noopener">
-          Set up RawJobs
+        <a class="rj-btn rj-btn--primary btn-lg" href="#install">
+          Install in one line
           <svg class="rj-icon rj-icon--nudge" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></svg>
-        <span class="rj-sr"> (opens in a new tab)</span></a>
-        <a class="rj-btn btn-lg" href="#install">Install in one line</a>
+        </a>
+        <a class="rj-btn btn-lg" href="https://github.com/Tanmay-Mhatre/rawjobs" target="_blank" rel="noopener">Source on GitHub<span class="rj-sr"> (opens in a new tab)</span></a>
       </div>
       <p class="hero__note" data-step style="--i:5">
         <span>Windows, macOS and Linux</span>
@@ -490,7 +490,7 @@ label.rj-chip:has(input:focus-visible) { outline: 2px solid var(--focus-ring); o
 <section class="proof" aria-label="RawJobs in numbers">
   <div class="wrap">
     <div class="proof__grid">
-      <div class="stat"><span class="stat__n">__COMPANIES__</span><span class="stat__l">companies in the directory</span></div>
+      <div class="stat"><span class="stat__n">__COMPANIES__</span><span class="stat__l">companies in the directory, __LIVE_ROUND__ with live job boards</span></div>
       <div class="stat"><span class="stat__n">__INDEXED__</span><span class="stat__l">companies hiring now</span></div>
       <div class="stat"><span class="stat__n">23</span><span class="stat__l">hiring systems, plus 4 job boards</span></div>
       <div class="stat"><span class="stat__n">__FEED_JOBS__</span><span class="stat__l">open jobs in the daily feed</span></div>
@@ -729,7 +729,7 @@ label.rj-chip:has(input:focus-visible) { outline: 2px solid var(--focus-ring); o
       <div class="cli" id="cli">
         <div class="cli__head">
           <h3 id="cli-title">Scans, schedules and alerts from the terminal</h3>
-          <p class="prose">The CLI scans, schedules and sends alerts. Run it by hand, schedule it, or send new matches to Telegram.</p>
+          <p class="prose">The CLI scans, schedules and sends alerts. Run it by hand, schedule it, or send new matches to Telegram. These are the commands from the source code; an installed copy has the same <code>rawjobs</code> command in its <code>bin</code> folder.</p>
         </div>
       <div class="rj-panel term" id="term" data-play="static">
         <div class="term__bar">
@@ -770,7 +770,7 @@ label.rj-chip:has(input:focus-visible) { outline: 2px solid var(--focus-ring); o
         <div class="fact">
           <svg class="rj-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="m17 8 5 5"/><path d="m22 8-5 5"/></svg>
           <h3>No account, no telemetry</h3>
-          <p>Nothing to sign up for. The app only talks to job boards, GitHub for the shared directory, the project's company inbox when you add a company (optional) and, if you turn on alerts, Telegram.</p>
+          <p>Nothing to sign up for. The app only talks to job boards, GitHub for the shared directory and for updates (once a day, and you can turn it off), the project's company inbox when you add a company (optional) and, if you turn on alerts, Telegram. Installing also downloads Node from nodejs.org.</p>
         </div>
         <div class="fact">
           <svg class="rj-icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="M12 2a14.5 14.5 0 0 0 0 20 14.5 14.5 0 0 0 0-20"/><path d="M2 12h20"/></svg>
@@ -833,8 +833,8 @@ label.rj-chip:has(input:focus-visible) { outline: 2px solid var(--focus-ring); o
       <div class="faq">
         <details><summary>Is it free?<svg class="rj-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14"/><path d="M12 5v14"/></svg></summary><p class="ans">Yes. RawJobs is MIT licensed, with no paid tier and no account.</p></details>
         <details><summary>Does it use AI?<svg class="rj-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14"/><path d="M12 5v14"/></svg></summary><p class="ans">No. Scores come from keyword rules you can read and change. An optional AI re-rank, with your own key, is on the roadmap.</p></details>
-        <details><summary>Where do the jobs come from?<svg class="rj-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14"/><path d="M12 5v14"/></svg></summary><p class="ans">From each company's own careers page on its hiring system, like Greenhouse, Lever or Workday, plus 4 public job boards. A shared directory of __COMPANIES_ROUND__ companies, rebuilt weekly, tells RawJobs where to look.</p></details>
-        <details><summary>Is my data sent anywhere?<svg class="rj-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14"/><path d="M12 5v14"/></svg></summary><p class="ans">Only one thing, and you can turn it off: when you add a company by link, its careers board is shared with the directory so everyone can find it. Your resume, roles and alert settings stay on your computer, and the app has no telemetry. It talks only to the job boards it scans, GitHub for the shared directory, the project's company inbox when you add a company (optional), and Telegram if you turn on alerts.</p></details>
+        <details><summary>Where do the jobs come from?<svg class="rj-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14"/><path d="M12 5v14"/></svg></summary><p class="ans">From each company's own careers page on its hiring system, like Greenhouse, Lever or Workday, plus 4 public job boards. A shared directory of __COMPANIES_ROUND__ companies, __LIVE_ROUND__ with live job boards, rebuilt weekly, tells RawJobs where to look.</p></details>
+        <details><summary>Is my data sent anywhere?<svg class="rj-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14"/><path d="M12 5v14"/></svg></summary><p class="ans">Only one thing, and you can turn it off: when you add a company by link, its careers board is shared with the directory so everyone can find it. Your resume, roles and alert settings stay on your computer, and the app has no telemetry. It talks only to the job boards it scans, GitHub for the shared directory and for updates (once a day, and you can turn it off), the project's company inbox when you add a company (optional), and Telegram if you turn on alerts. Installing also downloads Node from nodejs.org.</p></details>
         <details><summary>How fresh are the jobs?<svg class="rj-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14"/><path d="M12 5v14"/></svg></summary><p class="ans">As fresh as your last scan. Scan whenever you like, or schedule 1 or 2 scans a day and get new matches on Telegram.</p></details>
         <details><summary>How do I run it?<svg class="rj-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14"/><path d="M12 5v14"/></svg></summary><p class="ans">Paste one line into a terminal (PowerShell on Windows, Terminal on macOS and Linux): it installs RawJobs, starts it when you log in and opens the dashboard, which walks you through setup. The lines are in <a href="#install">Get it</a> and the <a href="https://github.com/Tanmay-Mhatre/rawjobs/blob/main/docs/install.md" target="_blank" rel="noopener">install guide</a>. Developers can also run it from the source code with Node 22+ and pnpm.</p></details>
       </div>
@@ -850,7 +850,7 @@ label.rj-chip:has(input:focus-visible) { outline: 2px solid var(--focus-ring); o
       <h2 id="final-title">Your next role may already be on a careers page</h2>
       <p class="prose">Schedule a scan for 08:00 and read new matches with your coffee.</p>
       <div class="hero__ctas">
-        <a class="rj-btn rj-btn--primary btn-lg" href="https://github.com/Tanmay-Mhatre/rawjobs#getting-started" target="_blank" rel="noopener">Set up RawJobs<svg class="rj-icon rj-icon--nudge" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></svg><span class="rj-sr"> (opens in a new tab)</span></a>
+        <a class="rj-btn rj-btn--primary btn-lg" href="#install">Install in one line<svg class="rj-icon rj-icon--nudge" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></svg></a>
         <a class="rj-btn btn-lg" href="https://github.com/Tanmay-Mhatre/rawjobs" target="_blank" rel="noopener">Star on GitHub<span class="rj-sr"> (opens in a new tab)</span></a>
       </div>
     </div>
