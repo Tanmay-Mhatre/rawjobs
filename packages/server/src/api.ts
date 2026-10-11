@@ -5,6 +5,7 @@ import { resolve } from "node:path";
 import { APP_VERSION, cliCommand, type Command } from "../../core/src/runtime";
 import { readTracking, saveTracking } from "../../core/src/tracking";
 import { refuse } from "./guard";
+import type { Updater } from "./updater";
 
 export type ApiOptions = {
   /** Your RawJobs folder: rawjobs.config.local.yaml and profile/. The CLI runs here. */
@@ -15,6 +16,8 @@ export type ApiOptions = {
   cli?: Command;
   /** Reported by /api/health. Default: this copy's version. */
   version?: string;
+  /** Answers /api/update (an installed copy's updates); without it, it says this copy doesn't update itself. */
+  updater?: Pick<Updater, "route">;
 };
 
 /** One line of the scan's NDJSON progress. */
@@ -24,6 +27,7 @@ type Line = string;
  * The dashboard's API: everything it needs to set up and run RawJobs on this computer.
  *   GET  /api/health          { ok, version, scanning }: is the server up, and which version
  *   GET/PUT /api/tracking     your statuses, notes and Radar preferences (profile/tracking.json)
+ *   GET  /api/update          an installed copy's updates (POST …/check, …/apply, …/seen; PUT …/settings)
  *   GET  /api/setup           setup status (+ current config)
  *   POST /api/setup/config    validate and save rawjobs.config.local.yaml
  *   POST /api/setup/reset     start setup over: move the config to rawjobs.config.local.backup.yaml
@@ -189,6 +193,11 @@ export function createApi(opts: ApiOptions) {
 
   async function route(url: string, req: IncomingMessage, res: ServerResponse): Promise<void> {
     if (url === "/api/health" && req.method === "GET") return json(res, { ok: true, version, scanning: busy() });
+    if (url === "/api/update" || url.startsWith("/api/update/")) {
+      if (opts.updater && (await opts.updater.route(url, req, res, () => readBody(req)))) return;
+      if (url === "/api/update" && req.method === "GET") return json(res, { installed: false, current: version, lastUpdate: null, available: null, tooOld: false, state: "idle", settings: { mode: "off", channel: "stable" } });
+      return json(res, { ok: false, errors: "This copy updates with git (git pull), not by itself." }, 400);
+    }
     if (url === "/api/tracking" && req.method === "GET") return json(res, { tracking: readTracking(home) });
     if (url === "/api/tracking" && req.method === "PUT") {
       let body: unknown;

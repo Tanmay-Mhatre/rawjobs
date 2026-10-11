@@ -17,6 +17,7 @@ import { ScanPrefsPicker } from "./ScanButton";
 import { ScheduledScans } from "./ScheduledScans";
 import { TelegramAlerts } from "./TelegramAlerts";
 import { Button, Card, cx, IconButton, Segmented, Toggle } from "./ui";
+import { UpdatesSettings } from "./Updates";
 
 type Props = {
   draft: Draft;
@@ -47,6 +48,7 @@ const GROUPS = [
   { id: "my-companies", label: "My companies" },
   { id: "scans", label: "Scans & alerts" },
   { id: "data", label: "Your data" },
+  { id: "updates", label: "Updates" },
   { id: "appearance", label: "Appearance" },
 ] as const;
 type GroupId = (typeof GROUPS)[number]["id"];
@@ -215,6 +217,14 @@ export function Settings({ draft, update, revert, dirty, onSaved, onScan, scanni
             </Section>
           )}
         </Group>
+
+        {canRunLocally && (
+          <Group id="updates" label="Updates">
+            <Section id="update" title="RawJobs updates" hint="New versions of RawJobs, from its releases on GitHub.">
+              <UpdatesSettings />
+            </Section>
+          </Group>
+        )}
 
         <Group id="appearance" label="Appearance">
           <AppearanceSection />
