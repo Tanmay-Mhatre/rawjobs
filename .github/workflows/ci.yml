@@ -36,4 +36,4 @@ jobs:
           curl -fs http://127.0.0.1:4399/api/health | grep -F '"ok":true'
           curl -fs http://127.0.0.1:4399/ | grep -qi "<!doctype html>"
           curl -fs http://127.0.0.1:4399/api/setup | grep -F '"isPersonal":false'
-          kill %1
+          kill $!
