@@ -684,8 +684,9 @@ export function RadarPage(p: Props) {
                   ),
                 )}
                 {limit < rows.length && (
+                  // No spinner on the feed (design/components/Loading): the next page is already here, it just renders.
                   <li ref={sentinel} className="flex items-center gap-2 px-4 py-4 type-small text-muted">
-                    <LoaderCircle className="rj-icon animate-spin" aria-hidden /> Loading more…
+                    Loading more…
                   </li>
                 )}
               </ul>
