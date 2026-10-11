@@ -64,7 +64,8 @@ export function Dialog({
       className={cx(
         "jh-dialog",
         placement === "center" && "m-auto w-[calc(100%-2rem)] max-w-lg",
-        placement === "right" && "ml-auto mr-0 h-dvh max-h-dvh w-full max-w-2xl",
+        // design/components/Drawer: drawer-width (560px), full width under 720px.
+        placement === "right" && "jh-drawer ml-auto mr-0 h-dvh max-h-dvh w-full min-[721px]:max-w-[var(--drawer-width)]",
         placement === "bottom" && "mx-auto mb-0 mt-auto w-full sm:m-auto sm:max-w-lg",
         className,
       )}

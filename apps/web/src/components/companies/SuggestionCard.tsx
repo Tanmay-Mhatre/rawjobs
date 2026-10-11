@@ -154,20 +154,20 @@ export function SuggestionCard({ s, added, onAdd, onRemove, onHide }: Props) {
   );
 }
 
-/** A card-shaped placeholder while suggestions load. */
+/** A card-shaped placeholder while suggestions load: the kit's shimmer bars (design/components/Loading), not a pulse. */
 export function CardSkeleton() {
   return (
-    <div className="flex animate-pulse flex-col gap-3 rounded-md border border-line p-4" aria-hidden>
+    <div className="flex flex-col gap-3 rounded-md border border-line p-4" aria-hidden>
       <div className="flex gap-3">
-        <span className="size-10 rounded-md bg-inset" />
+        <span className="rj-skel size-10" />
         <div className="flex-1 space-y-2 pt-1">
-          <span className="block h-3 w-2/3 rounded-md bg-inset" />
-          <span className="block h-2.5 w-1/3 rounded-md bg-inset" />
+          <span className="rj-skel h-3 w-2/3" />
+          <span className="rj-skel h-2.5 w-1/3" />
         </div>
       </div>
-      <span className="block h-3 w-1/2 rounded-md bg-inset" />
-      <span className="block h-2.5 w-5/6 rounded-md bg-inset" />
-      <span className="mt-2 block h-8 w-24 rounded-md bg-inset" />
+      <span className="rj-skel h-3 w-1/2" />
+      <span className="rj-skel h-2.5 w-5/6" />
+      <span className="rj-skel mt-2 h-8 w-24" />
     </div>
   );
 }

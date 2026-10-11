@@ -13,7 +13,9 @@ const BUILT_IN: { id: string; label: string; filters: Partial<Filters>; count: k
   { id: "saved", label: "Saved", filters: { status: "saved" }, count: "saved" },
   { id: "applied", label: "Applied", filters: { status: "applied" }, count: "applied" },
 ];
-export type ViewCounts = { all: number; mine: number; new: number; strong: number; saved: number; applied: number };
+/** The built-in views in tab order; the first scan has no New view (every job would be new). Keys 1-6 pick them. */
+export const builtInViews = (hideNew?: boolean) => BUILT_IN.filter((b) => !(b.id === "new" && hideNew));
+export type ViewCounts ={ all: number; mine: number; new: number; strong: number; saved: number; applied: number };
 
 export function ViewsBar(props: {
   className?: string;
@@ -43,7 +45,7 @@ export function ViewsBar(props: {
 
   /** Something worth saving: not a saved view already, and not just a built-in tab in Best match. */
   const canSave = !customActive && (!builtInActive || props.sort !== "best");
-  const builtIns = BUILT_IN.filter((b) => !(b.id === "new" && props.hideNew));
+  const builtIns = builtInViews(props.hideNew);
   const tabValue = builtInActive && !customActive ? builtInActive.id : "";
   return (
     <div className={cx("flex flex-wrap items-end gap-x-4 gap-y-2 lg:flex-nowrap", props.className)}>
