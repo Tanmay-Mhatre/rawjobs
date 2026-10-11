@@ -1,6 +1,6 @@
 import type { NormalizedJob } from "../schema";
 import { htmlToText, inferWorkplace } from "../text";
-import { countryName, detectAs, isoDate, joinParts } from "./parse";
+import { BoardClosedError, countryName, detectAs, isoDate, joinParts } from "./parse";
 import { jobId, type Connector } from "./types";
 
 type Branch = { id: number; city?: string | null; state?: string | null; country_code?: string | null; location?: string | null };
@@ -27,7 +27,16 @@ export const freshteam: Connector<FreshteamJob> = {
   detect: detectAs("freshteam"),
 
   async fetch(ref, { http }) {
-    const data = await http.getJson<Feed>(`https://${ref.slug}.freshteam.com/hire/widgets/jobs.json`);
+    const body = await http.getText(`https://${ref.slug}.freshteam.com/hire/widgets/jobs.json`);
+    let data: Feed;
+    try {
+      data = JSON.parse(body) as Feed;
+    } catch {
+      // Freshteam answers a web page for accounts that are gone or blocked (a lapsed subscription).
+      if (/couldn.t find/i.test(body)) throw new BoardClosedError("Freshteam", ref.slug, "no longer exists");
+      if (/account is blocked/i.test(body)) throw new BoardClosedError("Freshteam", ref.slug, "is blocked by Freshteam");
+      throw new Error("unexpected Freshteam response: not JSON");
+    }
     if (!Array.isArray(data.jobs)) throw new Error("unexpected Freshteam response: no jobs array");
     const branches = new Map((data.branches ?? []).map((b) => [b.id, b]));
     const roles = new Map((data.job_roles ?? []).map((r) => [r.id, r.name]));

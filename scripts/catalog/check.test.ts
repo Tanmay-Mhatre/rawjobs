@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest";
+import { HttpClient } from "../../packages/core/src/index";
 import { checkOrder } from "./check";
+import { checkBoard } from "./lib/live-check";
 import { dueKind, isCurrent, mergeCheck, retryWaitDays, spreadDays } from "./lib/checks";
 
 const board = (key: string, confidence: "high" | "single", sources: string[] = []) => ({ key, ats: "workable", slug: key, confidence, sources });
@@ -73,5 +75,18 @@ describe("retry back-off", () => {
     expect(dueKind(undefined)).toBe("new");
     expect(dueKind({ key: "a", status: "live", checked_at: at(40) })).toBe("recheck");
     expect(dueKind({ key: "a", status: "live", checked_at: at(40), errors: 1 })).toBe("retry");
+  });
+});
+
+describe("closed boards", () => {
+  const client = (answer: () => Response) => new HttpClient({ hostDelayMs: 0, sleep: async () => {}, fetchImpl: (async () => answer()) as unknown as typeof fetch });
+  const page = (body: string, url = "") => Object.defineProperty(new Response(body, { headers: { "content-type": "text/html" } }), "url", { value: url });
+
+  it("records a board its hiring system calls gone as dead, not as an error to retry", async () => {
+    expect(await checkBoard(client(() => page("<!DOCTYPE html>", "https://www.bamboohr.com/")), { key: "bamboohr:acme", ats: "bamboohr", slug: "acme" })).toMatchObject({ status: "dead" });
+    expect(await checkBoard(client(() => new Response("", { status: 401 })), { key: "bamboohr:acme", ats: "bamboohr", slug: "acme" })).toMatchObject({ status: "dead" });
+    expect(await checkBoard(client(() => page("Your account is blocked.")), { key: "freshteam:acme", ats: "freshteam", slug: "acme" })).toMatchObject({ status: "dead" });
+    // Anything else stays an error.
+    expect(await checkBoard(client(() => page("<html>maintenance</html>")), { key: "freshteam:acme", ats: "freshteam", slug: "acme" })).toMatchObject({ status: "error" });
   });
 });

@@ -87,6 +87,19 @@ describe("JSON feed connectors", () => {
     expect(await c.describe!(raws[0], ref, { http, now })).toMatchObject({ description: "Role", postedAt: "2026-05-19T00:00:00.000Z" });
   });
 
+  it("bamboohr and freshteam say plainly when a company's board is gone, instead of a JSON error", async () => {
+    // BambooHR sends a gone account to its home page and a switched-off careers page to the login.
+    const redirected = (to: string) => Object.defineProperty(text("<!DOCTYPE html><title>BambooHR</title>"), "url", { value: to });
+    await expect(run("bamboohr", { slug: "acme" }, () => redirected("https://www.bamboohr.com/"))).rejects.toThrow('BambooHR board not found: "acme" no longer exists');
+    await expect(run("bamboohr", { slug: "acme" }, () => redirected("https://acme.bamboohr.com/login.php"))).rejects.toThrow("has its careers page switched off");
+    await expect(run("bamboohr", { slug: "acme" }, () => new Response("", { status: 401 }))).rejects.toThrow("has its careers page switched off");
+    // Any other page is still an ordinary error (retried), not a closed board.
+    await expect(run("bamboohr", { slug: "acme" }, () => redirected("https://acme.bamboohr.com/careers/list"))).rejects.toThrow("unexpected BambooHR response");
+    await expect(run("freshteam", { slug: "acme" }, () => text("<h3>We couldn't find</h3> May be this is still fresh!"))).rejects.toThrow('Freshteam board not found: "acme" no longer exists');
+    await expect(run("freshteam", { slug: "acme" }, () => text("Your account is blocked. Please reach out to our support team"))).rejects.toThrow("is blocked by Freshteam");
+    await expect(run("freshteam", { slug: "acme" }, () => text("<html>maintenance</html>"))).rejects.toThrow("unexpected Freshteam response");
+  });
+
   it("breezy: list, then the JobPosting on the job page", async () => {
     const { raws, jobs, http, c, ref } = await run("breezy", { slug: "acme" }, (url) =>
       url.endsWith("/json")
