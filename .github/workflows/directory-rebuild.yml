@@ -2,19 +2,25 @@
 # contributions, re-check boards, refresh the job index, and publish a new release.
 # Setup: docs/shared-directory.md
 #
+# Two jobs, each with its own time limit: "collect" gathers and checks boards and saves the working
+# state; "publish" restores it, builds, indexes, gates and releases. Publish runs even when collect
+# failed or ran out of time (its progress is saved), so a slow source can never stop a release.
+# Collectors may also stop early on their own without failing collect: each saves what it found and
+# the next run continues. The steps on the publish path (sources, merge, build, package, gate,
+# publish) must succeed.
+#
 # Time budget (minutes; soft cap = the script's --max-minutes, hard cap = capped.sh, which runs it
-# under `timeout`). Collectors may fail or run out of time without stopping the rebuild: each saves
-# what it found, the next run continues, and build + publish always get their turn. The steps on
-# the publish path (sources, merge, build, package, gate, publish) must succeed.
+# under `timeout`):
 #
 #   stage            soft  hard     stage          soft  hard
 #   Common Crawl       35    45     crossprobe       20    25
 #   Wayback            25    50     check 2          10    15
 #   industry resolve   10    15     index            30    40
-#   bulk resolve       28    40     the rest          –   ~45 (setup, sources, merges, build, package, gate, publish)
+#   bulk resolve       28    40     publish job       –   ~25 besides index (setup, sources, merge, build, package, gate, release)
 #   check 1            25    30
 #
-# Hard caps add up to about 305 of the job's 350. A typical run takes about 3 hours.
+# Collect's hard caps add up to about 260 of its 350; publish's to about 65 of its 120.
+# A typical run takes about 3 hours.
 # A smoke run (dispatch with smoke) gives every stage 2 minutes, publishes nothing and checks
 # that a step past its timeout-minutes fails without stopping the job: about 25 minutes.
 name: Directory · weekly rebuild
@@ -46,7 +52,7 @@ env:
   DATA_REPO: ${{ vars.DATA_REPO || 'Tanmay-Mhatre/rawjobs-directory' }}
 
 jobs:
-  rebuild:
+  collect:
     runs-on: ubuntu-24.04
     timeout-minutes: 350
     env:
@@ -149,6 +155,58 @@ jobs:
         timeout-minutes: 17
         run: bash scripts/catalog/capped.sh "Check new boards" ${{ inputs.smoke && 5 || 15 }} pnpm exec tsx scripts/catalog/check.ts --recheck-days 30 --max-minutes ${{ inputs.smoke && 2 || 10 }}
 
+      - name: Save the working state
+        # Also after a failure or timeout, so progress isn't lost; but never when the restore failed,
+        # or a run that started from nothing would overwrite good state.
+        if: always() && steps.state.outcome == 'success'
+        env:
+          GH_TOKEN: ${{ secrets.DATA_REPO_TOKEN }}
+        run: bash scripts/catalog/state.sh save
+
+  publish:
+    needs: collect
+    # Also when collect failed or hit its time limit: its progress was saved, and the release gate
+    # decides whether the result is good enough to ship. (Cancelling the run by hand doesn't stop
+    # this job; cancel it again once it starts.)
+    if: always() && needs.collect.result != 'skipped'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
+    env:
+      CONTRIBUTIONS_FILE: ${{ github.workspace }}/directory-repo/contributions.json
+      DENYLIST_FILE: ${{ github.workspace }}/directory-repo/denylist.json
+    steps:
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+
+      - name: Check out the public directory repo
+        uses: actions/checkout@v7
+        with:
+          repository: ${{ env.DATA_REPO }}
+          token: ${{ secrets.DATA_REPO_TOKEN }}
+          path: directory-repo
+
+      - name: Restore the working state collect saved
+        id: state
+        env:
+          GH_TOKEN: ${{ secrets.DATA_REPO_TOKEN }}
+        run: bash scripts/catalog/state.sh restore
+
+      # merged.json isn't part of the saved state: merge again from the lists and saved results.
+      - name: Download the public lists
+        timeout-minutes: 5
+        run: |
+          [ -f directory-repo/contributions.json ] || echo '{"companies":[]}' > directory-repo/contributions.json
+          pnpm catalog:sources
+
+      - name: Merge
+        timeout-minutes: 5
+        run: pnpm exec tsx scripts/catalog/merge.ts
+
       - name: Build
         timeout-minutes: 5
         run: pnpm exec tsx scripts/catalog/build.ts
@@ -217,10 +275,11 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           OUTCOMES: ${{ toJSON(steps) }}
+          COLLECT: ${{ needs.collect.result }}
         run: |
           title="Directory rebuild did not publish"
           run_url="${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
-          steps=$(echo "$OUTCOMES" | jq -r 'to_entries | map("- \(.key): \(.value.outcome)") | join("\n")')
+          steps=$(printf -- '- collect job: %s\n%s' "$COLLECT" "$(echo "$OUTCOMES" | jq -r 'to_entries | map("- \(.key): \(.value.outcome)") | join("\n")')")
           body=$(printf 'The weekly rebuild ended without a new release. Installs keep the current one.\n\nRun: %s\n\nSteps:\n%s\n\nIf the release gate refused a deliberate shrink, re-run with: gh workflow run directory-rebuild.yml -f allow_shrink=true' "$run_url" "$steps")
           open=$(gh issue list -R "${{ github.repository }}" --state open --search "\"$title\" in:title" --json number -q '.[0].number')
           if [ -n "$open" ]; then gh issue comment "$open" -R "${{ github.repository }}" --body "$body"; else gh issue create -R "${{ github.repository }}" --title "$title" --body "$body"; fi
@@ -237,7 +296,7 @@ jobs:
             echo
             echo "| Step | Result | Minutes |"
             echo "|---|---|---|"
-            gh run view "${{ github.run_id }}" -R "${{ github.repository }}" --json jobs -q '.jobs[] | select(.name == "rebuild") | .steps[] | select(.conclusion != null and .conclusion != "" and (.completedAt | startswith("0001") | not)) | "| \(.name) | \(.conclusion) | \((((.completedAt | fromdate) - (.startedAt | fromdate)) / 60) | floor) |"' || echo "| (step times unavailable) | | |"
+            gh run view "${{ github.run_id }}" -R "${{ github.repository }}" --json jobs -q '.jobs[] | select(.name == "collect" or .name == "publish") | .name as $job | .steps[] | select(.conclusion != null and .conclusion != "" and (.completedAt | startswith("0001") | not)) | "| \($job): \(.name) | \(.conclusion) | \((((.completedAt | fromdate) - (.startedAt | fromdate)) / 60) | floor) |"' || echo "| (step times unavailable) | | |"
             echo
             live="${RUNNER_TEMP}/live-manifest.json"
             if [ -s "$live" ]; then echo "Live release: $(jq -r '"\(.companies) companies, \(.indexed) indexed"' "$live")."; fi
