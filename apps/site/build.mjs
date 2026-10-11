@@ -75,7 +75,9 @@ const int = (x) => x.toLocaleString("en-US");
 const day = (iso) => new Date(iso).toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric", timeZone: "UTC" });
 /** 21,485 -> "21,000+"; 1,338,418 -> "1.3M+": numbers in prose round down, so they stay true for a while. */
 const atLeast = (x) => (x >= 1e6 ? `${Math.floor(x / 1e5) / 10}M+` : `${int(Math.floor(x / 1000) * 1000)}+`);
+const VERSION = JSON.parse(read(join(ROOT, "package.json"))).version;
 const NUMBERS = {
+  __VERSION__: VERSION,
   __COMPANIES__: int(n.companies),
   __COMPANIES_ROUND__: atLeast(n.companies),
   __LIVE_ROUND__: atLeast(n.liveBoards),

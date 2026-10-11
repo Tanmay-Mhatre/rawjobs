@@ -4,12 +4,12 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>RawJobs: jobs, straight from the source</title>
-<meta name="description" content="RawJobs reads jobs straight from companies' own careers pages (a directory of __COMPANIES_ROUND__ companies, __LIVE_ROUND__ with live job boards) and scores each one with rules you can read. Free, open source, runs on your computer.">
+<meta name="description" content="RawJobs finds jobs on the careers pages of __COMPANIES_ROUND__ companies and scores each one with rules you can read. Free, open source, and it runs on your computer.">
 <link rel="canonical" href="__SITE_URL__/">
 <meta property="og:type" content="website">
 <meta property="og:site_name" content="RawJobs">
 <meta property="og:title" content="RawJobs: jobs, straight from the source">
-<meta property="og:description" content="Free, open-source job radar. Reads jobs straight from companies' careers pages (__COMPANIES_ROUND__ companies, __LIVE_ROUND__ with live job boards) and scores every job with rules you can read.">
+<meta property="og:description" content="Free, open-source job radar. Finds jobs on the careers pages of __COMPANIES_ROUND__ companies and scores every one with rules you can read.">
 <meta property="og:url" content="__SITE_URL__/">
 <meta property="og:image" content="__SITE_URL__/og.png">
 <meta property="og:image:width" content="1200">
@@ -121,7 +121,7 @@ h1, h2, h3 { margin: 0; text-wrap: balance; }
 /* ---------- radar panel (hero) ---------- */
 .radar { box-shadow: var(--shadow-l1); min-width: 0; }
 .radar__bar { display: flex; align-items: center; gap: var(--space-3); padding: var(--space-2) var(--space-2) var(--space-2) var(--space-4); border-bottom: 1px solid var(--feed-divider); }
-.radar__cmd { font: var(--text-code); color: var(--text-secondary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; flex: 1; }
+.radar__cmd { font: var(--text-small); color: var(--text-secondary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; flex: 1; }
 .radar__cmd b { color: var(--text-primary); font-weight: 500; }
 .radar__status { display: flex; align-items: center; gap: var(--space-2); justify-content: space-between; }
 .scanning { display: inline-flex; align-items: center; gap: var(--space-2); min-width: 0; overflow: hidden; white-space: nowrap; }
@@ -157,16 +157,15 @@ h1, h2, h3 { margin: 0; text-wrap: balance; }
 
 /* ---------- proof strip ---------- */
 .proof { border-block: 1px solid var(--rule); }
-.proof__grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); }
+.proof__grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); }
 .stat { padding: var(--space-6) var(--space-6) var(--space-6) 0; display: grid; gap: var(--space-1); align-content: start; }
 .stat + .stat { padding-left: var(--space-6); border-left: 1px solid var(--rule); }
 .stat__n { font: var(--text-display); letter-spacing: -0.03em; font-variant-numeric: tabular-nums; }
 .stat__l { font: var(--text-small); color: var(--text-secondary); }
-.proof__foot { font: var(--text-meta); color: var(--text-secondary); padding-bottom: var(--space-4); }
 @media (max-width: 760px) {
-  .proof__grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-  .stat:nth-child(3) { padding-left: 0; border-left: 0; }
-  .stat:nth-child(n+3) { border-top: 1px solid var(--rule); }
+  .proof__grid { grid-template-columns: minmax(0, 1fr); }
+  .stat, .stat + .stat { padding: var(--space-4) 0; border-left: 0; }
+  .stat + .stat { border-top: 1px solid var(--rule); }
 }
 
 /* ---------- sections ---------- */
@@ -181,7 +180,8 @@ h1, h2, h3 { margin: 0; text-wrap: balance; }
 .section h2 { font: var(--text-section); letter-spacing: -0.03em; }
 .section__lede { font: var(--text-lede); color: var(--text-secondary); max-width: 44ch; text-wrap: pretty; }
 .prose { color: var(--text-secondary); max-width: 62ch; text-wrap: pretty; }
-.prose strong { color: var(--text-primary); font-weight: 500; }
+.prose strong, .section__lede strong { color: var(--text-primary); font-weight: 500; }
+.prose a { text-underline-offset: 3px; }
 @media (max-width: 920px) { .split { grid-template-columns: minmax(0, 1fr); } }
 
 /* scroll reveal: only elements below the fold at load are hidden, then revealed once */
@@ -227,21 +227,6 @@ h1, h2, h3 { margin: 0; text-wrap: balance; }
   .link--broken > i { transform: scaleY(0.45); background: repeating-linear-gradient(180deg, var(--text-primary) 0 4px, transparent 4px 8px); }
   .routes[data-play="ready"] .link > i { transform: scaleY(0); }
 }
-
-/* ---------- get it ---------- */
-.soon { display: flex; width: fit-content; align-items: center; gap: var(--space-2); font: var(--text-meta); font-weight: 500; color: var(--text-secondary); border: 1px solid var(--border-default); border-radius: var(--radius-sm); padding: var(--space-1) var(--space-2); }
-.ways { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-4); }
-.way { display: grid; gap: var(--space-4); align-content: start; justify-items: start; padding: var(--space-6); }
-.way__head { display: grid; gap: var(--space-2); }
-.way h3 { font: var(--text-heading); }
-.way p, .way li { font: var(--text-small); color: var(--text-secondary); }
-.way b { color: var(--text-primary); font-weight: 500; }
-.way__cmds, .way__steps { margin: 0; padding-left: var(--space-6); display: grid; gap: var(--space-2); }
-.way__cmds code { font: var(--text-code); color: var(--text-primary); overflow-wrap: anywhere; }
-.cli { display: grid; gap: var(--space-4); }
-.cli__head { display: grid; gap: var(--space-2); }
-.cli h3 { font: var(--text-heading); }
-@media (max-width: 760px) { .ways { grid-template-columns: minmax(0, 1fr); } }
 
 /* ---------- the real dashboard and what else it does ---------- */
 .shot { margin: 0; display: grid; gap: var(--space-2); }
@@ -306,13 +291,17 @@ label.rj-chip:has(input:focus-visible) { outline: 2px solid var(--focus-ring); o
 @keyframes bump { from { transform: scale(0.97); } }
 .why-line { font: var(--text-code); color: var(--text-primary); background: var(--bg-raised); border: 1px solid var(--border-subtle); border-radius: var(--radius-sm); padding: var(--space-3); overflow-wrap: anywhere; }
 .lab__fine { font: var(--text-meta); color: var(--text-secondary); }
+.rules { border-top: 1px solid var(--border-subtle); padding-top: var(--space-2); }
+.rules > summary { cursor: pointer; font: var(--text-label); color: var(--text-secondary); min-height: var(--control-md); display: flex; align-items: center; }
+.rules > summary:hover { color: var(--text-primary); }
+.rules > summary:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 2px; }
+.rules__in { display: grid; gap: var(--space-6); padding-top: var(--space-4); }
 @media (max-width: 920px) { .lab { grid-template-columns: minmax(0, 1fr); } .lab__controls { border-right: 0; border-bottom: 1px solid var(--border-subtle); } }
 
-/* ---------- sources: a plain list of hiring systems in one panel ---------- */
-.ats-grid { list-style: none; margin: 0; padding: var(--space-4) var(--space-6); display: flex; flex-wrap: wrap; gap: var(--space-2) var(--space-6); box-shadow: var(--shadow-l1); }
+/* ---------- the hiring systems, listed inside the FAQ ---------- */
+.ats-grid { list-style: none; margin: var(--space-4) 0 0; padding: 0; display: flex; flex-wrap: wrap; gap: var(--space-2) var(--space-4); }
 .ats { font: var(--text-label); color: var(--text-primary); white-space: nowrap; }
-.boards { font: var(--text-small); color: var(--text-secondary); max-width: 64ch; }
-.boards b { color: var(--text-primary); font-weight: 500; }
+.faq .ans a { text-underline-offset: 3px; }
 
 /* ---------- privacy ---------- */
 .facts { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--space-8); }
@@ -321,44 +310,11 @@ label.rj-chip:has(input:focus-visible) { outline: 2px solid var(--focus-ring); o
 .fact p { font: var(--text-small); color: var(--text-secondary); }
 @media (max-width: 760px) { .facts { grid-template-columns: minmax(0, 1fr); gap: var(--space-6); } }
 
-/* ---------- terminal ---------- */
-.term { box-shadow: var(--shadow-l1); overflow: hidden; min-width: 0; }
-.term__bar { display: flex; align-items: center; justify-content: space-between; gap: var(--space-3); padding: var(--space-2) var(--space-2) var(--space-2) var(--space-4); border-bottom: 1px solid var(--border-subtle); background: var(--bg-inset); }
-.term__cwd { font: var(--text-code); color: var(--text-secondary); }
-.term__body { margin: 0; padding: var(--space-6) var(--space-4); overflow-x: auto; font: var(--text-code); color: var(--text-primary); white-space: pre; }
-.term__body .p, .radar__cmd .p { color: var(--text-secondary); }
-.term__body .d { color: var(--text-secondary); }
-.term__body .s { color: var(--success-text); font-weight: 500; }
-.term__body .st { color: var(--accent-mark); }
-.term__body [data-line] { display: block; }
-.js .term[data-play="ready"] [data-line] { opacity: 0; }
-.term[data-play="run"] [data-line] { animation: line-in var(--duration-base) var(--ease-enter) both; animation-delay: calc(var(--i) * 40ms + var(--duration-slow)); }
-.term[data-play="run"] [data-line="0"] { animation: none; opacity: 1; }
-@keyframes line-in { from { opacity: 0; transform: translateY(4px); } }
+/* copy buttons: the icon turns into a check */
 .ic { display: grid; }
 .ic > svg { grid-area: 1 / 1; transition: opacity var(--duration-instant) var(--ease-standard); }
 .ic-check, [data-copied="true"] .ic-copy { opacity: 0; }
 [data-copied="true"] .ic-check { opacity: 1; }
-.cmds { padding: 0 var(--space-4); }
-.cmd { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: var(--space-4); align-items: baseline; padding: var(--space-3) 0; }
-.cmd + .cmd { border-top: 1px solid var(--border-subtle); }
-.cmd code { font: var(--text-code); }
-.cmd span { font: var(--text-small); color: var(--text-secondary); text-align: right; }
-@media (max-width: 560px) { .cmd { grid-template-columns: minmax(0, 1fr); gap: var(--space-1); } .cmd span { text-align: left; } }
-
-/* ---------- open source ---------- */
-.cards { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-4); }
-.card { position: relative; display: grid; gap: var(--space-3); align-content: start; padding: var(--space-6); text-decoration: none; color: inherit; transition: border-color var(--duration-instant) var(--ease-standard); }
-.card h3 { font: var(--text-heading); display: flex; align-items: center; justify-content: space-between; gap: var(--space-3); }
-.card p { font: var(--text-small); color: var(--text-secondary); }
-.card code { font: var(--text-code); color: var(--text-primary); }
-.card .rj-icon { transition: transform var(--duration-instant) var(--ease-standard); }
-@media (hover: hover) and (pointer: fine) {
-  .card:hover { border-color: var(--border-control); }
-  .card:hover .rj-icon { transform: translate(2px, -2px); }
-}
-.card:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 2px; }
-@media (max-width: 760px) { .cards { grid-template-columns: minmax(0, 1fr); } }
 
 /* ---------- faq ---------- */
 .faq { border-top: 1px solid var(--border-default); }
@@ -384,8 +340,227 @@ label.rj-chip:has(input:focus-visible) { outline: 2px solid var(--focus-ring); o
 .foot__small { font: var(--text-meta); color: var(--text-secondary); max-width: var(--prose-max); margin-top: var(--space-4); }
 @media (max-width: 760px) { .foot__grid { grid-template-columns: minmax(0, 1fr); } }
 
+
+/* ---------- get it: pick your computer, then five steps beside a screen that looks like it ---------- */
+.get__head { display: grid; gap: var(--space-4); max-width: 60ch; margin-bottom: var(--space-8); }
+.os-bar { display: flex; align-items: flex-end; justify-content: space-between; gap: var(--space-4); flex-wrap: wrap; margin-bottom: var(--space-6); }
+.os-tabs { flex: 1 1 auto; }
+.os-tabs .rj-tab { min-height: var(--control-lg); }
+.os-tabs .detected { font: var(--text-meta); color: var(--text-secondary); font-weight: 400; }
+.os-tabs .rj-tab:not([data-detected]) .detected { display: none; }
+/* only the text for the chosen computer shows */
+.get[data-os="win"] [data-only]:not([data-only~="win"]),
+.get[data-os="mac"] [data-only]:not([data-only~="mac"]),
+.get[data-os="linux"] [data-only]:not([data-only~="linux"]) { display: none !important; }
+
+.handoff { display: none; gap: var(--space-3); padding: var(--space-4); margin-bottom: var(--space-6); border: 1px solid var(--border-default); border-radius: var(--radius-md); background: var(--bg-raised); }
+.handoff[data-show] { display: grid; }
+.handoff p { font: var(--text-small); color: var(--text-secondary); }
+.handoff b { color: var(--text-primary); font-weight: 500; }
+.handoff__btns { display: flex; flex-wrap: wrap; gap: var(--space-2); }
+
+.installer { display: grid; grid-template-columns: minmax(0, 5fr) minmax(0, 7fr); gap: clamp(24px, 4vw, 48px); align-items: start; }
+.isteps { list-style: none; margin: 0; padding: 0; display: grid; counter-reset: s; }
+.istep { border-top: 1px solid var(--border-subtle); }
+.istep:last-child { border-bottom: 1px solid var(--border-subtle); }
+.istep__head { all: unset; box-sizing: border-box; width: 100%; display: flex; align-items: center; gap: var(--space-3); padding: var(--space-4) 0; cursor: pointer; font: var(--text-subheading); color: var(--text-secondary); min-height: var(--control-lg); }
+.istep__head:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 2px; border-radius: var(--radius-sm); }
+.istep__head:hover { color: var(--text-primary); }
+.istep__n { flex: none; width: 28px; height: 28px; display: grid; place-items: center; border-radius: var(--radius-dot); border: 1px solid var(--border-control); font: var(--text-label); font-variant-numeric: tabular-nums; color: var(--text-secondary); transition: background-color var(--duration-instant) var(--ease-standard), color var(--duration-instant) var(--ease-standard); }
+.istep[data-done] .istep__n { background: var(--success-subtle); border-color: var(--success-text); color: var(--success-text); }
+.istep[data-active] .istep__head { color: var(--text-primary); }
+.istep[data-active] .istep__n { background: var(--text-primary); border-color: var(--text-primary); color: var(--bg-canvas); }
+.istep__body { display: none; gap: var(--space-4); padding: 0 0 var(--space-6) calc(28px + var(--space-3)); }
+.istep[data-active] .istep__body { display: grid; animation: rise var(--duration-base) var(--ease-enter) both; }
+.istep__body p { color: var(--text-secondary); text-wrap: pretty; }
+.istep__body b { color: var(--text-primary); font-weight: 500; }
+.istep__body .rj-kbd { vertical-align: 0.1em; }
+.istep__nav { display: flex; gap: var(--space-2); flex-wrap: wrap; }
+.tip { font: var(--text-small); color: var(--text-secondary); }
+
+/* the install line: one box, one big copy button */
+.line { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: var(--space-3); padding: var(--space-3) var(--space-3) var(--space-3) var(--space-4); border: 1px solid var(--border-control); border-radius: var(--radius-md); background: var(--bg-inset); }
+.line code { font: var(--text-code); color: var(--text-primary); overflow-wrap: anywhere; }
+.what { font: var(--text-small); color: var(--text-secondary); }
+.what summary { cursor: pointer; color: var(--text-primary); font: var(--text-label); min-height: var(--control-md); display: inline-flex; align-items: center; }
+.what summary:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 2px; }
+.what ul { margin: var(--space-2) 0 0; padding-left: var(--space-6); display: grid; gap: var(--space-2); }
+.what code, .help code, .dev code { font: var(--text-code); color: var(--text-primary); overflow-wrap: anywhere; }
+.done { display: flex; gap: var(--space-3); align-items: flex-start; padding: var(--space-3) var(--space-4); border-radius: var(--radius-md); background: var(--success-subtle); color: var(--text-primary); font: var(--text-small); }
+.done .rj-glyph { color: var(--success-text); margin-top: var(--space-1); }
+
+/* ---------- the mock computer ---------- */
+/* These colors imitate the visitor's own system (Windows, macOS, a Linux desktop), not RawJobs' UI,
+   so they are fixed values outside the token set, each marked for the design lint. */
+.screen-slot { position: sticky; top: 96px; min-width: 0; }
+.screen { position: relative; aspect-ratio: 16 / 10.5; border-radius: var(--radius-md); overflow: hidden; border: 1px solid var(--border-default); box-shadow: var(--shadow-l2); background: var(--dk-wall); font-family: var(--font-sans); isolation: isolate; container-type: inline-size; }
+.screen[data-os="win"] {
+  --dk-wall: radial-gradient(120% 90% at 70% 110%, #3b74c7 0%, #1d3f86 45%, #0e1f4a 100%); /* design-lint-ignore: mock Windows wallpaper */
+  --dk-bar: #f3f3f3; --dk-bar-fg: #1b1b1b; /* design-lint-ignore: mock Windows taskbar */
+  --tw-bg: #0c0c0c; --tw-fg: #cccccc; --tw-dim: #8a8a8a; --tw-ok: #16c60c; --tw-info: #61d6d6; /* design-lint-ignore: Windows Terminal colors */
+  --tw-title: #202020; --tw-title-fg: #ffffff; /* design-lint-ignore: Windows Terminal title bar */
+  --pn-bg: #f9f9f9; --pn-fg: #1b1b1b; --pn-sub: #5f5f5f; --pn-hi: #e5effa; --pn-line: #e1e1e1; /* design-lint-ignore: mock Windows Start search */
+}
+.screen[data-os="mac"] {
+  --dk-wall: linear-gradient(160deg, #f6b38d 0%, #c96aa6 45%, #4b3b8f 100%); /* design-lint-ignore: mock macOS wallpaper */
+  --dk-bar: #f5f5f7; --dk-bar-fg: #1d1d1f; /* design-lint-ignore: mock macOS menu bar */
+  --tw-bg: #ffffff; --tw-fg: #1d1d1f; --tw-dim: #6e6e73; --tw-ok: #248a3d; --tw-info: #1d1d1f; /* design-lint-ignore: macOS Terminal Basic profile */
+  --tw-title: #ececec; --tw-title-fg: #4d4d4d; /* design-lint-ignore: macOS window title bar */
+  --pn-bg: #f2f2f4; --pn-fg: #1d1d1f; --pn-sub: #6e6e73; --pn-hi: #2f6fe4; --pn-line: #d9d9de; /* design-lint-ignore: mock Spotlight */
+}
+.screen[data-os="linux"] {
+  --dk-wall: linear-gradient(150deg, #e95420 0%, #77216f 55%, #2c001e 100%); /* design-lint-ignore: mock Ubuntu wallpaper */
+  --dk-bar: #000000; --dk-bar-fg: #ffffff; /* design-lint-ignore: mock GNOME top bar */
+  --tw-bg: #300a24; --tw-fg: #ffffff; --tw-dim: #bfa7b8; --tw-ok: #8ae234; --tw-info: #ffffff; /* design-lint-ignore: Ubuntu terminal colors */
+  --tw-title: #2b2b2b; --tw-title-fg: #ffffff; /* design-lint-ignore: GNOME header bar */
+  --pn-bg: #2b2b2b; --pn-fg: #ffffff; --pn-sub: #c0c0c0; --pn-hi: #e95420; --pn-line: #444444; /* design-lint-ignore: mock GNOME keycaps */
+}
+.screen[data-os="win"] .only-mac, .screen[data-os="win"] .only-linux,
+.screen[data-os="mac"] .only-win, .screen[data-os="mac"] .only-linux,
+.screen[data-os="linux"] .only-win, .screen[data-os="linux"] .only-mac { display: none !important; }
+
+/* sizes inside the screen scale with its width (container units), so it looks the same at 360px and 800px */
+.screen { --u: 1cqw; }
+.screen > * { font-size: calc(var(--u) * 1.75); }
+
+/* desktop bars */
+.dk-bar { position: absolute; left: 0; right: 0; z-index: 5; display: flex; align-items: center; gap: calc(var(--u) * 2); padding: 0 calc(var(--u) * 2); background: var(--dk-bar); color: var(--dk-bar-fg); font-size: calc(var(--u) * 1.6); }
+.dk-bar--bottom { bottom: 0; height: calc(var(--u) * 6); justify-content: center; }
+.dk-bar--top { top: 0; height: calc(var(--u) * 3.4); }
+.screen[data-os="linux"] .dk-bar--top { justify-content: space-between; }
+.dk-bar .clock { margin-left: auto; font-variant-numeric: tabular-nums; }
+.screen[data-os="linux"] .dk-bar .clock { margin: 0; position: absolute; left: 50%; transform: translateX(-50%); }
+.dk-bar b { font-weight: 600; }
+.tb-icon { width: calc(var(--u) * 3.6); height: calc(var(--u) * 3.6); border-radius: calc(var(--u) * 0.8); background: var(--pn-line); }
+.tb-icon--term { background: var(--tw-title); display: grid; place-items: center; color: var(--tw-fg); font-family: var(--font-mono); font-size: calc(var(--u) * 1.5); }
+.tb-search { display: flex; align-items: center; gap: calc(var(--u) * 1); height: calc(var(--u) * 3.6); padding: 0 calc(var(--u) * 1.6); border-radius: calc(var(--u) * 1.8); background: var(--pn-bg); border: 1px solid var(--pn-line); color: var(--pn-sub); min-width: calc(var(--u) * 18); }
+.dock { position: absolute; left: 50%; bottom: calc(var(--u) * 1.2); transform: translateX(-50%); z-index: 5; display: flex; gap: calc(var(--u) * 1.2); padding: calc(var(--u) * 0.9); border-radius: calc(var(--u) * 2); background: color-mix(in srgb, var(--dk-bar) 55%, transparent); }
+.dock i { display: block; width: calc(var(--u) * 4.4); height: calc(var(--u) * 4.4); border-radius: calc(var(--u) * 1.1); background: var(--pn-line); }
+.dock i.on { background: var(--tw-title); }
+
+/* step 1: the launcher (Start search, Spotlight, or the shortcut keys) */
+.launcher { position: absolute; z-index: 6; opacity: 0; transform: translateY(calc(var(--u) * 1.5)); transition: opacity var(--duration-base) var(--ease-enter), transform var(--duration-base) var(--ease-enter); pointer-events: none; }
+.screen[data-scene="1"] .launcher { opacity: 1; transform: none; }
+.launcher--win { left: 50%; bottom: calc(var(--u) * 7.5); width: 58%; margin-left: -29%; background: var(--pn-bg); color: var(--pn-fg); border-radius: calc(var(--u) * 1.2); box-shadow: 0 calc(var(--u) * 2) calc(var(--u) * 5) color-mix(in srgb, black 40%, transparent); padding: calc(var(--u) * 2); display: grid; gap: calc(var(--u) * 1.6); } /* design-lint-ignore: mock shadow */
+.launcher--mac { left: 50%; top: 22%; width: 56%; margin-left: -28%; background: color-mix(in srgb, var(--pn-bg) 92%, transparent); color: var(--pn-fg); border-radius: calc(var(--u) * 1.6); box-shadow: 0 calc(var(--u) * 2) calc(var(--u) * 6) color-mix(in srgb, black 35%, transparent); overflow: hidden; } /* design-lint-ignore: mock shadow */
+.launcher--linux { inset: 0; display: grid; place-items: center; align-content: center; gap: calc(var(--u) * 2); color: var(--dk-bar-fg); text-align: center; }
+.l-field { display: flex; align-items: center; gap: calc(var(--u) * 1.2); padding: calc(var(--u) * 1.2) calc(var(--u) * 1.6); border-radius: calc(var(--u) * 0.8); border: 1px solid var(--pn-line); background: color-mix(in srgb, var(--pn-bg) 50%, white); font-size: calc(var(--u) * 2); } /* design-lint-ignore: mock field */
+.launcher--mac .l-field { border: 0; border-radius: 0; background: transparent; font-size: calc(var(--u) * 2.8); padding: calc(var(--u) * 1.6) calc(var(--u) * 2); }
+.l-field svg { width: 1.1em; height: 1.1em; flex: none; stroke: currentColor; fill: none; stroke-width: 2; opacity: 0.6; }
+.l-label { font-size: calc(var(--u) * 1.5); color: var(--pn-sub); }
+.l-hit { display: flex; align-items: center; gap: calc(var(--u) * 1.4); padding: calc(var(--u) * 1.2) calc(var(--u) * 1.6); border-radius: calc(var(--u) * 0.8); opacity: 0; transition: opacity var(--duration-base) var(--ease-enter), background-color var(--duration-base) var(--ease-standard); }
+.launcher--mac .l-hit { border-radius: 0; border-top: 1px solid var(--pn-line); padding: calc(var(--u) * 1.2) calc(var(--u) * 2); }
+.l-hit[data-on] { opacity: 1; }
+.l-hit[data-pick] { background: var(--pn-hi); }
+.screen[data-os="mac"] .l-hit[data-pick] { color: white; } /* design-lint-ignore: mock Spotlight selection text */
+.screen[data-os="mac"] .l-hit[data-pick] small { color: inherit; opacity: 0.85; }
+.l-hit .tb-icon--term { width: calc(var(--u) * 4.4); height: calc(var(--u) * 4.4); }
+.l-hit b { font-weight: 600; display: block; }
+.l-hit small { color: var(--pn-sub); font-size: calc(var(--u) * 1.5); }
+.keys { display: flex; align-items: center; gap: calc(var(--u) * 1.2); font-size: calc(var(--u) * 2.4); }
+.cap { min-width: calc(var(--u) * 8); padding: calc(var(--u) * 1.6) calc(var(--u) * 2); border-radius: calc(var(--u) * 1); background: var(--pn-bg); border: 1px solid var(--pn-line); border-bottom-width: calc(var(--u) * 0.6); font-weight: 600; transition: transform var(--duration-instant) var(--ease-standard), background-color var(--duration-instant) var(--ease-standard); }
+.cap[data-down] { transform: translateY(calc(var(--u) * 0.4)); border-bottom-width: 1px; background: var(--pn-hi); }
+.keys__or { font-size: calc(var(--u) * 1.8); opacity: 0.85; }
+.typed:empty::before { content: "\200b"; }
+.caret { display: inline-block; width: 0.5em; height: 1.1em; vertical-align: text-bottom; background: currentColor; animation: blink 1s steps(1) infinite; }
+@keyframes blink { 50% { opacity: 0; } }
+
+/* the terminal window */
+.twin { position: absolute; z-index: 3; left: 9%; right: 9%; top: 11%; bottom: 16%; display: grid; grid-template-rows: auto minmax(0, 1fr); border-radius: calc(var(--u) * 1); overflow: hidden; background: var(--tw-bg); color: var(--tw-fg); box-shadow: 0 calc(var(--u) * 2) calc(var(--u) * 6) color-mix(in srgb, black 45%, transparent); opacity: 0; transform: scale(0.97); transition: opacity var(--duration-base) var(--ease-enter), transform var(--duration-base) var(--ease-enter); } /* design-lint-ignore: mock shadow */
+.screen[data-os="mac"] .twin { border: 1px solid color-mix(in srgb, black 18%, transparent); } /* design-lint-ignore: mock window edge */
+.screen:not([data-scene="1"]) .twin { opacity: 1; transform: none; }
+.screen[data-scene="5"] .twin { transform: translate(-6%, -4%) scale(0.92); opacity: 0.6; }
+.tbar { position: relative; display: flex; align-items: center; height: calc(var(--u) * 4.2); padding: 0 calc(var(--u) * 1.6); background: var(--tw-title); color: var(--tw-title-fg); font-size: calc(var(--u) * 1.5); }
+.tbar__title { position: absolute; left: 0; right: 0; text-align: center; pointer-events: none; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; padding: 0 calc(var(--u) * 14); }
+.screen[data-os="win"] .tbar__title { text-align: left; padding-left: calc(var(--u) * 5.2); }
+.tbar__tabicon { position: absolute; left: calc(var(--u) * 1.6); width: calc(var(--u) * 2.4); height: calc(var(--u) * 2.4); border-radius: calc(var(--u) * 0.4); background: var(--tw-bg); border: 1px solid var(--tw-dim); }
+.lights { display: flex; gap: calc(var(--u) * 0.8); }
+.lights i { width: calc(var(--u) * 1.3); height: calc(var(--u) * 1.3); border-radius: 50%; }
+.lights i:nth-child(1) { background: #ff5f57; } /* design-lint-ignore: macOS close button */
+.lights i:nth-child(2) { background: #febc2e; } /* design-lint-ignore: macOS minimise button */
+.lights i:nth-child(3) { background: #28c840; } /* design-lint-ignore: macOS zoom button */
+.wbtns { margin-left: auto; display: flex; height: 100%; }
+.wbtns i { width: calc(var(--u) * 5); height: 100%; display: grid; place-items: center; }
+.wbtns svg { width: calc(var(--u) * 1.4); height: calc(var(--u) * 1.4); stroke: currentColor; fill: none; stroke-width: 1.5; }
+.gbtns { margin-left: auto; display: flex; gap: calc(var(--u) * 1); }
+.gbtns i { width: calc(var(--u) * 2.2); height: calc(var(--u) * 2.2); border-radius: 50%; background: color-mix(in srgb, var(--tw-title-fg) 18%, transparent); display: grid; place-items: center; }
+.gbtns svg { width: calc(var(--u) * 1.1); height: calc(var(--u) * 1.1); stroke: currentColor; fill: none; stroke-width: 2; }
+.tbody { margin: 0; padding: calc(var(--u) * 1.6) calc(var(--u) * 2); font-family: var(--font-mono); font-size: calc(var(--u) * 1.55); line-height: 1.5; white-space: pre-wrap; overflow-wrap: anywhere; overflow: hidden; }
+.tbody .dim { color: var(--tw-dim); }
+.tbody .ok { color: var(--tw-ok); font-weight: 600; }
+.tbody .info { color: var(--tw-info); font-weight: 600; }
+.tbody .ln { display: block; animation: line-in var(--duration-base) var(--ease-enter) both; }
+@keyframes line-in { from { opacity: 0; transform: translateY(4px); } }
+.pill { position: absolute; z-index: 7; right: 4%; top: 6%; display: flex; align-items: center; gap: calc(var(--u) * 0.8); padding: calc(var(--u) * 0.9) calc(var(--u) * 1.6); border-radius: calc(var(--u) * 3); background: var(--bg-raised); color: var(--text-primary); border: 1px solid var(--border-default); box-shadow: var(--shadow-l2); font-size: calc(var(--u) * 1.6); opacity: 0; transform: translateY(-6px); transition: opacity var(--duration-base) var(--ease-enter), transform var(--duration-base) var(--ease-enter); }
+.pill svg { width: 1.1em; height: 1.1em; stroke: var(--success-text); fill: none; stroke-width: 2.4; }
+.pill[data-on] { opacity: 1; transform: none; }
+.enter { display: inline-block; margin-left: 0.5em; padding: 0 0.5em; border: 1px solid var(--tw-dim); border-radius: 0.3em; color: var(--tw-dim); font-family: var(--font-sans); opacity: 0; }
+.enter[data-on] { opacity: 1; animation: press var(--duration-slow) var(--ease-standard) 2; }
+@keyframes press { 50% { transform: translateY(2px); background: color-mix(in srgb, var(--tw-fg) 20%, transparent); } }
+
+/* step 5: the browser opens the dashboard */
+.bwin { position: absolute; z-index: 4; left: 6%; right: 6%; top: 9%; bottom: 13%; display: grid; grid-template-rows: auto auto minmax(0, 1fr); border-radius: calc(var(--u) * 1); overflow: hidden; background: var(--bg-raised); box-shadow: 0 calc(var(--u) * 2) calc(var(--u) * 6) color-mix(in srgb, black 45%, transparent); opacity: 0; transform: translateY(calc(var(--u) * 3)); transition: opacity var(--duration-slow) var(--ease-enter), transform var(--duration-slow) var(--ease-enter); pointer-events: none; } /* design-lint-ignore: mock shadow */
+.screen[data-scene="5"] .bwin { opacity: 1; transform: none; }
+.btabs { display: flex; align-items: flex-end; gap: calc(var(--u) * 1.4); height: calc(var(--u) * 4); padding: 0 calc(var(--u) * 1.6); background: var(--tw-title); color: var(--tw-title-fg); font-size: calc(var(--u) * 1.5); }
+.screen[data-os="linux"] .btabs, .screen[data-os="win"] .btabs { background: color-mix(in srgb, var(--tw-title) 100%, transparent); }
+.btabs .lights { align-self: center; }
+.btab { display: flex; align-items: center; gap: calc(var(--u) * 0.8); height: calc(var(--u) * 3.2); padding: 0 calc(var(--u) * 1.6); border-radius: calc(var(--u) * 0.8) calc(var(--u) * 0.8) 0 0; background: var(--bg-raised); color: var(--text-primary); min-width: 30%; }
+.btab img { width: calc(var(--u) * 1.8); height: calc(var(--u) * 1.8); }
+.btabs .wbtns, .btabs .gbtns { align-self: stretch; align-items: center; }
+.baddr { display: flex; align-items: center; gap: calc(var(--u) * 1.2); padding: calc(var(--u) * 0.8) calc(var(--u) * 1.6); background: var(--bg-raised); border-bottom: 1px solid var(--border-subtle); }
+.baddr span { flex: 1; padding: calc(var(--u) * 0.6) calc(var(--u) * 1.6); border-radius: calc(var(--u) * 2); background: var(--bg-inset); color: var(--text-secondary); font-size: calc(var(--u) * 1.5); }
+.baddr span b { color: var(--text-primary); font-weight: 500; }
+.bwin picture, .bwin img.dash { display: block; width: 100%; height: 100%; object-fit: cover; object-position: left top; }
+
+/* help and developer panels under the steps */
+.after { display: grid; gap: var(--space-3); margin-top: var(--space-8); }
+.more { border: 1px solid var(--border-default); border-radius: var(--radius-md); background: var(--bg-raised); }
+.more > summary { list-style: none; cursor: pointer; display: flex; align-items: center; justify-content: space-between; gap: var(--space-4); padding: var(--space-4) var(--space-6); font: var(--text-subheading); min-height: var(--control-lg); }
+.more > summary::-webkit-details-marker { display: none; }
+.more > summary:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 2px; }
+.more > summary small { display: block; font: var(--text-small); color: var(--text-secondary); }
+.more > summary .rj-icon { flex: none; color: var(--text-secondary); transition: transform var(--duration-base) var(--ease-standard); }
+.more[open] > summary .rj-icon { transform: rotate(45deg); }
+.more__in { padding: 0 var(--space-6) var(--space-6); display: grid; gap: var(--space-6); }
+.fixes { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-6); }
+.fix { display: grid; gap: var(--space-2); align-content: start; }
+.fix h4 { margin: 0; font: var(--text-label); }
+.fix p { font: var(--text-small); color: var(--text-secondary); }
+.fix a, .dev a { text-underline-offset: 3px; }
+.dev ol { margin: 0; padding-left: var(--space-6); display: grid; gap: var(--space-2); }
+.dev h4 { margin: 0; font: var(--text-label); }
+.dev p { font: var(--text-small); color: var(--text-secondary); }
+
+@media (max-width: 920px) {
+  .installer { grid-template-columns: minmax(0, 1fr); }
+  .screen-slot { position: static; }
+  /* on narrow screens the screen moves into the open step (script), right under its text */
+  .istep .screen-slot { margin-top: var(--space-2); }
+  .fixes { grid-template-columns: minmax(0, 1fr); }
+  .istep__body { padding-left: 0; }
+}
+@media (max-width: 560px) { .more > summary, .more__in { padding-inline: var(--space-4); } .screen { aspect-ratio: 4 / 3.6; } }
+/* small screens: bigger text inside the mock, so the terminal stays readable on a phone */
+@container (max-width: 560px) {
+  .twin { left: 4%; right: 4%; top: 8%; bottom: 15%; }
+  .tbar { height: calc(var(--u) * 7); font-size: calc(var(--u) * 2.8); }
+  .tbody { font-size: calc(var(--u) * 2.7); padding: calc(var(--u) * 2.4); }
+  .launcher--win, .launcher--mac { width: 84%; margin-left: -42%; }
+  .launcher--win > *, .launcher--mac > * { font-size: calc(var(--u) * 3.2); }
+  .l-hit small, .l-label { font-size: calc(var(--u) * 2.4); }
+  .dk-bar { font-size: calc(var(--u) * 2.6); }
+  .dk-bar--bottom { height: calc(var(--u) * 9); }
+  .dk-bar--top { height: calc(var(--u) * 5.4); }
+  .tb-icon { width: calc(var(--u) * 5.4); height: calc(var(--u) * 5.4); }
+  .bwin { left: 3%; right: 3%; }
+  .btabs, .baddr span { font-size: calc(var(--u) * 2.6); }
+  .btabs { height: calc(var(--u) * 6.4); }
+  .btab { height: calc(var(--u) * 5); }
+  .pill { font-size: calc(var(--u) * 2.8); }
+}
+
 /* ---------- touch: text links are big enough to tap ---------- */
-@media (pointer: coarse) { .way a:not(.rj-btn), .hero__note a { display: inline-flex; align-items: center; min-height: var(--control-lg); } }
+@media (pointer: coarse) { .what a, .fix a, .tip a, .hero__note a { display: inline-flex; align-items: center; min-height: var(--control-lg); } }
 
 /* ---------- forced colors: lines and bars are backgrounds, so draw them in the system text color ---------- */
 @media (forced-colors: active) {
@@ -397,7 +572,7 @@ label.rj-chip:has(input:focus-visible) { outline: 2px solid var(--focus-ring); o
 @media (prefers-reduced-motion: reduce) {
   html { scroll-behavior: auto; }
   .page *, .page *::before, .page *::after { animation: none !important; transition: none !important; }
-  .rv-wait, .js .term[data-play="ready"] [data-line] { opacity: 1; transform: none; }
+  .rv-wait { opacity: 1; transform: none; }
   .routes[data-play="ready"] .node--end { opacity: 1; }
 }
 </style>
@@ -414,7 +589,6 @@ label.rj-chip:has(input:focus-visible) { outline: 2px solid var(--focus-ring); o
       <a href="#how">How it works</a>
       <a href="#scoring">Scoring</a>
       <a href="#get">Get it</a>
-      <a href="#privacy">Privacy</a>
       <a href="#faq">FAQ</a>
     </nav>
     <div class="nav__cta">
@@ -422,7 +596,7 @@ label.rj-chip:has(input:focus-visible) { outline: 2px solid var(--focus-ring); o
         <svg class="rj-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M15 22v-4a4.8 4.8 0 0 0-1-3.5c3 0 6-2 6-5.5.08-1.25-.27-2.48-1-3.5.28-1.15.28-2.35 0-3.5 0 0-1 0-3 1.5-2.64-.5-5.36-.5-8 0C6 2 5 2 5 2c-.3 1.15-.3 2.35 0 3.5A5.403 5.403 0 0 0 4 9c0 3.5 3 5.5 6 5.5-.39.49-.68 1.05-.85 1.65-.17.6-.22 1.23-.15 1.85v4"/><path d="M9 18c-4.51 2-5-2-7-2"/></svg>
         Star on GitHub
       <span class="rj-sr"> (opens in a new tab)</span></a>
-      <a class="rj-btn rj-btn--primary" href="#install">Set up RawJobs</a>
+      <a class="rj-btn rj-btn--primary" href="#get">Get RawJobs</a>
     </div>
   </div>
 </header>
@@ -432,27 +606,26 @@ label.rj-chip:has(input:focus-visible) { outline: 2px solid var(--focus-ring); o
 <section class="hero" id="top" aria-labelledby="hero-title">
   <div class="wrap hero__grid">
     <div class="hero__copy">
-      <p class="eyebrow" data-step style="--i:0">Free and open source · MIT</p>
+      <p class="eyebrow" data-step style="--i:0">Free and open source</p>
       <h1 id="hero-title" data-step style="--i:1">Jobs, straight from the source.<span class="cursor" aria-hidden="true"></span></h1>
-      <p class="hero__sub" data-step style="--i:2">See it before LinkedIn does.</p>
-      <p class="hero__lede" data-step style="--i:3">RawJobs reads jobs straight from companies' own careers pages, from a directory of __COMPANIES_ROUND__ companies, __LIVE_ROUND__ with live job boards, and scores each one with rules you can read. It runs on your computer.</p>
+      <p class="hero__lede" data-step style="--i:3">RawJobs finds jobs on the careers pages of __COMPANIES_ROUND__ companies and ranks each one by how well it fits you. Free, and it runs on your computer.</p>
       <div class="hero__ctas" data-step style="--i:4">
-        <a class="rj-btn rj-btn--primary btn-lg" href="#install">
-          Install in one line
+        <a class="rj-btn rj-btn--primary btn-lg" href="#get">
+          <span data-cta>Get RawJobs</span>
           <svg class="rj-icon rj-icon--nudge" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></svg>
         </a>
-        <a class="rj-btn btn-lg" href="https://github.com/Tanmay-Mhatre/rawjobs" target="_blank" rel="noopener">Source on GitHub<span class="rj-sr"> (opens in a new tab)</span></a>
+        <a class="rj-btn btn-lg" href="https://github.com/Tanmay-Mhatre/rawjobs" target="_blank" rel="noopener">View on GitHub<span class="rj-sr"> (opens in a new tab)</span></a>
       </div>
       <p class="hero__note" data-step style="--i:5">
-        <span>Windows, macOS and Linux</span>
+        <span><i class="rj-glyph rj-glyph--full" style="color:var(--success-text)" aria-hidden="true"></i>Windows, Mac and Linux</span>
         <span><i class="rj-glyph rj-glyph--full" style="color:var(--success-text)" aria-hidden="true"></i>No account</span>
-        <span><i class="rj-glyph rj-glyph--full" style="color:var(--success-text)" aria-hidden="true"></i>No AI scoring</span>
+        <span><i class="rj-glyph rj-glyph--full" style="color:var(--success-text)" aria-hidden="true"></i>Scores you can read</span>
       </p>
     </div>
 
-    <section class="rj-panel rj-feed radar" id="radar" data-running="false" aria-label="Example radar with made-up jobs">
+    <section class="rj-panel rj-feed radar" id="radar" data-running="false" aria-label="Example Radar with made-up jobs">
       <div class="radar__bar">
-        <span class="radar__cmd"><span class="p" aria-hidden="true">$ </span><b>pnpm rawjobs scan</b> --scope mine</span>
+        <span class="radar__cmd"><b>Your Radar</b> · best match first</span>
         <button class="rj-btn rj-btn--quiet rj-btn--icon rj-btn--sm" type="button" id="radar-toggle" aria-label="Pause the example feed" title="Pause">
           <svg class="rj-icon" viewBox="0 0 24 24" aria-hidden="true" id="radar-icon"><rect x="14" y="4" width="4" height="16" rx="1"/><rect x="6" y="4" width="4" height="16" rx="1"/></svg>
         </button>
@@ -466,7 +639,7 @@ label.rj-chip:has(input:focus-visible) { outline: 2px solid var(--focus-ring); o
           <li class="rj-row" data-current><span class="rj-score rj-score--strong" role="img" aria-label="Strong match, score 87"><i class="rj-glyph rj-glyph--full"></i>87</span><span class="rj-row__main"><span class="rj-row__title"><span>Head of Product, Exchange</span></span><span class="rj-row__meta">Acme Exchange<span class="rj-sep" aria-hidden="true">·</span>Dubai<span class="rj-sep" aria-hidden="true">·</span>Hybrid</span></span><span class="rj-row__side"><span class="rj-source"><span class="rj-dot" role="img" aria-label="New this scan"></span>Lever<span class="rj-source__age">2h</span></span></span></li>
           <li class="rj-row"><span class="rj-score rj-score--strong" role="img" aria-label="Strong match, score 72"><i class="rj-glyph rj-glyph--full"></i>72</span><span class="rj-row__main"><span class="rj-row__title"><span>Senior Product Manager, Custody</span></span><span class="rj-row__meta">Halcyon Labs<span class="rj-sep" aria-hidden="true">·</span>Abu Dhabi<span class="rj-sep" aria-hidden="true">·</span>On-site</span></span><span class="rj-row__side"><span class="rj-source">Ashby<span class="rj-source__age">1d</span></span></span></li>
           <li class="rj-row"><span class="rj-score rj-score--fair" role="img" aria-label="Fair match, score 61"><i class="rj-glyph rj-glyph--half"></i>61</span><span class="rj-row__main"><span class="rj-row__title"><span>Product Manager, Payments</span></span><span class="rj-row__meta">Northwind Pay<span class="rj-sep" aria-hidden="true">·</span>Remote (EMEA)<span class="rj-sep" aria-hidden="true">·</span>Remote</span></span><span class="rj-row__side"><span class="rj-source">Greenhouse<span class="rj-source__age">3d</span></span></span></li>
-          <li class="rj-row"><span class="rj-score rj-score--fair rj-score--estimated" role="img" aria-label="Fair match, score 56, estimated from title, place and industry" title="~ Estimated: scored on title, place and industry only, until the full posting is read"><i class="rj-glyph rj-glyph--half"></i>~56</span><span class="rj-row__main"><span class="rj-row__title"><span>Product Lead, Tokenization</span></span><span class="rj-row__meta">Meridian Bank<span class="rj-sep" aria-hidden="true">·</span>Dubai<span class="rj-sep" aria-hidden="true">·</span>Hybrid</span></span><span class="rj-row__side"><span class="rj-source">Workday<span class="rj-source__age">5d</span></span></span></li>
+          <li class="rj-row"><span class="rj-score rj-score--fair" role="img" aria-label="Fair match, score 56"><i class="rj-glyph rj-glyph--half"></i>56</span><span class="rj-row__main"><span class="rj-row__title"><span>Product Lead, Tokenization</span></span><span class="rj-row__meta">Meridian Bank<span class="rj-sep" aria-hidden="true">·</span>Dubai<span class="rj-sep" aria-hidden="true">·</span>Hybrid</span></span><span class="rj-row__side"><span class="rj-source">Workday<span class="rj-source__age">5d</span></span></span></li>
           <li class="rj-row"><span class="rj-score rj-score--weak" role="img" aria-label="Weak match, score 31"><i class="rj-glyph rj-glyph--empty"></i>31</span><span class="rj-row__main"><span class="rj-row__title"><span>Product Manager, Growth</span></span><span class="rj-row__meta">Parcel Freight<span class="rj-sep" aria-hidden="true">·</span>Riyadh<span class="rj-sep" aria-hidden="true">·</span>On-site</span></span><span class="rj-row__side"><span class="rj-source">SmartRecruiters<span class="rj-source__age">9d</span></span></span></li>
         </ul>
       </div>
@@ -490,12 +663,10 @@ label.rj-chip:has(input:focus-visible) { outline: 2px solid var(--focus-ring); o
 <section class="proof" aria-label="RawJobs in numbers">
   <div class="wrap">
     <div class="proof__grid">
-      <div class="stat"><span class="stat__n">__COMPANIES__</span><span class="stat__l">companies in the directory, __LIVE_ROUND__ with live job boards</span></div>
-      <div class="stat"><span class="stat__n">__INDEXED__</span><span class="stat__l">companies hiring now</span></div>
-      <div class="stat"><span class="stat__n">23</span><span class="stat__l">hiring systems, plus 4 job boards</span></div>
-      <div class="stat"><span class="stat__n">__FEED_JOBS__</span><span class="stat__l">open jobs in the daily feed</span></div>
+      <div class="stat" title="Directory build of __DIR_DATE__"><span class="stat__n">__COMPANIES_ROUND__</span><span class="stat__l">companies whose careers pages it knows</span></div>
+      <div class="stat" title="Job feed of __FEED_DATE__"><span class="stat__n">__FEED_JOBS__</span><span class="stat__l">open jobs in today's feed</span></div>
+      <div class="stat"><span class="stat__n">Daily</span><span class="stat__l">new jobs every day, more companies every week</span></div>
     </div>
-    <p class="proof__foot">Directory build of __DIR_DATE__, rebuilt weekly from public, permissively licensed lists. Daily job feed of __FEED_DATE__, from Greenhouse, Lever, Ashby, SmartRecruiters and Workday boards.</p>
   </div>
 </section>
 
@@ -504,12 +675,11 @@ label.rj-chip:has(input:focus-visible) { outline: 2px solid var(--focus-ring); o
   <div class="wrap split">
     <div class="split__head">
       <p class="eyebrow">The problem</p>
-      <h2 id="problem-title">Apply where the job lives</h2>
-      <p class="prose">Sent 50 applications and heard back from 2? Where you applied may be part of the reason.</p>
+      <h2 id="problem-title">Sent 50 applications and heard back from 2?</h2>
+      <p class="prose">Where you applied may be why.</p>
     </div>
     <div class="split__body">
-      <p class="section__lede">Many job sites repost jobs instead of hosting them.</p>
-      <p class="prose">Aggregators and agencies often repost openings from company careers pages. Copies can go stale, and some feed a talent pool rather than the hiring team. Apply there and your resume can stop with the middleman instead of reaching the team that's hiring. <strong>Most jobs in RawJobs come straight from the company's own careers page</strong>, so the apply link goes into the company's own hiring system.</p>
+      <p class="section__lede">Job sites and agencies often repost jobs. Apply there and your resume can stop with the middleman. <strong class="lede-strong">RawJobs links to the company's own careers page</strong>, so it lands in their hiring system.</p>
       <div class="rj-panel routes" id="routes" data-play="static">
         <div class="routes__bar">
           <span class="eyebrow">Where your resume goes</span>
@@ -544,7 +714,7 @@ label.rj-chip:has(input:focus-visible) { outline: 2px solid var(--focus-ring); o
           </div>
           <span class="token" aria-hidden="true"><svg class="rj-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/><path d="M14 2v4a2 2 0 0 0 2 2h4"/><path d="M10 13H8"/><path d="M16 17H8"/></svg></span>
         </div>
-        <p class="routes__note">Not every repost is a dead end, and applying direct doesn't guarantee a reply. It does remove the hops where resumes get lost.</p>
+        <p class="routes__note">Applying direct doesn't guarantee a reply. It removes the hops where resumes get lost.</p>
       </div>
     </div>
   </div>
@@ -555,15 +725,15 @@ label.rj-chip:has(input:focus-visible) { outline: 2px solid var(--focus-ring); o
   <div class="wrap split">
     <div class="split__head">
       <p class="eyebrow">How it works</p>
-      <h2 id="how-title">3 minutes to set up, then one scan button</h2>
-      <p class="prose">Setup takes about 3 minutes. After that, a scan is one button, or a schedule.</p>
+      <h2 id="how-title">Set it up once, then one scan button</h2>
+      <p class="prose">Setup takes about 3 minutes. After that, a scan is one click, or it runs on a schedule.</p>
     </div>
     <div class="split__body">
       <ol class="steps">
         <li class="panel step" style="--i:0">
           <span class="step__n">Step 1</span>
           <h3>Tell it what you want</h3>
-          <p>Titles, places and keywords. Paste your resume and it suggests them for you.</p>
+          <p>Job titles, places and keywords. Paste your resume and it suggests them.</p>
           <div class="step__demo" aria-hidden="true">
             <div class="chips"><span class="rj-chip" aria-pressed="true">Head of product</span><span class="rj-chip" aria-pressed="true">Product manager</span></div>
             <div class="chips"><span class="rj-chip" aria-pressed="true">Dubai</span><span class="rj-chip" aria-pressed="true">Remote (EMEA)</span><span class="rj-chip">London</span></div>
@@ -572,19 +742,19 @@ label.rj-chip:has(input:focus-visible) { outline: 2px solid var(--focus-ring); o
         </li>
         <li class="panel step" style="--i:1">
           <span class="step__n">Step 2</span>
-          <h3>It reads the source</h3>
-          <p>Straight from each company's own board on Greenhouse, Lever, Ashby, Workday and 19 more.</p>
+          <h3>It checks the careers pages</h3>
+          <p>Straight from each company's own page on Greenhouse, Lever, Workday and 20 more.</p>
           <div class="step__demo log" aria-hidden="true">
-            <div>lever    acme    <span class="ok">14 jobs</span></div>
-            <div>ashby    halcyon <span class="ok">6 jobs</span></div>
-            <div>workday  meridian <span class="ok">212</span></div>
-            <div>teamtailor quietco <span class="warn">dormant</span></div>
+            <div>Acme Exchange <span class="ok">14 jobs</span></div>
+            <div>Halcyon Labs <span class="ok">6 jobs</span></div>
+            <div>Meridian Bank <span class="ok">212 jobs</span></div>
+            <div>Quiet Co <span class="warn">not hiring</span></div>
           </div>
         </li>
         <li class="panel step" style="--i:2">
           <span class="step__n">Step 3</span>
-          <h3>You see the score and why</h3>
-          <p>Every job gets 0 to 100 with the reason written out. Companies you star are marked and nudged up.</p>
+          <h3>Your Radar, best match first</h3>
+          <p>Every job gets a score from 0 to 100, with the reason written out.</p>
           <div class="step__demo" aria-hidden="true">
             <div style="display:flex;gap:8px;align-items:center"><span class="rj-score rj-score--strong"><i class="rj-glyph rj-glyph--full"></i>87</span><span style="font:var(--text-label)">Head of Product, Exchange</span></div>
             <div class="log"><div>title 30 · place 20 · keywords 27 · industry 10</div></div>
@@ -599,10 +769,10 @@ label.rj-chip:has(input:focus-visible) { outline: 2px solid var(--focus-ring); o
         <figcaption>The real dashboard, with demo data.</figcaption>
       </figure>
       <ul class="features" aria-label="What else it does">
-        <li class="panel feature"><h3>A pipeline for what you apply to</h3><p>Saved, applied, interviewing, offer, rejected. Drag cards along, or use the keyboard.</p></li>
-        <li class="panel feature"><h3>Companies that stay useful</h3><p>The Companies tab flags broken careers links, and companies with nothing for you after a week of scans.</p></li>
-        <li class="panel feature"><h3>Views and alerts</h3><p>Save the filters you use as views. Telegram alerts take 2 minutes to set up and send one message per scan.</p></li>
-        <li class="panel feature"><h3>Setup that meets you</h3><p>33 role families and any city or region in the world. When a scan finds nothing, it says why and what to change.</p></li>
+        <li class="panel feature"><h3>Track every application</h3><p>Saved, applied, interviewing, offer. Drag cards along as things move.</p></li>
+        <li class="panel feature"><h3>Spots dead careers pages</h3><p>Flags broken links, and companies with nothing for you after a week.</p></li>
+        <li class="panel feature"><h3>Saved views and alerts</h3><p>Save the filters you use. Get new matches on Telegram, one message per scan.</p></li>
+        <li class="panel feature"><h3>Any role, any city</h3><p>33 role families, anywhere in the world. When a scan finds nothing, it tells you why.</p></li>
       </ul>
     </div>
   </div>
@@ -614,7 +784,7 @@ label.rj-chip:has(input:focus-visible) { outline: 2px solid var(--focus-ring); o
     <div class="split__head">
       <p class="eyebrow">Scoring</p>
       <h2 id="scoring-title">A score you can argue with</h2>
-      <p class="prose">No AI and no black box. <strong>Title</strong> up to 30, <strong>place</strong> up to 20, <strong>keywords</strong> up to 40, <strong>industry</strong> up to 10. Newer jobs rank higher, separately. Change what you're looking for and watch the score move.</p>
+      <p class="prose">No black box. Up to <strong>30</strong> for the title, <strong>20</strong> for the place, <strong>40</strong> for keywords and <strong>10</strong> for the industry. Try it.</p>
     </div>
     <div class="split__body">
       <div class="rj-panel lab" id="lab">
@@ -629,18 +799,9 @@ label.rj-chip:has(input:focus-visible) { outline: 2px solid var(--focus-ring); o
               <button type="button" class="rj-chip" id="t-em" data-group="titles" data-v="engineering manager" aria-pressed="false"><svg class="rj-icon tick" viewBox="0 0 24 24" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg>Engineering manager</button>
             </div>
           </fieldset>
-          <fieldset aria-describedby="hint-1">
-            <legend>Your seniority word</legend>
-            <p class="hint" id="hint-1">The title is Head level. The same level adds 10, one level away adds 5.</p>
-            <div class="chips">
-              <label class="rj-chip" for="s-head"><input class="rj-sr" type="radio" name="seniority" id="s-head" value="head" checked><svg class="rj-icon tick" viewBox="0 0 24 24" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg>Head</label>
-              <label class="rj-chip" for="s-lead"><input class="rj-sr" type="radio" name="seniority" id="s-lead" value="lead"><svg class="rj-icon tick" viewBox="0 0 24 24" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg>Lead</label>
-              <label class="rj-chip" for="s-none"><input class="rj-sr" type="radio" name="seniority" id="s-none" value=""><svg class="rj-icon tick" viewBox="0 0 24 24" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg>None</label>
-            </div>
-          </fieldset>
           <fieldset aria-describedby="hint-2">
             <legend>Places</legend>
-            <p class="hint" id="hint-2">The job must be in one of these, or remote where you accept it.</p>
+            <p class="hint" id="hint-2">In one of these, or remote.</p>
             <div class="chips">
               <button type="button" class="rj-chip" id="p-dxb" data-group="places" data-v="dubai" aria-pressed="true"><svg class="rj-icon tick" viewBox="0 0 24 24" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg>Dubai</button>
               <button type="button" class="rj-chip" id="p-ldn" data-group="places" data-v="london" aria-pressed="false"><svg class="rj-icon tick" viewBox="0 0 24 24" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg>London</button>
@@ -649,7 +810,7 @@ label.rj-chip:has(input:focus-visible) { outline: 2px solid var(--focus-ring); o
           </fieldset>
           <fieldset aria-describedby="hint-3">
             <legend>Keywords</legend>
-            <p class="hint" id="hint-3">Points are the share of your keywords the posting mentions. 3 matches fill the bar. A keyword in the title is worth up to 20.</p>
+            <p class="hint" id="hint-3">The more the posting mentions, the more points.</p>
             <div class="chips">
               <button type="button" class="rj-chip" id="k-crypto" data-group="kw" data-v="crypto" aria-pressed="true"><svg class="rj-icon tick" viewBox="0 0 24 24" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg>crypto</button>
               <button type="button" class="rj-chip" id="k-exch" data-group="kw" data-v="exchange" aria-pressed="true"><svg class="rj-icon tick" viewBox="0 0 24 24" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg>exchange</button>
@@ -658,15 +819,29 @@ label.rj-chip:has(input:focus-visible) { outline: 2px solid var(--focus-ring); o
               <button type="button" class="rj-chip" id="k-ai" data-group="kw" data-v="ai" aria-pressed="true"><svg class="rj-icon tick" viewBox="0 0 24 24" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg>AI</button>
             </div>
           </fieldset>
-          <fieldset aria-describedby="hint-4">
-            <legend>The company's industry</legend>
-            <p class="hint" id="hint-4">Yours adds 10, not known adds 5, another one adds 0.</p>
-            <div class="chips">
-              <label class="rj-chip" for="i-mine"><input class="rj-sr" type="radio" name="industry" id="i-mine" value="mine" checked><svg class="rj-icon tick" viewBox="0 0 24 24" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg>Yours</label>
-              <label class="rj-chip" for="i-unknown"><input class="rj-sr" type="radio" name="industry" id="i-unknown" value="unknown"><svg class="rj-icon tick" viewBox="0 0 24 24" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg>Not known</label>
-              <label class="rj-chip" for="i-other"><input class="rj-sr" type="radio" name="industry" id="i-other" value="other"><svg class="rj-icon tick" viewBox="0 0 24 24" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg>Another one</label>
+          <details class="rules">
+            <summary>More rules: seniority and industry</summary>
+            <div class="rules__in">
+              <fieldset aria-describedby="hint-1">
+                <legend>Your seniority word</legend>
+                <p class="hint" id="hint-1">This job is Head level. The same level adds 10, one level off adds 5.</p>
+                <div class="chips">
+                  <label class="rj-chip" for="s-head"><input class="rj-sr" type="radio" name="seniority" id="s-head" value="head" checked><svg class="rj-icon tick" viewBox="0 0 24 24" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg>Head</label>
+                  <label class="rj-chip" for="s-lead"><input class="rj-sr" type="radio" name="seniority" id="s-lead" value="lead"><svg class="rj-icon tick" viewBox="0 0 24 24" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg>Lead</label>
+                  <label class="rj-chip" for="s-none"><input class="rj-sr" type="radio" name="seniority" id="s-none" value=""><svg class="rj-icon tick" viewBox="0 0 24 24" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg>None</label>
+                </div>
+              </fieldset>
+              <fieldset aria-describedby="hint-4">
+                <legend>The company's industry</legend>
+                <p class="hint" id="hint-4">Yours adds 10, unknown adds 5, another adds 0.</p>
+                <div class="chips">
+                  <label class="rj-chip" for="i-mine"><input class="rj-sr" type="radio" name="industry" id="i-mine" value="mine" checked><svg class="rj-icon tick" viewBox="0 0 24 24" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg>Yours</label>
+                  <label class="rj-chip" for="i-unknown"><input class="rj-sr" type="radio" name="industry" id="i-unknown" value="unknown"><svg class="rj-icon tick" viewBox="0 0 24 24" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg>Unknown</label>
+                  <label class="rj-chip" for="i-other"><input class="rj-sr" type="radio" name="industry" id="i-other" value="other"><svg class="rj-icon tick" viewBox="0 0 24 24" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg>Another</label>
+                </div>
+              </fieldset>
             </div>
-          </fieldset>
+          </details>
         </form>
         <div class="lab__result">
           <div class="jobcard">
@@ -689,7 +864,7 @@ label.rj-chip:has(input:focus-visible) { outline: 2px solid var(--focus-ring); o
             <div class="rj-breakdown__legend num" id="lab-legend" aria-hidden="true"><span>Title <b>30</b></span><span>Place <b>20</b></span><span>Keywords <b>27</b>/40</span><span>Industry <b>10</b></span></div>
           </div>
           <p class="why-line num" id="lab-why" aria-live="polite">87: title 30, place 20, keywords 27 (crypto, exchange), industry 10</p>
-          <p class="lab__fine">An example job. In RawJobs you set what counts as a strong match: 70 and up by default, as here. Fair is 40 and up.</p>
+          <p class="lab__fine">A made-up job. 70 and up is a strong match, 40 and up is fair. You can change both.</p>
         </div>
       </div>
     </div>
@@ -697,57 +872,185 @@ label.rj-chip:has(input:focus-visible) { outline: 2px solid var(--focus-ring); o
 </section>
 
 <!-- ================= GET IT ================= -->
-<section class="section" id="get" aria-labelledby="get-title">
-  <div class="wrap split">
-    <div class="split__head">
+<section class="section get" id="get" data-os="win" aria-labelledby="get-title">
+  <span id="install" aria-hidden="true"></span>
+  <div class="wrap">
+    <div class="get__head">
       <p class="eyebrow">Get it</p>
-      <h2 id="get-title">Two ways to run it, both on your computer</h2>
-      <p class="prose">Install it with one line, or run it from the source code. Either way it runs on your computer, and nothing about you is uploaded.</p>
+      <h2 id="get-title">Install it in about a minute</h2>
+      <p class="section__lede">Pick your computer and follow along. Nothing to download first, no account, no admin rights.</p>
     </div>
-    <div class="split__body">
-      <div class="ways">
-        <div class="panel way" id="install">
-          <div class="way__head"><h3>Install in one line</h3><span class="soon"><i class="rj-glyph rj-glyph--full" style="color:var(--success-text)" aria-hidden="true"></i>Works today</span></div>
-          <p>No Node, git, account or admin rights needed. Paste one line into a terminal: it installs RawJobs in your user folder, starts it when you log in, keeps it up to date, and opens your dashboard in the browser.</p>
-          <ol class="way__cmds">
-            <li><b>Windows</b>, in PowerShell: <code>irm https://github.com/Tanmay-Mhatre/rawjobs/releases/latest/download/install.ps1 | iex</code></li>
-            <li><b>macOS, Linux</b>, in Terminal: <code>curl -fsSL https://github.com/Tanmay-Mhatre/rawjobs/releases/latest/download/install.sh | sh</code></li>
-          </ol>
-          <a class="rj-btn rj-btn--primary" href="https://github.com/Tanmay-Mhatre/rawjobs/blob/main/docs/install.md" target="_blank" rel="noopener">Install guide<svg class="rj-icon rj-icon--nudge" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></svg><span class="rj-sr"> (opens in a new tab)</span></a>
-        </div>
-        <div class="panel way" id="developer">
-          <div class="way__head"><h3>From the source code</h3><span class="soon"><i class="rj-glyph rj-glyph--full" style="color:var(--success-text)" aria-hidden="true"></i>Works today</span></div>
-          <p>Needs Node 22+, pnpm and a terminal. The dashboard opens in your browser and walks you through setup in about 3 minutes.</p>
-          <ol class="way__cmds">
-            <li><code>git clone https://github.com/Tanmay-Mhatre/rawjobs.git</code></li>
-            <li><code>cd rawjobs &amp;&amp; pnpm install</code></li>
-            <li><code>pnpm start</code></li>
-          </ol>
-          <a class="rj-btn" href="https://github.com/Tanmay-Mhatre/rawjobs#getting-started" target="_blank" rel="noopener">Read the README<svg class="rj-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M7 7h10v10"/><path d="M7 17 17 7"/></svg><span class="rj-sr"> (opens in a new tab)</span></a>
+
+    <div class="handoff" id="handoff" role="note">
+      <p><b>You're on a phone.</b> RawJobs runs on a Windows, Mac or Linux computer. Send yourself this page and open it there.</p>
+      <div class="handoff__btns">
+        <button class="rj-btn rj-btn--primary" type="button" id="share-link" hidden>Send to my computer</button>
+        <a class="rj-btn" id="mail-link" href="mailto:?subject=Install%20RawJobs&amp;body=Open%20this%20on%20your%20computer%3A%20__SITE_URL__%2F%23get">Email me the link</a>
+        <button class="rj-btn" type="button" data-copy="__SITE_URL__/#get"><span class="ic" aria-hidden="true"><svg class="rj-icon ic-copy" viewBox="0 0 24 24"><rect width="14" height="14" x="8" y="8" rx="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></svg><svg class="rj-icon ic-check" viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5"/></svg></span><span>Copy link</span></button>
+      </div>
+    </div>
+
+    <div class="os-bar">
+      <div class="rj-tabs os-tabs" role="tablist" aria-label="Your computer">
+        <button class="rj-tab" role="tab" type="button" id="os-win" data-os="win" aria-selected="true" aria-controls="installer">Windows <span class="detected">· yours</span></button>
+        <button class="rj-tab" role="tab" type="button" id="os-mac" data-os="mac" aria-selected="false" aria-controls="installer" tabindex="-1">Mac <span class="detected">· yours</span></button>
+        <button class="rj-tab" role="tab" type="button" id="os-linux" data-os="linux" aria-selected="false" aria-controls="installer" tabindex="-1">Linux <span class="detected">· yours</span></button>
+      </div>
+    </div>
+
+    <div class="installer" id="installer" role="tabpanel" aria-labelledby="os-win">
+      <ol class="isteps" id="isteps">
+        <li class="istep" data-step="1" data-active>
+          <button class="istep__head" type="button" aria-expanded="true" aria-controls="sb1"><span class="istep__n">1</span>Open the terminal</button>
+          <div class="istep__body" id="sb1">
+            <p data-only="win">Press the <kbd class="rj-kbd">Windows</kbd> key, type <b>PowerShell</b> and press <kbd class="rj-kbd">Enter</kbd>. A window with a blinking cursor opens.</p>
+            <p data-only="mac">Press <kbd class="rj-kbd">⌘</kbd> <kbd class="rj-kbd">Space</kbd>, type <b>Terminal</b> and press <kbd class="rj-kbd">Return</kbd>. A window with a blinking cursor opens.</p>
+            <p data-only="linux">Press <kbd class="rj-kbd">Ctrl</kbd> <kbd class="rj-kbd">Alt</kbd> <kbd class="rj-kbd">T</kbd>, or open <b>Terminal</b> from your apps.</p>
+            <p class="tip">The terminal is where you type commands. You only need it once.</p>
+            <div class="istep__nav"><button class="rj-btn rj-btn--primary" type="button" data-next>It's open</button></div>
+          </div>
+        </li>
+        <li class="istep" data-step="2">
+          <button class="istep__head" type="button" aria-expanded="false" aria-controls="sb2"><span class="istep__n">2</span>Copy the install line</button>
+          <div class="istep__body" id="sb2">
+            <p>Click Copy. You don't need to understand the line.</p>
+            <div class="line" data-only="win"><code>irm https://github.com/Tanmay-Mhatre/rawjobs/releases/latest/download/install.ps1 | iex</code>
+              <button class="rj-btn rj-btn--primary" type="button" data-copy="irm https://github.com/Tanmay-Mhatre/rawjobs/releases/latest/download/install.ps1 | iex" data-advance><span class="ic" aria-hidden="true"><svg class="rj-icon ic-copy" viewBox="0 0 24 24"><rect width="14" height="14" x="8" y="8" rx="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></svg><svg class="rj-icon ic-check" viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5"/></svg></span><span>Copy</span></button></div>
+            <div class="line" data-only="mac linux"><code>curl -fsSL https://github.com/Tanmay-Mhatre/rawjobs/releases/latest/download/install.sh | sh</code>
+              <button class="rj-btn rj-btn--primary" type="button" data-copy="curl -fsSL https://github.com/Tanmay-Mhatre/rawjobs/releases/latest/download/install.sh | sh" data-advance><span class="ic" aria-hidden="true"><svg class="rj-icon ic-copy" viewBox="0 0 24 24"><rect width="14" height="14" x="8" y="8" rx="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></svg><svg class="rj-icon ic-check" viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5"/></svg></span><span>Copy</span></button></div>
+            <details class="what">
+              <summary>What does this line do?</summary>
+              <ul>
+                <li>Downloads RawJobs from GitHub and the Node it runs on from nodejs.org, and checks both against signed checksums before running anything.</li>
+                <li>Installs into your own user folder: <code data-only="win">%LOCALAPPDATA%\RawJobs</code><code data-only="mac">~/Library/Application Support/RawJobs</code><code data-only="linux">~/.local/share/rawjobs</code>. Nothing system-wide, no admin rights.</li>
+                <li>Starts RawJobs now and every time you log in, and opens it in your browser.</li>
+                <li>You can read it first: <a href="https://github.com/Tanmay-Mhatre/rawjobs/blob/main/packaging/install.ps1" target="_blank" rel="noopener" data-only="win">install.ps1<span class="rj-sr"> (opens in a new tab)</span></a><a href="https://github.com/Tanmay-Mhatre/rawjobs/blob/main/packaging/install.sh" target="_blank" rel="noopener" data-only="mac linux">install.sh<span class="rj-sr"> (opens in a new tab)</span></a>.</li>
+              </ul>
+            </details>
+            <span class="rj-sr" role="status" data-copy-status></span>
+          </div>
+        </li>
+        <li class="istep" data-step="3">
+          <button class="istep__head" type="button" aria-expanded="false" aria-controls="sb3"><span class="istep__n">3</span>Paste it and press Enter</button>
+          <div class="istep__body" id="sb3">
+            <p data-only="win">Click in the PowerShell window, press <kbd class="rj-kbd">Ctrl</kbd> <kbd class="rj-kbd">V</kbd> (or right-click), then press <kbd class="rj-kbd">Enter</kbd>.</p>
+            <p data-only="mac">Click in the Terminal window, press <kbd class="rj-kbd">⌘</kbd> <kbd class="rj-kbd">V</kbd>, then press <kbd class="rj-kbd">Return</kbd>.</p>
+            <p data-only="linux">Click in the Terminal window, press <kbd class="rj-kbd">Ctrl</kbd> <kbd class="rj-kbd">Shift</kbd> <kbd class="rj-kbd">V</kbd>, then press <kbd class="rj-kbd">Enter</kbd>.</p>
+            <div class="istep__nav"><button class="rj-btn rj-btn--primary" type="button" data-next>Done, it's running</button></div>
+          </div>
+        </li>
+        <li class="istep" data-step="4">
+          <button class="istep__head" type="button" aria-expanded="false" aria-controls="sb4"><span class="istep__n">4</span>Wait about a minute</button>
+          <div class="istep__body" id="sb4">
+            <p>It downloads and checks RawJobs. You're done when you see <b>RawJobs is running</b>.</p>
+            <p class="tip">Something else showed up? See <a href="#help" data-open-help>Need help?</a> below.</p>
+            <div class="istep__nav"><button class="rj-btn rj-btn--primary" type="button" data-next>I see it</button></div>
+          </div>
+        </li>
+        <li class="istep" data-step="5">
+          <button class="istep__head" type="button" aria-expanded="false" aria-controls="sb5"><span class="istep__n">5</span>Set up your search</button>
+          <div class="istep__body" id="sb5">
+            <p>Your browser opens RawJobs at <b>127.0.0.1:4317</b>. It walks you through setup in about 3 minutes.</p>
+            <p class="tip">Didn't open? Go to that address, or open <b>RawJobs</b> from <span data-only="win">the Start menu</span><span data-only="mac">~/Applications</span><span data-only="linux">your app menu</span>.</p>
+            <div class="done"><i class="rj-glyph rj-glyph--full" aria-hidden="true"></i><span>That's it. You can close the terminal. RawJobs keeps running in the background and starts when you log in.</span></div>
+          </div>
+        </li>
+      </ol>
+
+      <div class="screen-slot" id="screen-slot">
+        <div class="screen" id="screen" data-os="win" data-scene="1" role="img" aria-label="Example of what your screen looks like at this step">
+          <!-- desktop bars -->
+          <div class="dk-bar dk-bar--bottom only-win" aria-hidden="true">
+            <span class="tb-search"><svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg>Search</span>
+            <i class="tb-icon"></i><i class="tb-icon"></i><i class="tb-icon tb-icon--term">&gt;_</i><i class="tb-icon"></i>
+            <span class="clock" data-clock>9:41</span>
+          </div>
+          <div class="dk-bar dk-bar--top only-mac" aria-hidden="true"><b>Terminal</b><span>Shell</span><span>Edit</span><span>View</span><span class="clock" data-clock>9:41</span></div>
+          <div class="dock only-mac" aria-hidden="true"><i></i><i></i><i></i><i class="on"></i><i></i></div>
+          <div class="dk-bar dk-bar--top only-linux" aria-hidden="true"><span>Activities</span><span class="clock" data-clock>9:41</span><span>⏻</span></div>
+
+          <!-- step 1: launchers -->
+          <div class="launcher launcher--win only-win" aria-hidden="true">
+            <div class="l-field"><svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg><span class="typed" data-q="PowerShell"></span><span class="caret"></span></div>
+            <span class="l-label">Best match</span>
+            <div class="l-hit"><i class="tb-icon tb-icon--term">&gt;_</i><span><b>Windows PowerShell</b><small>App</small></span></div>
+          </div>
+          <div class="launcher launcher--mac only-mac" aria-hidden="true">
+            <div class="l-field"><svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg><span class="typed" data-q="Terminal"></span><span class="caret"></span></div>
+            <div class="l-hit"><i class="tb-icon tb-icon--term">&gt;_</i><span><b>Terminal</b><small>Utilities</small></span></div>
+          </div>
+          <div class="launcher launcher--linux only-linux" aria-hidden="true">
+            <div class="keys"><span class="cap">Ctrl</span>+<span class="cap">Alt</span>+<span class="cap">T</span></div>
+            <span class="keys__or">or open Terminal from your apps</span>
+          </div>
+
+          <!-- steps 2 to 4: the terminal -->
+          <div class="twin" aria-hidden="true">
+            <div class="tbar">
+              <span class="lights only-mac"><i></i><i></i><i></i></span>
+              <span class="tbar__tabicon only-win"></span>
+              <span class="tbar__title"><span class="only-win">Windows PowerShell</span><span class="only-mac">you — -zsh — 80×24</span><span class="only-linux">you@laptop: ~</span></span>
+              <span class="wbtns only-win"><i><svg viewBox="0 0 12 12"><path d="M1 6h10"/></svg></i><i><svg viewBox="0 0 12 12"><rect x="1.5" y="1.5" width="9" height="9"/></svg></i><i><svg viewBox="0 0 12 12"><path d="m1 1 10 10M11 1 1 11"/></svg></i></span>
+              <span class="gbtns only-linux"><i><svg viewBox="0 0 12 12"><path d="M2 6h8"/></svg></i><i><svg viewBox="0 0 12 12"><rect x="2" y="2" width="8" height="8"/></svg></i><i><svg viewBox="0 0 12 12"><path d="m2 2 8 8M10 2 2 10"/></svg></i></span>
+            </div>
+            <pre class="tbody" id="tbody"></pre>
+          </div>
+          <span class="pill" id="pill" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5"/></svg>Install line copied</span>
+
+          <!-- step 5: the browser -->
+          <div class="bwin" aria-hidden="true">
+            <div class="btabs">
+              <span class="lights only-mac"><i></i><i></i><i></i></span>
+              <span class="btab"><img src="/favicon.svg" alt="">RawJobs</span>
+              <span class="wbtns only-win"><i><svg viewBox="0 0 12 12"><path d="M1 6h10"/></svg></i><i><svg viewBox="0 0 12 12"><rect x="1.5" y="1.5" width="9" height="9"/></svg></i><i><svg viewBox="0 0 12 12"><path d="m1 1 10 10M11 1 1 11"/></svg></i></span>
+              <span class="gbtns only-linux"><i><svg viewBox="0 0 12 12"><path d="M2 6h8"/></svg></i><i><svg viewBox="0 0 12 12"><rect x="2" y="2" width="8" height="8"/></svg></i><i><svg viewBox="0 0 12 12"><path d="m2 2 8 8M10 2 2 10"/></svg></i></span>
+            </div>
+            <div class="baddr"><span><b>127.0.0.1</b>:4317</span></div>
+            <picture>
+              <source srcset="/images/radar-dark.png" media="(prefers-color-scheme: dark)">
+              <img class="dash" src="/images/radar-light.png" width="1280" height="761" loading="lazy" decoding="async" alt="">
+            </picture>
+          </div>
         </div>
       </div>
-      <div class="cli" id="cli">
-        <div class="cli__head">
-          <h3 id="cli-title">Scans, schedules and alerts from the terminal</h3>
-          <p class="prose">The CLI scans, schedules and sends alerts. Run it by hand, schedule it, or send new matches to Telegram. These are the commands from the source code; an installed copy has the same <code>rawjobs</code> command in its <code>bin</code> folder.</p>
+    </div>
+
+    <div class="after">
+      <details class="more help" id="help">
+        <summary><span>Need help?<small>Fixes for common problems, and how to uninstall</small></span><svg class="rj-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14"/><path d="M12 5v14"/></svg></summary>
+        <div class="more__in">
+          <div class="fixes">
+            <div class="fix" data-only="win"><h4>“irm” isn't recognised</h4><p>You're in Command Prompt. Open <b>PowerShell</b> instead (step 1) and paste the line again.</p></div>
+            <div class="fix" data-only="mac linux"><h4>“curl” isn't found</h4><p data-only="mac">Run the line in <b>Terminal</b>, not another app.</p><p data-only="linux">Install curl, or use <code>wget -qO- https://github.com/Tanmay-Mhatre/rawjobs/releases/latest/download/install.sh | sh</code></p></div>
+            <div class="fix"><h4>Your antivirus or work laptop blocks it</h4><p>Download the script from the <a href="https://github.com/Tanmay-Mhatre/rawjobs/releases/latest" target="_blank" rel="noopener">latest release<span class="rj-sr"> (opens in a new tab)</span></a>, read it, and run it from the file.</p></div>
+            <div class="fix"><h4>The dashboard didn't open</h4><p>Open <b>RawJobs</b> from <span data-only="win">the Start menu</span><span data-only="mac">~/Applications</span><span data-only="linux">your app menu</span>. Still nothing? Run the install line again: it repairs RawJobs and keeps your data.</p></div>
+            <div class="fix"><h4>Port 4317 is busy</h4><p>RawJobs uses the next free one (4318, 4319…), and the shortcut finds it for you.</p></div>
+            <div class="fix" id="uninstall"><h4>Uninstall</h4><p>Paste this into <span data-only="win">PowerShell</span><span data-only="mac linux">Terminal</span>. It asks whether to keep your data.</p>
+              <div class="line" data-only="win"><code>&amp; "$env:LOCALAPPDATA\RawJobs\bin\rawjobs.cmd" uninstall</code><button class="rj-btn rj-btn--sm" type="button" data-copy='&amp; "$env:LOCALAPPDATA\RawJobs\bin\rawjobs.cmd" uninstall'>Copy</button></div>
+              <div class="line" data-only="mac"><code>"$HOME/Library/Application Support/RawJobs/bin/rawjobs" uninstall</code><button class="rj-btn rj-btn--sm" type="button" data-copy='"$HOME/Library/Application Support/RawJobs/bin/rawjobs" uninstall'>Copy</button></div>
+              <div class="line" data-only="linux"><code>~/.local/share/rawjobs/bin/rawjobs uninstall</code><button class="rj-btn rj-btn--sm" type="button" data-copy="~/.local/share/rawjobs/bin/rawjobs uninstall">Copy</button></div>
+            </div>
+          </div>
+          <p class="tip">More in the <a href="https://github.com/Tanmay-Mhatre/rawjobs/blob/main/docs/install.md" target="_blank" rel="noopener">install guide<span class="rj-sr"> (opens in a new tab)</span></a>.</p>
         </div>
-      <div class="rj-panel term" id="term" data-play="static">
-        <div class="term__bar">
-          <span class="term__cwd">~/rawjobs</span>
-          <button class="rj-btn rj-btn--quiet rj-btn--sm" type="button" id="copy-cmd" data-copy="pnpm rawjobs scan">
-            <span class="ic" aria-hidden="true"><svg class="rj-icon ic-copy" viewBox="0 0 24 24"><rect width="14" height="14" x="8" y="8" rx="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></svg><svg class="rj-icon ic-check" viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5"/></svg></span>
-            <span>Copy command</span>
-          </button>
-          <span class="rj-sr" id="copy-status" role="status"></span>
+      </details>
+
+      <details class="more dev" id="developer">
+        <summary><span>For developers<small>Run it from the source code, and the command line</small></span><svg class="rj-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14"/><path d="M12 5v14"/></svg></summary>
+        <div class="more__in">
+          <div class="fix"><h4>From the source code</h4><p>Needs Node 22+ and pnpm.</p>
+            <ol><li><code>git clone https://github.com/Tanmay-Mhatre/rawjobs.git</code></li><li><code>cd rawjobs &amp;&amp; pnpm install</code></li><li><code>pnpm start</code></li></ol>
+          </div>
+          <div class="fix"><h4>Command line</h4><p>Scan, schedule and alert from the terminal. An installed copy has the same <code>rawjobs</code> command in its <code>bin</code> folder.</p>
+            <ol>
+              <li><code>pnpm rawjobs scan --notify</code>: send new matches to Telegram</li>
+              <li><code>pnpm rawjobs schedule install --time 08:00</code>: scan every morning</li>
+              <li><code>pnpm rawjobs detect &lt;careers-url&gt;</code>: find a company's hiring system</li>
+            </ol>
+          </div>
+          <p class="tip"><a href="https://github.com/Tanmay-Mhatre/rawjobs#getting-started" target="_blank" rel="noopener">Read the README<span class="rj-sr"> (opens in a new tab)</span></a> · <a href="https://github.com/Tanmay-Mhatre/rawjobs/blob/main/CONTRIBUTING.md" target="_blank" rel="noopener">Write a connector<span class="rj-sr"> (opens in a new tab)</span></a></p>
         </div>
-<pre class="term__body" role="region" tabindex="0" aria-label="Example output of pnpm rawjobs scan, with made-up jobs"><span data-line="0"><span class="p">$ </span>pnpm rawjobs scan</span><span data-line style="--i:1"><span class="d">38 jobs passed your title and location gates (9 new); 6 scored 70+ (alert threshold).</span></span><span data-line style="--i:2"><span class="d">Checked 1,412 directory companies besides yours.</span></span><span data-line style="--i:3"> </span><span data-line style="--i:4"><span class="st">★</span>  <span class="s">87</span>  Head of Product, Exchange</span><span data-line style="--i:5"><span class="d">        Acme Exchange · Dubai, Abu Dhabi · hybrid · posted 2026-10-08</span></span><span data-line style="--i:6"><span class="d">        title 30 · place 20 · keywords 27 (crypto, exchange) · industry 10</span></span><span data-line style="--i:7"><span class="d">        https://jobs.lever.co/acme-exchange/…</span></span><span data-line style="--i:8"> </span><span data-line style="--i:9"><span class="st">★</span>  <span class="s">72</span>  Senior Product Manager, Custody</span><span data-line style="--i:10"><span class="d">        Halcyon Labs · Abu Dhabi · onsite · posted 2026-10-09</span></span><span data-line style="--i:11"><span class="d">        title 20 · place 20 · keywords 27 (crypto, exchange) · industry 5</span></span></pre>
-      </div>
-      <div class="panel cmds">
-        <div class="cmd"><code>pnpm rawjobs scan --notify</code><span>Send new matches to Telegram</span></div>
-        <div class="cmd"><code>pnpm rawjobs schedule install --time 08:00</code><span>Scan every morning on your computer</span></div>
-        <div class="cmd"><code>pnpm rawjobs detect &lt;careers-url&gt;</code><span>Find a company's hiring system from its link</span></div>
-      </div>
-      </div>
+      </details>
     </div>
   </div>
 </section>
@@ -757,66 +1060,26 @@ label.rj-chip:has(input:focus-visible) { outline: 2px solid var(--focus-ring); o
   <div class="wrap split">
     <div class="split__head">
       <p class="eyebrow">Privacy</p>
-      <h2 id="privacy-title">Runs on your machine</h2>
+      <h2 id="privacy-title">Runs on your computer</h2>
+      <p class="prose"><a href="https://github.com/Tanmay-Mhatre/rawjobs/blob/main/PRIVACY.md" target="_blank" rel="noopener">Everything it connects to<span class="rj-sr"> (opens in a new tab)</span></a></p>
     </div>
     <div class="split__body">
-      <p class="section__lede">Your resume and roles stay on your computer. If you add a company by link, only its careers board is shared, and you can turn that off. RawJobs only reads job postings that companies publish themselves.</p>
       <div class="facts">
         <div class="fact">
           <svg class="rj-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M20 16V7a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v9m16 0H4m16 0 1.28 2.55a1 1 0 0 1-.9 1.45H3.62a1 1 0 0 1-.9-1.45L4 16"/></svg>
-          <h3>Your profile stays local</h3>
-          <p>Resume, config, run history and alert settings are files on your computer, gitignored by default.</p>
+          <h3>Your data stays put</h3>
+          <p>Your resume, settings and results are saved only on your computer.</p>
         </div>
         <div class="fact">
           <svg class="rj-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="m17 8 5 5"/><path d="m22 8-5 5"/></svg>
-          <h3>No account, no telemetry</h3>
-          <p>Nothing to sign up for. The app only talks to job boards, GitHub for the shared directory and for updates (once a day, and you can turn it off), the project's company inbox when you add a company (optional) and, if you turn on alerts, Telegram. Installing also downloads Node from nodejs.org.</p>
+          <h3>No account, no tracking</h3>
+          <p>Nothing to sign up for, and the app sends no usage data.</p>
         </div>
         <div class="fact">
           <svg class="rj-icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="M12 2a14.5 14.5 0 0 0 0 20 14.5 14.5 0 0 0 0-20"/><path d="M2 12h20"/></svg>
-          <h3>Public postings only</h3>
-          <p>It never touches apply forms or candidate data, and every job links back to the original posting.</p>
+          <h3>Public jobs only</h3>
+          <p>It reads what companies publish, and every job links back to the original.</p>
         </div>
-      </div>
-    </div>
-  </div>
-</section>
-
-<!-- ================= SOURCES ================= -->
-<section class="section" id="sources" aria-labelledby="sources-title">
-  <div class="wrap split">
-    <div class="split__head">
-      <p class="eyebrow">Sources</p>
-      <h2 id="sources-title">23 hiring systems, read at the source</h2>
-      <p class="prose">Each connector reads the company's public feed or careers page. A few requests per company, spaced out and identified.</p>
-    </div>
-    <div class="split__body">
-      <ul class="rj-panel ats-grid" aria-label="Supported hiring systems">__ATS__</ul>
-      <div class="sources__foot">
-        <p class="boards">Plus <b>4 public job boards</b>: Hacker News “Who is hiring”, Remotive, Arbeitnow and Remote OK, each credited and linked back.</p>
-      </div>
-    </div>
-  </div>
-</section>
-
-<!-- ================= OPEN SOURCE ================= -->
-<section class="section" id="open" aria-labelledby="open-title">
-  <div class="wrap split">
-    <div class="split__head">
-      <p class="eyebrow">Open source</p>
-      <h2 id="open-title">Every rule and connector is in the repo</h2>
-      <p class="prose">MIT licensed. The directory, the connectors and the scoring rules are all in the repo for anyone to read and improve.</p>
-    </div>
-    <div class="split__body">
-      <div class="cards">
-        <a class="panel card" href="https://github.com/Tanmay-Mhatre/rawjobs/issues/new?template=suggest_company.yml" target="_blank" rel="noopener">
-          <h3>Add a company <svg class="rj-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M7 7h10v10"/><path d="M7 17 17 7"/></svg></h3>
-          <p>Missing a company? Paste its careers link in the app, or suggest it for the shared directory so everyone gets it.</p>
-        <span class="rj-sr"> (opens in a new tab)</span></a>
-        <a class="panel card" href="https://github.com/Tanmay-Mhatre/rawjobs/blob/main/CONTRIBUTING.md" target="_blank" rel="noopener">
-          <h3>Write a connector <svg class="rj-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M7 7h10v10"/><path d="M7 17 17 7"/></svg></h3>
-          <p>Each hiring system is one small file in <code>packages/core</code>, tested against saved responses so tests never hit live sites.</p>
-        <span class="rj-sr"> (opens in a new tab)</span></a>
       </div>
     </div>
   </div>
@@ -831,12 +1094,14 @@ label.rj-chip:has(input:focus-visible) { outline: 2px solid var(--focus-ring); o
     </div>
     <div class="split__body">
       <div class="faq">
-        <details><summary>Is it free?<svg class="rj-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14"/><path d="M12 5v14"/></svg></summary><p class="ans">Yes. RawJobs is MIT licensed, with no paid tier and no account.</p></details>
-        <details><summary>Does it use AI?<svg class="rj-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14"/><path d="M12 5v14"/></svg></summary><p class="ans">No. Scores come from keyword rules you can read and change. An optional AI re-rank, with your own key, is on the roadmap.</p></details>
-        <details><summary>Where do the jobs come from?<svg class="rj-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14"/><path d="M12 5v14"/></svg></summary><p class="ans">From each company's own careers page on its hiring system, like Greenhouse, Lever or Workday, plus 4 public job boards. A shared directory of __COMPANIES_ROUND__ companies, __LIVE_ROUND__ with live job boards, rebuilt weekly, tells RawJobs where to look.</p></details>
-        <details><summary>Is my data sent anywhere?<svg class="rj-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14"/><path d="M12 5v14"/></svg></summary><p class="ans">Only one thing, and you can turn it off: when you add a company by link, its careers board is shared with the directory so everyone can find it. Your resume, roles and alert settings stay on your computer, and the app has no telemetry. It talks only to the job boards it scans, GitHub for the shared directory and for updates (once a day, and you can turn it off), the project's company inbox when you add a company (optional), and Telegram if you turn on alerts. Installing also downloads Node from nodejs.org.</p></details>
-        <details><summary>How fresh are the jobs?<svg class="rj-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14"/><path d="M12 5v14"/></svg></summary><p class="ans">As fresh as your last scan. Scan whenever you like, or schedule 1 or 2 scans a day and get new matches on Telegram.</p></details>
-        <details><summary>How do I run it?<svg class="rj-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14"/><path d="M12 5v14"/></svg></summary><p class="ans">Paste one line into a terminal (PowerShell on Windows, Terminal on macOS and Linux): it installs RawJobs, starts it when you log in and opens the dashboard, which walks you through setup. The lines are in <a href="#install">Get it</a> and the <a href="https://github.com/Tanmay-Mhatre/rawjobs/blob/main/docs/install.md" target="_blank" rel="noopener">install guide</a>. Developers can also run it from the source code with Node 22+ and pnpm.</p></details>
+        <details><summary>Is it free?<svg class="rj-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14"/><path d="M12 5v14"/></svg></summary><p class="ans">Yes. RawJobs is open source (MIT), with no paid tier and no account.</p></details>
+        <details><summary>Does it use AI?<svg class="rj-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14"/><path d="M12 5v14"/></svg></summary><p class="ans">No. Scores come from rules you can read and change. An optional AI re-rank, with your own key, is on the roadmap.</p></details>
+        <details><summary>Which job sites does it read?<svg class="rj-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14"/><path d="M12 5v14"/></svg></summary><div class="ans"><p>Companies' own careers pages on 23 hiring systems, plus 4 public job boards: Hacker News “Who is hiring”, Remotive, Arbeitnow and Remote OK. A shared directory, updated weekly, tells it where to look.</p><ul class="ats-grid" aria-label="Supported hiring systems">__ATS__</ul></div></details>
+        <details><summary>Is my data sent anywhere?<svg class="rj-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14"/><path d="M12 5v14"/></svg></summary><p class="ans">No. Your resume and settings stay on your computer, and the app sends no usage data. One optional exception: when you add a company by its link, that careers page address is shared so everyone can find it. You can turn that off. <a href="https://github.com/Tanmay-Mhatre/rawjobs/blob/main/PRIVACY.md" target="_blank" rel="noopener">Full details<span class="rj-sr"> (opens in a new tab)</span></a>.</p></details>
+        <details><summary>Is the install line safe?<svg class="rj-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14"/><path d="M12 5v14"/></svg></summary><p class="ans">It downloads RawJobs from GitHub and Node from nodejs.org, checks both against signed checksums before running anything, and installs only into your user folder. You can read the script first: <a href="https://github.com/Tanmay-Mhatre/rawjobs/blob/main/packaging/install.ps1" target="_blank" rel="noopener">Windows<span class="rj-sr"> (opens in a new tab)</span></a>, <a href="https://github.com/Tanmay-Mhatre/rawjobs/blob/main/packaging/install.sh" target="_blank" rel="noopener">Mac and Linux<span class="rj-sr"> (opens in a new tab)</span></a>.</p></details>
+        <details><summary>How fresh are the jobs?<svg class="rj-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14"/><path d="M12 5v14"/></svg></summary><p class="ans">As fresh as your last scan. Scan whenever you like, or schedule a scan every morning and get new matches on Telegram.</p></details>
+        <details><summary>How do I uninstall it?<svg class="rj-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14"/><path d="M12 5v14"/></svg></summary><p class="ans">One line removes it and asks whether to keep your data. It's under <a href="#uninstall" data-open-help>Need help?</a> in Get it.</p></details>
+        <details><summary>Can I add a company, or help build it?<svg class="rj-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14"/><path d="M12 5v14"/></svg></summary><p class="ans">Yes. Paste a careers link in the app, or <a href="https://github.com/Tanmay-Mhatre/rawjobs/issues/new?template=suggest_company.yml" target="_blank" rel="noopener">suggest a company<span class="rj-sr"> (opens in a new tab)</span></a> for the shared directory so everyone gets it. Each hiring system is one small file in the repo: see <a href="https://github.com/Tanmay-Mhatre/rawjobs/blob/main/CONTRIBUTING.md" target="_blank" rel="noopener">Contributing<span class="rj-sr"> (opens in a new tab)</span></a>.</p></details>
       </div>
     </div>
   </div>
@@ -850,7 +1115,7 @@ label.rj-chip:has(input:focus-visible) { outline: 2px solid var(--focus-ring); o
       <h2 id="final-title">Your next role may already be on a careers page</h2>
       <p class="prose">Schedule a scan for 08:00 and read new matches with your coffee.</p>
       <div class="hero__ctas">
-        <a class="rj-btn rj-btn--primary btn-lg" href="#install">Install in one line<svg class="rj-icon rj-icon--nudge" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></svg></a>
+        <a class="rj-btn rj-btn--primary btn-lg" href="#get"><span data-cta>Get RawJobs</span><svg class="rj-icon rj-icon--nudge" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></svg></a>
         <a class="rj-btn btn-lg" href="https://github.com/Tanmay-Mhatre/rawjobs" target="_blank" rel="noopener">Star on GitHub<span class="rj-sr"> (opens in a new tab)</span></a>
       </div>
     </div>
@@ -863,10 +1128,11 @@ label.rj-chip:has(input:focus-visible) { outline: 2px solid var(--focus-ring); o
     <div class="foot__grid">
       <div>
         <a class="brand" href="#top" aria-label="RawJobs, back to top">__WORDMARK__</a>
-        <p class="foot__small">Built by Tanmay Mhatre. MIT licensed. RawJobs is an independent project and isn't affiliated with or endorsed by LinkedIn, Greenhouse, Lever, Ashby, Workday or any other job site or hiring system named here. Names and trademarks belong to their owners. Jobs shown on this page are made-up examples. This website uses Cloudflare Web Analytics (cookieless, no personal data). The app has none.</p>
+        <p class="foot__small">Built by Tanmay Mhatre. MIT licensed. Not affiliated with LinkedIn or any job site or hiring system named here; names and trademarks belong to their owners. Jobs on this page are made-up examples. This site uses cookieless Cloudflare Web Analytics; the app uses none.</p>
       </div>
       <nav class="foot__links" aria-label="Project links">
         <a href="https://github.com/Tanmay-Mhatre/rawjobs" target="_blank" rel="noopener">GitHub<span class="rj-sr"> (opens in a new tab)</span></a>
+        <a href="https://github.com/Tanmay-Mhatre/rawjobs/blob/main/docs/install.md" target="_blank" rel="noopener">Install guide<span class="rj-sr"> (opens in a new tab)</span></a>
         <a href="https://github.com/Tanmay-Mhatre/rawjobs/blob/main/PRIVACY.md" target="_blank" rel="noopener">Privacy<span class="rj-sr"> (opens in a new tab)</span></a>
         <a href="https://github.com/Tanmay-Mhatre/rawjobs/blob/main/CONTRIBUTING.md" target="_blank" rel="noopener">Contributing<span class="rj-sr"> (opens in a new tab)</span></a>
         <a href="https://github.com/Tanmay-Mhatre/rawjobs/blob/main/SECURITY.md" target="_blank" rel="noopener">Security<span class="rj-sr"> (opens in a new tab)</span></a>
@@ -895,13 +1161,12 @@ label.rj-chip:has(input:focus-visible) { outline: 2px solid var(--focus-ring); o
   addEventListener('scroll', onScroll, { passive: true }); onScroll();
 
   /* ---------- scroll reveals: only below-the-fold blocks, revealed once ---------- */
-  var revealSel = '.step, .lab, .term, .way';
+  var revealSel = '.step, .lab';
   var io = 'IntersectionObserver' in window ? new IntersectionObserver(function (es) {
     es.forEach(function (e) {
       if (!e.isIntersecting) return;
       var el = e.target; io.unobserve(el);
       el.classList.remove('rv-wait'); el.classList.add('rv-in');
-      if (el.id === 'term') playTerm();
     });
   }, { rootMargin: '0px 0px -8% 0px', threshold: 0.12 }) : null;
   if (io && !reduce) {
@@ -911,23 +1176,7 @@ label.rj-chip:has(input:focus-visible) { outline: 2px solid var(--focus-ring); o
         el.classList.add('rv-wait'); io.observe(el);
       }
     });
-    var t = $('#term'); if (t.classList.contains('rv-wait')) t.setAttribute('data-play', 'ready');
   }
-
-  /* ---------- terminal ---------- */
-  function playTerm() { var t = $('#term'); if (t.getAttribute('data-play') === 'ready') t.setAttribute('data-play', 'run'); }
-
-  /* ---------- copy: the button keeps its width; the icon turns into a check ---------- */
-  $('#copy-cmd').addEventListener('click', function () {
-    var b = this, text = b.getAttribute('data-copy'), status = $('#copy-status');
-    var done = function (ok) {
-      b.setAttribute('data-copied', ok ? 'true' : 'false');
-      status.textContent = ok ? 'Copied: ' + text : 'Couldn’t copy. Select the command and copy it.';
-      clearTimeout(b._t); b._t = setTimeout(function () { b.removeAttribute('data-copied'); status.textContent = ''; }, 1600);
-    };
-    if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(text).then(function () { done(true); }, function () { done(false); });
-    else done(false);
-  });
 
   /* ---------- score breakdown legend, as the ScoreBreakdown component writes it ---------- */
   var PARTS = [['Title', 30], ['Place', 20], ['Keywords', 40], ['Industry', 10]];
@@ -1140,6 +1389,205 @@ label.rj-chip:has(input:focus-visible) { outline: 2px solid var(--focus-ring); o
       rio.observe(routes);
     }
   }
+  /* ---------- copy buttons: the icon turns into a check, the label says Copied ---------- */
+  function copyText(text) {
+    if (navigator.clipboard && navigator.clipboard.writeText) return navigator.clipboard.writeText(text);
+    return Promise.reject(new Error('no clipboard'));
+  }
+  var copyStatus = $('[data-copy-status]');
+  $$('[data-copy]').forEach(function (b) {
+    var label = b.querySelector('span:not(.ic)') || b;
+    var original = label.textContent;
+    b.addEventListener('click', function () {
+      var text = b.getAttribute('data-copy');
+      var done = function (ok) {
+        b.setAttribute('data-copied', ok ? 'true' : 'false');
+        label.textContent = ok ? 'Copied' : 'Select and copy';
+        if (copyStatus) copyStatus.textContent = ok ? 'Copied the line.' : 'Couldn’t copy. Select the line and copy it.';
+        clearTimeout(b._t); b._t = setTimeout(function () { b.removeAttribute('data-copied'); label.textContent = original; }, 1800);
+        if (ok && b.hasAttribute('data-advance')) { copied = true; setTimeout(function () { setStep(3, true); }, reduce ? 0 : 700); }
+      };
+      copyText(text).then(function () { done(true); }, function () { done(false); });
+    });
+  });
+
+  /* ---------- get it: which computer ---------- */
+  var get = $('#get'), screen = $('#screen'), slot = $('#screen-slot'), installer = $('#installer'), tbody = $('#tbody'), pill = $('#pill');
+  var tabs = $$('.os-tabs [role="tab"]');
+  var OS_NAME = { win: 'Windows', mac: 'Mac', linux: 'Linux' };
+  function detectOS() {
+    var p = ((navigator.userAgentData && navigator.userAgentData.platform) || navigator.platform || '') + ' ' + navigator.userAgent;
+    if (/android/i.test(p)) return 'linux';
+    if (/iphone|ipad|ipod|mac/i.test(p)) return 'mac';
+    if (/win/i.test(p)) return 'win';
+    if (/linux|x11|cros/i.test(p)) return 'linux';
+    return 'win';
+  }
+  var isPhone = /android|iphone|ipod|mobile/i.test(navigator.userAgent) || (matchMedia('(pointer: coarse)').matches && matchMedia('(max-width: 760px)').matches);
+  var os = detectOS(), copied = false;
+
+  var VERSION = '__VERSION__';
+  var TERM = {
+    win: { prompt: 'PS C:\\Users\\you> ', cmd: 'irm https://github.com/Tanmay-Mhatre/rawjobs/releases/latest/download/install.ps1 | iex', platform: 'win-x64', dir: 'C:\\Users\\you\\AppData\\Local\\RawJobs', open: 'It starts by itself when you log in. Open it any time from the Start menu: RawJobs.' },
+    mac: { prompt: 'you@MacBook ~ % ', cmd: 'curl -fsSL https://github.com/Tanmay-Mhatre/rawjobs/releases/latest/download/install.sh | sh', platform: 'darwin-arm64', dir: '/Users/you/Library/Application Support/RawJobs', open: 'It starts by itself when you log in. Open it any time: RawJobs in ~/Applications.' },
+    linux: { prompt: 'you@laptop:~$ ', cmd: 'curl -fsSL https://github.com/Tanmay-Mhatre/rawjobs/releases/latest/download/install.sh | sh', platform: 'linux-x64', dir: '/home/you/.local/share/rawjobs', open: 'It starts by itself when you log in. Open it any time: RawJobs in your app menu.' }
+  };
+  function output(t) {
+    return [
+      ['', ''],
+      ['info', 'Installing RawJobs'],
+      ['', '  Version ' + VERSION + ', for ' + t.platform],
+      ['', '  Downloading Node'],
+      ['', '  Downloading RawJobs'],
+      ['', '  Starting RawJobs (and at every log in)'],
+      ['', ''],
+      ['ok', 'RawJobs ' + VERSION + ' is running at http://127.0.0.1:4317'],
+      ['dim', '  Installed in ' + t.dir],
+      ['dim', '  ' + t.open]
+    ];
+  }
+
+  function setOS(next, focus) {
+    os = next;
+    get.setAttribute('data-os', os);
+    screen.setAttribute('data-os', os);
+    tabs.forEach(function (t) {
+      var on = t.getAttribute('data-os') === os;
+      t.setAttribute('aria-selected', on ? 'true' : 'false');
+      t.tabIndex = on ? 0 : -1;
+      if (on) { installer.setAttribute('aria-labelledby', t.id); if (focus) t.focus(); }
+    });
+    playScene(step);
+  }
+  tabs.forEach(function (t, i) {
+    if (t.getAttribute('data-os') === os && !isPhone) t.setAttribute('data-detected', '');
+    t.addEventListener('click', function () { setOS(t.getAttribute('data-os')); });
+    t.addEventListener('keydown', function (e) {
+      var d = e.key === 'ArrowRight' ? 1 : e.key === 'ArrowLeft' ? -1 : 0;
+      if (e.key === 'Home') d = -i; if (e.key === 'End') d = tabs.length - 1 - i;
+      if (!d) return; e.preventDefault();
+      setOS(tabs[(i + d + tabs.length) % tabs.length].getAttribute('data-os'), true);
+    });
+  });
+  /* the buttons that lead here say which computer, once we know it (not on a phone) */
+  if (!isPhone) $$('[data-cta]').forEach(function (el) { el.textContent = 'Get RawJobs for ' + OS_NAME[os]; });
+
+  /* phones: RawJobs installs on a computer, so offer to send the page there */
+  if (isPhone) {
+    $('#handoff').setAttribute('data-show', '');
+    var share = $('#share-link');
+    if (navigator.share) {
+      share.hidden = false;
+      share.addEventListener('click', function () { navigator.share({ title: 'Install RawJobs', text: 'Open this on your computer to install RawJobs.', url: location.origin + '/#get' }).catch(function () {}); });
+    }
+  }
+
+  /* ---------- get it: the five steps ---------- */
+  var steps = $$('.istep'), step = 1;
+  var narrow = matchMedia('(max-width: 920px)');
+  function placeScreen() {
+    var host = narrow.matches ? $('.istep[data-step="' + step + '"] .istep__body') : installer;
+    if (slot.parentNode !== host) host.appendChild(slot);
+  }
+  function setStep(n, fromAction) {
+    step = Math.max(1, Math.min(5, n));
+    steps.forEach(function (li) {
+      var k = +li.getAttribute('data-step'), head = $('.istep__head', li);
+      if (k === step) li.setAttribute('data-active', ''); else li.removeAttribute('data-active');
+      if (k < step) li.setAttribute('data-done', ''); else li.removeAttribute('data-done');
+      head.setAttribute('aria-expanded', k === step ? 'true' : 'false');
+    });
+    placeScreen();
+    playScene(step);
+    if (fromAction) {
+      var li = $('.istep[data-step="' + step + '"]');
+      var r = li.getBoundingClientRect();
+      if (r.top < 80 || r.top > innerHeight * 0.6) li.scrollIntoView({ behavior: reduce ? 'auto' : 'smooth', block: 'start' });
+    }
+  }
+  steps.forEach(function (li) {
+    $('.istep__head', li).addEventListener('click', function () { setStep(+li.getAttribute('data-step')); });
+    $$('[data-next]', li).forEach(function (b) { b.addEventListener('click', function () { setStep(+li.getAttribute('data-step') + 1, true); }); });
+  });
+  if (narrow.addEventListener) narrow.addEventListener('change', placeScreen);
+  $$('[data-open-help]').forEach(function (a) { a.addEventListener('click', function () { $('#help').open = true; }); });
+
+  /* ---------- the mock screen: each step plays a short scene, or shows its last frame when motion is off ---------- */
+  var scene = 0;
+  function esc(s) { return s.replace(/&/g, '&amp;').replace(/</g, '&lt;'); }
+  function line(cls, text, animate) { return '<span class="' + (animate ? 'ln ' : '') + (cls || '') + '">' + (text ? esc(text) : ' ') + '</span>\n'; }
+  function promptHTML(t, typed, caret) { return '<span class="dim">' + esc(t.prompt) + '</span>' + esc(typed) + (caret ? '<span class="caret"></span>' : ''); }
+  function typeInto(el, text, every, id) {
+    if (reduce) { el.textContent = text; return Promise.resolve(); }
+    return new Promise(function (res) {
+      var i = 0;
+      (function next() {
+        if (id !== scene) return res();
+        el.textContent = text.slice(0, ++i);
+        if (i < text.length) setTimeout(next, every); else res();
+      })();
+    });
+  }
+  function wait(ms) { return reduce ? Promise.resolve() : sleep(ms); }
+
+  async function playScene(n) {
+    var id = ++scene, t = TERM[os];
+    screen.setAttribute('data-scene', String(n));
+    pill.removeAttribute('data-on');
+    $$('.l-hit', screen).forEach(function (h) { h.removeAttribute('data-on'); h.removeAttribute('data-pick'); });
+    $$('.cap', screen).forEach(function (c) { c.removeAttribute('data-down'); });
+    $$('.typed', screen).forEach(function (el) { el.textContent = ''; });
+
+    if (n === 1) {
+      if (os === 'linux') {
+        var caps = $$('.cap', screen);
+        for (var i = 0; i < caps.length; i++) { await wait(260); if (id !== scene) return; caps[i].setAttribute('data-down', ''); }
+        return;
+      }
+      var q = $$('.launcher', screen).filter(function (l) { return getComputedStyle(l).display !== 'none'; })[0];
+      var typed = $('.typed', q), hit = $('.l-hit', q);
+      await wait(350); if (id !== scene) return;
+      await typeInto(typed, typed.getAttribute('data-q'), 90, id); if (id !== scene) return;
+      hit.setAttribute('data-on', '');
+      await wait(300); if (id !== scene) return;
+      hit.setAttribute('data-pick', '');
+      return;
+    }
+    if (n === 2) {
+      tbody.innerHTML = promptHTML(t, '', true);
+      await wait(400); if (id !== scene) return;
+      if (copied) pill.setAttribute('data-on', '');
+      return;
+    }
+    if (n === 3) {
+      tbody.innerHTML = '<span class="dim">' + esc(t.prompt) + '</span><span id="tcmd"></span><span class="caret"></span><span class="enter" id="tenter">' + (os === 'mac' ? 'Return' : 'Enter') + '</span>';
+      var cmd = $('#tcmd');
+      await wait(300); if (id !== scene) return;
+      /* a paste is instant: the whole line appears at once */
+      cmd.textContent = t.cmd;
+      if (copied) pill.setAttribute('data-on', '');
+      await wait(500); if (id !== scene) return;
+      $('#tenter').setAttribute('data-on', '');
+      return;
+    }
+    if (n === 4 || n === 5) {
+      var lines = output(t), html = promptHTML(t, t.cmd, false) + '\n';
+      if (reduce || n === 5) { tbody.innerHTML = html + lines.map(function (l) { return line(l[0], l[1], false); }).join(''); tbody.scrollTop = tbody.scrollHeight; return; }
+      tbody.innerHTML = html;
+      for (var j = 0; j < lines.length; j++) {
+        await sleep(j < 2 ? 200 : 420); if (id !== scene) return;
+        tbody.insertAdjacentHTML('beforeend', line(lines[j][0], lines[j][1], true));
+        tbody.scrollTop = tbody.scrollHeight;
+      }
+    }
+  }
+
+  /* the screen's clock shows the visitor's own time */
+  var now = new Date();
+  $$('[data-clock]').forEach(function (c) { c.textContent = now.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }); });
+
+  setOS(os);
+  setStep(1);
 })();
 </script>
 </body>
