@@ -13,12 +13,14 @@
  *     -> scripts/catalog/out/resolved-bulk.json
  *
  * --max-minutes N stops starting new companies after N minutes and saves what was resolved; the
- * rest are due again next run.
+ * rest are due again next run. Results are also saved every 100 companies and when the process is
+ * stopped (SIGTERM from the rebuild's hard cap), so a killed run keeps its work.
  */
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { atsHints, careersLinks, findBoards, HttpClient, HttpError, type FoundBoard } from "../../packages/core/src/index";
+import { writeFileAtomic } from "./lib/fs";
 import { maxMsFromArgs, nextInTime } from "./lib/time-box";
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -178,6 +180,18 @@ async function main() {
   const todo = due.sort((a, b) => age(a) - age(b) || sampleOrder(a.name) - sampleOrder(b.name)).slice(0, LIMIT);
   console.error(`${seeds.length} seeds, ${due.length} due, resolving ${todo.length}`);
   let done = 0;
+  // Keep only current seeds, in seed order.
+  const save = () => {
+    const companies = seeds.map((s) => byName.get(s.name.toLowerCase())).filter((r): r is Resolved => !!r);
+    writeFileAtomic(OUT, JSON.stringify({ generated_at: new Date().toISOString(), companies }, null, 1));
+    return companies;
+  };
+  for (const signal of ["SIGTERM", "SIGINT"] as const)
+    process.once(signal, () => {
+      save();
+      console.error(`Stopped (${signal}) after ${done} of ${todo.length}; saved what was resolved.`);
+      process.exit(143);
+    });
   const queue = [...todo];
   const started = Date.now();
   await Promise.all(
@@ -185,15 +199,12 @@ async function main() {
       for (let s = nextInTime(queue, started, MAX_MS); s; s = nextInTime(queue, started, MAX_MS)) {
         const r = await resolveSeed(s).catch((err): Resolved => ({ name: s!.name, website: s!.website, industries: s!.industries, status: "error", error: String(err).slice(0, 160), pages: 0, resolved_at: new Date().toISOString() }));
         byName.set(s.name.toLowerCase(), r);
-        done++;
+        if (++done % 100 === 0) save();
         console.error(`  [${done}/${todo.length}] ${s.name}: ${r.status}${r.board ? ` ${r.board.key}${r.board.supported ? "" : " (not scannable yet)"}` : r.careers_url ? ` ${r.careers_url}` : ""}`);
       }
     }),
   );
-  // Keep only current seeds, in seed order.
-  const companies = seeds.map((s) => byName.get(s.name.toLowerCase())).filter((r): r is Resolved => !!r);
-  mkdirSync(dirname(OUT), { recursive: true });
-  writeFileSync(OUT, JSON.stringify({ generated_at: new Date().toISOString(), companies }, null, 1));
+  const companies = save();
   const tally: Record<string, number> = {};
   for (const r of companies) tally[r.status] = (tally[r.status] ?? 0) + 1;
   console.error(queue.length ? `Stopped after ${MAX_MS / 60_000} min: ${queue.length} left for the next run.` : "Done.", tally);

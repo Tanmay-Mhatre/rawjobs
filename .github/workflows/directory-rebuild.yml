@@ -8,13 +8,15 @@
 # the publish path (sources, merge, build, package, gate, publish) must succeed.
 #
 #   stage            soft  hard     stage          soft  hard
-#   Common Crawl       60    70     crossprobe       20    25
+#   Common Crawl       35    45     crossprobe       20    25
 #   Wayback            25    50     check 2          10    15
 #   industry resolve   10    15     index            30    40
 #   bulk resolve       28    40     the rest          –   ~45 (setup, sources, merges, build, package, gate, publish)
 #   check 1            25    30
 #
-# Hard caps add up to about 330 of the job's 350. A typical run takes about 3.5 hours.
+# Hard caps add up to about 305 of the job's 350. A typical run takes about 3 hours.
+# A smoke run (dispatch with smoke) gives every stage 2 minutes, publishes nothing and checks
+# that a step past its timeout-minutes fails without stopping the job: about 25 minutes.
 name: Directory · weekly rebuild
 
 on:
@@ -26,6 +28,10 @@ on:
         description: "Publish even if the directory shrank more than the release gate allows (a deliberate purge)"
         type: boolean
         default: false
+      smoke:
+        description: "Smoke test: every stage for 2 minutes, nothing published"
+        type: boolean
+        default: false
 
 concurrency:
   group: directory
@@ -34,6 +40,7 @@ concurrency:
 permissions:
   contents: read
   issues: write
+  actions: read
 
 env:
   DATA_REPO: ${{ vars.DATA_REPO || 'Tanmay-Mhatre/rawjobs-directory' }}
@@ -73,32 +80,47 @@ jobs:
           [ -f directory-repo/contributions.json ] || echo '{"companies":[]}' > directory-repo/contributions.json
           pnpm catalog:sources
 
+      # Smoke runs only: prove that a step past its timeout-minutes ends as a failure that
+      # continue-on-error absorbs (the collectors rely on it as their last backstop).
+      - name: Canary
+        id: canary
+        if: ${{ inputs.smoke }}
+        continue-on-error: true
+        timeout-minutes: 1
+        run: sleep 120
+
+      - name: Check the canary
+        if: ${{ inputs.smoke }}
+        run: |
+          [ "${{ steps.canary.outcome }}" = failure ] || { echo "::error::A step past its timeout-minutes ended as '${{ steps.canary.outcome }}', not failure."; exit 1; }
+          echo "OK: a step past its timeout-minutes fails, and continue-on-error keeps the job going."
+
       # Our own URL lists: new Common Crawl crawls, and the next stretch of the Wayback index.
       - name: Common Crawl
         id: commoncrawl
         continue-on-error: true
-        timeout-minutes: 72
-        run: bash scripts/catalog/capped.sh "Common Crawl" 70 pnpm exec tsx scripts/catalog/commoncrawl.ts --per-run 1 --max-minutes 60
+        timeout-minutes: 47
+        run: bash scripts/catalog/capped.sh "Common Crawl" ${{ inputs.smoke && 5 || 45 }} pnpm exec tsx scripts/catalog/commoncrawl.ts --per-run 1 --max-minutes ${{ inputs.smoke && 2 || 35 }}
 
       - name: Wayback
         id: wayback
         continue-on-error: true
         timeout-minutes: 52
         # A query in flight can run ~22 min past the soft cap (retries on a slow index).
-        run: bash scripts/catalog/capped.sh "Wayback" 50 pnpm exec tsx scripts/catalog/wayback.ts --max-minutes 25
+        run: bash scripts/catalog/capped.sh "Wayback" ${{ inputs.smoke && 10 || 50 }} pnpm exec tsx scripts/catalog/wayback.ts --max-minutes ${{ inputs.smoke && 2 || 25 }}
 
       # Company-first: industry seeds, then the next batch of Wikidata companies (the coverage sample).
       - name: Resolve industry seeds
         id: seeds
         continue-on-error: true
         timeout-minutes: 17
-        run: bash scripts/catalog/capped.sh "Industry seeds" 15 pnpm exec tsx scripts/catalog/resolve.ts --max-minutes 10
+        run: bash scripts/catalog/capped.sh "Industry seeds" ${{ inputs.smoke && 5 || 15 }} pnpm exec tsx scripts/catalog/resolve.ts --max-minutes ${{ inputs.smoke && 2 || 10 }}
 
       - name: Resolve Wikidata companies
         id: bulk
         continue-on-error: true
         timeout-minutes: 42
-        run: bash scripts/catalog/capped.sh "Wikidata companies" 40 bash -c "pnpm exec tsx scripts/catalog/seeds-bulk.ts && pnpm exec tsx scripts/catalog/resolve.ts --bulk --limit 1500 --max-minutes 28"
+        run: bash scripts/catalog/capped.sh "Wikidata companies" ${{ inputs.smoke && 8 || 40 }} bash -c "pnpm exec tsx scripts/catalog/seeds-bulk.ts && pnpm exec tsx scripts/catalog/resolve.ts --bulk --limit ${{ inputs.smoke && 20 || 1500 }} --max-minutes ${{ inputs.smoke && 2 || 28 }}"
 
       - name: Merge
         timeout-minutes: 5
@@ -108,14 +130,14 @@ jobs:
         id: check1
         continue-on-error: true
         timeout-minutes: 32
-        run: bash scripts/catalog/capped.sh "Check boards" 30 pnpm exec tsx scripts/catalog/check.ts --recheck-days 30 --max-minutes 25
+        run: bash scripts/catalog/capped.sh "Check boards" ${{ inputs.smoke && 5 || 30 }} pnpm exec tsx scripts/catalog/check.ts --recheck-days 30 --max-minutes ${{ inputs.smoke && 2 || 25 }}
 
       # Known companies tried on other systems (needs fresh check results), then merge and check what it found.
       - name: Cross-probe
         id: crossprobe
         continue-on-error: true
         timeout-minutes: 27
-        run: bash scripts/catalog/capped.sh "Cross-probe" 25 pnpm exec tsx scripts/catalog/crossprobe.ts --max-minutes 20
+        run: bash scripts/catalog/capped.sh "Cross-probe" ${{ inputs.smoke && 5 || 25 }} pnpm exec tsx scripts/catalog/crossprobe.ts --max-minutes ${{ inputs.smoke && 2 || 20 }}
 
       - name: Merge again
         timeout-minutes: 5
@@ -125,7 +147,7 @@ jobs:
         id: check2
         continue-on-error: true
         timeout-minutes: 17
-        run: bash scripts/catalog/capped.sh "Check new boards" 15 pnpm exec tsx scripts/catalog/check.ts --recheck-days 30 --max-minutes 10
+        run: bash scripts/catalog/capped.sh "Check new boards" ${{ inputs.smoke && 5 || 15 }} pnpm exec tsx scripts/catalog/check.ts --recheck-days 30 --max-minutes ${{ inputs.smoke && 2 || 10 }}
 
       - name: Build
         timeout-minutes: 5
@@ -135,7 +157,7 @@ jobs:
         id: index
         continue-on-error: true
         timeout-minutes: 42
-        run: bash scripts/catalog/capped.sh "Index open jobs" 40 pnpm exec tsx scripts/catalog/index.ts --max-age-days 7 --max-minutes 30
+        run: bash scripts/catalog/capped.sh "Index open jobs" ${{ inputs.smoke && 5 || 40 }} pnpm exec tsx scripts/catalog/index.ts --max-age-days 7 --max-minutes ${{ inputs.smoke && 2 || 30 }}
 
       - name: Package
         timeout-minutes: 10
@@ -153,6 +175,7 @@ jobs:
 
       - name: Publish the release
         id: publish
+        if: ${{ !inputs.smoke }}
         timeout-minutes: 5
         env:
           GH_TOKEN: ${{ secrets.DATA_REPO_TOKEN }}
@@ -177,6 +200,7 @@ jobs:
         run: bash scripts/catalog/state.sh save
 
       - name: Commit the coverage report
+        if: ${{ !inputs.smoke }}
         working-directory: directory-repo
         run: |
           cp ../scripts/catalog/out/coverage.md coverage.md
@@ -189,7 +213,7 @@ jobs:
       - name: Report a run that didn't publish
         # Keyed on the publish step, not on failure()/cancelled(): a timeout, a failed step and a
         # refused release all land here.
-        if: always() && steps.publish.outcome != 'success'
+        if: always() && steps.publish.outcome != 'success' && !inputs.smoke
         env:
           GH_TOKEN: ${{ github.token }}
           OUTCOMES: ${{ toJSON(steps) }}
@@ -201,9 +225,21 @@ jobs:
           open=$(gh issue list -R "${{ github.repository }}" --state open --search "\"$title\" in:title" --json number -q '.[0].number')
           if [ -n "$open" ]; then gh issue comment "$open" -R "${{ github.repository }}" --body "$body"; else gh issue create -R "${{ github.repository }}" --title "$title" --body "$body"; fi
 
-      - name: Warn about collectors that didn't finish
+      - name: Summary
         if: always()
         env:
+          GH_TOKEN: ${{ github.token }}
           OUTCOMES: ${{ toJSON(steps) }}
         run: |
           echo "$OUTCOMES" | jq -r 'to_entries[] | select(.value.outcome == "failure" and .value.conclusion == "success") | "::warning::\(.key) did not finish; the rebuild went on without it."'
+          {
+            echo "### Weekly rebuild${{ inputs.smoke && ' (smoke test)' || '' }}"
+            echo
+            echo "| Step | Result | Minutes |"
+            echo "|---|---|---|"
+            gh run view "${{ github.run_id }}" -R "${{ github.repository }}" --json jobs -q '.jobs[] | select(.name == "rebuild") | .steps[] | select(.conclusion != null and .conclusion != "" and (.completedAt | startswith("0001") | not)) | "| \(.name) | \(.conclusion) | \((((.completedAt | fromdate) - (.startedAt | fromdate)) / 60) | floor) |"' || echo "| (step times unavailable) | | |"
+            echo
+            live="${RUNNER_TEMP}/live-manifest.json"
+            if [ -s "$live" ]; then echo "Live release: $(jq -r '"\(.companies) companies, \(.indexed) indexed"' "$live")."; fi
+            if [ -f dist/manifest.json ]; then echo "This run's directory: $(jq -r '"\(.companies) companies, \(.indexed) indexed"' dist/manifest.json)."; fi
+          } >> "$GITHUB_STEP_SUMMARY"

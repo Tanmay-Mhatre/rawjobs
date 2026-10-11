@@ -36,6 +36,8 @@ async function main() {
     } catch (err) {
       failed++;
       console.error(`! ${folder}/${name}: ${(err as Error).message} (${url})`);
+      // In the rebuild: say so on the run page, since merge then uses last week's copy (if saved) or none.
+      if (process.env.GITHUB_ACTIONS) console.log(`::warning title=Source list::${folder}/${name} didn't download (${(err as Error).message}); using last week's copy if there is one.`);
     }
   }
   console.error(failed ? `Done, ${failed} of ${FILES.length} failed (merge skips missing files).` : `Done: ${FILES.length} files.`);
