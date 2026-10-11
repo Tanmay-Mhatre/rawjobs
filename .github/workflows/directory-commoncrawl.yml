@@ -1,0 +1,54 @@
+# Every day: read more of the Common Crawl URL index (our richest board source: one crawl added
+# 16,295 boards no other source had, 9,438 of them live). The weekly rebuild alone reads ~35
+# minutes a week, which would take about 10 months to cover the crawls; this adds 45 minutes a day.
+# Only the 12 newest crawls (about a year). Resumes per query, and stops at once when the index
+# keeps failing. What it finds is merged and checked by the next contributions run or rebuild.
+# Setup: docs/shared-directory.md
+name: Directory · Common Crawl
+
+on:
+  schedule:
+    # Between the contributions runs at :17 every 3 hours, and never near Monday's 03:00 rebuild.
+    - cron: "40 13 * * *"
+  workflow_dispatch:
+
+concurrency:
+  group: directory
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+env:
+  DATA_REPO: ${{ vars.DATA_REPO || 'Tanmay-Mhatre/rawjobs-directory' }}
+
+jobs:
+  read:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 70
+    steps:
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+
+      - name: Restore the catalog's working state
+        id: state
+        env:
+          GH_TOKEN: ${{ secrets.DATA_REPO_TOKEN }}
+        run: bash scripts/catalog/state.sh restore
+
+      - name: Common Crawl
+        if: steps.state.outputs.restored == 'true'
+        continue-on-error: true
+        timeout-minutes: 57
+        run: bash scripts/catalog/capped.sh "Common Crawl" 55 pnpm exec tsx scripts/catalog/commoncrawl.ts --crawls 12 --per-run 2 --max-minutes 45
+
+      - name: Save the working state
+        if: always() && steps.state.outputs.restored == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.DATA_REPO_TOKEN }}
+        run: bash scripts/catalog/state.sh save

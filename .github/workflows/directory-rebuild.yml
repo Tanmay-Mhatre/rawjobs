@@ -106,7 +106,7 @@ jobs:
         id: commoncrawl
         continue-on-error: true
         timeout-minutes: 47
-        run: bash scripts/catalog/capped.sh "Common Crawl" ${{ inputs.smoke && 5 || 45 }} pnpm exec tsx scripts/catalog/commoncrawl.ts --per-run 1 --max-minutes ${{ inputs.smoke && 2 || 35 }}
+        run: bash scripts/catalog/capped.sh "Common Crawl" ${{ inputs.smoke && 5 || 45 }} pnpm exec tsx scripts/catalog/commoncrawl.ts --crawls 12 --per-run 1 --max-minutes ${{ inputs.smoke && 2 || 35 }}
 
       - name: Wayback
         id: wayback
