@@ -2,18 +2,18 @@
 
 **Jobs, straight from the source.** · [rawjobs.workers.dev](https://www.rawjobs.workers.dev)
 
-[![CI](https://github.com/Tanmay-Mhatre/rawjobs/actions/workflows/ci.yml/badge.svg)](https://github.com/Tanmay-Mhatre/rawjobs/actions/workflows/ci.yml) [![License: MIT](https://img.shields.io/badge/license-MIT-blue)](LICENSE) ![Node 22+](https://img.shields.io/badge/node-22%2B-informational)
+[![CI](https://github.com/Tanmay-Mhatre/rawjobs/actions/workflows/ci.yml/badge.svg)](https://github.com/Tanmay-Mhatre/rawjobs/actions/workflows/ci.yml) [![License: MIT](https://img.shields.io/badge/license-MIT-blue)](LICENSE) [![Latest release](https://img.shields.io/github/v/release/Tanmay-Mhatre/rawjobs)](https://github.com/Tanmay-Mhatre/rawjobs/releases/latest)
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/images/radar-dark.png">
   <img alt="The RawJobs Radar: a list of scored jobs on the left, and on the right why the selected job matched." src="docs/images/radar-light.png">
 </picture>
 
-A free, self-hosted job radar. Tell it the roles, places and industries you want; RawJobs scans the careers pages of the companies that fit, from a directory of ~21,000 companies' hiring systems, scores every opening against your profile with clear keyword rules, and shows you the matches, with the companies you'd most like to join starred and their newest jobs up top.
+A free, self-hosted job radar. Tell it the roles, places and industries you want; RawJobs scans the careers pages of the companies that fit, from a directory of 47,000+ companies' hiring systems (37,000+ with live job boards), scores every opening against your profile with clear keyword rules, and shows you the matches, with the companies you'd most like to join starred and their newest jobs up top.
 
 Good roles often appear on company careers pages (Greenhouse, Lever, Ashby, Workday…) before LinkedIn, or never reach it. Checking 50 careers pages by hand doesn't happen. This does it for you.
 
-> **Status: runs on your computer.** A web dashboard and a CLI with connectors for 23 hiring systems (Greenhouse, Lever, Ashby, Workday, SmartRecruiters and 18 more) and 4 public job boards, scoring, run history, scheduled scans and Telegram alerts. Scheduled scans in GitHub Actions are next. See [Roadmap](#roadmap).
+> **Status: runs on your computer, installs with one line on Windows, macOS and Linux, and keeps itself up to date.** A web dashboard and a CLI with connectors for 23 hiring systems (Greenhouse, Lever, Ashby, Workday, SmartRecruiters and [18 more](docs/hiring-systems.md)) and 4 public job boards, scoring, run history, scheduled scans and Telegram alerts. Scheduled scans in GitHub Actions are next. See [Roadmap](#roadmap).
 
 Built by Tanmay Mhatre.
 
@@ -68,6 +68,7 @@ Prefer the terminal? Copy `rawjobs.config.example.yaml` to `rawjobs.config.local
   - **Profile**: master resume, roles, locations, industries, topics.
   - **Scans & alerts**: strong-match threshold, scheduled scans, Telegram alerts, what a scan covers by default.
   - **Your data**: export / import your tracking data, sharing, start setup over.
+  - **Updates** (installed copies): install new versions automatically, ask first, or never; test versions early; check now.
   - **Appearance**: light, dark or system theme, an increased-contrast option, and job list density.
 
 Statuses and notes are saved on your computer in `profile/tracking.json` (export them for backup). **Scan now** in the header scans on your machine and shows its progress there (hover it for details); with Telegram set up, you get a message when it's done.
@@ -94,10 +95,12 @@ Jobs keep their first-seen date, and a job missing from two successful scans of 
 ### Scheduled scans and alerts
 
 - **Scheduled scans** (Settings → Scans & alerts): pick one or two times a day and a scope. RawJobs registers the scan with your computer's own scheduler (Windows Task Scheduler, macOS launchd, or a systemd user timer on Linux). It runs while the computer is on and catches up on a missed run. From the terminal: `pnpm rawjobs schedule install --time 08:00 --scope mine`.
-  - Linux without systemd: add a cron line instead, for example `0 8 * * * cd /path/to/rawjobs && pnpm rawjobs scan --notify`.
+  - Linux without systemd: add a cron line instead, for example `0 8 * * * ~/.local/share/rawjobs/bin/rawjobs scan --notify` (installed) or `0 8 * * * cd /path/to/rawjobs && pnpm rawjobs scan --notify` (from source).
 - **Telegram alerts**: a 2-minute guided setup with your own bot (make a bot with @BotFather, press Start, done), then a test message. Each scheduled scan sends one digest of new matches, and nothing when nothing is new. The bot token and chat ID are kept in `profile/secrets.json` (gitignored), or read from `TELEGRAM_BOT_TOKEN` and `TELEGRAM_CHAT_ID`.
 
 ## Command line
+
+The examples use `pnpm rawjobs`, as in a copy of the source code. An installed copy has the same command as `rawjobs` in its `bin` folder (see [docs/install.md](docs/install.md#using-it)).
 
 `pnpm rawjobs scan` (alias `run`) prints every job that passes your title and location gates, best first, with the reason for its score:
 
@@ -139,8 +142,6 @@ rawjobs update [--check] [--to <version>]        install the newest version (ins
 rawjobs uninstall [--keep-data|--delete-data]    remove an installed copy
 ```
 
-From an install, the `rawjobs` command is in its `bin` folder (see [docs/install.md](docs/install.md#using-it)); from the source code, run `pnpm rawjobs …`.
-
 ### Adding companies
 
 Paste careers URLs into `detect` and copy the lines into `companies:`:
@@ -149,33 +150,7 @@ Paste careers URLs into `detect` and copy the lines into `companies:`:
 pnpm rawjobs detect https://jobs.lever.co/somecompany https://job-boards.greenhouse.io/other
 ```
 
-| ATS | Careers URL looks like | Read from |
-| --- | --- | --- |
-| Greenhouse | `job-boards.greenhouse.io/{slug}` | public API |
-| Lever | `jobs.lever.co/{slug}` (EU: `jobs.eu.lever.co`) | public API |
-| Ashby | `jobs.ashbyhq.com/{slug}` | public API |
-| SmartRecruiters | `careers.smartrecruiters.com/{slug}` | public API |
-| Workday | `{tenant}.wd{N}.myworkdayjobs.com/{site}` | careers-site API (20 per page, capped at 2,000 jobs) |
-| Workable | `apply.workable.com/{slug}` | widget feed |
-| Recruitee | `{slug}.recruitee.com` | careers-site API |
-| Personio | `{slug}.jobs.personio.com` (or `.de`) | XML feed |
-| BambooHR | `{slug}.bamboohr.com/careers` | careers-page JSON |
-| Breezy HR | `{slug}.breezy.hr` | careers-page JSON |
-| Teamtailor | `{slug}.teamtailor.com/jobs` | RSS feed |
-| Pinpoint | `{slug}.pinpointhq.com` | careers-site JSON |
-| Rippling | `ats.rippling.com/{slug}/jobs` | board API |
-| HiBob | `{slug}.careers.hibob.com` | careers-page API |
-| Freshteam | `{slug}.freshteam.com/jobs` | widget feed |
-| Comeet | `www.comeet.com/jobs/{company}/{uid}` | data embedded in the hosted page |
-| Oracle Recruiting | `{pod}.fa.{dc}.oraclecloud.com/hcmUI/CandidateExperience/en/sites/{site}` | candidate-experience API |
-| SAP SuccessFactors | `career{N}.successfactors.com/career?company={id}` (or `.eu`) | XML listing feed |
-| Taleo | `{host}.taleo.net/careersection/{section}/jobsearch.ftl` | career-section search API |
-| iCIMS | `careers-{slug}.icims.com/jobs` | portal search pages |
-| Jobvite | `jobs.jobvite.com/{slug}` | careers search pages |
-| JazzHR | `{slug}.applytojob.com/apply` | careers page |
-| Zoho Recruit | `{slug}.zohorecruit.com/jobs/{page}` | data embedded in the careers page |
-
-iCIMS, Jobvite and JazzHR have no keyless feed, so their connectors read the public careers pages. If a company changes its page template, that connector may need an update.
+RawJobs reads 23 hiring systems, including Greenhouse, Lever, Ashby, Workday and SmartRecruiters: [the full list, and what their careers links look like](docs/hiring-systems.md).
 
 Public job boards (Hacker News "Who is hiring", Remotive, Arbeitnow, Remote OK) are added the same way, by pasting their link.
 
@@ -183,7 +158,7 @@ Public job boards (Hacker News "Who is hiring", Remotive, Arbeitnow, Remote OK) 
 
 Two things are built for everyone by GitHub Actions and published as releases of the directory repo. Neither knows anything about you.
 
-- **The directory** (rebuilt weekly): which companies exist, which hiring system and board each one uses, whether it's live, and its industries. About 21,000 companies, ~14,000 with their open job titles and places indexed.
+- **The directory** (rebuilt weekly): which companies exist, which hiring system and board each one uses, whether it's live, and its industries. 47,000+ companies (37,000+ with live job boards), 16,000+ of them with their open job titles and places indexed.
 - **The job feed** (daily): every open job on the live Greenhouse, Lever, Ashby, SmartRecruiters and Workday boards, as a full copy plus a small change file per day. Scans use it only to skip companies with nothing for you.
 
 How the directory is built (no AI, `scripts/catalog/`):
@@ -225,7 +200,7 @@ Terms match whole words, case-insensitively: `ai` matches "AI-native" but not "m
 
 ## Privacy
 
-Your profile, resume, config, Telegram token and run history stay on your computer. The app has no telemetry. It talks to the companies' job boards (to scan), GitHub (to download the shared directory and job feed) and, if you set up alerts, Telegram.
+Your profile, resume, config, Telegram token and run history stay on your computer. The app has no telemetry. It talks to the companies' job boards (to scan), GitHub (to download the shared directory and job feed, and, for installed copies, to check for updates once a day; turn that off in Settings → Updates) and, if you set up alerts, Telegram. Installing also downloads Node from nodejs.org.
 
 **Sharing is on by default:** when you add a company by link that the directory doesn't have, its careers board (hiring system, board name, company name) is sent to the project's contribution inbox so everyone can find it. Nothing about you is sent. Turn it off in **Settings → Your data → Sharing** or with `directory.share_additions: false`. Full details: [PRIVACY.md](PRIVACY.md).
 

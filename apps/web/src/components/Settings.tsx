@@ -168,7 +168,7 @@ export function Settings({ draft, update, revert, dirty, onSaved, onScan, scanni
           <Section
             id="directory"
             title="How scans work"
-            hint={`The shared company directory lists ${directorySize ? roughCount(directorySize) : "~21,000"} companies and where each one posts jobs. Jobs are always fetched live by your own scans; nothing about you is sent.`}
+            hint={`The shared company directory lists ${directorySize ? roughCount(directorySize) : "~47,000"} companies and where each one posts jobs. Jobs are always fetched live by your own scans; nothing about you is sent.`}
           >
             <div className="space-y-3">
               <ul className="space-y-1.5 type-small">

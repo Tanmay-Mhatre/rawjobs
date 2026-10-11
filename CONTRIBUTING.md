@@ -15,7 +15,10 @@ pnpm check           # design tokens + design lint + typecheck + tests
 
 The copy people install is a bundle that needs only Node: `pnpm bundle` builds it in
 `dist/bundle/`, and `pnpm bundle --try <folder>` lays it out as an installed copy so you can run
-`<folder>/bin/rawjobs serve`. CI does that on every push. See `docs/plans/local-install.md`.
+`<folder>/bin/rawjobs serve`. To try the installer and updates end to end, make test releases
+signed with a throwaway key, as CI does (`release-files` in `.github/workflows/ci.yml`):
+`pnpm release:files --key <key.pem> --public-key <base64>`, plus `pnpm bundle --version <v>` and
+`--broken` for a newer and a broken version. See `docs/install.md` and `docs/plans/local-install.md`.
 
 The contribution inbox (`services/contribute`) is a Cloudflare Worker with its own `package.json`.
 Its tests run with the rest (`pnpm test`); typecheck it with `npm install && npm run typecheck`
@@ -23,8 +26,10 @@ in that folder.
 
 ## Pull requests
 
-- Branch from `main` and open a pull request. `main` is protected, so CI's `check` must pass
-  before it can merge.
+- Branch from `main` and open a pull request. `main` is protected: CI's `check` and the install
+  test (install, update, go back, uninstall on Windows, macOS and Linux) must pass before it can
+  merge.
+- Releases are made by the maintainer with a version tag (see [README → Development](README.md#development)).
 - Add or update tests. Connector tests use saved responses in `packages/core/test/fixtures`, so
   tests never hit live sites.
 - Write user-facing text in plain English: short sentences, no jargon, no marketing tone.

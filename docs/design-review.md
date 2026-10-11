@@ -1,5 +1,7 @@
 # Design Review: RawJobs web app
 
+> **Status:** a record of the app as it was on 2026-10-09. The app has changed since, so line numbers and some screens below may be out of date.
+
 **Date:** 2026-10-09 · **Method:** Anthropic `design` plugin (`design-critique` + `accessibility-review` + `ux-copy`)
 **How it was tested:**
 - Ran the live app on a fresh profile (a new user). Went through setup (sample resume → roles → Berlin → topics → 5 companies → first scan), then Radar, Pipeline, Companies and Settings.

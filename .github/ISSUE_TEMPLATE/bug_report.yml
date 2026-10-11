@@ -26,6 +26,7 @@ body:
     attributes:
       label: Where
       options:
+        - Installing, updating or uninstalling
         - Web dashboard
         - Command line
         - A hiring system connector (Greenhouse, Workday, ...)
@@ -33,14 +34,23 @@ body:
         - Other
     validations:
       required: true
+  - type: dropdown
+    id: install
+    attributes:
+      label: How you run RawJobs
+      options:
+        - Installed with the one-line install
+        - From the source code (pnpm)
+    validations:
+      required: true
   - type: input
     id: versions
     attributes:
       label: Versions
-      description: Operating system, Node version (`node -v`) and the commit you're on (`git rev-parse --short HEAD`).
+      description: "Your operating system (e.g. Windows 11, macOS 15.4). Installed: the RawJobs version from Settings → Updates. From source: `node -v` and `git rev-parse --short HEAD`."
   - type: textarea
     id: logs
     attributes:
       label: Error output
-      description: Paste any error text. Remove anything personal first.
+      description: "Paste any error text. Installed copies keep logs in the install folder: logs/server.log, and logs/update.log for updates (see docs/install.md). Remove anything personal first."
       render: text

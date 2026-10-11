@@ -10,7 +10,7 @@ central inbox, like any other install. You only need the steps below if you want
 
 ### Point the app at your own data
 
-Three environment variables, read by the CLI and the dev server (`packages/core/src/directory.ts`):
+Three environment variables, read by the CLI and the local server (`packages/core/src/directory.ts`):
 
 | Variable | Default | What it is |
 |---|---|---|
@@ -23,11 +23,33 @@ For example:
 ```bash
 RAWJOBS_DIRECTORY_URL=https://github.com/you/your-directory/releases/latest/download \
 RAWJOBS_CONTRIBUTE_URL=https://your-inbox.you.workers.dev \
-pnpm dev
+pnpm start
 ```
 
 To make it permanent for everyone using your fork, change `DEFAULT_DIRECTORY_URL` and
-`DEFAULT_CONTRIBUTE_URL` in `packages/core/src/directory.ts` instead.
+`DEFAULT_CONTRIBUTE_URL` in `packages/core/src/directory.ts` instead. Installed copies need this:
+the computer starts their server at log in, without your terminal's environment variables.
+
+### Publish your own releases
+
+Out of the box, a fork's installers and installed copies download **this** repository's releases
+and accept only releases signed with **its** key. To ship your own installs and updates:
+
+1. Make a signing key pair (ed25519), and keep the private key safe:
+
+   ```bash
+   node -e "const {generateKeyPairSync}=require('crypto');const {publicKey,privateKey}=generateKeyPairSync('ed25519');console.log(publicKey.export({type:'spki',format:'der'}).toString('base64'));require('fs').writeFileSync('release-signing-key.pem',privateKey.export({type:'pkcs8',format:'pem'}),{mode:0o600})"
+   ```
+
+2. Put the public key (the line it prints) in `RELEASE_PUBLIC_KEY` in `packages/core/src/release.ts`
+   and in `packaging/install.sh` and `packaging/install.ps1` (a test checks all three match).
+3. Point the code at your repository: `RELEASE_URL` in `packages/core/src/release.ts`, `REPO` in
+   `packages/core/src/update.ts`, the `Release` address in both installers, and the install lines in
+   `README.md`, `docs/install.md` and `apps/site/src/index.html`.
+4. Add the private key as the `RAWJOBS_SIGNING_KEY` Actions secret
+   (`gh secret set RAWJOBS_SIGNING_KEY < release-signing-key.pem`).
+5. Set the version in `package.json`, merge, and push an annotated `v*` tag. The release workflow
+   builds, signs, test-installs and publishes it (see [README → Development](../README.md#development)).
 
 ### Run your own directory
 
