@@ -27,9 +27,9 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 340
     steps:
-      - uses: actions/checkout@v4
-      - uses: pnpm/action-setup@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v7
         with:
           node-version: 22
           cache: pnpm
@@ -105,6 +105,22 @@ jobs:
           if [ -z "$(gh issue list -R "${{ github.repository }}" --state open --search "\"$title\" in:title" --json number -q '.[].number')" ]; then
             gh issue create -R "${{ github.repository }}" --title "$title" \
               --body "The daily job feed failed. Scans fall back to fetching every company live until it runs again. Run: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+          fi
+
+      - name: Check the directory isn't stale
+        # The weekly rebuild publishes a new dated release; contributions only replace that release's
+        # files, which doesn't change its date. More than 8 days old means a rebuild went missing.
+        if: always()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          published=$(gh release view -R "$DATA_REPO" --json publishedAt -q .publishedAt)
+          age_days=$(( ( $(date -u +%s) - $(date -u -d "$published" +%s) ) / 86400 ))
+          echo "Latest directory release: $published ($age_days days old)"
+          [ "$age_days" -gt 8 ] || exit 0
+          title="Directory is stale"
+          if [ -z "$(gh issue list -R "${{ github.repository }}" --state open --search "\"$title\" in:title" --json number -q '.[].number')" ]; then
+            gh issue create -R "${{ github.repository }}" --title "$title" --body "The latest directory release is $age_days days old (published $published); the weekly rebuild should publish one every Monday. Check the Directory · weekly rebuild runs: ${{ github.server_url }}/${{ github.repository }}/actions/workflows/directory-rebuild.yml"
           fi
 
       - name: Keep the schedule alive

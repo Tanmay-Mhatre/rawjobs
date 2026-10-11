@@ -21,7 +21,23 @@ const ONLY = atsArg > 0 ? new Set(process.argv[atsArg + 1]!.split(",")) : null;
 const OUT_DIR = join(here, "out");
 const recheckArg = process.argv.indexOf("--recheck-days");
 /** Results older than this are checked again (default: never, i.e. only unchecked boards). */
-const RECHECK_CUTOFF = recheckArg > 0 ? Date.now() - Number(process.argv[recheckArg + 1]) * 86_400_000 : 0;
+const RECHECK_DAYS = recheckArg > 0 ? Number(process.argv[recheckArg + 1]) : Infinity;
+const DAY_MS = 86_400_000;
+
+/**
+ * 0-6 extra days per board, fixed by its key (FNV-1a). Boards first checked together (some 40,000
+ * between 4 and 10 Oct 2026) then come due over a week instead of in one run, so a monthly recheck
+ * can't move the live count by 10% at once and trip the release gate.
+ */
+export const spreadDays = (key: string): number => {
+  let h = 0x811c9dc5;
+  for (const ch of key) h = Math.imul(h ^ ch.charCodeAt(0), 0x01000193) >>> 0;
+  return h % 7;
+};
+
+/** A definite result stays good for --recheck-days plus the board's spread; an error is always due. */
+export const isCurrent = (r: { key: string; status: string; checked_at: string }, recheckDays: number, now = Date.now()): boolean =>
+  r.status !== "error" && (recheckDays === Infinity || now - Date.parse(r.checked_at) < (recheckDays + spreadDays(r.key)) * DAY_MS);
 const maxArg = process.argv.indexOf("--max-minutes");
 /** Stop starting new checks after this long (default: no limit). */
 const MAX_MS = maxArg > 0 ? Number(process.argv[maxArg + 1]) * 60_000 : Infinity;
@@ -50,7 +66,7 @@ async function main() {
       if (!line) continue;
       const r = JSON.parse(line) as Result;
       // Errors get another go; so does anything older than --recheck-days (monthly refresh).
-      if (r.status !== "error" && Date.parse(r.checked_at) >= RECHECK_CUTOFF) done.add(r.key);
+      if (isCurrent(r, RECHECK_DAYS)) done.add(r.key);
     }
   }
   const todo = merged.boards.filter((b) => !done.has(b.key) && (!ONLY || ONLY.has(b.ats)));
