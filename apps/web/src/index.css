@@ -247,6 +247,15 @@ textarea:not(:focus) {
   dialog.jh-dialog::backdrop {
     background: var(--scrim);
   }
+  /* The job drawer arrives like the kit's rj-drawer: a 24px slide and fade; slower on phones (design/components/Drawer). */
+  dialog.jh-drawer[open] {
+    animation: rj-slide-in var(--duration-base) var(--ease-enter);
+  }
+  @media (max-width: 720px) {
+    dialog.jh-drawer[open] {
+      animation-duration: var(--duration-slow);
+    }
+  }
 }
 
 .sr-only-focusable:not(:focus) {

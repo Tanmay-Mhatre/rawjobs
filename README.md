@@ -1,6 +1,6 @@
 # RawJobs
 
-**Jobs, straight from the source.**
+**Jobs, straight from the source.** · [rawjobs.workers.dev](https://www.rawjobs.workers.dev)
 
 [![CI](https://github.com/Tanmay-Mhatre/rawjobs/actions/workflows/ci.yml/badge.svg)](https://github.com/Tanmay-Mhatre/rawjobs/actions/workflows/ci.yml) [![License: MIT](https://img.shields.io/badge/license-MIT-blue)](LICENSE) ![Node 22+](https://img.shields.io/badge/node-22%2B-informational)
 
@@ -23,7 +23,7 @@ Requires Node 22+ and [pnpm](https://pnpm.io).
 
 ```bash
 pnpm install
-pnpm dev                # opens http://127.0.0.1:5173
+pnpm dev                # opens http://127.0.0.1:5173 in your browser
 ```
 
 The dashboard walks you through setup the first time (about 3 minutes; you can skip it and come back from any page):
@@ -44,7 +44,7 @@ Prefer the terminal? Copy `rawjobs.config.example.yaml` to `rawjobs.config.local
 
 - **Radar**: every job for you in one list, best match first: fit, then freshness (the boost halves every 3 days), with **your companies starred (★)**, nudged up by 10 and their three newest jobs in a strip on top. Newest, salary and company sorts mean exactly that. One company shows two roles before the rest fold into "+N more". Views: All, My companies, New, Strong, Saved, Applied, plus views you save yourself. Sort by best match, newest, highest salary or company. Filter by date posted, country, location, workplace, seniority, industry, company, keywords, match and hiring system; search.
 - **Job detail**: score breakdown (why it matched), description, salary, notes, status, copy the description for CV tailoring.
-- **Pipeline**: saved → applied → interviewing → offer → rejected. Drag cards between columns (or use the keyboard; on phones, one column at a time).
+- **Pipeline**: saved → applied → interviewing → offer → rejected. Drag cards between columns, or focus one and press `[` / `]` (on phones, one column at a time).
 - **Companies**: My companies, with what each has for you now, scan health and broken links; companies with nothing for you in 10+ scans over a week are flagged for removal. **Suggestions** and **Browse all** search the directory; **Add by link** takes any careers page. Hidden companies, with Show again.
 - **Settings**:
   - **Profile**: master resume, roles, locations, industries, topics.
@@ -54,7 +54,7 @@ Prefer the terminal? Copy `rawjobs.config.example.yaml` to `rawjobs.config.local
 
 Statuses and notes live in your browser (export them for backup). **Scan now** in the header scans on your machine and shows its progress there (hover it for details); with Telegram set up, you get a message when it's done.
 
-Keyboard: `j`/`k` move, `Enter` open, `s` save, `a` applied, `x` not interested, `c` copy description, `/` search, `1`–`4` sections, `?` help, `Esc` close.
+Keyboard: `j`/`k` move, `Enter` open, `s` save, `a` applied, `x` not interested, `c` copy description, `f` full window, `r` scan now, `/` search, `1`–`6` Radar views (`1`–`4` switch sections elsewhere), `[`/`]` move a pipeline card, `?` help, `Esc` close.
 
 ## Scans
 

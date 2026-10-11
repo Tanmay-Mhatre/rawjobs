@@ -228,5 +228,6 @@ export default defineConfig({
   base: "./",
   publicDir: dataDir,
   plugins: [react(), tailwindcss(), localApi()],
-  server: { port: 5173, host: "127.0.0.1" },
+  // open: `pnpm dev` opens the dashboard in your browser (BROWSER=none turns that off).
+  server: { port: 5173, host: "127.0.0.1", open: true },
 });

@@ -28,6 +28,7 @@ import { buildSuggestions } from "./lib/suggest";
 import { load, save } from "./lib/storage";
 import { timeAgo } from "./lib/format";
 import { hasNewTag } from "./lib/filters";
+import { ignoreShortcut } from "./lib/keys";
 import { useTheme } from "./lib/theme";
 import { useUserState, type Status } from "./lib/userState";
 import wordmarkInk from "./design/logos/rawjobs-wordmark-ink.svg";
@@ -306,19 +307,26 @@ export function App() {
     lastTab.current = tab;
   }, [tab, viewLabel]);
 
-  // Global keys: Esc closes, 1-4 switch tabs, ? shows shortcuts. Dialogs close themselves on Escape too.
+  // Global keys: Esc closes, ? shows shortcuts, R scans now, 1-4 switch sections (the Radar uses 1-6 for
+  // its views instead). Dialogs close themselves on Escape too.
+  const canScanNow = canRunLocally && setupState === "configured" && !scanning;
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if ((e.target as HTMLElement | null)?.closest?.("input, textarea, select") || e.metaKey || e.ctrlKey || e.altKey) return;
+      if (ignoreShortcut(e)) return;
       if (e.key === "Escape") {
         setOpenId(null);
         setShowKeys(false);
-      } else if (e.key === "?") setShowKeys((v) => !v);
-      else if (!openId && !showKeys && !inSetup && /^[1-4]$/.test(e.key)) go({ tab: TABS[Number(e.key) - 1]!.id });
+        return;
+      }
+      if (e.key === "?") return setShowKeys((v) => !v);
+      // The rest only on the page itself, not under a dialog (a job, the scan chooser, "Did you apply?").
+      if (openId || showKeys || inSetup || document.querySelector("dialog[open]")) return;
+      if (e.key === "r" && canScanNow) requestScan();
+      else if (tab !== "radar" && /^[1-4]$/.test(e.key)) go({ tab: TABS[Number(e.key) - 1]!.id });
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [openId, showKeys, inSetup, go]);
+  }, [openId, showKeys, inSetup, tab, canScanNow, requestScan, go]);
 
   const lastRun = meta?.runs[0];
   // Only your companies: the extra ones a scan checks aren't yours to fix.
@@ -643,7 +651,7 @@ export function App() {
         }}
       />
 
-      <ShortcutHelp open={showKeys} onClose={() => setShowKeys(false)} />
+      <ShortcutHelp open={showKeys} onClose={() => setShowKeys(false)} canScan={canRunLocally && setupState === "configured"} />
       <ScanChooser open={choosing} onClose={closeChooser} onStart={(scope) => void startScan(scope)} />
       <Toaster />
     </div>
@@ -689,7 +697,9 @@ function ErrorState({ message, onRetry }: { message: string; onRetry: () => void
   );
 }
 
-function ShortcutHelp({ open, onClose }: { open: boolean; onClose: () => void }) {
+/** Every single-key shortcut the dashboard handles, and only those (design/README.md, Interaction). */
+function ShortcutHelp({ open, onClose, canScan }: { open: boolean; onClose: () => void; canScan: boolean }) {
+  // Two digits are a range ("1–6"), other keys a pair ("J / K").
   const rows: [string[], string][] = [
     [["J", "K"], "Next / previous job"],
     [["Enter"], "Open job"],
@@ -698,8 +708,12 @@ function ShortcutHelp({ open, onClose }: { open: boolean; onClose: () => void })
     [["X"], "Not interested"],
     [["C"], "Copy description"],
     [["F"], "Expand job to full window"],
+    ...(canScan ? [[["R"], "Scan now"] as [string[], string]] : []),
     [["/"], "Search"],
-    [["1", "4"], "Switch section"],
+    [["1", "6"], "Radar views, in order"],
+    [["1", "4"], "Switch section, outside the Radar"],
+    [["[", "]"], "Move a pipeline card back / forward"],
+    [["?"], "Show these shortcuts"],
     [["Esc"], "Close"],
   ];
   return (
@@ -720,7 +734,7 @@ function ShortcutHelp({ open, onClose }: { open: boolean; onClose: () => void })
               <span className="flex items-center gap-1">
                 {keys.map((k, i) => (
                   <span key={k} className="flex items-center gap-1">
-                    {i > 0 && <span className="type-meta text-muted">{k === "4" ? "–" : "/"}</span>}
+                    {i > 0 && <span className="type-meta text-muted">{/^\d$/.test(k) ? "–" : "/"}</span>}
                     <Kbd>{k}</Kbd>
                   </span>
                 ))}
