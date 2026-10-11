@@ -60,6 +60,16 @@ export function configToYaml(config: Config): string {
     "  # Jobs scoring at least this count as strong matches (and trigger alerts).",
     `  min_score: ${p.min_score}`,
     "",
+    "  # Dealbreakers. A job that breaks one stays on your Radar with the reason, at half its score and under min_score.",
+    "  # Lowest base pay you'd take; a posted range topping out more than 5% under it breaks it.",
+    p.salary_floor
+      ? `  salary_floor: { amount: ${p.salary_floor.amount}, currency: ${q(p.salary_floor.currency)}, period: ${p.salary_floor.period} }`
+      : '  # salary_floor: { amount: 85000, currency: "EUR", period: year }',
+    "  # Countries you can work in without a visa sponsor (\"eu\" for the EU/EEA; [\"none\"] if you need one everywhere).",
+    p.work_authorization?.length ? `  work_authorization: ${list(p.work_authorization)}` : '  # work_authorization: ["united kingdom"]',
+    "  # Work you won't do: matched in the title, or said again and again in the description.",
+    p.avoid?.length ? `  avoid: ${list(p.avoid)}` : '  # avoid: ["frontend", "credit risk"]',
+    "",
     "# One line per company. Add more with:  pnpm rawjobs detect <careers url>",
     // An empty block would read back as null, so write an explicit empty list.
     config.companies.length ? "companies:" : "companies: []",

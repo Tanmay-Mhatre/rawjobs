@@ -89,6 +89,11 @@ export const TITLE_SYNONYMS: string[][] = [
   ["people operations", "human resources operations"],
   ["talent acquisition partner", "talent partner"],
   ["solutions architect", "solution architect"],
+  // The same work under another name: a DevOps engineer runs the platform. Pairs, so platform, SRE
+  // and infrastructure each take DevOps without becoming each other.
+  ["platform engineer", "devops engineer"],
+  ["site reliability engineer", "devops engineer"],
+  ["infrastructure engineer", "devops engineer"],
 ];
 
 /**

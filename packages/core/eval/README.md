@@ -9,7 +9,7 @@ Everything here is invented: the candidates, the companies and the postings. No 
 
 | Path | What |
 |---|---|
-| `profiles/*.yaml` | Six candidates across role families. Each has a real RawJobs `profile` (what the scorer sees) and an `about` block: a short resume summary with level, work authorisation, salary floor and dealbreakers (what a labeller reads; the scorer can't see it yet). |
+| `profiles/*.yaml` | Six candidates across role families. Each has a real RawJobs `profile` (what the scorer sees) and an `about` block: a short resume summary with level, work authorisation, salary floor and dealbreakers (what a labeller reads). The salary floor, work authorisation and dealbreakers are also in the `profile` as `salary_floor`, `work_authorization` and `avoid`, written from `about` the way the person would fill them in Settings; the rest of `about` (level, years, domain) the scorer can't see. |
 | `jobs/*.json` | 49 postings, grouped by family. Realistic noise on purpose: company boilerplate, requirements vs nice-to-haves, sponsorship lines, EEO footers. Includes hard cases: the same role at several levels, synonyms (k8s, Golang, ML, payment), keyword-stuffed wrong roles, right roles with a dealbreaker, title-only postings, and adjacent titles that fit. |
 | `labels.yaml` | A 0..4 label, a one-line `why`, and `by` for every profile x posting pair (294). |
 | `lib.ts` | Loads and checks the set, scores every pair, computes the metrics. |
@@ -100,6 +100,9 @@ The report shows, per profile and as a mean:
 - The **10 worst disagreements**: score / 25 furthest from the label, with the label's `why`.
 
 When a scoring change makes the order better, run `--json` and commit the new `baseline.json` with it.
+
+Dealbreakers (0.4.0) moved NDCG@10 from 0.789 to 0.919 and the label 0-1 pairs scoring in the strong band from 15 to 2
+(both left are level and must-have gaps, which the scorer can't read yet).
 
 ## Adding pairs
 

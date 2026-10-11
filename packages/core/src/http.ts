@@ -1,4 +1,4 @@
-export const VERSION = "0.3.1";
+export const VERSION = "0.4.0";
 
 export function defaultUserAgent(): string {
   const repo = process.env.GITHUB_REPOSITORY;

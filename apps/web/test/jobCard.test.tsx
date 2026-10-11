@@ -67,6 +67,16 @@ describe("feed row (design/components/Feed)", () => {
     expect(screen.getAllByRole("button")).toHaveLength(3); // the title, Save, Not interested
   });
 
+  it("says which dealbreaker a job breaks, in the warning treatment", () => {
+    const lead = job({ score: 37, why: { title: 30, location: 20, keywords: [], keywordPoints: 14, industry: 10, dealbreakers: ["Pay below your floor: up to EUR 55k vs your 60k a year", "About agency, which you avoid"] } });
+    const { container } = render(<ul><JobCard group={{ key: lead.group, lead, jobs: [lead] }} min={65} isNew={false} selected={false} onSelect={vi.fn()} onStatus={vi.fn()} /></ul>);
+    const note = screen.getByText(/Pay below your floor/);
+    expect(note.className).toBe("text-warning-text");
+    expect(note.textContent).toBe("Pay below your floor: up to EUR 55k vs your 60k a year +1");
+    expect(note.getAttribute("title")).toContain("About agency, which you avoid");
+    expect(container.querySelector("li")!.className).not.toContain("opacity-60");
+  });
+
   it("the title is the button that opens the job", async () => {
     const { props } = renderRow();
     await userEvent.click(screen.getByRole("button", { name: "Head of Product, Exchange" }));

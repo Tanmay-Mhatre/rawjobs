@@ -262,6 +262,12 @@ export type Draft = {
   industries: string[];
   /** Companies you've worked at (from your resume, confirmed by you): seeds "companies like them". */
   pastEmployers: string[];
+  /** Dealbreakers (Settings): lowest base pay, as typed. Saved only with an amount and a 3-letter currency. */
+  salaryFloor?: { amount: number; currency: string; period: "year" | "month" };
+  /** Countries you can work in without a visa sponsor. Empty = not checked. */
+  workAuthorization: string[];
+  /** Work you won't do ("frontend", "credit risk"). */
+  avoid: string[];
   companies: CompanyRow[];
   minScore: number;
   alerts: Config["alerts"];
@@ -296,6 +302,8 @@ export function emptyDraft(): Draft {
     keywords: {},
     industries: [],
     pastEmployers: [],
+    workAuthorization: [],
+    avoid: [],
     companies: [],
     minScore: 70,
     alerts: { telegram: false, email: false, only_new: true },
@@ -355,6 +363,9 @@ export function draftFromConfig(input: unknown): Draft {
     keywords,
     industries: strings(p.industries),
     pastEmployers: strings(p.past_employers),
+    salaryFloor: salaryFloorFromConfig(p.salary_floor),
+    workAuthorization: strings(p.work_authorization),
+    avoid: strings(p.avoid),
     companies,
     minScore: typeof p.min_score === "number" ? p.min_score : d.minScore,
     alerts: {
@@ -371,6 +382,19 @@ export function draftFromConfig(input: unknown): Draft {
     furthestStep: STEPS.length,
     family: inferFamily(strings(t.include)),
   };
+}
+
+/** A saved salary floor, or undefined when it's missing or not a number. */
+function salaryFloorFromConfig(v: unknown): Draft["salaryFloor"] {
+  const s = obj(v);
+  if (typeof s.amount !== "number" || !(s.amount > 0)) return undefined;
+  return { amount: s.amount, currency: typeof s.currency === "string" ? s.currency : "", period: s.period === "month" ? "month" : "year" };
+}
+
+/** The salary floor as the config takes it: a positive amount and a 3-letter currency, else none. */
+export function salaryFloorToConfig(f: Draft["salaryFloor"]): Config["profile"]["salary_floor"] {
+  const currency = f?.currency.trim().toUpperCase() ?? "";
+  return f && f.amount > 0 && /^[A-Z]{3}$/.test(currency) ? { amount: f.amount, currency, period: f.period } : undefined;
 }
 
 /** Saved workplace list -> Work style: empty means both, unless the search is remote only (no places). */
@@ -423,6 +447,10 @@ export function draftToConfig(d: Draft): Config {
       past_employers: d.pastEmployers,
       keywords: d.keywords,
       min_score: d.minScore,
+      // Dealbreakers only when set, so a config without them reads exactly as before.
+      ...(salaryFloorToConfig(d.salaryFloor) ? { salary_floor: salaryFloorToConfig(d.salaryFloor) } : {}),
+      ...(d.workAuthorization?.length ? { work_authorization: d.workAuthorization } : {}),
+      ...(d.avoid?.length ? { avoid: d.avoid } : {}),
     },
     companies,
     companies_muted: d.muted,
@@ -475,10 +503,13 @@ export function setupProgress(d: Draft, hasResume = false): SetupProgress {
 
 /** Steps that still block saving, for the Review screen. */
 export function saveBlockers(d: Draft): { step: number; message: string }[] {
-  return [STEP.roles, STEP.locations].flatMap((step) => {
+  const out = [STEP.roles, STEP.locations].flatMap((step): { step: number; message: string }[] => {
     const message = stepBlocker(step, d);
     return message ? [{ step, message }] : [];
   });
+  // Only Settings sets a salary floor: an amount with no usable currency can't be saved.
+  if (d.salaryFloor && d.salaryFloor.amount > 0 && !salaryFloorToConfig(d.salaryFloor)) out.push({ step: STEP.review, message: "Add the salary floor's currency as 3 letters, such as EUR." });
+  return out;
 }
 
 /** The job family whose titles overlap most with these titles. */

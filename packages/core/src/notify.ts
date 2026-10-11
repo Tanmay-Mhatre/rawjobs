@@ -107,7 +107,7 @@ export function digest(
 
 /**
  * The first 10 jobs, best first, one link each. As on the Radar, ⭐ marks your companies; a strong fit
- * says so after its score.
+ * says so after its score, and a job that breaks a dealbreaker (never a strong fit) says which.
  */
 function jobLines(jobs: readonly Job[], minScore: number, now = Date.now(), yours?: ReadonlySet<string>): string {
   // The Radar's best-match order (fit plus freshness), so an alert lists jobs the way the Radar shows them.
@@ -117,7 +117,8 @@ function jobLines(jobs: readonly Job[], minScore: number, now = Date.now(), your
     .slice(0, MAX_LINES)
     .map((j) => {
       const star = yours?.has(companyKey(j)) ? "⭐ " : "";
-      const strong = j.score >= minScore ? " · strong fit" : "";
+      const broken = j.why.dealbreakers?.[0];
+      const strong = broken ? ` · ${esc(broken)}` : j.score >= minScore ? " · strong fit" : "";
       const where = j.location ? ` · ${esc(j.location.split(/[;|]/)[0]!.trim())}` : "";
       // The score sits after the company, labelled: before the title it read as part of it ("63 Staff Product Manager").
       return `${star}<a href="${esc(j.url)}">${esc(j.title)}</a>\n${esc(j.company)}${where} · score ${j.score}/100${strong}`;

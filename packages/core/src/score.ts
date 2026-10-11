@@ -1,6 +1,7 @@
 import { INDUSTRY_BY_ID } from "./catalog/industries";
 import { seniorityCue, seniorityGap, seniorityOf, type Seniority } from "./catalog/seniority";
 import { allPlaceNames, countriesIn, expandPlaces, LOCATION_SEGMENTS, placeOwner, placeOwnerName, spellOutPlaces, SUBDIVISIONS } from "./catalog/places";
+import { dealbreakers } from "./dealbreakers";
 import type { NormalizedJob, Profile, ScoreBreakdown } from "./schema";
 import { matchesAny, matchesTerm, matchesTitle, mayMatchTitle, termRegex, titleForms } from "./text";
 
@@ -26,7 +27,7 @@ export const POINTS = {
   industryTopicCap: 4,
 } as const;
 
-type Scorable = Pick<NormalizedJob, "title" | "location" | "workplace" | "description">;
+type Scorable = Pick<NormalizedJob, "title" | "location" | "workplace" | "description"> & Partial<Pick<NormalizedJob, "salary">>;
 
 /** What's known about the job's company, for the industry part. */
 export type CompanyFit = {
@@ -53,6 +54,10 @@ const NON_KEYWORD_MAX = POINTS.titleMatch + POINTS.seniority + POINTS.locationCi
  *              Your industries add their topics you didn't list at weight 2, at most 4 together (topicsOf).
  *   industry   10 the company is in one of your industries (or is yours), 5 not known, 0 another industry
  * With no topics at all, title + location + industry (max 60) is scaled to 0..100 (`why.scale`).
+ *
+ * Dealbreakers (dealbreakers.ts: pay under your floor, no sponsorship where you'd need it, residents of
+ * another country only, work you avoid) halve the score and keep it under your min_score, with the
+ * reasons in `why.dealbreakers`: the job still shows, but never as a strong match.
  *
  * The score is how well a job fits, never how old it is: recency is part of the Radar's order
  * (rankScore), worked out when you look, so it doesn't go stale between scans.
@@ -104,7 +109,10 @@ export function scoreJob(job: Scorable, profile: Profile, company: CompanyFit = 
   if (!titleOk) return { score: 0, why: { ...why, gate: "title" } };
   if (locationPts === 0) return { score: 0, why: { ...why, gate: "location", ...(fit.note ? { locationNote: fit.note } : {}) } };
   const raw = titlePts + locationPts + keywordPoints + industry;
-  return { score: Math.min(100, Math.round(raw * (why.scale ?? 1))), why };
+  const score = Math.min(100, Math.round(raw * (why.scale ?? 1)));
+  const broken = dealbreakers(job, profile);
+  if (!broken.length) return { score, why };
+  return { score: Math.max(0, Math.min(Math.round(score / 2), profile.min_score - 1)), why: { ...why, dealbreakers: broken } };
 }
 
 const levelsCache = new WeakMap<readonly string[], Seniority[]>();

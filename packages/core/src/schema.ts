@@ -64,6 +64,11 @@ export type ScoreBreakdown = {
   gate?: "title" | "location";
   /** Why the location didn't fit, when it's worth saying (e.g. "Remote, but only in India…"). */
   locationNote?: string;
+  /**
+   * Your dealbreakers the job breaks, in plain words ("Pay below your floor: up to AED 18k vs your 25k a month").
+   * When set, the score is halved and kept under min_score.
+   */
+  dealbreakers?: string[];
 };
 
 /** The one shape every connector produces. */
@@ -231,6 +236,23 @@ export const ProfileSchema = z.object({
   /** keyword -> weight 1..5, matched as whole words in title + description. */
   keywords: z.record(term, z.number().int().min(1).max(5)).default({}),
   min_score: z.number().int().min(0).max(100).default(70),
+  // Dealbreakers (dealbreakers.ts). Each is optional: left out, nothing is checked. A job that breaks one
+  // keeps showing, with the reason, but its score is halved and kept under min_score.
+  /** The lowest base pay you'd take. A posted range that tops out more than 5% under it is a dealbreaker. */
+  salary_floor: z
+    .object({
+      amount: z.number().positive(),
+      currency: z.string().trim().toUpperCase().length(3, "currency: a 3-letter code such as EUR, USD or AED"),
+      period: z.enum(["year", "month"]).default("year"),
+    })
+    .optional(),
+  /**
+   * Countries you can work in without a visa sponsor ("united kingdom"; "eu" for the EU/EEA). A job that
+   * won't sponsor, in a country not listed, is a dealbreaker. ["none"] if you need sponsorship everywhere.
+   */
+  work_authorization: terms.optional(),
+  /** Work you won't do ("frontend", "credit risk"): a job whose title, or the role it describes, is about one is a dealbreaker. */
+  avoid: terms.optional(),
 });
 export type Profile = z.infer<typeof ProfileSchema>;
 

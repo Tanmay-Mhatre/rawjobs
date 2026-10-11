@@ -38,6 +38,21 @@ companies:
 `);
     expect(parseConfig(configToYaml(cfg))).toEqual(cfg);
   });
+
+  it("writes dealbreakers when set, and commented examples when not", () => {
+    expect(configToYaml(example)).toContain("# salary_floor: {");
+    expect(parseConfig(configToYaml(example)).profile.avoid).toBeUndefined();
+    const cfg = parseConfig(`
+profile:
+  titles: { include: ["platform engineer"] }
+  locations: { include: ["berlin"] }
+  salary_floor: { amount: 85000, currency: eur }
+  work_authorization: [eu]
+  avoid: [frontend, "credit risk"]
+`);
+    expect(cfg.profile.salary_floor).toEqual({ amount: 85000, currency: "EUR", period: "year" });
+    expect(parseConfig(configToYaml(cfg))).toEqual(cfg);
+  });
 });
 
 describe("detectCompany for every hiring system", () => {

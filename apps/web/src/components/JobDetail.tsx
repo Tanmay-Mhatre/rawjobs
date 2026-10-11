@@ -502,6 +502,16 @@ function WhyItMatches({ job, profile, yours }: { job: Job; profile: Profile; you
         </Button>
       </div>
       {w.gate && <p className="type-small text-warning-text">Failed your {w.gate} filter, so the score is 0.</p>}
+      {!!w.dealbreakers?.length && (
+        <div className="type-small text-warning-text" data-dealbreakers>
+          <p>Breaks {w.dealbreakers.length === 1 ? "one of your dealbreakers" : `${w.dealbreakers.length} of your dealbreakers`}, so the score is at most half what its parts add up to, and under your threshold:</p>
+          <ul className="mt-1 list-disc space-y-0.5 pl-5">
+            {w.dealbreakers.map((d) => (
+              <li key={d}>{d}</li>
+            ))}
+          </ul>
+        </div>
+      )}
       {open && (
         <div id={`why-${job.id}`} className="grid gap-4">
       <ScoreBreakdown score={job.score} parts={scoreParts(w)} missing={missing} />

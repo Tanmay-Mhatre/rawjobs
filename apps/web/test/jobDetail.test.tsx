@@ -115,6 +115,16 @@ describe("Why it matched", () => {
     expect(why()).toContain("Title matches product manager");
   });
 
+  it("lists the dealbreakers a job breaks, folded or not", () => {
+    const { container } = renderDetail(scored({ score: 32, why: { title: 30, location: 20, keywords: ["payments"], keywordPoints: 14, industry: 10, dealbreakers: ["Only for people already living in the United States"] } }));
+    const note = container.querySelector("[data-dealbreakers]")!;
+    expect(note.className).toContain("text-warning-text");
+    expect(note.textContent).toContain("Breaks one of your dealbreakers");
+    expect(note.querySelector("li")!.textContent).toBe("Only for people already living in the United States");
+    cleanup();
+    expect(renderDetail(scored()).container.querySelector("[data-dealbreakers]")).toBeNull();
+  });
+
   it("says how close the level is", () => {
     const senior = { ...profile, seniority_boost: ["senior"] } as Profile;
     render(<JobDetail job={scored({ title: "Product Manager", why: { title: 25, location: 20, keywords: [], keywordPoints: 0, industry: 10 } })} profile={senior} onUpdate={() => {}} />);

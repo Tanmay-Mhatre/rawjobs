@@ -24,3 +24,7 @@ profile:
   industries: [fintech, payments, banking]
   keywords: { payments: 5, cards: 4, kyc: 3, onboarding: 3, open banking: 3, fintech: 3, api: 2, b2b: 2 }
   min_score: 70
+  # From `about`: floor, work authorisation, dealbreakers.
+  salary_floor: { amount: 95000, currency: GBP, period: year }
+  work_authorization: [united kingdom]
+  avoid: [product marketing, project manager, operations manager]
