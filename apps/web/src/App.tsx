@@ -28,7 +28,7 @@ import { buildSuggestions } from "./lib/suggest";
 import { load, save } from "./lib/storage";
 import { timeAgo } from "./lib/format";
 import { hasNewTag } from "./lib/filters";
-import { ignoreShortcut } from "./lib/keys";
+import { ignoreShortcut, useGoToKeys } from "./lib/keys";
 import { useTheme } from "./lib/theme";
 import { useUserState, type Status } from "./lib/userState";
 import wordmarkInk from "./design/logos/rawjobs-wordmark-ink.svg";
@@ -308,8 +308,11 @@ export function App() {
   }, [tab, viewLabel]);
 
   // Global keys: Esc closes, ? shows shortcuts, R scans now, 1-4 switch sections (the Radar uses 1-6 for
-  // its views instead). Dialogs close themselves on Escape too.
+  // its views instead), and "g" then r/p/c/s goes to a section from anywhere. Dialogs close themselves on
+  // Escape too.
   const canScanNow = canRunLocally && setupState === "configured" && !scanning;
+  const onPage = !openId && !showKeys && !inSetup;
+  useGoToKeys((section) => go({ tab: section }), () => onPage && !document.querySelector("dialog[open]"));
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (ignoreShortcut(e)) return;
@@ -699,7 +702,7 @@ function ErrorState({ message, onRetry }: { message: string; onRetry: () => void
 
 /** Every single-key shortcut the dashboard handles, and only those (design/README.md, Interaction). */
 function ShortcutHelp({ open, onClose, canScan }: { open: boolean; onClose: () => void; canScan: boolean }) {
-  // Two digits are a range ("1–6"), other keys a pair ("J / K").
+  // Two digits are a range ("1–6"), "G" starts a sequence ("G then R"), other keys a pair ("J / K").
   const rows: [string[], string][] = [
     [["J", "K"], "Next / previous job"],
     [["Enter"], "Open job"],
@@ -712,6 +715,10 @@ function ShortcutHelp({ open, onClose, canScan }: { open: boolean; onClose: () =
     [["/"], "Search"],
     [["1", "6"], "Radar views, in order"],
     [["1", "4"], "Switch section, outside the Radar"],
+    [["G", "R"], "Go to Radar"],
+    [["G", "P"], "Go to Pipeline"],
+    [["G", "C"], "Go to Companies"],
+    [["G", "S"], "Go to Settings"],
     [["[", "]"], "Move a pipeline card back / forward"],
     [["?"], "Show these shortcuts"],
     [["Esc"], "Close"],
@@ -734,7 +741,7 @@ function ShortcutHelp({ open, onClose, canScan }: { open: boolean; onClose: () =
               <span className="flex items-center gap-1">
                 {keys.map((k, i) => (
                   <span key={k} className="flex items-center gap-1">
-                    {i > 0 && <span className="type-meta text-muted">{/^\d$/.test(k) ? "–" : "/"}</span>}
+                    {i > 0 && <span className="type-meta text-muted">{/^\d$/.test(k) ? "–" : keys[0] === "G" ? "then" : "/"}</span>}
                     <Kbd>{k}</Kbd>
                   </span>
                 ))}

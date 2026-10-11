@@ -1,13 +1,13 @@
 // @vitest-environment happy-dom
 import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { Pipeline } from "../src/components/Pipeline";
 import { RadarPage } from "../src/components/radar/RadarPage";
 import type { DataMeta, Job, Profile } from "../src/lib/data";
 import { DEFAULT_FILTERS } from "../src/lib/filters";
-import { ignoreShortcut } from "../src/lib/keys";
+import { GO_TO_MS, ignoreShortcut, useGoToKeys, type GoToSection } from "../src/lib/keys";
 import type { UserState } from "../src/lib/userState";
 
 afterEach(cleanup);
@@ -119,43 +119,46 @@ describe("Pipeline [ / ] moves (design/components/Pipeline)", () => {
   });
 });
 
+const profile = {
+  name: "Me",
+  titles: { include: ["product manager"], exclude: [] },
+  seniority_boost: [],
+  locations: { include: ["Dubai"], remote_ok: [], remote_exclude: [], workplace: [] },
+  industries: [],
+  past_employers: [],
+  keywords: {},
+  min_score: 65,
+} as unknown as Profile;
+const meta = { version: 1, generatedAt: new Date().toISOString(), profile, companies: [], runs: [] } as DataMeta;
+const noop = () => {};
+const renderRadar = (onStatus: (job: Job, status: string) => void = noop, extra: ReactNode = null) =>
+  render(
+    <>
+    {extra}
+    <RadarPage
+      jobs={[job({ id: "a" }), job({ id: "b", company: "Beta", score: 40 })]}
+      meta={meta}
+      user={{}}
+      prefs={{ views: [], hiddenCompanies: [], hideRules: [] }}
+      onOpenOverlay={noop}
+      overlayOpen={false}
+      onStatus={onStatus}
+      onUpdate={noop}
+      onApply={noop}
+      onSaveView={() => ({ id: "v", name: "", filters: DEFAULT_FILTERS, sort: "best" })}
+      onRenameView={noop}
+      onDeleteView={noop}
+      onRestoreView={noop}
+      onHideCompany={noop}
+      onSetRule={noop}
+      isYours={() => false}
+      companyCount={0}
+      onCompanies={noop}
+      onEditProfile={noop}
+    />
+    </>,
+  );
 describe("Radar 1-6 pick the views", () => {
-  const profile = {
-    name: "Me",
-    titles: { include: ["product manager"], exclude: [] },
-    seniority_boost: [],
-    locations: { include: ["Dubai"], remote_ok: [], remote_exclude: [], workplace: [] },
-    industries: [],
-    past_employers: [],
-    keywords: {},
-    min_score: 65,
-  } as unknown as Profile;
-  const meta = { version: 1, generatedAt: new Date().toISOString(), profile, companies: [], runs: [] } as DataMeta;
-  const noop = () => {};
-  const renderRadar = () =>
-    render(
-      <RadarPage
-        jobs={[job({ id: "a" }), job({ id: "b", company: "Beta", score: 40 })]}
-        meta={meta}
-        user={{}}
-        prefs={{ views: [], hiddenCompanies: [], hideRules: [] }}
-        onOpenOverlay={noop}
-        overlayOpen={false}
-        onStatus={noop}
-        onUpdate={noop}
-        onApply={noop}
-        onSaveView={() => ({ id: "v", name: "", filters: DEFAULT_FILTERS, sort: "best" })}
-        onRenameView={noop}
-        onDeleteView={noop}
-        onRestoreView={noop}
-        onHideCompany={noop}
-        onSetRule={noop}
-        isYours={() => false}
-        companyCount={0}
-        onCompanies={noop}
-        onEditProfile={noop}
-      />,
-    );
   const selectedTab = () => screen.getAllByRole("tab").find((t) => t.getAttribute("aria-selected") === "true")?.textContent ?? "";
 
   it("each number picks the view in its tab position (first scan: no New view)", () => {
@@ -172,5 +175,64 @@ describe("Radar 1-6 pick the views", () => {
     const search = screen.getByRole("searchbox", { name: "Search jobs" });
     act(() => void fireEvent.keyDown(search, { key: "3" }));
     expect(selectedTab()).toMatch(/^All/);
+  });
+});
+
+describe("g then a letter goes to a section", () => {
+  const GoTo = ({ onGo, canGo = () => true }: { onGo: (s: GoToSection) => void; canGo?: () => boolean }) => {
+    useGoToKeys(onGo, canGo);
+    return null;
+  };
+  const press = (key: string, target: EventTarget = window) => act(() => void fireEvent.keyDown(target, { key }));
+  afterEach(() => vi.useRealTimers());
+
+  it("g r, g p, g c and g s go to Radar, Pipeline, Companies and Settings", () => {
+    const onGo = vi.fn();
+    render(<GoTo onGo={onGo} />);
+    for (const k of ["r", "p", "c", "s"]) (press("g"), press(k));
+    expect(onGo.mock.calls.map((c) => c[0])).toEqual(["radar", "pipeline", "companies", "settings"]);
+  });
+
+  it("a letter without g, or after the window closes, does nothing", () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    const onGo = vi.fn();
+    render(<GoTo onGo={onGo} />);
+    press("s");
+    press("g");
+    vi.setSystemTime(Date.now() + GO_TO_MS + 1);
+    press("s");
+    press("g");
+    press("j");
+    press("s");
+    expect(onGo).not.toHaveBeenCalled();
+  });
+
+  it("not while typing, with Ctrl held, or when canGo says no", () => {
+    const onGo = vi.fn();
+    let allowed = true;
+    render(<GoTo onGo={onGo} canGo={() => allowed} />);
+    const input = document.createElement("input");
+    document.body.append(input);
+    press("g", input);
+    press("s", input);
+    press("g");
+    act(() => void fireEvent.keyDown(window, { key: "s", ctrlKey: true }));
+    allowed = false;
+    press("g");
+    press("s");
+    input.remove();
+    expect(onGo).not.toHaveBeenCalled();
+  });
+
+  it("on the Radar, g s goes to Settings without also saving the selected job", () => {
+    const onGo = vi.fn();
+    const onStatus = vi.fn();
+    renderRadar(onStatus, <GoTo onGo={onGo} />);
+    press("g");
+    press("s");
+    expect(onGo).toHaveBeenCalledWith("settings");
+    expect(onStatus).not.toHaveBeenCalled();
+    press("s");
+    expect(onStatus).toHaveBeenCalledWith(expect.objectContaining({ id: "a" }), "saved");
   });
 });
