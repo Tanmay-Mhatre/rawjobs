@@ -1,0 +1,86 @@
+name: Install test
+
+# Install a release the way people do (the one-line installer), on Windows, macOS and Linux, from a
+# local copy of the release files: check it runs, repair it by installing again, then uninstall it.
+on:
+  workflow_call:
+    inputs:
+      artifact:
+        description: Name of the uploaded artifact holding the release files (dist/release)
+        type: string
+        required: true
+      public-key:
+        description: Public key the release was signed with, when it isn't the real release key
+        type: string
+        default: ""
+
+permissions:
+  contents: read
+
+jobs:
+  install:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, macos-15, windows-2025]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 15
+    env:
+      RAWJOBS_RELEASE_URL: http://127.0.0.1:8765
+      RAWJOBS_PUBLIC_KEY: ${{ inputs.public-key }}
+      RAWJOBS_NO_OPEN: "1"
+    steps:
+      - uses: actions/download-artifact@v8
+        with:
+          name: ${{ inputs.artifact }}
+          path: release
+      - name: Serve the release files
+        shell: bash
+        run: |
+          (cd release && python3 -m http.server 8765 --bind 127.0.0.1 >/dev/null 2>&1 &)
+          for i in $(seq 1 20); do curl -fs http://127.0.0.1:8765/latest.json >/dev/null && break; sleep 1; done
+
+      - name: Install, repair, uninstall (macOS, Linux)
+        if: runner.os != 'Windows'
+        shell: bash
+        run: |
+          set -eu
+          export RAWJOBS_HOME="$RUNNER_TEMP/Raw Jobs"
+          curl -fsSL http://127.0.0.1:8765/install.sh | sh
+          curl -fs http://127.0.0.1:4317/api/health | grep -F '"ok":true'
+          "$RAWJOBS_HOME/bin/rawjobs" setup status | grep -F "\"configPath\":\"$RAWJOBS_HOME/rawjobs.config.local.yaml\""
+          "$RAWJOBS_HOME/bin/rawjobs" open --no-browser
+          if [ "$RUNNER_OS" = macOS ]; then
+            test -d "$HOME/Applications/RawJobs.app"
+            launchctl print "gui/$(id -u)/com.rawjobs.server" >/dev/null && echo "Starts at login: launchd agent loaded" || echo "::warning::launchd agent not loaded on this runner"
+          fi
+          mkdir -p "$RAWJOBS_HOME/profile" && echo "my resume" > "$RAWJOBS_HOME/profile/resume.md"
+          # Installing again repairs it and keeps your data.
+          curl -fsSL http://127.0.0.1:8765/install.sh | sh
+          grep -qx "my resume" "$RAWJOBS_HOME/profile/resume.md"
+          "$RAWJOBS_HOME/bin/rawjobs" uninstall --keep-data
+          sleep 2
+          test ! -e "$RAWJOBS_HOME/app" && test ! -e "$RAWJOBS_HOME/runtime" && test ! -e "$RAWJOBS_HOME/bin"
+          grep -qx "my resume" "$RAWJOBS_HOME/profile/resume.md"
+          ! curl -fs --max-time 2 http://127.0.0.1:4317/api/health
+
+      - name: Install, repair, uninstall (Windows PowerShell)
+        if: runner.os == 'Windows'
+        shell: powershell
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $env:RAWJOBS_HOME = Join-Path $env:RUNNER_TEMP 'Raw Jobs'
+          irm http://127.0.0.1:8765/install.ps1 | iex
+          if (-not (Invoke-RestMethod http://127.0.0.1:4317/api/health).ok) { throw 'not running' }
+          if (-not (Get-ScheduledTask -TaskName 'RawJobs Server')) { throw 'no task' }
+          if (-not (Test-Path (Join-Path ([Environment]::GetFolderPath('Programs')) 'RawJobs.lnk'))) { throw 'no shortcut' }
+          $launcher = Join-Path $env:RAWJOBS_HOME 'bin\rawjobs.cmd'
+          & $launcher open --no-browser
+          New-Item -ItemType Directory -Force (Join-Path $env:RAWJOBS_HOME 'profile') | Out-Null
+          Set-Content (Join-Path $env:RAWJOBS_HOME 'profile\resume.md') 'my resume'
+          irm http://127.0.0.1:8765/install.ps1 | iex
+          & $launcher uninstall --keep-data
+          Start-Sleep -Seconds 6
+          foreach ($p in 'app', 'runtime', 'bin') { if (Test-Path (Join-Path $env:RAWJOBS_HOME $p)) { throw "$p is still there" } }
+          if ((Get-Content (Join-Path $env:RAWJOBS_HOME 'profile\resume.md')) -ne 'my resume') { throw 'data was lost' }
+          if (Get-ScheduledTask -TaskName 'RawJobs Server' -ErrorAction SilentlyContinue) { throw 'task still there' }

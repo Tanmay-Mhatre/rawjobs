@@ -24,6 +24,10 @@ const out = join(root, "dist/bundle", `rawjobs-${version}`);
 
 if (!values["skip-web"]) run("pnpm", ["build"]);
 if (!existsSync(join(root, "apps/web/dist/index.html"))) fail("apps/web/dist is missing: run without --skip-web.");
+// The bundle is shipped to other people: never with anyone's own jobs, profile or scan data in it.
+for (const personal of ["jobs.json", "meta.json", "history.json", "catalog", "runs", "profile"]) {
+  if (existsSync(join(root, "apps/web/dist", personal))) fail(`apps/web/dist/${personal} is run data, not part of the dashboard. Delete apps/web/dist and build again.`);
+}
 
 rmSync(out, { recursive: true, force: true });
 mkdirSync(out, { recursive: true });

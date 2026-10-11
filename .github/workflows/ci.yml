@@ -37,3 +37,44 @@ jobs:
           curl -fs http://127.0.0.1:4399/ | grep -qi "<!doctype html>"
           curl -fs http://127.0.0.1:4399/api/setup | grep -F '"isPersonal":false'
           kill $!
+
+  # Release files like a real release's, signed with a key made for this run (the real one stays
+  # with releases), for the install test below.
+  release-files:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    outputs:
+      public-key: ${{ steps.key.outputs.public-key }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: A throwaway signing key
+        id: key
+        run: |
+          node -e '
+            const { generateKeyPairSync } = require("node:crypto");
+            const fs = require("node:fs");
+            const { publicKey, privateKey } = generateKeyPairSync("ed25519");
+            fs.writeFileSync(process.env.RUNNER_TEMP + "/key.pem", privateKey.export({ type: "pkcs8", format: "pem" }));
+            fs.appendFileSync(process.env.GITHUB_OUTPUT, "public-key=" + publicKey.export({ type: "spki", format: "der" }).toString("base64") + "\n");
+          '
+      - run: pnpm bundle
+      - run: pnpm release:files --key "$RUNNER_TEMP/key.pem" --public-key "${{ steps.key.outputs.public-key }}"
+      - uses: actions/upload-artifact@v7
+        with:
+          name: release-test
+          path: dist/release
+          if-no-files-found: error
+          retention-days: 3
+
+  install:
+    needs: release-files
+    uses: ./.github/workflows/install-test.yml
+    with:
+      artifact: release-test
+      public-key: ${{ needs.release-files.outputs.public-key }}
