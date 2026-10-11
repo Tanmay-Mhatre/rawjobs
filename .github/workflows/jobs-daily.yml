@@ -108,13 +108,13 @@ jobs:
           fi
 
       - name: Check the directory isn't stale
-        # The weekly rebuild publishes a new dated release; contributions only replace that release's
-        # files, which doesn't change its date. More than 8 days old means a rebuild went missing.
+        # The weekly rebuild publishes a dated release (directory-YYYY-MM-DD); contributions publish
+        # "-shared" ones in between, which don't count. More than 8 days old means a rebuild went missing.
         if: always()
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          published=$(gh release view -R "$DATA_REPO" --json publishedAt -q .publishedAt)
+          published=$(gh release list -R "$DATA_REPO" --limit 100 --json tagName,publishedAt -q '[.[] | select((.tagName | startswith("directory-")) and (.tagName | endswith("-shared") | not))] | max_by(.publishedAt) | .publishedAt')
           age_days=$(( ( $(date -u +%s) - $(date -u -d "$published" +%s) ) / 86400 ))
           echo "Latest directory release: $published ($age_days days old)"
           [ "$age_days" -gt 8 ] || exit 0
