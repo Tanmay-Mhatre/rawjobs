@@ -3,6 +3,7 @@ import { releaseItems } from "@rawjobs/core/release-notes";
 import { ArrowDownToLine, ChevronDown, LoaderCircle, RefreshCw, ShieldCheck } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { formatDate } from "../lib/format";
+import { settingsHash } from "./settings/registry";
 import { announceUpdateStatus, loadChangelog, markUpdateSeen, updateNow, useUpdateStatus, type Changelog, type UpdateStatus } from "../lib/update";
 import { Dialog } from "./Dialog";
 import { Button, Card, cx, Segmented } from "./ui";
@@ -134,7 +135,7 @@ export function WhatsNewDialog({ from, to, notes, onSeen }: { from: string; to: 
             type="button"
             onClick={() => {
               close();
-              location.hash = "#settings?section=release-notes";
+              location.hash = settingsHash("whats-new");
             }}
             className="self-center type-small text-muted underline underline-offset-2 hover:text-ink"
           >

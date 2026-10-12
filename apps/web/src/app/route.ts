@@ -14,11 +14,12 @@ export type Tab = (typeof TABS)[number]["id"];
 export type Route = { tab: Tab } | { setup: number };
 
 export function parseHash(): Route {
-  // "#radar?posted=7…" carries the Radar's filters after the tab name.
+  // "#radar?posted=7…" carries the Radar's filters after the tab name; "#settings/scans" a Settings page.
   const h = location.hash.slice(1).split("?")[0]!;
   const m = h.match(/^setup(?:\/(\d))?$/);
   if (m) return { setup: Math.min(STEP_COUNT, Number(m[1] ?? 0)) };
-  return { tab: (TABS.some((t) => t.id === h) ? h : "radar") as Tab };
+  const tab = h.split("/")[0];
+  return { tab: (TABS.some((t) => t.id === tab) ? tab : "radar") as Tab };
 }
 
 export function useHashRoute() {

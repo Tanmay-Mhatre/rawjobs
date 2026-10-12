@@ -6,10 +6,11 @@ import { Dialog } from "./Dialog";
 import { TelegramAlerts } from "./TelegramAlerts";
 import { IconButton as RjIconButton } from "./primitives";
 import { Button, Card, cx, IconButton } from "./ui";
+import { settingsHash } from "./settings/registry";
 
 /** Settings › Telegram alerts. */
 const toTelegramSettings = () => {
-  location.hash = "settings?section=alerts";
+  location.hash = settingsHash("alerts");
 };
 
 export const telegramReady = (tg: TelegramStatus | null | undefined) => !!tg?.token && !!tg.connected;
