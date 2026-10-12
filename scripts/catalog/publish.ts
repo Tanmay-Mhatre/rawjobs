@@ -13,8 +13,7 @@
  *   pnpm exec tsx scripts/catalog/publish.ts [--data <dir>]
  */
 import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
-import { dirname, join, resolve } from "node:path";
-import { fileURLToPath } from "node:url";
+import { join, resolve } from "node:path";
 import {
   careersUrl,
   companyKey,
@@ -30,10 +29,10 @@ import {
   type IndexRow,
 } from "@rawjobs/core";
 import type { Resolved, Seed } from "./resolve";
+import { catalogDir, dataDir } from "./lib/paths";
 
-const here = dirname(fileURLToPath(import.meta.url));
 const dataArg = process.argv.indexOf("--data");
-const DATA = resolve(dataArg > 0 ? process.argv[dataArg + 1]! : join(here, "..", "..", "data"));
+const DATA = resolve(dataArg > 0 ? process.argv[dataArg + 1]! : dataDir);
 const OUT = join(DATA, "catalog");
 
 type Dir = {
@@ -56,14 +55,14 @@ type Addition = Pick<Dir, "key" | "name" | "ats" | "slug" | "region" | "shard" |
 const readJson = <T>(path: string, fallback: T): T => (existsSync(path) ? (JSON.parse(readFileSync(path, "utf8")) as T) : fallback);
 
 // Sandbox/training/test boards stay out (build.ts drops them too; this covers older builds).
-const dir = readJson<{ companies: Dir[] }>(join(here, "out", "directory.json"), { companies: [] }).companies.filter((d) => !isPlaceholderBoard(d.name));
+const dir = readJson<{ companies: Dir[] }>(join(catalogDir, "out", "directory.json"), { companies: [] }).companies.filter((d) => !isPlaceholderBoard(d.name));
 const byKey = new Map(dir.map((d) => [d.key, d]));
 
 // ---- job rows ----
 // Latest successful index line per company wins.
 const index = new Map<string, { fetched_at: string; open_jobs: number; rows: IndexRow[] }>();
-for (const f of readdirSync(join(here, "out")).filter((n) => /^index-.+\.jsonl$/.test(n))) {
-  for (const line of readFileSync(join(here, "out", f), "utf8").split("\n")) {
+for (const f of readdirSync(join(catalogDir, "out")).filter((n) => /^index-.+\.jsonl$/.test(n))) {
+  for (const line of readFileSync(join(catalogDir, "out", f), "utf8").split("\n")) {
     if (!line) continue;
     const r = JSON.parse(line) as { key: string; fetched_at: string; open_jobs?: number; rows?: IndexRow[]; error?: string };
     if (r.error || !r.rows) continue;
@@ -83,16 +82,16 @@ const tag = (key: string, ids: readonly string[], source: string) => {
   }
 };
 // 1. Source lists' own labels.
-const cryptoJobs = readJson<{ companies: { jobs_url: string; category?: string }[] }>(join(here, "seeds", "crypto-jobs-fyi.companies.json"), { companies: [] });
+const cryptoJobs = readJson<{ companies: { jobs_url: string; category?: string }[] }>(join(catalogDir, "seeds", "crypto-jobs-fyi.companies.json"), { companies: [] });
 for (const c of cryptoJobs.companies) {
   const found = detectCompany(c.jobs_url);
   if (found) tag(companyKey(found), industriesForLabel(c.category), "crypto-jobs list");
 }
-const curated = readJson<{ companies: { key: string; segment?: string }[] }>(join(here, "seeds", "curated-boards.json"), { companies: [] });
+const curated = readJson<{ companies: { key: string; segment?: string }[] }>(join(catalogDir, "seeds", "curated-boards.json"), { companies: [] });
 for (const c of curated.companies) tag(c.key, industriesForLabel(c.segment), "curated list");
 // 2. The seed list, through the boards found for each seed.
-const seeds = readJson<{ companies: Seed[] }>(join(here, "seeds", "industries.json"), { companies: [] }).companies;
-const resolved = readJson<{ companies: Resolved[] }>(join(here, "out", "resolved.json"), { companies: [] }).companies;
+const seeds = readJson<{ companies: Seed[] }>(join(catalogDir, "seeds", "industries.json"), { companies: [] }).companies;
+const resolved = readJson<{ companies: Resolved[] }>(join(catalogDir, "out", "resolved.json"), { companies: [] }).companies;
 const seedBoards = new Map<string, Seed>();
 for (const s of seeds) {
   const found = s.careers_url ? detectCompany(s.careers_url) : null;
@@ -221,7 +220,7 @@ mkdirSync(OUT, { recursive: true });
 const generated_at = new Date().toISOString();
 writeFileSync(join(OUT, "directory.json"), JSON.stringify({ generated_at, count: slim.length, industries, companies: slim }));
 writeFileSync(join(OUT, "index.json"), JSON.stringify({ generated_at, count: indexed.length, companies: indexed }));
-writeFileSync(join(here, "out", "tags.json"), JSON.stringify(Object.fromEntries([...tags].map(([k, m]) => [k, Object.fromEntries([...m].map(([id, src]) => [id, [...src]]))])), null, 1));
+writeFileSync(join(catalogDir, "out", "tags.json"), JSON.stringify(Object.fromEntries([...tags].map(([k, m]) => [k, Object.fromEntries([...m].map(([id, src]) => [id, [...src]]))])), null, 1));
 
 const perIndustry = INDUSTRIES.map((i) => {
   const n = slim.filter((c) => c.tags?.includes(i.id)).length;

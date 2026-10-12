@@ -1,0 +1,9 @@
+{ "boards": [
+  { "ats": "lever", "slug": "acme" },
+  { "ats": "lever", "slug": "acme" },
+  { "ats": "greenhouse", "slug": "betapay" },
+  { "ats": "ashby", "slug": "gammapay" },
+  { "ats": "lever", "slug": "deltaco" },
+  { "ats": "greenhouse", "slug": "takendown" },
+  { "ats": "lever", "slug": "acmesandbox" }
+] }
