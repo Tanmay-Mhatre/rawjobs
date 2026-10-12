@@ -1,5 +1,5 @@
-import { companyLabel, displayName } from "@rawjobs/core/display-name";
-import { ArrowRight, Check, CircleAlert, EyeOff, LoaderCircle, Radar, RefreshCw, X } from "lucide-react";
+import { companyLabel } from "@rawjobs/core/display-name";
+import { ArrowRight, Check, CircleAlert, LoaderCircle, Radar, RefreshCw, X } from "lucide-react";
 import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
 import { addCompanies, countCompanies, jobCompanyKey, keyOf, wantsAttention, type CompanyRef } from "../lib/companies";
 import { companyIndex, nameRank, type CompanyIndex } from "../lib/companySearch";
@@ -11,7 +11,7 @@ import { useScanPrefs } from "../lib/scan";
 import { draftToConfig, saveConfig, scanPlan, type CompanyRow, type Draft, type ScanPlan } from "../lib/setup";
 import { load, save } from "../lib/storage";
 import { AddByLink } from "./AddByLink";
-import { MyCompanies, RecentRuns } from "./Companies";
+import { MyCompanies, type HiddenCompany } from "./Companies";
 import { CompanyFinder, searchDirectory, useDirectory, type DirCompany } from "./CompanyFinder";
 import { ForYou } from "./companies/ForYou";
 import { QuickAdd } from "./companies/QuickAdd";
@@ -276,18 +276,20 @@ export function CompaniesTab({ configured, meta, jobs, draft, loaded, saved, upd
     toast({
       message: one ? `Removed ${one} from My companies.` : `Removed ${removed.length} companies from My companies.`,
       actionLabel: "Undo",
-      onAction: () => {
-        const have = new Set(latest.current.companies.map(keyOf));
-        update({ companies: [...latest.current.companies, ...removed.filter((r) => !have.has(keyOf(r)))] });
-      },
+      onAction: () => restore(removed),
     });
+  };
+  /** Put removed entries back (Undo), skipping any added again meanwhile. */
+  const restore = (removed: readonly CompanyRow[]) => {
+    const have = new Set(latest.current.companies.map(keyOf));
+    update({ companies: [...latest.current.companies, ...removed.filter((r) => !have.has(keyOf(r)))] });
   };
 
   // Hidden companies: muted in your config (by key) and hidden on the Radar (by name), shown once each.
   const names = new Map((directory ?? []).map((c) => [c.key, c.name]));
   const mutedRows = draft.muted.map((key) => ({ key, name: names.get(key) }));
   const mutedNames = new Set(mutedRows.map((m) => m.name).filter(Boolean));
-  const hidden = [...mutedRows, ...hiddenNames.filter((n) => !mutedNames.has(n)).map((name) => ({ key: undefined, name }))];
+  const hidden: HiddenCompany[] = [...mutedRows, ...hiddenNames.filter((n) => !mutedNames.has(n)).map((name) => ({ key: undefined, name }))];
 
   const openLink = (name?: string) => {
     setLinkName(name);
@@ -355,12 +357,19 @@ export function CompaniesTab({ configured, meta, jobs, draft, loaded, saved, upd
             meta={meta}
             jobNames={jobNames}
             onRemove={(k) => removeWithUndo([k])}
-            onRemoveMany={removeWithUndo}
+            onRemoveMany={removeMany}
+            onRestore={restore}
             onScan={onScan}
             scanning={scanning}
+            onPasteLink={() => openLink()}
+            hidden={hidden}
+            onShowAgain={(h) => {
+              if (h.key) update({ muted: draft.muted.filter((k) => k !== h.key) });
+              if (h.name) onUnhideName(h.name);
+            }}
             attention={attention}
             empty={coverage ?? "You haven't added any companies yet."}
-            q={q}
+            query={searchMine ? q : ""}
             noMatch={
               <p className="flex flex-wrap items-center gap-x-3 gap-y-1">
                 <b className="font-semibold">None of your companies match “{q.trim()}”.</b>
@@ -382,35 +391,6 @@ export function CompaniesTab({ configured, meta, jobs, draft, loaded, saved, upd
               <Button onClick={() => setTab("browse")}>Browse all companies</Button>
             </div>
           )}
-
-          {hidden.length > 0 && (
-            <Card className="p-5 sm:p-6">
-              <h2 className="flex items-center gap-2 type-body font-semibold">
-                <EyeOff className="size-4 text-muted" /> Hidden companies <span className="tabular font-normal text-muted">({hidden.length})</span>
-              </h2>
-              <p className="mt-0.5 type-small text-muted">Their jobs don't show on your Radar, and scans skip them.</p>
-              <ul className="mt-3 flex flex-wrap gap-1.5">
-                {hidden.map((h) => (
-                  <li key={h.key ?? h.name} className="inline-flex h-8 items-center gap-2 rounded-md border border-line pl-2.5 pr-1.5 type-small">
-                    <span className="font-medium">{h.name ? displayName(h.name) : h.key}</span>
-                    <button
-                      type="button"
-                      className="min-h-6 type-label text-ink underline underline-offset-2 hover:text-muted"
-                      aria-label={`Show ${h.name ? displayName(h.name) : h.key} again`}
-                      onClick={() => {
-                        if (h.key) update({ muted: draft.muted.filter((k) => k !== h.key) });
-                        if (h.name) onUnhideName(h.name);
-                      }}
-                    >
-                      Show again
-                    </button>
-                  </li>
-                ))}
-              </ul>
-            </Card>
-          )}
-
-          {meta && <RecentRuns meta={meta} />}
         </TabPanel>
       )}
 

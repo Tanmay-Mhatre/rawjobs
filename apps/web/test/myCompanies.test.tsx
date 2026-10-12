@@ -1,31 +1,106 @@
 // @vitest-environment happy-dom
-import { cleanup, render, screen } from "@testing-library/react";
-import { afterEach, describe, expect, it } from "vitest";
+import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { MyCompanies } from "../src/components/Companies";
+import type { CompanyHealth, DataMeta } from "../src/lib/data";
+import { barsOf, barsSummary, filterCounts, pageOf, problemOf, quietOf, type Seen } from "../src/lib/myCompanies";
 import type { CompanyRow } from "../src/lib/setup";
 
 afterEach(cleanup);
 
-const row = (name: string, slug: string): CompanyRow => ({ id: slug, input: `greenhouse: ${slug}`, state: "saved", name, ats: "greenhouse", slug });
+const DAY = 86_400_000;
+const row = (name: string, slug: string, patch: Partial<CompanyRow> = {}): CompanyRow => ({ id: slug, input: `greenhouse: ${slug}`, state: "saved", name, ats: "greenhouse", slug, ...patch });
 const rows = [row("Acme", "acme"), row("Globex", "globex")];
-const renderList = (attention?: number) => render(<MyCompanies rows={rows} savedKeys={new Set()} onRemove={() => {}} onRemoveMany={() => {}} attention={attention} />);
-const checked = () => screen.getByRole("radiogroup", { name: "Sort My companies" }).querySelector("[aria-checked=true]")?.textContent;
+const keys = (list: CompanyRow[]) => new Set(list.map((r) => `greenhouse:${r.slug}`));
+const renderList = (attention?: number) => render(<MyCompanies rows={rows} savedKeys={keys(rows)} onRemove={() => {}} onRemoveMany={() => {}} attention={attention} />);
+
+const health = (slug: string, patch: Partial<CompanyHealth> = {}): CompanyHealth => ({ company: slug, ats: "greenhouse", slug, ok: true, jobsFound: 10, matches: 0, durationMs: 100, ...patch });
+/** Scans newest first, one a day: `each(slug, i)` is a company's health in scan i (undefined: not in it). */
+function meta(n: number, slugs: string[], each: (slug: string, i: number) => Partial<CompanyHealth> | undefined = () => ({})): DataMeta {
+  const runs = Array.from({ length: n }, (_, i) => {
+    const at = new Date(Date.now() - (i + 1) * DAY).toISOString();
+    const hs = slugs.flatMap((s) => {
+      const p = each(s, i);
+      return p ? [health(s, p)] : [];
+    });
+    return { startedAt: at, finishedAt: at, partial: false, jobsFound: 0, matches: 0, newMatches: 0, closed: 0, health: hs };
+  });
+  return { version: 1, generatedAt: new Date().toISOString(), runs } as unknown as DataMeta;
+}
+const seen = (...hs: Partial<CompanyHealth>[]): Seen[] => hs.map((p, i) => ({ h: health("x", p), at: new Date(Date.UTC(2026, 9, 10 - i)).toISOString() }));
+
+describe("status mapping", () => {
+  it("says nothing for a company whose last scan worked", () => {
+    expect(problemOf(seen({}, { ok: false, error: "HTTP (500)" }), { anyScans: true })).toBeNull();
+  });
+
+  it("calls a 404 'not found', since the first failing scan in a row", () => {
+    expect(problemOf(seen({ ok: false, error: "Not found (404)" }, { ok: false, error: "Not found (404)" }, {}), { anyScans: true })).toEqual({
+      kind: "notFound",
+      since: new Date(Date.UTC(2026, 9, 9)).toISOString(),
+    });
+  });
+
+  it("calls other failures 'not answering', counting the scans in a row", () => {
+    expect(problemOf(seen({ ok: false, error: "timeout" }, {}), { anyScans: true })).toMatchObject({ kind: "notAnswering", scans: 1 });
+  });
+
+  it("knows hiring systems it can't read yet, and companies no scan has included", () => {
+    expect(problemOf(seen({ ok: false, unsupported: true }), { anyScans: true })).toEqual({ kind: "cantRead" });
+    expect(problemOf([], { unreadable: true, anyScans: true })).toEqual({ kind: "cantRead" });
+    expect(problemOf([], { anyScans: true })).toEqual({ kind: "notChecked", afterLastScan: true });
+    expect(problemOf([], { anyScans: false })).toEqual({ kind: "notChecked", afterLastScan: false });
+  });
+
+  it("counts quiet scans until one has something for you or fails", () => {
+    expect(quietOf(seen({}, {}, { matches: 2 }, {})).scans).toBe(2);
+    expect(quietOf(seen({ ok: false }, {})).scans).toBe(0);
+  });
+});
+
+describe("filter counts and pages", () => {
+  it("counts each filter", () => {
+    expect(
+      filterCounts([
+        { problem: null, quiet: false },
+        { problem: null, quiet: true },
+        { problem: { kind: "notFound", since: "" }, quiet: false },
+        { problem: { kind: "notAnswering", since: "", scans: 1 }, quiet: false },
+        { problem: { kind: "notChecked", afterLastScan: true }, quiet: false },
+        { problem: { kind: "cantRead" }, quiet: false },
+      ]),
+    ).toEqual({ all: 6, attention: 2, quiet: 1, new: 1 });
+  });
+
+  it("pages 25 at a time and clamps the page", () => {
+    const list = Array.from({ length: 60 }, (_, i) => i);
+    expect(pageOf(list, 1)).toMatchObject({ page: 1, pages: 3 });
+    expect(pageOf(list, 3).items).toEqual([50, 51, 52, 53, 54, 55, 56, 57, 58, 59]);
+    expect(pageOf(list, 9).page).toBe(3);
+    expect(pageOf([], 1)).toEqual({ items: [], page: 1, pages: 1 });
+  });
+
+  it("draws the last 5 scans oldest first, with health only", () => {
+    const runs = meta(7, ["a"], (_, i) => (i === 0 ? { ok: false } : i === 2 ? undefined : { matches: 3 })).runs;
+    const bars = barsOf(runs, (h) => h[0]);
+    expect(bars.map((b) => b.state)).toEqual(["worked", "worked", "none", "worked", "failed"]);
+    expect(barsSummary(bars)).toBe("Last 5 scans: 3 worked, 1 failed, 1 not checked");
+  });
+});
 
 describe("MyCompanies sort", () => {
-  it("starts on A–Z", () => {
+  const sortValue = () => (screen.getByRole("combobox", { name: "Sort" }) as HTMLSelectElement).value;
+
+  it("starts with Needs attention first, on All", () => {
     renderList();
-    expect(checked()).toBe("A–Z");
+    expect(sortValue()).toBe("attention");
+    expect(screen.getByRole("button", { name: /^All/ }).getAttribute("aria-pressed")).toBe("true");
   });
 
-  it("starts on Needs attention when a failing link was followed", () => {
-    renderList(1);
-    expect(checked()).toBe("Needs attention");
-  });
-
-  it("switches to Needs attention each time a failing link is followed again", () => {
+  it("shows Needs attention when a failing link was followed, each time", () => {
     const { rerender } = renderList();
-    rerender(<MyCompanies rows={rows} savedKeys={new Set()} onRemove={() => {}} onRemoveMany={() => {}} attention={1} />);
-    expect(checked()).toBe("Needs attention");
+    rerender(<MyCompanies rows={rows} savedKeys={keys(rows)} onRemove={() => {}} onRemoveMany={() => {}} attention={1} />);
+    expect(screen.getByRole("button", { name: /^Needs attention/ }).getAttribute("aria-pressed")).toBe("true");
   });
 });
 
@@ -39,6 +114,23 @@ describe("MyCompanies summary", () => {
     render(<MyCompanies rows={[]} savedKeys={new Set()} onRemove={() => {}} onRemoveMany={() => {}} empty="Right now: 0 companies, so your Radar stays empty." />);
     expect(screen.getByText("Right now: 0 companies, so your Radar stays empty.")).toBeTruthy();
     expect(screen.queryByText(/checked on every scan/)).toBeNull();
+  });
+
+  it("opens the last scan and hidden companies in place at the top", () => {
+    const onShowAgain = vi.fn();
+    const m = meta(2, ["acme", "globex"], (s, i) => (s === "acme" && i === 0 ? { ok: false, error: "timeout" } : {}));
+    render(
+      <MyCompanies rows={rows} savedKeys={keys(rows)} meta={m} hidden={[{ key: "greenhouse:zoominfo", name: "ZoomInfo" }]} onShowAgain={onShowAgain} onRemove={() => {}} onRemoveMany={() => {}} />,
+    );
+    const last = screen.getByRole("button", { name: /Last scan 1d ago · 1 failed/ });
+    expect(last.getAttribute("aria-expanded")).toBe("false");
+    fireEvent.click(last);
+    expect(screen.getByRole("heading", { name: "Recent scans" })).toBeTruthy();
+    expect(screen.getAllByText(/2 companies checked/).length).toBe(2);
+    fireEvent.click(screen.getByRole("button", { name: "1 hidden" }));
+    expect(screen.queryByRole("heading", { name: "Recent scans" })).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Show ZoomInfo again" }));
+    expect(onShowAgain).toHaveBeenCalledWith({ key: "greenhouse:zoominfo", name: "ZoomInfo" });
   });
 });
 
@@ -56,5 +148,66 @@ describe("MyCompanies rows", () => {
     expect(links("Acme")[0]).toBe("#radar?companies=Acme");
     expect(links("Globex")[0]).toBe("#radar?companies=Globex+Corp");
     expect(screen.getAllByTitle("See Acme on your Radar").length).toBeGreaterThan(0);
+  });
+
+  it("puts words only on problems, each with its fix", () => {
+    const list = [row("Acme", "acme"), row("Globex", "globex"), row("Initech", "initech"), row("Umbrella", "umbrella")];
+    const m = meta(3, ["acme", "globex", "initech"], (s, i) => (s === "globex" ? { ok: false, error: "Not found (404)" } : s === "initech" && i === 0 ? { ok: false, error: "timeout" } : {}));
+    const onScan = vi.fn();
+    const onPasteLink = vi.fn();
+    const { container } = render(<MyCompanies rows={list} savedKeys={keys(list)} meta={m} onScan={onScan} onPasteLink={onPasteLink} onRemove={() => {}} onRemoveMany={() => {}} />);
+    const table = within(container.querySelector("table")!);
+    const rowOf = (name: string) => within(table.getByRole("link", { name: `${name}: see its jobs on your Radar` }).closest("tr")!);
+    expect(rowOf("Acme").getAllByRole("cell")[2]!.textContent).toBe("");
+    expect(rowOf("Globex").getByText("Careers page not found")).toBeTruthy();
+    fireEvent.click(rowOf("Globex").getByRole("button", { name: "Paste new link" }));
+    expect(onPasteLink).toHaveBeenCalled();
+    expect(rowOf("Initech").getByText("Not answering")).toBeTruthy();
+    expect(rowOf("Initech").getByText("on the last scan")).toBeTruthy();
+    fireEvent.click(rowOf("Initech").getByRole("button", { name: "Check again" }));
+    expect(onScan).toHaveBeenCalled();
+    expect(rowOf("Umbrella").getByText("Not checked yet")).toBeTruthy();
+    expect(screen.getByRole("button", { name: /^Needs attention/ }).textContent).toBe("Needs attention2");
+    expect(screen.getByRole("button", { name: /^Not checked yet/ }).textContent).toBe("Not checked yet1");
+    // No role counts in the bars' tooltips.
+    for (const el of container.querySelectorAll("[title]")) expect(el.getAttribute("title")).not.toMatch(/for you|jobs,/);
+  });
+
+  it("shows 25 per page", () => {
+    const many = Array.from({ length: 30 }, (_, i) => row(`Co ${String(i).padStart(2, "0")}`, `co${i}`));
+    const { container } = render(<MyCompanies rows={many} savedKeys={keys(many)} onRemove={() => {}} onRemoveMany={() => {}} />);
+    expect(container.querySelectorAll("tbody tr").length).toBe(25);
+    expect(screen.getByText("Showing 1–25 of 30")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Next page" }));
+    expect(container.querySelectorAll("tbody tr").length).toBe(5);
+  });
+
+  it("filters by the page's search", () => {
+    const { container } = render(<MyCompanies rows={rows} savedKeys={keys(rows)} query="glo" onRemove={() => {}} onRemoveMany={() => {}} />);
+    expect(container.querySelectorAll("tbody tr").length).toBe(1);
+  });
+});
+
+describe("quiet banner", () => {
+  // 10 scans with nothing for you, over more than 7 days.
+  const m = meta(10, ["acme", "globex"], (s) => (s === "acme" ? {} : { matches: 1 }));
+
+  it("tells the truth, offers Review first, and Remove with Undo", () => {
+    const onRemoveMany = vi.fn();
+    const onRestore = vi.fn();
+    const { container } = render(<MyCompanies rows={rows} savedKeys={keys(rows)} meta={m} onRemove={() => {}} onRemoveMany={onRemoveMany} onRestore={onRestore} />);
+    expect(screen.getByText(/1 company has had nothing for you in its last 10 scans\. Removing it keeps scans quick\./)).toBeTruthy();
+    expect(container.textContent).not.toMatch(/from the directory/);
+    const review = screen.getByRole("button", { name: "Review 1" });
+    const remove = screen.getByRole("button", { name: "Remove 1 quiet company" });
+    expect(review.compareDocumentPosition(remove) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(remove.className).not.toMatch(/danger/);
+    fireEvent.click(review);
+    expect(container.querySelectorAll("tbody tr").length).toBe(1);
+    fireEvent.click(remove);
+    expect(onRemoveMany).toHaveBeenCalledWith(["greenhouse:acme"]);
+    expect(screen.getByRole("status").textContent).toMatch(/Removed 1 quiet company/);
+    fireEvent.click(screen.getByRole("button", { name: /Undo/ }));
+    expect(onRestore).toHaveBeenCalledWith([rows[0]]);
   });
 });

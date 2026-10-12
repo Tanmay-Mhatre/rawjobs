@@ -109,7 +109,7 @@ describe("typedName", () => {
 const row = (name: string, slug: string): CompanyRow => ({ id: slug, input: `greenhouse: ${slug}`, state: "saved", name, ats: "greenhouse", slug });
 const mine = [row("Acme", "acme"), row("Globex", "globex"), row("Getrecharge.Com", "recharge")];
 const list = (q: string) =>
-  render(<MyCompanies rows={mine} savedKeys={new Set(mine.map((r) => `greenhouse:${r.slug}`))} onRemove={() => {}} onRemoveMany={() => {}} q={q} noMatch={<p>Nothing of yours</p>} />);
+  render(<MyCompanies rows={mine} savedKeys={new Set(mine.map((r) => `greenhouse:${r.slug}`))} onRemove={() => {}} onRemoveMany={() => {}} query={q} noMatch={<p>Nothing of yours</p>} />);
 const listed = () => [...new Set(screen.queryAllByRole("link", { name: /see its jobs on your Radar/ }).map((a) => a.textContent))];
 
 describe("My companies search", () => {
