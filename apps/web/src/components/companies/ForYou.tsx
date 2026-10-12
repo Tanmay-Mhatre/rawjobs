@@ -382,9 +382,10 @@ function GroupSection({ title, reason, count, children }: { title: string; reaso
   );
 }
 
+/** "Oct 7", kept on one line. */
 const shortDate = (iso?: string) => {
   const d = iso ? new Date(iso) : null;
-  return d && !Number.isNaN(d.getTime()) ? d.toLocaleDateString(undefined, { month: "short", day: "numeric" }) : null;
+  return d && !Number.isNaN(d.getTime()) ? d.toLocaleDateString(undefined, { month: "short", day: "numeric" }).replace(/\s/g, " ") : null;
 };
 
 /**
