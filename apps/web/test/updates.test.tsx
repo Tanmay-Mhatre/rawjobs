@@ -71,8 +71,59 @@ describe("ServerNotices", () => {
     unmount();
     api({ ...base, tooOld: true });
     render(<ServerNotices />);
-    expect(await screen.findByText(/too old to update by itself/)).toBeTruthy();
-    expect(screen.getByText(/install\.(sh|ps1)/)).toBeTruthy();
+    expect(await screen.findByRole("heading", { name: "Reinstall RawJobs to keep using it" })).toBeTruthy();
+    expect(screen.getByText(/too old to update by itself/)).toBeTruthy();
+    expect((screen.getByRole("textbox", { name: "Install line" }) as HTMLInputElement).value).toMatch(/install\.(sh|ps1)/);
+  });
+
+  const required = {
+    ...base,
+    available: {
+      version: "0.6.0",
+      notes: "",
+      changes: [
+        { type: "fixed" as const, text: "Alerts after a restart" },
+        { type: "new" as const, text: "Update button" },
+        { type: "improved" as const, text: "Faster scans" },
+        { type: "new" as const, text: "Release notes" },
+      ],
+      critical: true,
+      date: "",
+      major: false,
+      ready: true,
+    },
+  };
+
+  it("asks for a required update at a glance: versions, three points, New changes first, one button", async () => {
+    api(required);
+    render(<ServerNotices />);
+    expect(await screen.findByRole("heading", { name: "Update to RawJobs 0.6.0" })).toBeTruthy();
+    expect(screen.getByText("This update is required to keep using RawJobs.")).toBeTruthy();
+    expect(screen.getByText("Takes a few seconds")).toBeTruthy();
+    expect(screen.getByText("Your data stays, backed up first")).toBeTruthy();
+    expect(screen.getByText("Updates after a running scan")).toBeTruthy();
+    // The top three, New first; the fourth behind "See all".
+    const shown = screen.getAllByRole("listitem").map((li) => li.textContent);
+    expect(shown.indexOf("NewUpdate button")).toBeLessThan(shown.indexOf("ImprovedFaster scans"));
+    expect(screen.getByText("See all 4 changes")).toBeTruthy();
+    expect(screen.getByRole("button", { name: /Update now/ })).toBeTruthy();
+    // Background check errors don't turn it into "didn't finish" before you clicked.
+    cleanup();
+    api({ ...required, error: "Couldn't reach GitHub to get the update." });
+    render(<ServerNotices />);
+    expect(await screen.findByRole("heading", { name: "Update to RawJobs 0.6.0" })).toBeTruthy();
+  });
+
+  it("doesn't block you once you said yes during a scan: no window, the pill waits", async () => {
+    api({ ...required, state: "waiting" });
+    render(
+      <>
+        <ServerNotices />
+        <UpdatePill />
+      </>,
+    );
+    expect((await screen.findByRole("button", { name: /Update after scan/ })).hasAttribute("disabled")).toBe(true);
+    expect(screen.queryByRole("heading", { name: /Update to RawJobs/ })).toBeNull();
   });
 
   it("says it's reconnecting while the server is away", async () => {

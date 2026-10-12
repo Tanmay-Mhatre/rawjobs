@@ -16,9 +16,9 @@ import {
   type UpdateStatus,
 } from "../lib/update";
 import { DesktopShortcutNotice, Row } from "./DesktopShortcut";
-import { Dialog } from "./Dialog";
+import { RequiredUpdate } from "./RequiredUpdate";
 import { toast } from "./Toast";
-import { Button, Card, Toggle } from "./ui";
+import { Button, Toggle } from "./ui";
 import { ReleaseList, WhatsNewDialog } from "./WhatsNew";
 
 /** A release's notes, folded: its New / Improved / Fixed lines (WhatsNew.tsx). */
@@ -100,6 +100,9 @@ export function ServerNotices({ onRadar = false }: { onRadar?: boolean }) {
     const s = await updateNow();
     if (s) setStatus(s);
     setBusy(false);
+    // The header's Update pill shows "Update after scan" when it's waiting for one.
+    announceUpdateStatus();
+    return s;
   };
   const required = !!status.available?.critical || status.tooOld;
   const last = status.lastUpdate;
@@ -133,60 +136,6 @@ export function ServerNotices({ onRadar = false }: { onRadar?: boolean }) {
         <X className="size-4" />
       </button>
     </div>
-  );
-}
-
-/**
- * A required update: a window that closes only by updating. If the update itself fails (offline, a
- * download that broke), you can go on for now; it asks again the next time the dashboard opens.
- * A version too old to update by itself asks for the install line instead.
- */
-function RequiredUpdate({ status, update, busy }: { status: UpdateStatus; update: () => Promise<void>; busy: boolean }) {
-  const [later, setLater] = useState(false);
-  const a = status.available;
-  const failed = !!status.error && status.state === "idle";
-  if (later) return null;
-  return (
-    <Dialog open persistent onClose={() => {}} labelledBy="required-update-title">
-      <Card className="space-y-3 p-5 shadow-l3 sm:p-6">
-        <h2 id="required-update-title" className="type-subheading font-semibold">
-          {status.tooOld ? "Reinstall RawJobs to keep using it" : `Update to RawJobs ${a?.version}`}
-        </h2>
-        {status.tooOld ? (
-          <>
-            <p className="type-small">
-              This version (<b>{status.current}</b>) is too old to update by itself. Run the install line again: it installs the newest RawJobs and keeps your profile, tracking and scan data.
-            </p>
-            <CopyInstallLine />
-          </>
-        ) : (
-          <>
-            <p className="type-small">
-              This is a required update. It takes a few seconds; your profile, tracking and scan data stay as they are, and are backed up first.
-              {status.state === "waiting" && " A scan is running: RawJobs updates as soon as it's done."}
-            </p>
-            {a && (a.notes.trim() || a.changes?.length) ? (
-              <div className="max-h-60 overflow-y-auto rounded-md border border-line p-3">
-                <ReleaseList notes={a.notes} changes={a.changes} />
-              </div>
-            ) : null}
-            {failed && (
-              <p role="alert" className="type-small text-danger-text">
-                {status.error}
-              </p>
-            )}
-            <div className="flex flex-wrap items-center justify-end gap-2 pt-1">
-              {failed && (
-                <Button variant="ghost" onClick={() => setLater(true)}>
-                  Continue for now
-                </Button>
-              )}
-              <UpdateButton status={status} onClick={() => void update()} busy={busy} label={failed ? "Try again" : "Update now"} />
-            </div>
-          </>
-        )}
-      </Card>
-    </Dialog>
   );
 }
 
