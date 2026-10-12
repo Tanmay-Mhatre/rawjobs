@@ -5,7 +5,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import { COUNTRIES, countryTerms, REGIONS, searchPlaces } from "../src/catalog/places";
 import { allTitles, ROLE_FAMILIES, SENIORITY } from "../src/catalog/roles";
 import { deleteResume, readResume, saveResume } from "../src/resume";
-import { detectFromResume, parseAiAnswer } from "../src/resume-parse";
+import { detectFromResume, parseAiAnswer, resumeBody, resumeTemplate } from "../src/resume-parse";
 
 const RESUME = `# Jane Doe
 Dubai, UAE · jane@example.com
@@ -188,5 +188,87 @@ describe("groupPlaces", () => {
     const uae = groups[0]!;
     expect(uae.options).toEqual(expect.arrayContaining(["united arab emirates", "uae", "emirates", "dubai", "abu dhabi", "sharjah"]));
     expect(groupPlaces([])).toEqual([]);
+  });
+});
+
+// The cv-tailor skeleton a user once saved as their resume: headings, comments and placeholders only.
+const TEMPLATE = `# MASTER RESUME — [Your Name]
+<!-- HOW TO USE THIS FILE: this is the single source of truth the cv-tailor skill reads from. -->
+- Location:
+- Phone:
+- Email:
+- LinkedIn / portfolio:
+
+## PROFESSIONAL SUMMARY (master version — reword per role)
+<!-- 3-4 sentences capturing who you are, your strongest domains, and your value. -->
+
+## EXPERIENCE
+### [Company] — [Title]
+<!-- Quantified, verifiable wins. One line each. -->
+
+## EDUCATION
+<!-- Degree, institution, year. -->
+
+## WORK AUTHORIZATION & MOBILITY
+`;
+
+const CATALOGS = { titles: allTitles().map((t) => t.title), countries: COUNTRIES, keywords: { mobility: 3, payments: 5, crypto: 5 } };
+
+describe("resumeTemplate", () => {
+  it("flags an unfilled template by its placeholders", () => {
+    expect(resumeTemplate(TEMPLATE)).toEqual(["[Your Name]", "[Company]", "[Title]"]);
+  });
+
+  it("leaves real resumes alone, short ones and ones with a [link] too", () => {
+    expect(resumeTemplate(RESUME)).toBeNull();
+    expect(resumeTemplate("Sam Lee. Barista at Bean Co (2021 – Present): opened two stores, trained 12 staff. [link] Before that, cashier at Corner Shop.")).toBeNull();
+  });
+
+  it("detects nothing from a template, so no 'mobility' from its headings", () => {
+    const d = detectFromResume(TEMPLATE, CATALOGS);
+    expect(d).toMatchObject({ titles: [], places: [], keywords: [], industries: [], template: ["[Your Name]", "[Company]", "[Title]"] });
+  });
+});
+
+describe("resumeBody", () => {
+  it("drops sections that say nothing about industries, wherever they sit", () => {
+    // PDF text: Title Case headings, Languages before Experience.
+    const pdf = `Jane Doe
+Languages
+English, Arabic
+Experience
+BINANCE
+Senior Product Manager, Crypto Payments
+Dubai · 2022 – Present
+Interests: gaming, esports, football`;
+    const body = resumeBody(pdf);
+    expect(body).toContain("BINANCE");
+    expect(body).toContain("Crypto Payments");
+    expect(body).not.toMatch(/Arabic|gaming|Languages|Experience/);
+  });
+
+  it("keeps a bullet that starts like a skipped section", () => {
+    expect(resumeBody("Experience\n- Visa: launched card issuing for 3 banks")).toContain("card issuing");
+  });
+
+  it("removes contact details but keeps date ranges", () => {
+    const body = resumeBody("jane@example.com · +971 50 123 4567 · linkedin.com/in/jane\nAcme Pay, 2019-2022");
+    expect(body).not.toMatch(/example|4567|linkedin/);
+    expect(body).toContain("2019-2022");
+  });
+});
+
+describe("detectFromResume industries", () => {
+  it("suggests the industries a resume keeps coming back to, with the evidence", () => {
+    const d = detectFromResume(RESUME, CATALOGS);
+    expect(d.industries[0]).toBe("payments");
+    expect(d.industries.slice(0, 3)).toEqual(expect.arrayContaining(["crypto", "regtech"]));
+    expect(d.industryWhy?.payments).toEqual([["payments", 3], ["card issuing", 1]]);
+    expect(d.industryCounts).toMatchObject({ payments: 4, crypto: 3 });
+  });
+
+  it("doesn't read the transport industry into a work-authorization heading", () => {
+    const d = detectFromResume(`${RESUME}\n\n## Work authorization & mobility\nUAE resident; open to global mobility and relocation.`, CATALOGS);
+    expect(d.industries).not.toContain("mobility");
   });
 });

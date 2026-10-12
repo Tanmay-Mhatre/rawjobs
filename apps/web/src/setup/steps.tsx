@@ -1,6 +1,6 @@
 import { matchesTerm } from "@rawjobs/core/text";
 import { COUNTRIES, countryTerms, groupPlaces, REGIONS, searchPlaces } from "@rawjobs/core/catalog/places";
-import { FEW_COMPANIES, INDUSTRIES, INDUSTRY_BY_ID, INDUSTRY_GROUPS as GROUPS } from "@rawjobs/core/catalog/industries";
+import { FEW_COMPANIES, INDUSTRIES, INDUSTRY_BY_ID, INDUSTRY_GROUPS as GROUPS, industriesFromTitles } from "@rawjobs/core/catalog/industries";
 import { allTitles, COMMON_EXCLUDES, ROLE_FAMILIES, SENIORITY, type RoleFamily } from "@rawjobs/core/catalog/roles";
 import { Check, ChevronDown, Plus, Search, X } from "lucide-react";
 import { createContext, useCallback, useContext, useMemo, useRef, useState, type KeyboardEvent, type ReactNode } from "react";
@@ -26,7 +26,8 @@ function SectionHeading({ children }: { children: ReactNode }) {
 export function Field({ label, hint, action, children }: { label: string; hint?: ReactNode; action?: ReactNode; children: ReactNode }) {
   return (
     <div className="space-y-2">
-      <div className="flex items-start gap-2">
+      {/* Room for the action (a Clear that appears with the first pick), so picking doesn't push the chips down. */}
+      <div className={cx("flex items-start gap-2", action != null && "min-h-7")}>
         <div className="min-w-0 flex-1">
           <SectionHeading>{label}</SectionHeading>
           {hint && <p className="mt-0.5 type-small text-muted">{hint}</p>}
@@ -702,22 +703,27 @@ export function LocationsStep({ draft, update, suggest }: StepProps) {
 
 // ---------- Industries ----------
 
-// The catalog's groups (broadest first), each with its industries in catalog order.
+// The catalog's groups (broadest first), each with its industries in catalog order. Nothing re-sorts: a chip stays where it was clicked.
 const INDUSTRY_GROUPS = GROUPS.map((g) => ({ label: g.label, ids: INDUSTRIES.filter((i) => i.group === g.id).map((i) => i.id) }));
 export const industryLabel = (id: string) => INDUSTRY_BY_ID.get(id)?.label ?? id;
 
-/** Industries that fit the resume or the chosen roles and topics, for ordering the groups. */
-function relevantIndustries(draft: Draft, fromResume: string[]): Set<string> {
-  const text = [...draft.include, ...Object.keys(draft.keywords)].join(" ; ");
-  const out = new Set([...fromResume, ...draft.industries]);
-  for (const g of INDUSTRY_GROUPS)
-    for (const id of g.ids) if (text && INDUSTRY_BY_ID.get(id)?.terms.some((t) => matchesTerm(text, t))) out.add(id);
-  return out;
+/** "a, b and c", or "a, b and 3 more" past `max`. */
+function listText(items: string[], max = 6): string {
+  const shown = items.slice(0, max);
+  const more = items.length - shown.length;
+  if (more > 0) return `${shown.join(", ")} and ${more} more`;
+  return shown.length > 1 ? `${shown.slice(0, -1).join(", ")} and ${shown[shown.length - 1]}` : (shown[0] ?? "");
 }
 
 export function IndustriesStep({ draft, update, suggest }: StepProps) {
   const [q, setQ] = useState("");
+  const [said, setSaid] = useState("");
   const fromResume = (suggest?.industries ?? []).filter((id) => INDUSTRY_BY_ID.has(id));
+  // No resume industries: suggest from the chosen roles instead ("Registered Nurse" -> Healthcare).
+  const rolesKey = draft.include.join("\n");
+  const fromRoles = useMemo(() => industriesFromTitles(draft.include).slice(0, 5), [rolesKey]); // eslint-disable-line react-hooks/exhaustive-deps
+  const suggested = fromResume.length ? fromResume : suggest?.template ? [] : fromRoles;
+  const why = fromResume.flatMap((id) => suggest?.industryWhy[id] ?? []).sort((a, b) => b[1] - a[1]).slice(0, 3);
   const query = q.trim().toLowerCase();
   const matches = (id: string) => {
     const ind = INDUSTRY_BY_ID.get(id);
@@ -725,45 +731,49 @@ export function IndustriesStep({ draft, update, suggest }: StepProps) {
   };
   // Topics the picked industries suggest; topics are added in Settings.
   const topics = [...new Set(draft.industries.flatMap((id) => INDUSTRY_BY_ID.get(id)?.topics ?? []))].filter((t) => !(t in draft.keywords));
-  const [showAll, setShowAll] = useState(false);
   // Industries the directory has few companies in: say so, so picking one doesn't promise a big scan.
   const counts = useIndustryCounts();
   const few = (id: string) => (counts && id in counts && counts[id]! < FEW_COMPANIES ? "few companies" : undefined);
-  // Groups that fit you come first (stable otherwise); the rest wait behind "Show all industries".
-  const relevant = relevantIndustries(draft, fromResume);
-  const groups = INDUSTRY_GROUPS.map((g) => ({ ...g, hits: g.ids.filter((id) => relevant.has(id)).length }))
-    .sort((a, b) => b.hits - a.hits)
-    .map((g, i) => ({ ...g, ids: [...g.ids].sort((a, b) => Number(relevant.has(b)) - Number(relevant.has(a))), first: i === 0 }));
-  const expanded = showAll || !!query;
-  const visible = groups.filter((g) => expanded || g.first || g.hits > 0);
-  const hidden = groups.length - visible.length;
+  /** Set the picks, and tell screen readers what changed. */
+  const setPicks = (next: string[]) => {
+    const added = next.find((id) => !draft.industries.includes(id));
+    const removed = draft.industries.find((id) => !next.includes(id));
+    if (added) setSaid(`Added ${industryLabel(added)}. ${next.length} picked.`);
+    else if (removed) setSaid(`Removed ${industryLabel(removed)}. ${next.length} picked.`);
+    update({ industries: next });
+  };
 
   return (
     <div className="space-y-6">
-      {fromResume.length > 0 && (
+      {suggested.length > 0 ? (
         <div className="rounded-md border border-dashed border-line p-4">
           <div className="mb-2 flex items-start gap-2">
             <p className="min-w-0 flex-1 type-small">
-              <span className="font-semibold text-ink">{RESUME_LABEL(suggest)}</span>
+              <span className="font-semibold text-ink">{fromResume.length ? RESUME_LABEL(suggest) : "Suggested from your roles"}</span>
               <span className="text-muted">: click to add or remove</span>
             </p>
             <ClearButton
-              count={draft.industries.filter((id) => fromResume.includes(id)).length}
+              count={draft.industries.filter((id) => suggested.includes(id)).length}
               noun={["industry", "industries"]}
-              name="Clear industries from your resume"
-              {...clearing(draft, update, { industries: draft.industries.filter((id) => !fromResume.includes(id)) })}
+              name="Clear suggested industries"
+              {...clearing(draft, update, { industries: draft.industries.filter((id) => !suggested.includes(id)) })}
             />
           </div>
           <ToggleChips
-            label="Industries from your resume"
-            options={fromResume}
-            selected={draft.industries.filter((id) => fromResume.includes(id))}
-            onChange={(next) => update({ industries: [...draft.industries.filter((id) => !fromResume.includes(id)), ...next] })}
+            label="Suggested industries"
+            options={suggested}
+            selected={draft.industries.filter((id) => suggested.includes(id))}
+            onChange={(next) => setPicks([...draft.industries.filter((id) => !suggested.includes(id)), ...next])}
             format={industryLabel}
             note={few}
           />
+          {why.length > 0 && <p className="mt-2 type-small text-muted">Your resume mentions {listText(why.map(([t, n]) => `${t} ×${n}`))}.</p>}
         </div>
-      )}
+      ) : suggest?.template ? (
+        <p className="type-small text-muted">Your saved resume looks like an empty template, so nothing is suggested. Replace it in the Resume step.</p>
+      ) : suggest?.source ? (
+        <p className="type-small text-muted">We didn't spot an industry in your resume. Pick any below, or skip: your jobs are still found by your roles and places.</p>
+      ) : null}
 
       <div className="flex items-center gap-2">
         <div className="relative min-w-0 flex-1">
@@ -779,7 +789,7 @@ export function IndustriesStep({ draft, update, suggest }: StepProps) {
         <ClearButton label="Clear all" count={draft.industries.length} noun={["industry", "industries"]} {...clearing(draft, update, { industries: [] })} />
       </div>
 
-      {visible.map((g) => {
+      {INDUSTRY_GROUPS.map((g) => {
         const ids = g.ids.filter(matches);
         if (!ids.length) return null;
         return (
@@ -800,24 +810,22 @@ export function IndustriesStep({ draft, update, suggest }: StepProps) {
               options={ids}
               selected={draft.industries.filter((id) => g.ids.includes(id))}
               // Picked ones stay listed even when the search hides them, so `next` is the whole group's selection.
-              onChange={(next) => update({ industries: [...draft.industries.filter((id) => !g.ids.includes(id)), ...next] })}
+              onChange={(next) => setPicks([...draft.industries.filter((id) => !g.ids.includes(id)), ...next])}
               format={industryLabel}
               note={few}
             />
           </Field>
         );
       })}
-      {hidden > 0 && (
-        <Button size="sm" variant="ghost" onClick={() => setShowAll(true)}>
-          <ChevronDown className="size-4" /> Show all industries
-        </Button>
-      )}
 
       <p className="type-small text-muted">
         {draft.industries.length === 0
           ? "None picked. That's OK: your jobs are found by your roles and places."
-          : `${draft.industries.length} picked. Companies in ${draft.industries.length === 1 ? "this industry" : "these industries"} are scanned and suggested, and you can narrow your Radar to ${draft.industries.length === 1 ? "it" : "them"}.`}
+          : `${draft.industries.length} picked: ${listText(draft.industries.map(industryLabel))}. Companies in ${draft.industries.length === 1 ? "this industry" : "these industries"} are scanned and suggested, and you can narrow your Radar to ${draft.industries.length === 1 ? "it" : "them"}.`}
         {topics.length > 0 && <> To rank jobs higher by topics like {topics.slice(0, 5).join(", ")}, add them under Settings, Topics.</>}
+      </p>
+      <p role="status" className="sr-only">
+        {said}
       </p>
     </div>
   );
