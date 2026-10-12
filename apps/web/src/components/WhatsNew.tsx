@@ -202,8 +202,10 @@ export function UpdatePill() {
   const { status, setStatus } = useUpdateStatus();
   const [busy, setBusy] = useState(false);
   const a = status?.available;
-  if (!status?.installed || !a || status.tooOld || a.critical) return null;
-  const waiting = status.state === "waiting";
+  const waiting = status?.state === "waiting";
+  // A required update asks in its own window (RequiredUpdate); once you said yes during a scan, the
+  // pill is where it waits.
+  if (!status?.installed || !a || status.tooOld || (a.critical && !waiting)) return null;
   const updating = busy || status.state === "updating";
   const click = async () => {
     setBusy(true);
