@@ -136,6 +136,7 @@ describe("updating an installed copy", () => {
       to: "0.2.0",
       notes: "Faster scans.",
       timeoutMs: 5000,
+      pollMs: 50,
       // "Starting the server": one that answers as the new version.
       start: () => void serve((_q, res) => res.end(JSON.stringify({ ok: true, version: "0.2.0" }))).then((port) => writeFileSync(join(home, "state.json"), JSON.stringify({ port }))),
     });
@@ -152,7 +153,8 @@ describe("updating an installed copy", () => {
       from: "0.1.0",
       to: "0.2.0",
       backup,
-      timeoutMs: 2500,
+      timeoutMs: 800,
+      pollMs: 50,
       start: () => {
         const v = installedVersions(home)!.current;
         starts.push(v);

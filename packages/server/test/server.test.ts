@@ -8,6 +8,12 @@ import { createApi } from "../src/api";
 import { refuse } from "../src/guard";
 import { findFile } from "../src/static";
 
+/** Wait until `ok()` is true (checked every 10 ms, for up to 5 s). */
+async function until(ok: () => boolean) {
+  for (let i = 0; i < 500 && !ok(); i++) await new Promise((r) => setTimeout(r, 10));
+  if (!ok()) throw new Error("timed out waiting");
+}
+
 const req = (method: string, headers: Record<string, string>) => ({ method, headers }) as unknown as IncomingMessage;
 
 describe("refuse", () => {
@@ -53,15 +59,23 @@ describe("the API", () => {
   let server: Server | undefined;
   afterEach(() => server?.close());
 
-  /** An API whose CLI is a stand-in that prints a few NDJSON events, slowly. */
-  async function start() {
+  /**
+   * An API whose CLI is a stand-in: a scan prints a few NDJSON events, slowly; any other command
+   * prints what it was given (folder, arguments, stdin) so a test can see how a route called it.
+   */
+  async function start(opts: { updating?: boolean } = {}) {
     const dir = mkdtempSync(join(tmpdir(), "rawjobs-api-"));
     mkdirSync(join(dir, "data"));
     const fake = join(dir, "fake-cli.mjs");
     writeFileSync(
       fake,
       `const args = process.argv.slice(2);
-if (args[0] !== "scan") { console.log(JSON.stringify({ cwd: process.cwd() })); process.exit(0); }
+if (args[0] !== "scan" || args.includes("--plan")) {
+  let stdin = "";
+  for await (const chunk of process.stdin) stdin += chunk;
+  console.log(JSON.stringify({ cwd: process.cwd(), args, stdin }));
+  process.exit(0);
+}
 const wait = (ms) => new Promise((r) => setTimeout(r, ms));
 console.log(JSON.stringify({ type: "start", companies: ["A", "B"], total: 2 }));
 await wait(150);
@@ -71,11 +85,13 @@ console.log(JSON.stringify({ type: "done", scope: args[args.indexOf("--scope") +
     );
     const home = join(dir, "home");
     mkdirSync(home);
-    const api = createApi({ home, dataDir: join(dir, "data"), cli: { command: process.execPath, args: [fake] }, version: "9.9.9" });
+    const dataDir = join(dir, "data");
+    const updater = opts.updating ? ({ updating: () => true } as unknown as Parameters<typeof createApi>[0]["updater"]) : undefined;
+    const api = createApi({ home, dataDir, cli: { command: process.execPath, args: [fake] }, version: "9.9.9", updater });
     server = createServer((rq, rs) => void api.handle(rq, rs));
     await new Promise<void>((r) => server!.listen(0, "127.0.0.1", r));
     const port = (server!.address() as AddressInfo).port;
-    return { api, port, home };
+    return { api, port, home, dataDir };
   }
 
   function call(port: number, method: string, path: string, body?: string, onFirstChunk?: (abort: () => void) => void) {
@@ -155,11 +171,84 @@ console.log(JSON.stringify({ type: "done", scope: args[args.indexOf("--scope") +
   });
 
   it("runs one scan at a time", async () => {
-    const { port } = await start();
+    const { api, port } = await start();
     const first = call(port, "POST", "/api/run", "{}");
-    await new Promise((r) => setTimeout(r, 50));
+    // Once the first is really running (no fixed wait: CI machines are slow at times).
+    await until(() => api.scanning());
     const second = await call(port, "POST", "/api/run", "{}");
     expect(second.text).toMatch(/already running/);
     expect((await first).text).toMatch(/"done"/);
+  });
+
+  it("hands each route to the right CLI command, with the request body on stdin", async () => {
+    const { port, dataDir } = await start();
+    const routes: [method: string, path: string, args: string[], body?: string][] = [
+      ["GET", "/api/setup", ["setup", "status", "--data", dataDir]],
+      ["POST", "/api/setup/config", ["setup", "save"], '{"profile":{}}'],
+      ["POST", "/api/setup/reset", ["setup", "reset"]],
+      ["GET", "/api/setup/resume", ["setup", "resume"]],
+      ["POST", "/api/setup/resume", ["setup", "resume", "save"], "# Resume"],
+      ["DELETE", "/api/setup/resume", ["setup", "resume", "delete"]],
+      ["POST", "/api/setup/check", ["setup", "check", "--data", dataDir], '{"urls":["https://jobs.lever.co/acme"]}'],
+      ["GET", "/api/directory", ["directory", "status", "--json", "--data", dataDir]],
+      ["POST", "/api/directory/update", ["directory", "update", "--json", "--data", dataDir]],
+      ["GET", "/api/scan/plan", ["scan", "--plan", "--data", dataDir]],
+      ["GET", "/api/alerts/telegram", ["alerts", "telegram", "status"]],
+      ["POST", "/api/alerts/telegram/token", ["alerts", "telegram", "token"], '{"token":"x"}'],
+      ["POST", "/api/alerts/telegram/forget", ["alerts", "telegram", "forget"]],
+      ["GET", "/api/schedule", ["schedule", "status", "--data", dataDir]],
+      ["POST", "/api/schedule", ["schedule", "install", "--stdin", "--data", dataDir], '{"times":["08:00"]}'],
+      ["DELETE", "/api/schedule", ["schedule", "remove", "--data", dataDir]],
+      ["POST", "/api/schedule/run", ["schedule", "run", "--data", dataDir]],
+      ["POST", "/api/check", ["run", "--progress", "ndjson", "--data", dataDir, "--check", "lever:acme", "--check", "ashby:beta"], '{"keys":["lever:acme","ashby:beta","no spaces allowed",7]}'],
+    ];
+    for (const [method, path, args, body] of routes) {
+      const r = await call(port, method, path, body);
+      expect(r.status, `${method} ${path}`).toBe(200);
+      let got: { args: string[]; stdin: string };
+      try {
+        got = JSON.parse(r.text);
+      } catch {
+        throw new Error(`${method} ${path} answered: ${r.text.slice(0, 300)}`);
+      }
+      expect(got.args, `${method} ${path}`).toEqual(args);
+      if (body && path !== "/api/check") expect(got.stdin, `${method} ${path}`).toBe(body);
+    }
+  });
+
+  it("answers what it can't do: no company to check, an unknown route, stop or notify with no scan", async () => {
+    const { port } = await start();
+    expect((await call(port, "POST", "/api/check", '{"keys":["not a key"]}')).status).toBe(400);
+    expect((await call(port, "GET", "/api/nothing-here")).status).toBe(404);
+    expect(JSON.parse((await call(port, "POST", "/api/run/stop")).text)).toEqual({ ok: false });
+    expect(JSON.parse((await call(port, "POST", "/api/run/notify")).text)).toEqual({ ok: false });
+  });
+
+  it("asks a running scan to stop, or to send its message, through files the scan checks", async () => {
+    const { api, port, dataDir } = await start();
+    const run = call(port, "POST", "/api/run", "{}");
+    await until(() => api.scanning());
+    expect(JSON.parse((await call(port, "POST", "/api/run/notify")).text)).toEqual({ ok: true });
+    expect(existsSync(join(dataDir, "scan-notify"))).toBe(true);
+    expect(JSON.parse((await call(port, "POST", "/api/run/stop")).text)).toEqual({ ok: true });
+    expect(existsSync(join(dataDir, "scan-stop"))).toBe(true);
+    await run;
+  });
+
+  it("starts nothing new while RawJobs is updating", async () => {
+    const { port } = await start({ updating: true });
+    expect((await call(port, "POST", "/api/run", "{}")).text).toMatch(/updating/);
+    expect((await call(port, "POST", "/api/check", '{"keys":["lever:acme"]}')).status).toBe(503);
+    expect((await call(port, "POST", "/api/schedule/run")).status).toBe(503);
+  });
+
+  it("on shutdown, asks the running scan to stop and waits for it", async () => {
+    const { api, port, dataDir } = await start();
+    const run = call(port, "POST", "/api/run", "{}");
+    await until(() => api.scanning());
+    await api.stop(5_000);
+    expect(existsSync(join(dataDir, "scan-stop"))).toBe(true);
+    // The tab following it was closed rather than left hanging.
+    expect((await run).text).toMatch(/"start"/);
   });
 });
