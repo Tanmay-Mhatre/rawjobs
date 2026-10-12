@@ -1,6 +1,7 @@
 import { existsSync, mkdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { rawjobsHome } from "./paths";
+import { writeFileAtomic } from "./atomic";
 
 /** The master resume lives next to the config, in a gitignored folder. Never committed or published. */
 export const RESUME_PATH = "profile/resume.md";
@@ -20,7 +21,7 @@ export function saveResume(text: string, cwd = rawjobsHome()): { ok: true; path:
   if (Buffer.byteLength(clean) > MAX_BYTES) return { ok: false, error: "That's longer than any resume should be (over 300 KB). Paste the text only." };
   const path = resolve(cwd, RESUME_PATH);
   mkdirSync(dirname(path), { recursive: true });
-  writeFileSync(path, `${clean}\n`);
+  writeFileAtomic(path, `${clean}\n`);
   return { ok: true, path };
 }
 

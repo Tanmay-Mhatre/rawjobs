@@ -63,6 +63,7 @@ export function useData() {
       ]);
       otherJobs = undefined;
       descriptions = undefined;
+      dataGeneration++;
       legacy = null;
       if (!jobsFile || !meta) setState({ kind: "empty" });
       else {
@@ -84,6 +85,8 @@ export function useData() {
 }
 
 let otherJobs: Promise<Job[]> | undefined;
+/** Bumped each time the data is reloaded (after a scan), so loaded extras know they're out of date. */
+let dataGeneration = 0;
 /** Jobs that failed your filters (jobs-other.json), fetched the first time they're needed. */
 export function loadOtherJobs(): Promise<Job[]> {
   otherJobs ??= legacy
@@ -92,18 +95,23 @@ export function loadOtherJobs(): Promise<Job[]> {
   return otherJobs;
 }
 
-/** The other jobs once `enabled` turns true (and from then on). */
+/**
+ * The other jobs once `enabled` turns true (and from then on). After a rescan they're fetched again;
+ * until they arrive, the previous scan's stay shown.
+ */
 export function useOtherJobs(enabled: boolean): Job[] | null {
-  const [jobs, setJobs] = useState<Job[] | null>(null);
+  const [loaded, setLoaded] = useState<{ generation: number; jobs: Job[] } | null>(null);
+  const generation = dataGeneration;
+  const current = loaded?.generation === generation;
   useEffect(() => {
-    if (!enabled || jobs) return;
+    if (!enabled || current) return;
     let live = true;
-    void loadOtherJobs().then((j) => live && setJobs(j));
+    void loadOtherJobs().then((jobs) => live && setLoaded({ generation, jobs }));
     return () => {
       live = false;
     };
-  }, [enabled, jobs]);
-  return jobs;
+  }, [enabled, current, generation]);
+  return loaded?.jobs ?? null;
 }
 
 let descriptions: Promise<Record<string, string>> | undefined;

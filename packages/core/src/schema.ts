@@ -124,6 +124,10 @@ export type CompanyHealth = {
   error?: string;
   /** Recognised ATS whose connector isn't built yet; not a failure of the company. */
   unsupported?: boolean;
+  /** Postings the hiring system sent that couldn't be read (left out; the rest still count). */
+  skipped?: number;
+  /** Job pages that failed to load, so those jobs have no description. */
+  describeFailed?: number;
 };
 
 export type RunSummary = {

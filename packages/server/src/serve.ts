@@ -77,8 +77,11 @@ export async function serve(args: string[]): Promise<number> {
   return new Promise((done) => {
     // An update stops this server; the old version's helper starts the new one.
     shutdown = () => {
-      server.close();
-      done(0);
+      // Let a running scan save and stop first, so it isn't cut off mid-write.
+      void api.stop().finally(() => {
+        server.close();
+        done(0);
+      });
     };
     for (const signal of ["SIGINT", "SIGTERM"] as const) process.once(signal, () => shutdown());
   });

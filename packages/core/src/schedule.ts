@@ -3,6 +3,7 @@ import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node
 import { homedir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import type { ScanScope } from "./scope";
+import { writeFileAtomic } from "./atomic";
 
 /**
  * Scheduled scans on this computer: the operating system's own scheduler runs
@@ -67,7 +68,7 @@ export function readScheduledRuns(dataDir: string): ScheduledRun[] {
 export function recordScheduledRun(dataDir: string, run: ScheduledRun): void {
   const runs = [run, ...readScheduledRuns(dataDir).filter((r) => r.startedAt !== run.startedAt)].slice(0, KEEP_RUNS);
   mkdirSync(dataDir, { recursive: true });
-  writeFileSync(join(dataDir, RUNS_FILE), JSON.stringify(runs, null, 1));
+  writeFileAtomic(join(dataDir, RUNS_FILE), JSON.stringify(runs, null, 1));
 }
 
 // ---------- the command the scheduler runs ----------
@@ -285,7 +286,7 @@ export function installSchedule(ctx: ScheduleContext, input: Partial<ScheduleSet
   // A schedule saved before the rename would otherwise scan twice.
   removeFrom(ctx, platform, LEGACY_SCHEDULER_NAMES);
   mkdirSync(ctx.dataDir, { recursive: true });
-  writeFileSync(join(ctx.dataDir, SETTINGS_FILE), JSON.stringify(s, null, 1));
+  writeFileAtomic(join(ctx.dataDir, SETTINGS_FILE), JSON.stringify(s, null, 1));
   return s;
 }
 

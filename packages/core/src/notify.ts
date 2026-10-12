@@ -3,6 +3,7 @@ import { dirname, resolve } from "node:path";
 import type { Job } from "./schema";
 import { rankScore } from "./score";
 import { rawjobsHome } from "./paths";
+import { writeFileAtomic } from "./atomic";
 
 /**
  * Telegram alerts: one message per scan with the new matches. The bot is the user's own (made with
@@ -36,7 +37,7 @@ export function saveTelegramSecrets(patch: TelegramSecrets, cwd = rawjobsHome())
   for (const k of Object.keys(next) as (keyof TelegramSecrets)[]) if (!next[k]) delete next[k];
   mkdirSync(dirname(path), { recursive: true });
   // The bot token: readable by this user only (modes are ignored on Windows).
-  writeFileSync(path, `${JSON.stringify({ ...all, telegram: next }, null, 2)}\n`, { mode: 0o600 });
+  writeFileAtomic(path, `${JSON.stringify({ ...all, telegram: next }, null, 2)}\n`, { mode: 0o600 });
   chmodSync(path, 0o600);
   return next;
 }

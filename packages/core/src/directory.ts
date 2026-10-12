@@ -2,9 +2,10 @@ import { createHash } from "node:crypto";
 import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { gunzipSync } from "node:zlib";
-import { fetchSignedJson } from "./data-signing";
+import { fetchSignedJson, FILE_TIMEOUT_MS } from "./data-signing";
 import { envSetting } from "./env";
 import { isSafeName, safeJoin } from "./safe-name";
+import { writeFileAtomic } from "./atomic";
 
 /**
  * The shared company directory lives online (built weekly from public lists plus what users add)
@@ -90,7 +91,7 @@ export async function updateDirectory(dataDir: string, opts: { force?: boolean; 
   mkdirSync(dir, { recursive: true });
   const staged: [string, Buffer][] = [];
   for (const [file, meta] of Object.entries(manifest.files)) {
-    const r = await get(`${base}/${file}`, { redirect: "follow" });
+    const r = await get(`${base}/${file}`, { redirect: "follow", signal: AbortSignal.timeout(FILE_TIMEOUT_MS) });
     if (!r.ok) return { updated: false, message: `Download of ${file} failed (HTTP ${r.status}).` };
     const gz = Buffer.from(await r.arrayBuffer());
     if (createHash("sha256").update(gz).digest("hex") !== meta.sha256) return { updated: false, message: `${file} didn't match its checksum; kept your current directory.` };
@@ -100,7 +101,7 @@ export async function updateDirectory(dataDir: string, opts: { force?: boolean; 
     writeFileSync(safeJoin(dir, `${name}.tmp`), body);
     renameSync(safeJoin(dir, `${name}.tmp`), safeJoin(dir, name));
   }
-  writeFileSync(join(dir, "manifest.json"), JSON.stringify({ ...manifest, updated_at: new Date().toISOString() }, null, 2));
+  writeFileAtomic(join(dir, "manifest.json"), JSON.stringify({ ...manifest, updated_at: new Date().toISOString() }, null, 2));
   return { updated: true, version: manifest.version, companies: manifest.companies, message: `Updated to ${manifest.companies.toLocaleString()} companies.` };
 }
 
@@ -137,7 +138,7 @@ export function queueContributions(dataDir: string, boards: SharedBoard[]): numb
     next.push(b);
   }
   mkdirSync(catalogDir(dataDir), { recursive: true });
-  writeFileSync(file, JSON.stringify({ boards: next }, null, 1));
+  writeFileAtomic(file, JSON.stringify({ boards: next }, null, 1));
   return next.length;
 }
 
@@ -148,7 +149,7 @@ export function queueContributions(dataDir: string, boards: SharedBoard[]): numb
 export async function sendContributions(dataDir: string, opts: { fetchImpl?: typeof fetch; client?: string; enabled?: boolean } = {}): Promise<{ sent: number; message: string }> {
   const file = join(catalogDir(dataDir), "outbox.json");
   if (opts.enabled === false) {
-    if (existsSync(file)) writeFileSync(file, JSON.stringify({ boards: [] }, null, 1));
+    if (existsSync(file)) writeFileAtomic(file, JSON.stringify({ boards: [] }, null, 1));
     return { sent: 0, message: "Sharing is off in your settings." };
   }
   const url = contributeUrl();
@@ -169,9 +170,9 @@ export async function sendContributions(dataDir: string, opts: { fetchImpl?: typ
       sent += batch.length;
     }
   } catch (err) {
-    writeFileSync(file, JSON.stringify({ boards: boards.slice(sent) }, null, 1));
+    writeFileAtomic(file, JSON.stringify({ boards: boards.slice(sent) }, null, 1));
     return { sent, message: `Shared ${sent}; the rest will be retried (${(err as Error).message}).` };
   }
-  writeFileSync(file, JSON.stringify({ boards: [] }, null, 1));
+  writeFileAtomic(file, JSON.stringify({ boards: [] }, null, 1));
   return { sent, message: `Shared ${sent} compan${sent === 1 ? "y" : "ies"} with the directory.` };
 }

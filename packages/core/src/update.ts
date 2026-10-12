@@ -4,6 +4,7 @@ import { cpSync, existsSync, mkdirSync, readdirSync, readFileSync, renameSync, r
 import { join } from "node:path";
 import { compareVersions, nodeArchive, RELEASE_URL, verifyRelease, type ReleaseManifest } from "./release";
 import { cliCommand } from "./runtime";
+import { writeFileAtomic } from "./atomic";
 
 /**
  * Updates for an installed copy (docs/plans/local-install.md, section 5). The layout in your RawJobs
@@ -46,7 +47,7 @@ const readText = (path: string) => {
     return null;
   }
 };
-const writeJson = (path: string, value: unknown) => writeFileSync(path, `${JSON.stringify(value, null, 1)}\n`);
+const writeJson = (path: string, value: unknown) => writeFileAtomic(path, `${JSON.stringify(value, null, 1)}\n`);
 
 // ---------- settings and records ----------
 
@@ -99,7 +100,7 @@ export const releaseBaseFor = (version: string) => process.env.RAWJOBS_RELEASE_U
 export async function fetchManifest(base: string, opts: { fetchImpl?: typeof fetch; publicKey?: string } = {}): Promise<ReleaseManifest> {
   const f = opts.fetchImpl ?? fetch;
   const get = async (name: string) => {
-    const res = await f(`${base}/${name}`, { redirect: "follow" });
+    const res = await f(`${base}/${name}`, { redirect: "follow", signal: AbortSignal.timeout(30_000) });
     if (!res.ok) throw new Error(`Couldn't download ${name} (HTTP ${res.status}).`);
     return Buffer.from(await res.arrayBuffer());
   };
@@ -154,7 +155,8 @@ function untar(archive: string, into: string, strip: number): void {
 }
 
 async function download(url: string, file: string, fetchImpl: typeof fetch): Promise<void> {
-  const res = await fetchImpl(url, { redirect: "follow" });
+  // A bundle or a Node archive is tens of MB: generous, but never forever.
+  const res = await fetchImpl(url, { redirect: "follow", signal: AbortSignal.timeout(600_000) });
   if (!res.ok) throw new Error(`Couldn't download ${url} (HTTP ${res.status}).`);
   writeFileSync(file, Buffer.from(await res.arrayBuffer()));
 }
@@ -231,11 +233,11 @@ export function restoreBackup(home: string, dir: string): void {
 export function switchTo(home: string, version: string, node: string): void {
   const now = installedVersions(home);
   if (now && now.current !== version) {
-    writeFileSync(join(home, "app/previous.txt"), now.current);
-    writeFileSync(join(home, "app/previous-node.txt"), now.node);
+    writeFileAtomic(join(home, "app/previous.txt"), now.current);
+    writeFileAtomic(join(home, "app/previous-node.txt"), now.node);
   }
-  writeFileSync(join(home, "app/current.txt"), version);
-  writeFileSync(join(home, "runtime/current.txt"), node);
+  writeFileAtomic(join(home, "app/current.txt"), version);
+  writeFileAtomic(join(home, "runtime/current.txt"), node);
 }
 
 /**
@@ -243,14 +245,14 @@ export function switchTo(home: string, version: string, node: string): void {
  * the newest other version still here, so the next update can go back too.
  */
 export function switchBack(home: string, previous: string, failed?: string): void {
-  writeFileSync(join(home, "app/current.txt"), previous);
+  writeFileAtomic(join(home, "app/current.txt"), previous);
   const node = readText(join(home, "app/previous-node.txt"));
-  if (node && existsSync(join(home, "runtime", node))) writeFileSync(join(home, "runtime/current.txt"), node);
+  if (node && existsSync(join(home, "runtime", node))) writeFileAtomic(join(home, "runtime/current.txt"), node);
   if (failed && failed !== previous) rmSync(join(home, "app/versions", failed), { recursive: true, force: true });
   const others = readdirSync(join(home, "app/versions"))
     .filter((v) => v !== previous && !v.startsWith("."))
     .sort((a, b) => compareVersions(b, a));
-  if (others[0]) writeFileSync(join(home, "app/previous.txt"), others[0]);
+  if (others[0]) writeFileAtomic(join(home, "app/previous.txt"), others[0]);
   else rmSync(join(home, "app/previous.txt"), { force: true });
 }
 
