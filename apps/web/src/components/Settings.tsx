@@ -23,6 +23,8 @@ import { DesktopShortcutSettings } from "./DesktopShortcut";
 import { AboutRawJobs, UpdatesSettings } from "./Updates";
 import { ReleaseNotes } from "./WhatsNew";
 import { parseSettingsHash, SETTINGS_GROUPS, SETTINGS_PAGES, SETTINGS_SECTIONS, settingsHash, type SettingsPageId } from "./settings/registry";
+import { searchSettings, type SettingsHit } from "./settings/search";
+import { SettingsSearchBox, SettingsSearchResults, useSearchShortcut } from "./settings/SettingsSearch";
 
 type Props = {
   draft: Draft;
@@ -99,6 +101,12 @@ export function Settings({
     "release-notes": canRunLocally,
   };
   const isShown = (id: string) => shown[id] ?? true;
+  /** Why search shows a card it can't open here. */
+  const unavailable = (id: string) => {
+    if (isShown(id)) return undefined;
+    if (!canRunLocally) return "Only when RawJobs runs on your computer";
+    return id === "reset" ? "Once your setup is saved" : "Only in the installed app";
+  };
   const pages = SETTINGS_PAGES.filter((p) => SETTINGS_SECTIONS.some((s) => s.page === p.id && isShown(s.id)));
 
   const route = useSettingsRoute();
@@ -120,6 +128,31 @@ export function Settings({
   };
   // Dealbreakers are optional, so they start folded even when empty.
   const [open, setOpen] = useState<Set<string>>(() => new Set(Object.keys(summaries).filter((k) => !summaries[k] && k !== "dealbreakers")));
+  // What's saved in each card, in full, for search ("berlin" finds Locations).
+  const values = (id: string): string[] =>
+    ({
+      roles: [...draft.include, ...draft.exclude],
+      locations: [...groupPlaces(officePlaces(draft)).map((g) => displayPlace(g.name)), ...(draft.remote ? ["Remote"] : [])],
+      industries: draft.industries.map((i) => INDUSTRY_BY_ID.get(i)?.label ?? i),
+      keywords: Object.keys(draft.keywords),
+      dealbreakers: [...(draft.workAuthorization ?? []), ...(draft.avoid ?? [])],
+    })[id] ?? [];
+
+  const [query, setQuery] = useState("");
+  const [active, setActive] = useState(0);
+  const searching = !!query.trim();
+  const hits = searching ? searchSettings(query, { unavailable, values }) : [];
+  useSearchShortcut();
+  /** The card a search result opened: outlined for a moment once it's on screen. */
+  const flash = useRef<string | null>(null);
+  const openHit = (hit: SettingsHit) => {
+    setQuery("");
+    flash.current = hit.section.id;
+    const target = `#${settingsHash(hit.section.id)}`;
+    if (location.hash === target) reveal(hit.section.id);
+    else location.hash = target;
+  };
+
   const toggle = (id: string) =>
     setOpen((o) => {
       const next = new Set(o);
@@ -137,18 +170,32 @@ export function Settings({
       window.scrollTo({ top: 0 });
       return;
     }
+    return reveal(id);
+  }, [route.page, route.section]);
+
+  /** Open a card (if it folds), scroll to it and, when search led here, outline it and move focus to it. */
+  function reveal(id: string) {
     if (id in summaries) setOpen((o) => new Set(o).add(id));
     // After the page has rendered. Some cards appear once their data loads (Desktop shortcut): keep looking for a moment.
     let tries = 0;
     let timer: ReturnType<typeof setTimeout> | undefined;
     const scroll = () => {
       const el = document.getElementById(`settings-${id}`);
-      if (el) el.scrollIntoView({ block: "start" });
-      else if (++tries < 20) timer = setTimeout(scroll, 100);
+      if (!el) {
+        if (++tries < 20) timer = setTimeout(scroll, 100);
+        return;
+      }
+      el.scrollIntoView({ block: "start" });
+      if (flash.current !== id) return;
+      flash.current = null;
+      el.tabIndex = -1;
+      el.focus({ preventScroll: true });
+      el.classList.add("ring-2", "ring-focus");
+      timer = setTimeout(() => el.classList.remove("ring-2", "ring-focus"), 1600);
     };
     timer = setTimeout(scroll, 60);
     return () => clearTimeout(timer);
-  }, [route.page, route.section]);
+  }
 
   useEffect(() => {
     if (dirty) setStatus(null);
@@ -178,15 +225,28 @@ export function Settings({
 
   // Every page stays mounted (just hidden), as when Settings was one long page, so nothing typed is lost on a page switch.
   const page = (id: SettingsPageId, children: ReactNode) => (
-    <SettingsPage id={id} current={current} onList={!route.page}>
+    <SettingsPage id={id} current={searching ? null : current} onList={!route.page}>
       {children}
     </SettingsPage>
   );
 
   return (
     <div className="md:grid md:grid-cols-[12rem_minmax(0,1fr)] md:items-start md:gap-8">
-      <SettingsNav pages={pages} current={current} onList={!route.page} />
-      <div className={cx("min-w-0", !route.page && "max-md:hidden")}>
+      <SettingsNav pages={pages} current={current} onList={!route.page} searching={searching}>
+        <SettingsSearchBox
+          query={query}
+          onQuery={(q) => {
+            setQuery(q);
+            setActive(0);
+          }}
+          hits={hits}
+          active={active}
+          onActive={setActive}
+          onOpen={openHit}
+        />
+      </SettingsNav>
+      <div className={cx("min-w-0", !route.page && !searching && "max-md:hidden")}>
+        {searching && <SettingsSearchResults query={query} hits={hits} active={active} onOpen={openHit} />}
         {page(
           "profile",
           <>
@@ -409,48 +469,52 @@ function goToPage(e: MouseEvent, id: SettingsPageId) {
  * The pages, under their group headings. On a computer, a sidebar beside the page. On a phone, a bare
  * "#settings" shows this list as the whole screen (`onList`); a page then has a Back link to it.
  */
-function SettingsNav({ pages, current, onList }: { pages: readonly NavPage[]; current: SettingsPageId; onList: boolean }) {
+function SettingsNav({ pages, current, onList, searching, children }: { pages: readonly NavPage[]; current: SettingsPageId; onList: boolean; searching: boolean; children: ReactNode }) {
   return (
-    <nav aria-label="Settings pages" className={cx("mb-6 md:sticky md:top-20 md:mb-0", !onList && "max-md:hidden")}>
+    <nav aria-label="Settings pages" className={cx("mb-6 md:sticky md:top-20 md:mb-0", !onList && !searching && "max-md:hidden")}>
       <h1 className="mb-3 type-subheading md:hidden">Settings</h1>
-      {SETTINGS_GROUPS.map((group) => {
-        const inGroup = pages.filter((p) => p.group === group);
-        if (!inGroup.length) return null;
-        return (
-          <Fragment key={group}>
-            <p className="mb-1 mt-5 px-3 type-meta font-medium text-muted first:mt-0 md:px-2" aria-hidden="true">
-              {group}
-            </p>
-            <ul aria-label={group} className="divide-y divide-line overflow-hidden rounded-md border border-line bg-raised md:divide-y-0 md:overflow-visible md:border-0 md:bg-transparent">
-              {inGroup.map((p) => (
-                <li key={p.id}>
-                  <a
-                    href={`#${settingsHash(p.id)}`}
-                    aria-current={p.id === current ? "page" : undefined}
-                    onClick={(e) => goToPage(e, p.id)}
-                    className={cx(
-                      "flex min-h-11 items-center gap-2 px-3 type-label md:min-h-9 md:rounded-md md:px-2",
-                      p.id === current ? "md:bg-active md:text-ink" : "text-ink md:text-muted md:hover:bg-inset md:hover:text-ink",
-                    )}
-                  >
-                    <span className="min-w-0 flex-1">
-                      {p.label}
-                      <span className="block truncate type-meta font-normal text-muted md:hidden">{p.hint}</span>
-                    </span>
-                    <ChevronRight className="size-4 text-muted md:hidden" aria-hidden="true" />
-                  </a>
-                </li>
-              ))}
-            </ul>
-          </Fragment>
-        );
-      })}
+      {children}
+      {/* While searching on a phone, the results take the list's place. */}
+      <div className={cx(searching && "max-md:hidden")}>
+        {SETTINGS_GROUPS.map((group) => {
+          const inGroup = pages.filter((p) => p.group === group);
+          if (!inGroup.length) return null;
+          return (
+            <Fragment key={group}>
+              <p className="mb-1 mt-5 px-3 type-meta font-medium text-muted first:mt-0 md:px-2" aria-hidden="true">
+                {group}
+              </p>
+              <ul aria-label={group} className="divide-y divide-line overflow-hidden rounded-md border border-line bg-raised md:divide-y-0 md:overflow-visible md:border-0 md:bg-transparent">
+                {inGroup.map((p) => (
+                  <li key={p.id}>
+                    <a
+                      href={`#${settingsHash(p.id)}`}
+                      aria-current={p.id === current ? "page" : undefined}
+                      onClick={(e) => goToPage(e, p.id)}
+                      className={cx(
+                        "flex min-h-11 items-center gap-2 px-3 type-label md:min-h-9 md:rounded-md md:px-2",
+                        p.id === current ? "md:bg-active md:text-ink" : "text-ink md:text-muted md:hover:bg-inset md:hover:text-ink",
+                      )}
+                    >
+                      <span className="min-w-0 flex-1">
+                        {p.label}
+                        <span className="block truncate type-meta font-normal text-muted md:hidden">{p.hint}</span>
+                      </span>
+                      <ChevronRight className="size-4 text-muted md:hidden" aria-hidden="true" />
+                    </a>
+                  </li>
+                ))}
+              </ul>
+            </Fragment>
+          );
+        })}
+      </div>
     </nav>
   );
 }
 
 /** One Settings page: its heading and cards. Hidden unless it's the current one. */
-function SettingsPage({ id, current, onList, children }: { id: SettingsPageId; current: SettingsPageId; onList: boolean; children: ReactNode }) {
+function SettingsPage({ id, current, onList, children }: { id: SettingsPageId; current: SettingsPageId | null; onList: boolean; children: ReactNode }) {
   const meta = SETTINGS_PAGES.find((p) => p.id === id)!;
   return (
     <div hidden={id !== current} className="space-y-4">
