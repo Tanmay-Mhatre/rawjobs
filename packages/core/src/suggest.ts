@@ -1,5 +1,5 @@
 import { companyIndustries, INDUSTRY_BY_ID } from "./catalog/industries";
-import { COUNTRIES, countryTerms, groupPlaces } from "./catalog/places";
+import { COUNTRIES, countriesIn, countryTerms, groupPlaces } from "./catalog/places";
 import { connectors } from "./connectors";
 import type { Profile } from "./schema";
 import { gateOf, scoreJob } from "./score";
@@ -46,6 +46,13 @@ export type IndexedCompany = BoardPlace & {
 /** A directory company without job rows: no openings right now, or not indexed yet. */
 export type DirectoryCompany = Omit<IndexedCompany, "rows" | "terms" | "open_jobs"> & { open_jobs: number | null };
 
+/**
+ * Where a company hires, from its postings in the weekly index: the countries most of them name
+ * (most first, up to 3) and whether a good share is remote. A fact about the company, not about
+ * the user's roles. Only indexed companies have it.
+ */
+export type HiresIn = { remote: boolean; countries: string[] };
+
 export type CompanySuggestion = BoardPlace & {
   key: string;
   name: string;
@@ -74,6 +81,8 @@ export type CompanySuggestion = BoardPlace & {
   /** The user's industries only its job titles point to ("hires for AI roles"); weaker than `industries`. */
   hires_for: string[];
   reasons: string[];
+  /** Where it hires (indexed companies only). */
+  hires_in?: HiresIn;
 };
 
 export type SuggestResult = {
@@ -295,13 +304,61 @@ export function suggestCompanies(
   }
 
   const limit = opts.limit ?? 30;
-  const order = (list: CompanySuggestion[]) => rerankForDiversity(list.sort(bySuggestion)).slice(0, limit);
+  const indexed = new Map(companies.map((c) => [c.key, c]));
+  // Worked out only for the companies returned: reading places is too slow for the whole index.
+  const withPlaces = (s: CompanySuggestion): CompanySuggestion => {
+    const c = indexed.get(s.key);
+    const where = c && hiresIn(c, { now, indexGeneratedAt: generatedAt });
+    return where ? { ...s, hires_in: where } : s;
+  };
+  const order = (list: CompanySuggestion[]) => rerankForDiversity(list.sort(bySuggestion)).slice(0, limit).map(withPlaces);
   return {
     hiringNow: order(hiring),
     worthWatching: order(watching),
     notScannable: order(notScannable),
     scanned: companies.length + (opts.others?.length ?? 0),
   };
+}
+
+/** A country counts when at least this share of a company's postings name it; remote, this share of them. */
+const COUNTRY_SHARE = 0.1;
+const REMOTE_SHARE = 0.2;
+const REMOTE = /remote/i;
+const countryCache = new Map<string, string[]>();
+function countriesOf(location: string): string[] {
+  let c = countryCache.get(location);
+  if (!c) {
+    if (countryCache.size > 50_000) countryCache.clear();
+    countryCache.set(location, (c = countriesIn(location)));
+  }
+  return c;
+}
+
+/**
+ * Where a company hires, from its newest 150 postings that aren't stale: the countries named by at
+ * least a tenth of them (most first, up to 3) and remote when a fifth or more are. Undefined when
+ * the postings name no place.
+ */
+export function hiresIn(c: Pick<IndexedCompany, "rows" | "fetched_at">, opts: { now?: Date; indexGeneratedAt?: Date } = {}): HiresIn | undefined {
+  const now = opts.now ?? new Date();
+  const fetchedAt = c.fetched_at ? new Date(c.fetched_at) : (opts.indexGeneratedAt ?? now);
+  const byCountry = new Map<string, number>();
+  let total = 0;
+  let remote = 0;
+  for (const [, location, workplace, age, count] of c.rows.slice(0, 150)) {
+    if (isStale(age, fetchedAt, now)) continue;
+    total += count;
+    if (workplace === "remote" || REMOTE.test(location)) remote += count;
+    for (const country of countriesOf(location)) byCountry.set(country, (byCountry.get(country) ?? 0) + count);
+  }
+  if (!total) return undefined;
+  const countries = [...byCountry.entries()]
+    .filter(([, n]) => n >= total * COUNTRY_SHARE)
+    .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
+    .slice(0, 3)
+    .map(([name]) => name);
+  const isRemote = remote >= total * REMOTE_SHARE;
+  return countries.length || isRemote ? { remote: isRemote, countries } : undefined;
 }
 
 const industryLabels = (ids: string[]) => ids.map((id) => INDUSTRY_BY_ID.get(id)?.label ?? id).join(", ");

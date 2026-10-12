@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { suggestCompanies, type DirectoryCompany, type IndexedCompany, type IndexRow } from "../src/suggest";
+import { hiresIn, suggestCompanies, type DirectoryCompany, type IndexedCompany, type IndexRow } from "../src/suggest";
 import { profile } from "./helpers";
 
 const now = new Date("2026-10-04T12:00:00Z");
@@ -195,5 +195,29 @@ describe("suggestCompanies", () => {
     const r = suggestCompanies(profile(), [withTerms], { now });
     expect(r.hiringNow[0]!.topics).toEqual(["crypto", "payments"]);
     expect(r.hiringNow[0]!.reasons).toContain("Your topics: crypto, payments");
+  });
+});
+
+describe("hiresIn", () => {
+  it("names the countries most postings are in, most first, and remote when a fair share is", () => {
+    const rows = [pm("Dubai, UAE", 2, 5), pm("London, UK", 2, 3), eng("Riyadh, Saudi Arabia"), pm("Remote", 2, 2, "remote")];
+    expect(hiresIn({ rows }, { now })).toEqual({ remote: false, countries: ["United Arab Emirates", "United Kingdom"] });
+    expect(hiresIn({ rows: [...rows, pm("Remote - Global", 2, 3, "remote")] }, { now })).toEqual({ remote: true, countries: ["United Arab Emirates", "United Kingdom"] });
+  });
+
+  it("leaves out countries with only a stray posting, stale postings, and companies with no place", () => {
+    const rows = [pm("Berlin, Germany", 2, 20), pm("Paris, France"), pm("Dubai", 2000, 50)];
+    expect(hiresIn({ rows }, { now })).toEqual({ remote: false, countries: ["Germany"] });
+    expect(hiresIn({ rows: [["Engineer", "", "unknown", 2, 4]] }, { now })).toBeUndefined();
+    expect(hiresIn({ rows: [] }, { now })).toBeUndefined();
+  });
+
+  it("comes with each suggestion from the index, and not with directory-only ones", () => {
+    const r = suggestCompanies(profile({ industries: ["fintech"] }), [co("lever:one", [pm("Dubai"), pm("Remote", 2, 1, "remote")])], {
+      now,
+      others: [{ key: "lever:quiet", name: "quiet", ats: "lever", slug: "quiet", careers_url: "https://x", open_jobs: null, tags: ["fintech"] }],
+    });
+    expect(r.hiringNow[0]!.hires_in).toEqual({ remote: true, countries: ["United Arab Emirates"] });
+    expect(r.worthWatching.find((s) => s.key === "lever:quiet")!.hires_in).toBeUndefined();
   });
 });

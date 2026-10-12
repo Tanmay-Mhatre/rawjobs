@@ -11,6 +11,15 @@ describe("displayName", () => {
     expect(displayName("Symbiotic.Fi")).toBe("Symbiotic");
   });
 
+  it("turns word-like endings into the brand's last word", () => {
+    expect(displayName("Sui.Foundation", "sui")).toBe("Sui Foundation");
+    expect(displayName("Nomic.Foundation")).toBe("Nomic Foundation");
+    expect(displayName("Acme.Finance")).toBe("Acme Finance");
+    expect(displayName("Acme.Labs")).toBe("Acme Labs");
+    // Only the machine casing: brands that write it lower case, or as a web address, keep it.
+    for (const n of ["yearn.finance", "Ramp.Network", "Safe.Global", "Q.Institute"]) expect(displayName(n)).toBe(n);
+  });
+
   it("prefers the board slug when the domain has a prefix", () => {
     expect(displayName("Getrecharge.Com", "recharge")).toBe("Recharge");
     // Without the slug it can't tell, so it only drops the ending.
@@ -45,6 +54,8 @@ describe("displayName", () => {
     expect(displayName("Magiceden", "magiceden")).toBe("Magic Eden");
     expect(displayName("Trmlabs", "trm-labs")).toBe("TRM Labs");
     expect(displayName("Redgate", "red-gate")).toBe("Redgate");
+    expect(displayName("Oplabs", "oplabs")).toBe("OP Labs");
+    expect(displayName("Coinmarketcap", "coinmarketcap")).toBe("CoinMarketCap");
   });
 
   it("leaves ordinary names alone and trims", () => {
