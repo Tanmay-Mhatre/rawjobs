@@ -69,11 +69,15 @@ message when they finish.
 
 ### Installing and updating (installed copies only)
 The install line downloads RawJobs from this repository's GitHub Releases and Node from
-`nodejs.org`. An installed copy then checks once a day for a newer version by downloading
-`latest.json` from the latest release (with "test versions" on, it lists releases through
-`api.github.com`), and downloads the new version when there is one. GitHub and nodejs.org see your
-IP address, as with any download. Nothing about you is sent. Turn the checks off in Settings →
-Updates. A copy run from the source code (`pnpm start`) never checks.
+`nodejs.org`. An installed copy then reads a small file every few minutes,
+`https://www.rawjobs.workers.dev/v1/latest.json`, which only names the newest version. When it
+names a newer one, the copy downloads `latest.json` from the latest GitHub release (with "test
+versions" on, it lists releases through `api.github.com`) and the new version. Cloudflare (which
+serves that file), GitHub and nodejs.org see your IP address, as with any download. Nothing about
+you is sent, and Cloudflare Web Analytics doesn't count these requests. If Telegram alerts are on,
+the "update ready" message goes from your computer to your own bot, like scan alerts. Turn the
+checks off in Settings → About → Updates. A copy run from the source code (`pnpm start`) never
+checks.
 
 ### No telemetry
 The app has no analytics, no crash reporting and no usage tracking. The web dashboard loads no

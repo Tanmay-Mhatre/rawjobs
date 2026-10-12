@@ -1,25 +1,22 @@
 name: Release
 
-# Push a tag like v0.5.1 to publish a release: build the bundle (as that version), sign latest.json
-# with the release key, install it on Windows, macOS and Linux, then publish. The weekly release
-# (weekly-release.yml) tags and calls this too.
-# The tag's message becomes the "what's new" note shown in the dashboard. A line "Update: mandatory"
-# in it makes it a required update; "Min-version: 0.5.0" makes older versions reinstall instead.
+# Push a tag like v0.6.1 to publish a release: build the bundle (as that version), sign latest.json
+# with the release key, install it on Windows, macOS and Linux, then publish. Releases happen only
+# this way: merging a PR releases nothing (release-reminder.yml keeps an issue open as a reminder).
+# The tag's message becomes "What's new" in the dashboard: lines starting "New:", "Improved:" or
+# "Fixed:" show with a tag each. A line "Update: mandatory" makes it a required update;
+# "Min-version: 0.5.0" makes older versions reinstall instead. Once published, the site is deployed
+# again, which updates the beacon (v1/latest.json) installed copies watch: they download the new
+# version within minutes and show the Update pill (and a Telegram message, if set up).
 on:
   push:
     tags: ["v*"]
-  workflow_call:
-    inputs:
-      tag:
-        description: The tag to release (already pushed), e.g. v0.5.1
-        type: string
-        required: true
 
 permissions:
   contents: read
 
 env:
-  TAG: ${{ inputs.tag || github.ref_name }}
+  TAG: ${{ github.ref_name }}
 
 jobs:
   build:
@@ -96,6 +93,9 @@ jobs:
     runs-on: ubuntu-24.04
     permissions:
       contents: write
+      # Start the site deploy (the update beacon) and close the "not released yet" reminder.
+      actions: write
+      issues: write
     steps:
       - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
@@ -111,3 +111,15 @@ jobs:
           jq -r .notes release/latest.json > "$RUNNER_TEMP/notes.md"
           if [ "$(jq -r .critical release/latest.json)" = true ]; then printf '\n\n**Required update.**\n' >> "$RUNNER_TEMP/notes.md"; fi
           gh release create "$TAG" release/* --repo "$GITHUB_REPOSITORY" --title "RawJobs ${TAG#v}" --notes-file "$RUNNER_TEMP/notes.md" --generate-notes $pre
+      - name: Tell installed copies (the update beacon)
+        env:
+          GH_TOKEN: ${{ github.token }}
+        # The site's build writes v1/latest.json from the releases; copies read it every few minutes.
+        run: gh workflow run site.yml --repo "$GITHUB_REPOSITORY" --ref main
+      - name: Close the "not released yet" reminder
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          for n in $(gh issue list --repo "$GITHUB_REPOSITORY" --label release-pending --state open --json number --jq '.[].number'); do
+            gh issue close "$n" --repo "$GITHUB_REPOSITORY" --comment "Released as $TAG." || true
+          done

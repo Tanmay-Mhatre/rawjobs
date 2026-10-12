@@ -2,7 +2,7 @@ import { spawn, spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import { cpSync, existsSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { compareVersions, nodeArchive, RELEASE_URL, verifyRelease, type ReleaseManifest } from "./release";
+import { compareVersions, nodeArchive, RELEASE_URL, type ReleaseChange, verifyRelease, type ReleaseManifest } from "./release";
 import { cliCommand } from "./runtime";
 import { writeFileAtomic } from "./atomic";
 import { readDataFormat } from "./migrate";
@@ -16,26 +16,31 @@ import { readDataFormat } from "./migrate";
  * if it doesn't (finishUpdate).
  */
 
-/** "ask": check every day and tell you; you choose when to install. "off": never check. */
+/** "ask": watch for new versions, download them and tell you; you choose when to install. "off": never check. */
 export type UpdateMode = "ask" | "off";
 export type UpdateChannel = "stable" | "beta";
-export type UpdateSettings = { mode: UpdateMode; channel: UpdateChannel };
+/** `telegram`: a Telegram message when an update is downloaded (if Telegram alerts are set up). */
+export type UpdateSettings = { mode: UpdateMode; channel: UpdateChannel; telegram: boolean };
 /** updates.json: your choices, and what the last check found. */
 export type UpdateFile = UpdateSettings & {
   lastCheck?: string;
   /** The newest release seen at the last check (for "Update available" after a restart). */
-  latest?: { version: string; notes: string; critical: boolean; date: string; minVersion: string };
+  latest?: { version: string; notes: string; critical: boolean; date: string; minVersion: string; changes?: ReleaseChange[] };
   /** Versions that failed to start here: not offered again. */
   skip?: string[];
   /** A newer version downloaded and checked ahead of time (app/ready/<version>), waiting for you. */
   ready?: { version: string; node: string };
   /** When this copy first ran the version it's on: "Updated on" / "Installed on" in Settings → About. */
   installed?: { version: string; at: string };
+  /** The beacon as last read (fetchBeacon): its ETag, so an unchanged one costs almost nothing, and when. */
+  beacon?: { etag?: string; checkedAt: string; stable?: string; beta?: string };
+  /** The version a Telegram message already announced as ready (one message per version). */
+  notified?: string;
 };
 /** app/last-update.json: how the last update went, for the dashboard's note. */
 export type UpdateRecord = { from: string; to: string; ok: boolean; at: string; error?: string; notes?: string; seen?: boolean };
 
-export const DEFAULT_UPDATE_SETTINGS: UpdateSettings = { mode: "ask", channel: "stable" };
+export const DEFAULT_UPDATE_SETTINGS: UpdateSettings = { mode: "ask", channel: "stable", telegram: true };
 const REPO = "Tanmay-Mhatre/rawjobs";
 /** How long a new version gets to answer before the old one takes over again. */
 export const START_TIMEOUT_MS = 60_000;
@@ -65,6 +70,7 @@ export function readUpdateFile(home: string): UpdateFile {
     // "auto" (before 0.5) installed by itself: it's "ask" now. Only "off" stays off.
     mode: (f.mode as string) === "off" ? "off" : "ask",
     channel: f.channel === "beta" ? "beta" : "stable",
+    telegram: f.telegram !== false,
   };
 }
 
@@ -103,6 +109,37 @@ export async function releaseBase(channel: UpdateChannel, fetchImpl: typeof fetc
 
 /** A release's base address by version (`rawjobs update --to 0.3.0`). */
 export const releaseBaseFor = (version: string) => process.env.RAWJOBS_RELEASE_URL?.replace(/\/$/, "") ?? `https://github.com/${REPO}/releases/download/v${version.replace(/^v/, "")}`;
+
+// ---------- the beacon: is there a new version? ----------
+
+/**
+ * A tiny file on the RawJobs site (apps/site/build.mjs writes it when a release is published) with
+ * the newest version on each channel. Copies read it every few minutes, which costs almost nothing
+ * (static files on Cloudflare are free, and an unchanged one answers 304), and fetch the signed
+ * latest.json from GitHub only when it names a newer version. It's a hint, not trusted: a wrong
+ * one can only make a copy look at GitHub, where every release is checked against the signing key.
+ */
+export const BEACON_URL = "https://www.rawjobs.workers.dev/v1/latest.json";
+export type Beacon = { stable?: { version: string; critical?: boolean; date?: string }; beta?: { version: string; critical?: boolean; date?: string } };
+
+/** Read the beacon. "same" when it hasn't changed since `etag`. Throws when it can't be read. */
+export async function fetchBeacon(etag?: string, fetchImpl: typeof fetch = fetch): Promise<{ same: true } | { same: false; etag?: string; beacon: Beacon }> {
+  const url = process.env.RAWJOBS_BEACON_URL || BEACON_URL;
+  const res = await fetchImpl(url, { headers: etag ? { "if-none-match": etag } : {}, signal: AbortSignal.timeout(15_000) });
+  if (res.status === 304) return { same: true };
+  if (!res.ok) throw new Error(`The update beacon answered HTTP ${res.status}.`);
+  const beacon = (await res.json()) as Beacon;
+  return { same: false, etag: res.headers.get("etag") ?? undefined, beacon };
+}
+
+/** The newest version the beacon names for a channel (beta also takes a newer stable). */
+export function beaconVersion(b: Pick<NonNullable<UpdateFile["beacon"]>, "stable" | "beta"> | undefined, channel: UpdateChannel): string | null {
+  const stable = b?.stable ?? null;
+  const beta = b?.beta ?? null;
+  if (channel === "stable" || !beta) return stable;
+  if (!stable) return beta;
+  return compareVersions(beta, stable) > 0 ? beta : stable;
+}
 
 /** Download latest.json and its signature, and accept it only when the signature is the release key's. */
 export async function fetchManifest(base: string, opts: { fetchImpl?: typeof fetch; publicKey?: string } = {}): Promise<ReleaseManifest> {

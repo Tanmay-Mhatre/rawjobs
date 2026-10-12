@@ -7,6 +7,12 @@
 // build time; the Site workflow rebuilds weekly, after the directory does. Offline, the last known
 // numbers are used and the build says so.
 //
+// It also writes the update beacon, v1/latest.json: the newest RawJobs version on each channel,
+// from the app's GitHub releases. Installed copies read it every few minutes (packages/core
+// update.ts, fetchBeacon); the release workflow deploys the site when it publishes a release.
+// With REQUIRE_BEACON=1 (the Site workflow) a beacon that can't be built fails the build, so a
+// deploy never drops it.
+//
 // The page uses the app's own design files, so the site and the dashboard never drift:
 // tokens and fonts from apps/web/src/design, components from design/components/bundle.css.
 // No dependencies: plain Node, so it runs in CI without installing the workspace.
@@ -24,6 +30,7 @@ const SITE_URL = (process.env.SITE_URL || "https://www.rawjobs.workers.dev").rep
 // Cloudflare Web Analytics site token (public, cookieless). Unset: no analytics script.
 const ANALYTICS_TOKEN = (process.env.CF_ANALYTICS_TOKEN || "").trim();
 const DATA_REPO = process.env.DATA_REPO || "Tanmay-Mhatre/rawjobs-directory";
+const APP_REPO = process.env.APP_REPO || "Tanmay-Mhatre/rawjobs";
 
 // The 23 hiring systems with a connector in packages/core (README, "Adding companies").
 const SYSTEMS = [
@@ -238,6 +245,7 @@ cpSync(join(SITE, "public"), DIST, { recursive: true });
 // The dashboard screenshots the README uses (pnpm design:shots, demo data only).
 mkdirSync(join(DIST, "images"));
 for (const f of ["radar-light.png", "radar-dark.png"]) copyFileSync(join(ROOT, "docs/images", f), join(DIST, "images", f));
+await writeBeacon();
 writeFileSync(join(DIST, "robots.txt"), `User-agent: *\nAllow: /\n\nSitemap: ${SITE_URL}/sitemap.xml\n`);
 writeFileSync(join(DIST, "sitemap.xml"), `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n  <url><loc>${SITE_URL}/</loc></url>\n</urlset>\n`);
 
@@ -245,3 +253,43 @@ console.log(
   `Built ${DIST} for ${SITE_URL}${ANALYTICS_TOKEN ? " (with Web Analytics)" : ""}: ${Math.round(Buffer.byteLength(html) / 1024)} KB page, ` +
     `${NUMBERS.__COMPANIES__} companies (${n.live ? "live" : "last known"}).`,
 );
+
+/**
+ * v1/latest.json, the update beacon: { stable: { version, critical, date }, beta: {...} }. Stable is
+ * the newest release, beta the newest pre-release when it's newer than that. Built from GitHub's
+ * release list (with GITHUB_TOKEN when there is one, for the higher rate limit).
+ */
+async function writeBeacon() {
+  try {
+    const headers = { accept: "application/vnd.github+json", ...(process.env.GITHUB_TOKEN ? { authorization: `Bearer ${process.env.GITHUB_TOKEN}` } : {}) };
+    const res = await fetch(`https://api.github.com/repos/${APP_REPO}/releases?per_page=30`, { headers, signal: AbortSignal.timeout(15_000) });
+    if (!res.ok) throw new Error(`GitHub releases: HTTP ${res.status}`);
+    const list = (await res.json()).filter((r) => !r.draft && /^v\d+\.\d+\.\d+(-[0-9A-Za-z.]+)?$/.test(r.tag_name));
+    const entry = (r) => r && { version: r.tag_name.slice(1), critical: /\*\*Required update\.\*\*/.test(r.body ?? ""), date: (r.published_at ?? "").slice(0, 10) };
+    const stable = list.filter((r) => !r.prerelease).sort((a, b) => cmp(b.tag_name, a.tag_name))[0];
+    const beta = list.filter((r) => r.prerelease).sort((a, b) => cmp(b.tag_name, a.tag_name))[0];
+    const beacon = { stable: entry(stable), ...(beta && (!stable || cmp(beta.tag_name, stable.tag_name) > 0) ? { beta: entry(beta) } : {}) };
+    if (!beacon.stable) throw new Error("no release yet");
+    mkdirSync(join(DIST, "v1"), { recursive: true });
+    writeFileSync(join(DIST, "v1/latest.json"), `${JSON.stringify(beacon)}\n`);
+    console.log(`Update beacon: ${beacon.stable.version}${beacon.beta ? `, beta ${beacon.beta.version}` : ""}`);
+  } catch (err) {
+    if (process.env.REQUIRE_BEACON === "1") throw new Error(`Couldn't build the update beacon: ${err.message}`);
+    console.log(`No update beacon (${err.message}).`);
+  }
+}
+
+/** Compare "v0.10.2" and "v0.9.0" (a pre-release sorts before its release). */
+function cmp(a, b) {
+  const parse = (v) => {
+    const [main, pre] = v.replace(/^v/, "").split("-", 2);
+    return { nums: main.split(".").map(Number), pre };
+  };
+  const x = parse(a);
+  const y = parse(b);
+  for (let i = 0; i < 3; i++) if (x.nums[i] !== y.nums[i]) return x.nums[i] - y.nums[i];
+  if (x.pre === y.pre) return 0;
+  if (!x.pre) return 1;
+  if (!y.pre) return -1;
+  return x.pre < y.pre ? -1 : 1;
+}

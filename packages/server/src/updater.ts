@@ -1,7 +1,12 @@
+import { readFileSync } from "node:fs";
 import type { IncomingMessage, ServerResponse } from "node:http";
-import { APP_VERSION, BUNDLED } from "@rawjobs/core";
+import { join } from "node:path";
+import { APP_VERSION, BUNDLED, CODE_ROOT, loadConfig, sendTelegram, telegramSecrets } from "@rawjobs/core";
+import { type ChangelogEntry, compareVersions, type ReleaseChange } from "@rawjobs/core/release";
 import {
+  beaconVersion,
   downloadAhead,
+  fetchBeacon,
   fetchManifest,
   installedVersions,
   judge,
@@ -26,6 +31,8 @@ export type UpdateStatus = {
   available: {
     version: string;
     notes: string;
+    /** Its "New / Improved / Fixed" lines (empty for a release written before them). */
+    changes?: ReleaseChange[];
     /** A required update: the dashboard asks for it in a window that only closes by updating. */
     critical: boolean;
     date: string;
@@ -57,25 +64,55 @@ export type UpdateStatus = {
 
 const MINUTE = 60 * 1000;
 const HOUR = 60 * MINUTE;
-const CHECK_EVERY = 24 * HOUR;
+/** How often it reads the beacon: every 5 minutes, give or take one (so copies don't all ask at once). */
+const WATCH_EVERY = 5 * MINUTE;
+const JITTER = MINUTE;
+/** When the beacon can't be read: wait longer each time (5, 10, 20… minutes), up to an hour. */
+const MAX_BACKOFF = HOUR;
+/** And when it hasn't been read for this long, ask GitHub directly (as before the beacon). */
+const DIRECT_AFTER = 6 * HOUR;
+/** Coming back to the dashboard reads the beacon too, at most this often. */
+const FOCUS_EVERY = MINUTE;
+
+/** Every release's notes up to this version, newest first (the bundle's changelog.json; none in a checkout). */
+export function readChangelog(): ChangelogEntry[] {
+  try {
+    return JSON.parse(readFileSync(join(CODE_ROOT, "changelog.json"), "utf8")) as ChangelogEntry[];
+  } catch {
+    return [];
+  }
+}
 
 /**
- * Keeps an installed copy up to date without ever installing on its own: once a day it checks for
- * a new version and downloads it ahead of time (when no scan is running), so the dashboard can say
- * it's ready. It installs only when you click Update now; if a scan (also a scheduled one) is
- * running then, it waits for it to finish. Required updates come up in a window the dashboard
- * shows until you update. Off never checks. The dashboard reads and drives it through /api/update.
+ * Keeps an installed copy up to date, over the air, without ever installing on its own. Every few
+ * minutes (and at start, and when you come back to the dashboard) it reads the beacon, a tiny file
+ * naming the newest version (core update.ts, fetchBeacon). When that names a newer version, it gets
+ * the signed release from GitHub and downloads it in the background (after any scan that's
+ * running). Then it says so: an Update pill in the dashboard (seen within seconds through
+ * /api/health's updateHint), and a Telegram message if Telegram alerts are set up. It installs only
+ * when you click the pill; if a scan (also a scheduled one) is running then, it waits for it to
+ * finish. Required updates come up in a window the dashboard shows until you update. Off never
+ * checks. The dashboard reads and drives it through /api/update.
  */
-export function createUpdater(o: { home: string; isBusy: () => boolean; exit: () => void }) {
+export function createUpdater(o: {
+  home: string;
+  isBusy: () => boolean;
+  exit: () => void;
+  /** Tests: act as an installed copy without being one. */
+  installed?: boolean;
+}) {
   const { home } = o;
-  const installed = BUNDLED && !!process.env.RAWJOBS_LAUNCHER && !!installedVersions(home);
+  const installed = o.installed ?? (BUNDLED && !!process.env.RAWJOBS_LAUNCHER && !!installedVersions(home));
   let state: UpdateStatus["state"] = "idle";
   let error: string | undefined;
-  let daily: ReturnType<typeof setInterval> | undefined;
-  let first: ReturnType<typeof setTimeout> | undefined;
+  let next: ReturnType<typeof setTimeout> | undefined;
   let waiter: ReturnType<typeof setInterval> | undefined;
-  /** The download ahead of time was put off (a scan was running): try again at the next hourly tick. */
+  let stopped = false;
+  /** The download ahead of time was put off (a scan was running): try again at the next look. */
   let prefetchLater = false;
+  /** Beacon reads that failed in a row (for the back-off). */
+  let failures = 0;
+  let lastLook = 0;
 
   const judged = (): UpdateCheck | null => {
     const f = readUpdateFile(home);
@@ -91,9 +128,9 @@ export function createUpdater(o: { home: string; isBusy: () => boolean; exit: ()
     return {
       installed,
       current: APP_VERSION,
-      settings: { mode: f.mode, channel: f.channel },
+      settings: { mode: f.mode, channel: f.channel, telegram: f.telegram },
       lastCheck: f.lastCheck,
-      available: c?.available ? { ...f.latest!, major: c.major, ready: f.ready?.version === f.latest!.version } : null,
+      available: c?.available ? { ...f.latest!, changes: f.latest!.changes ?? [], major: c.major, ready: f.ready?.version === f.latest!.version } : null,
       tooOld: !!c?.tooOld,
       state,
       error,
@@ -118,7 +155,7 @@ export function createUpdater(o: { home: string; isBusy: () => boolean; exit: ()
       const m = await fetchManifest(base);
       writeUpdateFile(home, {
         lastCheck: new Date().toISOString(),
-        latest: { version: m.version, notes: m.notes, critical: m.critical, date: m.date, minVersion: m.minVersion },
+        latest: { version: m.version, notes: m.notes, critical: m.critical, date: m.date, minVersion: m.minVersion, changes: m.changes ?? [] },
       });
       return { check: judge(APP_VERSION, m, f.skip), base };
     } catch (err) {
@@ -179,27 +216,107 @@ export function createUpdater(o: { home: string; isBusy: () => boolean; exit: ()
     }, 15 * 1000);
   }
 
-  /** The daily check, and the download ahead of time. Never installs. */
-  async function tick() {
+  /**
+   * One look for a new version, never an install: read the beacon; when it names a version newer
+   * than this one (and not downloaded yet), get the signed release and download it. When the beacon
+   * can't be read for hours, ask GitHub directly. Returns how long to wait before the next look.
+   */
+  async function look(): Promise<number> {
+    lastLook = Date.now();
     const f = readUpdateFile(home);
-    if (f.mode === "off" || state !== "idle") return;
-    const due = !f.lastCheck || Date.now() - Date.parse(f.lastCheck) > CHECK_EVERY;
-    if (!due && !prefetchLater) return;
-    const found = await check();
-    if (found) await prefetch(found);
+    if (f.mode === "off" || state !== "idle") return WATCH_EVERY;
+    let wanted = false;
+    try {
+      const r = await fetchBeacon(f.beacon?.etag);
+      const b = r.same ? f.beacon : { etag: r.etag, stable: r.beacon.stable?.version, beta: r.beacon.beta?.version };
+      writeUpdateFile(home, { beacon: { ...b, checkedAt: new Date().toISOString() } });
+      failures = 0;
+      const v = beaconVersion(b, f.channel);
+      // Newer than this version, and not already found and downloaded.
+      wanted = !!v && compareVersions(v, APP_VERSION) > 0 && !(f.skip ?? []).includes(v) && (f.latest?.version !== v || f.ready?.version !== v);
+    } catch (err) {
+      failures++;
+      const quiet = Date.now() - Date.parse(f.beacon?.checkedAt ?? f.lastCheck ?? "1970-01-01");
+      // Can't reach the beacon for a long while: GitHub, at most hourly.
+      wanted = quiet > DIRECT_AFTER && (!f.lastCheck || Date.now() - Date.parse(f.lastCheck) > HOUR);
+      if (failures === 1) console.log(`Couldn't read the update beacon: ${(err as Error).message}`);
+    }
+    if (wanted || prefetchLater) {
+      const found = await check();
+      if (found) await prefetch(found);
+    }
+    await announce();
+    return failures ? Math.min(WATCH_EVERY * 2 ** (failures - 1), MAX_BACKOFF) : WATCH_EVERY + Math.round((Math.random() * 2 - 1) * JITTER);
+  }
+
+  /** Look now, then keep looking: every few minutes, or longer while it can't reach the beacon. */
+  function watch(delay: number) {
+    clearTimeout(next);
+    if (stopped) return;
+    next = setTimeout(() => {
+      void look()
+        .catch(() => WATCH_EVERY)
+        .then((wait) => watch(wait));
+    }, delay);
+  }
+
+  /**
+   * A Telegram message once a new version is downloaded and ready, once per version, when Telegram
+   * alerts are set up and turned on (and this message isn't turned off in Settings). From this
+   * computer to your own bot, like scan alerts.
+   */
+  async function announce() {
+    const f = readUpdateFile(home);
+    const l = f.latest;
+    if (!l || f.ready?.version !== l.version || f.notified === l.version || !f.telegram) return;
+    if (compareVersions(l.version, APP_VERSION) <= 0) return;
+    let on = false;
+    try {
+      on = loadConfig().config.alerts.telegram;
+    } catch {
+      // no config yet: no alerts
+    }
+    const secrets = telegramSecrets(home);
+    if (!on || !secrets.token || !secrets.chatId) return;
+    try {
+      await sendTelegram(updateMessage(l.version, l.critical, l.changes ?? []), secrets);
+      writeUpdateFile(home, { notified: l.version });
+    } catch (err) {
+      // Tried again at the next look.
+      console.log(`Couldn't send the update message on Telegram: ${(err as Error).message}`);
+    }
   }
 
   function start() {
     if (!installed) return;
     // "Updated on" / "Installed on": the first time this copy runs this version.
     if (readUpdateFile(home).installed?.version !== APP_VERSION) writeUpdateFile(home, { installed: { version: APP_VERSION, at: new Date().toISOString() } });
-    first = setTimeout(() => void tick(), MINUTE);
-    daily = setInterval(() => void tick(), HOUR);
+    // Soon after start: a copy that was off all night hears about the night's release.
+    watch(30 * 1000);
+  }
+
+  /**
+   * For /api/health, which the dashboard asks every 5 seconds: the version waiting to be installed,
+   * so an open dashboard shows the Update pill within seconds of the server finding it.
+   */
+  function updateHint(): { version: string; critical: boolean } | null {
+    if (!installed) return null;
+    const c = judged();
+    return c?.available && !c.tooOld ? { version: c.manifest.version, critical: c.manifest.critical } : null;
+  }
+
+  /** Release notes for Settings → About and "What's new": this version's history, and the one waiting, if any. */
+  function changelog(): { current: string; entries: ChangelogEntry[]; upcoming: ChangelogEntry | null } {
+    const f = readUpdateFile(home);
+    const entries = readChangelog().filter((e) => compareVersions(e.version, APP_VERSION) <= 0);
+    const l = f.latest;
+    const upcoming = installed && l && compareVersions(l.version, APP_VERSION) > 0 ? { version: l.version, date: l.date, notes: l.notes, changes: l.changes ?? [], critical: l.critical } : null;
+    return { current: APP_VERSION, entries, upcoming };
   }
 
   function stop() {
-    clearTimeout(first);
-    clearInterval(daily);
+    stopped = true;
+    clearTimeout(next);
     clearInterval(waiter);
   }
 
@@ -215,6 +332,10 @@ export function createUpdater(o: { home: string; isBusy: () => boolean; exit: ()
       json(res, status());
       return true;
     }
+    if (url === "/api/update/changelog" && req.method === "GET") {
+      json(res, changelog());
+      return true;
+    }
     if (!url.startsWith("/api/update/")) return false;
     if (!installed) {
       json(res, { ...status(), error: "This copy updates with git (git pull), not by itself." }, 400);
@@ -224,6 +345,9 @@ export function createUpdater(o: { home: string; isBusy: () => boolean; exit: ()
       const found = await check();
       // Get it ready in the background; the answer doesn't wait for the download.
       if (found) void prefetch(found);
+    } else if (url === "/api/update/focus" && req.method === "POST") {
+      // You came back to the dashboard: look for a new version now (unless it just did), in the background.
+      if (Date.now() - lastLook > FOCUS_EVERY && state === "idle") watch(0);
     } else if (url === "/api/update/apply" && req.method === "POST") await apply();
     else if (url === "/api/update/seen" && req.method === "POST") markLastUpdateSeen(home);
     else if (url === "/api/update/shortcut" && req.method === "POST") {
@@ -232,19 +356,33 @@ export function createUpdater(o: { home: string; isBusy: () => boolean; exit: ()
       markShortcutNoticeSeen(home);
     } else if (url === "/api/update/shortcut-seen" && req.method === "POST") markShortcutNoticeSeen(home);
     else if (url === "/api/update/settings" && req.method === "PUT") {
-      const b = JSON.parse((await body()) || "{}") as { mode?: unknown; channel?: unknown };
+      const b = JSON.parse((await body()) || "{}") as { mode?: unknown; channel?: unknown; telegram?: unknown };
       const patch: Partial<UpdateSettings> = {};
       if (b.mode === "ask" || b.mode === "off") patch.mode = b.mode;
       if (b.channel === "stable" || b.channel === "beta") patch.channel = b.channel;
+      if (typeof b.telegram === "boolean") patch.telegram = b.telegram;
       // A new channel has a different newest release.
       const channelChanged = patch.channel !== undefined && patch.channel !== readUpdateFile(home).channel;
-      writeUpdateFile(home, channelChanged ? { ...patch, lastCheck: undefined, latest: undefined } : patch);
+      writeUpdateFile(home, channelChanged ? { ...patch, lastCheck: undefined, latest: undefined, beacon: undefined } : patch);
+      if (channelChanged) watch(0);
     } else return false;
     json(res, status());
     return true;
   }
 
-  return { start, status, check, apply, route, stop, updating: () => state === "updating" };
+  return { start, status, check, apply, route, stop, look, updateHint, updating: () => state === "updating" };
 }
 
 export type Updater = ReturnType<typeof createUpdater>;
+
+const LABEL: Record<ReleaseChange["type"], string> = { new: "New", improved: "Improved", fixed: "Fixed" };
+const esc = (t: string) => t.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+
+/** The Telegram message for a downloaded update (HTML, as sendTelegram sends it). */
+export function updateMessage(version: string, critical: boolean, changes: ReleaseChange[]): string {
+  const lines = [critical ? `<b>RawJobs ${esc(version)} is a required update.</b> It's downloaded and ready.` : `<b>RawJobs ${esc(version)} is downloaded and ready.</b>`];
+  for (const c of changes.slice(0, 5)) lines.push(`${LABEL[c.type]}: ${esc(c.text)}`);
+  if (changes.length > 5) lines.push(`and ${changes.length - 5} more`);
+  lines.push("", "Open RawJobs and click Update. Nothing changes until you do.");
+  return lines.join("\n");
+}

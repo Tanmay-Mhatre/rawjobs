@@ -17,7 +17,7 @@ export type ApiOptions = {
   /** Reported by /api/health. Default: this copy's version. */
   version?: string;
   /** Answers /api/update (an installed copy's updates); without it, it says this copy doesn't update itself. */
-  updater?: Pick<Updater, "route" | "updating">;
+  updater?: Pick<Updater, "route" | "updating" | "updateHint">;
 };
 
 /** One line of the scan's NDJSON progress. */
@@ -25,7 +25,7 @@ type Line = string;
 
 /**
  * The dashboard's API: everything it needs to set up and run RawJobs on this computer.
- *   GET  /api/health          { ok, version, scanning }: is the server up, and which version
+ *   GET  /api/health          { ok, version, scanning, update }: is the server up, which version, and one waiting to install
  *   GET/PUT /api/tracking     your statuses, notes and Radar preferences (profile/tracking.json)
  *   GET  /api/update          an installed copy's updates (POST …/check, …/apply, …/seen; PUT …/settings)
  *   GET  /api/setup           setup status (+ current config)
@@ -213,7 +213,7 @@ Stopped after ${Math.round(timeoutMs / 1000)} s without finishing.`.trim(),
   }
 
   async function route(url: string, req: IncomingMessage, res: ServerResponse): Promise<void> {
-    if (url === "/api/health" && req.method === "GET") return json(res, { ok: true, version, scanning: busy() });
+    if (url === "/api/health" && req.method === "GET") return json(res, { ok: true, version, scanning: busy(), update: opts.updater?.updateHint() ?? null });
     if (url === "/api/update" || url.startsWith("/api/update/")) {
       if (opts.updater && (await opts.updater.route(url, req, res, () => readBody(req)))) return;
       if (url === "/api/update" && req.method === "GET")
