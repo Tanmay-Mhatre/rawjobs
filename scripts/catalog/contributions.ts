@@ -10,7 +10,7 @@
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { ATS_TYPES, careersUrl, companyKey, guessName, HttpClient } from "../../packages/core/src/index";
+import { ATS_TYPES, careersUrl, companyKey, guessName, HttpClient } from "@rawjobs/core";
 import { readDenylist } from "./lib/denylist";
 import { checkBoard } from "./lib/live-check";
 

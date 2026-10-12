@@ -1,5 +1,5 @@
 import type { IncomingMessage, ServerResponse } from "node:http";
-import { APP_VERSION, BUNDLED } from "../../core/src/runtime";
+import { APP_VERSION, BUNDLED } from "@rawjobs/core";
 import {
   downloadAhead,
   fetchManifest,
@@ -14,7 +14,7 @@ import {
   type UpdateCheck,
   type UpdateRecord,
   type UpdateSettings,
-} from "../../core/src/update";
+} from "@rawjobs/core/update";
 import { hasDesktopShortcut, makeShortcuts } from "./shortcuts";
 
 export type UpdateStatus = {

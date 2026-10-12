@@ -7,6 +7,7 @@
     "rawjobs": "./src/index.ts"
   },
   "dependencies": {
-    "@rawjobs/core": "workspace:*"
+    "@rawjobs/core": "workspace:*",
+    "@rawjobs/server": "workspace:*"
   }
 }

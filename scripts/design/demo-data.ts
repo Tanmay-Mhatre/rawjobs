@@ -24,7 +24,7 @@ import {
   type RunSummary,
   type Salary,
   type Workplace,
-} from "../../packages/core/src/index";
+} from "@rawjobs/core";
 
 /** The page's clock is frozen here too. */
 export const NOW = new Date("2026-06-15T09:00:00.000Z");

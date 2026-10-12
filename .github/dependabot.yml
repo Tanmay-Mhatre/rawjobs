@@ -21,3 +21,15 @@ updates:
       dependencies:
         dependency-type: production
         update-types: [minor, patch]
+    ignore:
+      # The types follow the Node that installed copies run (the bundled runtime, Node 24) and the
+      # data workflows (22), so code can't type-check against features that crash there. They move
+      # up together with the bundled runtime, by hand; minor and patch updates still come.
+      - dependency-name: "@types/node"
+        update-types: ["version-update:semver-major"]
+      # Big upgrades done on purpose, in their own pull request, not as a weekly bump: the test
+      # runner (config and APIs change between majors) and the compiler (TypeScript 7 is the native one).
+      - dependency-name: "vitest"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "typescript"
+        update-types: ["version-update:semver-major"]

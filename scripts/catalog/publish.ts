@@ -28,7 +28,7 @@ import {
   isPlaceholderBoard,
   type IndexedCompany,
   type IndexRow,
-} from "../../packages/core/src/index";
+} from "@rawjobs/core";
 import type { Resolved, Seed } from "./resolve";
 
 const here = dirname(fileURLToPath(import.meta.url));

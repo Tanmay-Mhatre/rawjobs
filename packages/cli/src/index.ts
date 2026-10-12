@@ -15,6 +15,8 @@ import {
   detectCompany,
   loadConfig,
   readResume,
+  companyExtras,
+  recordAdditions,
   deleteResume,
   saveResume,
   saveConfig,
@@ -51,121 +53,25 @@ import {
   isLegacyConfig,
   type BoardMove,
   type ScanScope,
-  type DirectoryEntry,
   directoryAgeDays,
   directoryStatus,
   queueContributions,
   sendContributions,
   updateDirectory,
-  companyWords,
-  lookalikes,
-  matchEmployers,
   ProfileSchema,
-  rolesFromResume,
-  seedFromRole,
-  type CompanyCheck,
   type CompanyHealth,
-  type CompanyShape,
   type Config,
-  type Profile,
-  type SuggestResult,
   type IndexedCompany,
   type Job,
 } from "@rawjobs/core";
 import { ATS_TYPES } from "@rawjobs/core";
+import type { RunEvent } from "@rawjobs/core/protocol";
 
 /** A company's own hiring system, not a job board (JOB_BOARDS): boards are never shared or put in the directory. */
 const isAts = (ats: string | undefined) => (ATS_TYPES as readonly string[]).includes(ats ?? "");
 
 /** Remember boards found by "Add by link" that the directory doesn't have yet. */
-function recordAdditions(dataDir: string, results: CompanyCheck[]): void {
-  const fresh = results.filter((r) => (r.status === "live" || r.status === "dormant") && !r.in_directory && r.key && isAts(r.ats));
-  if (!fresh.length) return;
-  const file = resolve(dataDir, "catalog", "additions.json");
-  const current = existsSync(file) ? (JSON.parse(readFileSync(file, "utf8")) as { companies: (DirectoryEntry & { added_at: string })[] }).companies : [];
-  const byKey = new Map(current.map((c) => [c.key, c]));
-  for (const r of fresh) {
-    byKey.set(r.key!, {
-      key: r.key!,
-      name: r.name!,
-      ats: r.ats!,
-      slug: r.slug!,
-      ...(r.region ? { region: r.region } : {}),
-      ...(r.shard ? { shard: r.shard } : {}),
-      ...(r.site ? { site: r.site } : {}),
-      careers_url: r.careers_url!,
-      status: r.status,
-      open_jobs: r.open_jobs ?? null,
-      added_at: byKey.get(r.key!)?.added_at ?? new Date().toISOString(),
-    });
-  }
-  mkdirSync(dirname(file), { recursive: true });
-  writeFileSync(file, JSON.stringify({ companies: [...byKey.values()] }, null, 1));
-}
-
 type SuggestInput = { profile?: unknown; watched?: string[]; hidden?: string[] };
-
-/**
- * What the Companies page shows beyond the three lists: your past employers in the directory
- * ("go back?"), companies like them, one starter pack per industry you picked, and how much of
- * your industries we can track.
- */
-function companyExtras(profile: Profile, pool: SuggestResult, indexed: readonly IndexedCompany[], directory: readonly DirectoryEntry[], exclude: ReadonlySet<string>) {
-  const candidates = [...pool.hiringNow, ...pool.worthWatching];
-  const rowsByKey = new Map(indexed.map((c) => [c.key, c]));
-  const dirByKey = new Map(directory.map((c) => [c.key, c]));
-  const source = (key: string) => rowsByKey.get(key) ?? dirByKey.get(key);
-  const shapes = new Map<string, CompanyShape>();
-
-  // Past employers: the confirmed list, or (until there is one) what the resume says.
-  const roles = rolesFromResume(readResume().text ?? "");
-  const names = profile.past_employers.length ? profile.past_employers : roles.map((r) => r.company);
-  const matched = matchEmployers(names, directory);
-  const roleOf = (name: string) => roles.find((r) => companyWords(r.company).join(" ") === companyWords(name).join(" "));
-  const lookalikeRows = matched
-    .map(({ name, match }) => {
-      const role = roleOf(name);
-      const seed = match ? { ...(rowsByKey.get(match.key) ?? match), name } : role ? seedFromRole(role) : undefined;
-      return seed ? { seed: name, in_directory: !!match, items: lookalikes(seed, candidates, source, shapes, { limit: 6 }) } : undefined;
-    })
-    .filter((r): r is NonNullable<typeof r> => !!r && r.items.length > 0)
-    .slice(0, 3);
-  const pastEmployers = matched.map(({ name, match }) => ({
-    name,
-    ...(match && !exclude.has(match.key)
-      ? {
-          company: {
-            key: match.key,
-            name: match.name,
-            ats: match.ats,
-            slug: match.slug,
-            careers_url: match.careers_url,
-            region: match.region,
-            shard: match.shard,
-            site: match.site,
-            open_jobs: match.open_jobs,
-            status: match.status,
-          },
-        }
-      : {}),
-    watched: !!match && exclude.has(match.key),
-  }));
-
-  const wanted = new Set(profile.industries);
-  const packs = profile.industries.map((id) => ({
-    industry: id,
-    items: candidates
-      .filter((c) => c.industries.includes(id) && connectors[c.ats as keyof typeof connectors])
-      .sort((a, b) => b.score - a.score)
-      .slice(0, 8),
-  }));
-  const inIndustries = directory.filter((c) => c.tags?.some((t) => wanted.has(t)));
-  const coverage = {
-    in_industries: new Set(inIndustries.map((c) => companyWords(c.name).join(" "))).size,
-    trackable: new Set(inIndustries.filter((c) => c.status === "live" && connectors[c.ats as keyof typeof connectors]).map((c) => companyWords(c.name).join(" "))).size,
-  };
-  return { pastEmployers, lookalikes: lookalikeRows, packs: packs.filter((p) => p.items.length), coverage };
-}
 
 async function cmdCompanies(args: string[]): Promise<number> {
   const { values, positionals } = parseArgs({
@@ -292,15 +198,15 @@ async function main(argv: string[]): Promise<number> {
       return cmdSchedule(rest);
     case "serve":
       // Loaded only when asked for, so other commands start as fast as before.
-      return (await import("../../server/src/serve")).serve(rest);
+      return (await import("@rawjobs/server/serve")).serve(rest);
     case "open":
-      return (await import("../../server/src/desktop")).openDashboard(rest);
+      return (await import("@rawjobs/server/desktop")).openDashboard(rest);
     case "uninstall":
-      return (await import("../../server/src/desktop")).uninstall(rest);
+      return (await import("@rawjobs/server/desktop")).uninstall(rest);
     case "update":
-      return (await import("../../server/src/desktop")).updateCommand(rest);
+      return (await import("@rawjobs/server/desktop")).updateCommand(rest);
     case "shortcuts":
-      return (await import("../../server/src/desktop")).shortcutsCommand(rest);
+      return (await import("@rawjobs/server/desktop")).shortcutsCommand(rest);
     case undefined:
     case "help":
     case "-h":
@@ -492,7 +398,8 @@ function printPlan(values: { config?: string; data: string }): number {
   return 0;
 }
 
-const emit = (event: Record<string, unknown>) => process.stdout.write(`${JSON.stringify(event)}\n`);
+/** One line of the dashboard's scan progress: @rawjobs/core/protocol's RunEvent. */
+const emit = (event: RunEvent) => process.stdout.write(`${JSON.stringify(event)}\n`);
 
 /** Machine-readable scan for the dashboard: sync, start, one line per company (yours, plus matches and failures), done (or error). */
 async function runNdjson(values: RunValues): Promise<number> {

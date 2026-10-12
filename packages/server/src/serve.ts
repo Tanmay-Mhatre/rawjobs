@@ -1,10 +1,8 @@
 import { existsSync, mkdirSync } from "node:fs";
 import { createServer, type Server } from "node:http";
 import { parseArgs } from "node:util";
-import { defaultDataDir, rawjobsHome } from "../../core/src/paths";
-import { migrateData } from "../../core/src/migrate";
-import { APP_VERSION, BUNDLED, WEB_DIR } from "../../core/src/runtime";
-import { scanLockHeld } from "../../core/src/scan";
+import { defaultDataDir, rawjobsHome } from "@rawjobs/core";
+import { APP_VERSION, BUNDLED, migrateData, scanLockHeld, WEB_DIR } from "@rawjobs/core";
 import { createApi } from "./api";
 import { createUpdater } from "./updater";
 import { DEFAULT_PORT, healthy, logTo, openBrowser, readServerState, writeServerState } from "./desktop";
