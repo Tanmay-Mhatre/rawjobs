@@ -54,7 +54,7 @@ export function checklistItems(config: Config | undefined, meta: DataMeta | unde
   ];
 }
 
-const DISMISS_KEY = "rawjobs.checklist.dismissed";
+export const DISMISS_KEY = "rawjobs.checklist.dismissed";
 
 type Actions = { onStep: (n: number) => void; onScan: () => void; onCompanies: () => void };
 
