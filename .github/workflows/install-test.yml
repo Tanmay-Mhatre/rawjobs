@@ -54,8 +54,11 @@ jobs:
           curl -fs http://127.0.0.1:4317/api/health | grep -F '"ok":true'
           "$RAWJOBS_HOME/bin/rawjobs" setup status | grep -F "\"configPath\":\"$RAWJOBS_HOME/rawjobs.config.local.yaml\""
           "$RAWJOBS_HOME/bin/rawjobs" open --no-browser
+          if [ "$RUNNER_OS" = Linux ]; then grep -qF "Icon=$RAWJOBS_HOME/icons/rawjobs.png" "${XDG_DATA_HOME:-$HOME/.local/share}/applications/rawjobs.desktop"; fi
           if [ "$RUNNER_OS" = macOS ]; then
             test -d "$HOME/Applications/RawJobs.app"
+            test -f "$HOME/Applications/RawJobs.app/Contents/Resources/applet.icns"
+            if [ -d "$HOME/Desktop" ]; then test -L "$HOME/Desktop/RawJobs.app"; fi
             launchctl print "gui/$(id -u)/com.rawjobs.server" >/dev/null && echo "Starts at login: launchd agent loaded" || echo "::warning::launchd agent not loaded on this runner"
           fi
           mkdir -p "$RAWJOBS_HOME/profile" && echo "my resume" > "$RAWJOBS_HOME/profile/resume.md"
@@ -78,7 +81,12 @@ jobs:
           sleep 2
           test ! -e "$RAWJOBS_HOME/app" && test ! -e "$RAWJOBS_HOME/runtime" && test ! -e "$RAWJOBS_HOME/bin"
           grep -qx "my resume" "$RAWJOBS_HOME/profile/resume.md"
+          # Reinstalling backed your data up first.
+          ls "$RAWJOBS_HOME/backups/"*/profile/resume.md
           ! curl -fs --max-time 2 http://127.0.0.1:4317/api/health
+          # The shortcuts are gone too.
+          test ! -e "$HOME/Applications/RawJobs.app" && test ! -e "$HOME/Desktop/RawJobs.app"
+          test ! -e "${XDG_DATA_HOME:-$HOME/.local/share}/applications/rawjobs.desktop"
 
       - name: The logs, when something failed (macOS, Linux)
         if: failure() && runner.os != 'Windows'
@@ -96,7 +104,11 @@ jobs:
           irm http://127.0.0.1:8765/install.ps1 | iex
           if (-not (Invoke-RestMethod http://127.0.0.1:4317/api/health).ok) { throw 'not running' }
           if (-not (Get-ScheduledTask -TaskName 'RawJobs Server')) { throw 'no task' }
-          if (-not (Test-Path (Join-Path ([Environment]::GetFolderPath('Programs')) 'RawJobs.lnk'))) { throw 'no shortcut' }
+          $menu = Join-Path ([Environment]::GetFolderPath('Programs')) 'RawJobs.lnk'
+          $desktop = Join-Path ([Environment]::GetFolderPath('Desktop')) 'RawJobs.lnk'
+          if (-not (Test-Path $menu)) { throw 'no Start menu shortcut' }
+          if (-not (Test-Path $desktop)) { throw 'no Desktop shortcut' }
+          if (-not (New-Object -ComObject WScript.Shell).CreateShortcut($desktop).IconLocation.StartsWith((Join-Path $env:RAWJOBS_HOME 'icons\rawjobs.ico'))) { throw 'the shortcut has no RawJobs icon' }
           $launcher = Join-Path $env:RAWJOBS_HOME 'bin\rawjobs.cmd'
           & $launcher open --no-browser
           New-Item -ItemType Directory -Force (Join-Path $env:RAWJOBS_HOME 'profile') | Out-Null
@@ -121,6 +133,8 @@ jobs:
           foreach ($p in 'app', 'runtime', 'bin') { if (Test-Path (Join-Path $env:RAWJOBS_HOME $p)) { throw "$p is still there" } }
           if ((Get-Content (Join-Path $env:RAWJOBS_HOME 'profile\resume.md')) -ne 'my resume') { throw 'data was lost' }
           if (Get-ScheduledTask -TaskName 'RawJobs Server' -ErrorAction SilentlyContinue) { throw 'task still there' }
+          if ((Test-Path $menu) -or (Test-Path $desktop)) { throw 'a shortcut is still there' }
+          if (-not (Get-ChildItem (Join-Path $env:RAWJOBS_HOME 'backups\*\profile\resume.md'))) { throw 'reinstalling made no backup' }
 
       - name: The logs, when something failed (Windows)
         if: failure() && runner.os == 'Windows'

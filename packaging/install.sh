@@ -8,9 +8,10 @@
 #      (macOS: ~/Library/Application Support/RawJobs, Linux: ~/.local/share/rawjobs), and checks
 #      both against the release's signed checksums.
 #   2. Starts RawJobs now and every time you log in, in the background, and restarts it if it stops.
-#   3. Adds a RawJobs app (macOS: ~/Applications; Linux: your app menu) and opens the dashboard:
-#      http://127.0.0.1:4317
-# Running it again updates or repairs RawJobs. Your profile, tracking and scan data are never touched.
+#   3. Adds a RawJobs app (macOS: ~/Applications; Linux: your app menu) and a shortcut on the
+#      Desktop, and opens the dashboard: http://127.0.0.1:4317
+# Running it again updates or repairs RawJobs. Your profile, tracking and scan data are never touched
+# (and are backed up first, to backups/); a scan that's running gets time to finish.
 # Uninstall: "<that folder>/bin/rawjobs" uninstall
 #
 # Settings (environment variables, all optional):
@@ -123,7 +124,44 @@ download "$RELEASE/$BUNDLE_FILE" "$TMP/bundle.tar.gz"
 mkdir -p "$TMP/app"
 tar -xzf "$TMP/bundle.tar.gz" -C "$TMP/app" --strip-components=1 || fail "couldn't unpack RawJobs."
 
-# 5. Stop the running copy (if any), then put the new one in place.
+# 5. Let a running scan finish (or stop it so it can carry on later), back up your data, stop the
+#    running copy (if any), then put the new one in place.
+LOCK="$DIR/data/scan.lock"
+LOCK_PID="$(cat "$LOCK" 2>/dev/null || true)"
+case "$LOCK_PID" in '' | *[!0-9]*) LOCK_PID="" ;; esac
+if [ -n "$LOCK_PID" ] && kill -0 "$LOCK_PID" 2>/dev/null; then
+  say "A scan is running: waiting up to 10 minutes for it to finish"
+  i=0
+  while [ $i -lt 120 ] && kill -0 "$LOCK_PID" 2>/dev/null; do sleep 5; i=$((i + 1)); done
+  if kill -0 "$LOCK_PID" 2>/dev/null; then
+    # It saves its progress and stops; the next scan carries on from there.
+    say "Stopping the scan (the next scan carries on where it stopped)"
+    : >"$DIR/data/scan-stop"
+    i=0
+    while [ $i -lt 12 ] && kill -0 "$LOCK_PID" 2>/dev/null; do sleep 5; i=$((i + 1)); done
+  fi
+fi
+if [ -f "$DIR/app/current.txt" ]; then
+  say "Backing up your data"
+  B="$DIR/backups/$(date -u +%Y-%m-%dT%H-%M-%S-000Z)-before-$VERSION"
+  mkdir -p "$B"
+  for f in rawjobs.config.local.yaml rawjobs.config.local.backup.yaml profile; do
+    if [ -e "$DIR/$f" ]; then cp -R "$DIR/$f" "$B/"; fi
+  done
+  if [ -d "$DIR/data" ]; then
+    # Not what downloads again (caches, the company directory), nor a scan's own flags.
+    mkdir -p "$B/data"
+    for f in "$DIR/data/"* "$DIR/data/".[!.]*; do
+      [ -e "$f" ] || continue
+      case "$(basename "$f")" in cache | catalog | scan.lock | scan-stop | scan-notify) ;; *) cp -R "$f" "$B/data/" ;; esac
+    done
+    if [ -f "$DIR/data/catalog/additions.json" ]; then mkdir -p "$B/data/catalog" && cp "$DIR/data/catalog/additions.json" "$B/data/catalog/"; fi
+  fi
+  # The last three backups are kept.
+  n="$(ls -1d "$DIR/backups/"*/ 2>/dev/null | wc -l | tr -d ' ')"
+  if [ "$n" -gt 3 ]; then ls -1d "$DIR/backups/"*/ | sort | head -n "$((n - 3))" | while IFS= read -r old; do rm -rf "$old"; done; fi
+fi
+
 if [ "$OSKEY" = darwin ]; then
   launchctl bootout "gui/$(id -u)/$LABEL" >/dev/null 2>&1 || true
 else
@@ -202,25 +240,10 @@ if [ -z "$started" ]; then
   nohup "$LAUNCHER" serve --log "$LOG" </dev/null >/dev/null 2>&1 &
 fi
 
-# 7. The RawJobs app: opens the dashboard (and starts RawJobs if it isn't running).
-if [ "$OSKEY" = darwin ]; then
-  mkdir -p "$HOME/Applications"
-  rm -rf "$HOME/Applications/RawJobs.app"
-  osacompile -o "$HOME/Applications/RawJobs.app" -e "do shell script quoted form of \"$LAUNCHER\" & \" open >/dev/null 2>&1 &\"" >/dev/null 2>&1 ||
-    say "(Couldn't add the RawJobs app; open http://127.0.0.1:4317 instead.)"
-else
-  APPS="${XDG_DATA_HOME:-$HOME/.local/share}/applications"
-  mkdir -p "$APPS"
-  cat >"$APPS/rawjobs.desktop" <<EOF
-[Desktop Entry]
-Type=Application
-Name=RawJobs
-Comment=Open the RawJobs dashboard
-Exec="$LAUNCHER" open
-Terminal=false
-Categories=Office;
-EOF
-fi
+# 7. The RawJobs app (~/Applications on macOS, the app menu on Linux) and a shortcut on the Desktop,
+#    with RawJobs' icon: they open the dashboard on whatever port it's on (and start RawJobs if it
+#    isn't running).
+"$LAUNCHER" shortcuts --desktop </dev/null >/dev/null 2>&1 || say "(Couldn't add the RawJobs shortcuts; open http://127.0.0.1:4317 instead.)"
 
 # 8. Wait for it to answer, then open the dashboard.
 URL=""
@@ -236,7 +259,7 @@ done
 
 printf '\nRawJobs %s is running at %s\n' "$VERSION" "$URL"
 say "Installed in $DIR"
-if [ "$OSKEY" = darwin ]; then say "It starts by itself when you log in. Open it any time: RawJobs in ~/Applications."; else say "It starts by itself when you log in. Open it any time: RawJobs in your app menu."; fi
+if [ "$OSKEY" = darwin ]; then say "It starts by itself when you log in. Open it any time: RawJobs, on the Desktop or in ~/Applications."; else say "It starts by itself when you log in. Open it any time: RawJobs, on the Desktop or in your app menu."; fi
 say "To update or repair it, run the same line again."
 say "To uninstall: \"$LAUNCHER\" uninstall"
 printf '\n'

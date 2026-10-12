@@ -5,16 +5,19 @@ import { join } from "node:path";
 import { compareVersions, nodeArchive, RELEASE_URL, verifyRelease, type ReleaseManifest } from "./release";
 import { cliCommand } from "./runtime";
 import { writeFileAtomic } from "./atomic";
+import { readDataFormat } from "./migrate";
 
 /**
  * Updates for an installed copy (docs/plans/local-install.md, section 5). The layout in your RawJobs
  * folder: app/versions/<v>/ (at most two), app/current.txt and previous.txt, runtime/<node>/ and
- * runtime/current.txt. Updating = download and check the new version next to the old one, back up
- * your data, point current.txt at it and restart; the old version watches the new one start and
- * switches back if it doesn't (finishUpdate).
+ * runtime/current.txt. A new version is downloaded and checked ahead of time into app/ready/<v>/;
+ * nothing installs until you say so. Updating = move it next to the old one, back up your data,
+ * point current.txt at it and restart; the old version watches the new one start and switches back
+ * if it doesn't (finishUpdate).
  */
 
-export type UpdateMode = "auto" | "ask" | "off";
+/** "ask": check every day and tell you; you choose when to install. "off": never check. */
+export type UpdateMode = "ask" | "off";
 export type UpdateChannel = "stable" | "beta";
 export type UpdateSettings = { mode: UpdateMode; channel: UpdateChannel };
 /** updates.json: your choices, and what the last check found. */
@@ -22,13 +25,17 @@ export type UpdateFile = UpdateSettings & {
   lastCheck?: string;
   /** The newest release seen at the last check (for "Update available" after a restart). */
   latest?: { version: string; notes: string; critical: boolean; date: string; minVersion: string };
-  /** Versions that failed to start here: never installed automatically again. */
+  /** Versions that failed to start here: not offered again. */
   skip?: string[];
+  /** A newer version downloaded and checked ahead of time (app/ready/<version>), waiting for you. */
+  ready?: { version: string; node: string };
+  /** When this copy first ran the version it's on: "Updated on" / "Installed on" in Settings → About. */
+  installed?: { version: string; at: string };
 };
 /** app/last-update.json: how the last update went, for the dashboard's note. */
 export type UpdateRecord = { from: string; to: string; ok: boolean; at: string; error?: string; notes?: string; seen?: boolean };
 
-export const DEFAULT_UPDATE_SETTINGS: UpdateSettings = { mode: "auto", channel: "stable" };
+export const DEFAULT_UPDATE_SETTINGS: UpdateSettings = { mode: "ask", channel: "stable" };
 const REPO = "Tanmay-Mhatre/rawjobs";
 /** How long a new version gets to answer before the old one takes over again. */
 export const START_TIMEOUT_MS = 60_000;
@@ -55,7 +62,8 @@ export function readUpdateFile(home: string): UpdateFile {
   const f = read<Partial<UpdateFile>>(join(home, "updates.json")) ?? {};
   return {
     ...f,
-    mode: f.mode === "ask" || f.mode === "off" ? f.mode : "auto",
+    // "auto" (before 0.5) installed by itself: it's "ask" now. Only "off" stays off.
+    mode: (f.mode as string) === "off" ? "off" : "ask",
     channel: f.channel === "beta" ? "beta" : "stable",
   };
 }
@@ -166,7 +174,14 @@ async function download(url: string, file: string, fetchImpl: typeof fetch): Pro
  * against the signed manifest's SHA-256, and unpack them next to the running version. Nothing the
  * running version uses is touched.
  */
-export async function prepareVersion(home: string, base: string, m: ReleaseManifest, fetchImpl: typeof fetch = fetch): Promise<{ version: string; node: string }> {
+export async function prepareVersion(
+  home: string,
+  base: string,
+  m: ReleaseManifest,
+  fetchImpl: typeof fetch = fetch,
+  /** "ready": download ahead of time, into app/ready/<v>, to install later (startUpdate). */
+  into: "versions" | "ready" = "versions",
+): Promise<{ version: string; node: string }> {
   const tmp = join(home, "app", `.download-${m.version}`);
   rmSync(tmp, { recursive: true, force: true });
   mkdirSync(tmp, { recursive: true });
@@ -193,7 +208,9 @@ export async function prepareVersion(home: string, base: string, m: ReleaseManif
       renameSync(join(tmp, "node", node), nodeDir);
     }
 
-    const target = join(home, "app/versions", m.version);
+    const target = join(home, "app", into, m.version);
+    if (into === "ready") rmSync(join(home, "app/ready"), { recursive: true, force: true });
+    mkdirSync(join(home, "app", into), { recursive: true });
     rmSync(target, { recursive: true, force: true });
     renameSync(unpacked, target);
     return { version: m.version, node };
@@ -202,31 +219,49 @@ export async function prepareVersion(home: string, base: string, m: ReleaseManif
   }
 }
 
+/** In data/, what downloads again by itself, so a backup leaves it out: caches and the company directory. */
+const REFETCHED = new Set(["cache", "catalog"]);
+/** A running scan's lock and stop flags belong to that scan, not to a backup. */
+const SCAN_FLAGS = new Set(["scan.lock", "scan-stop", "scan-notify"]);
+
 /**
- * Copy what's yours before the switch: the config, profile/ (resume, tracking, secrets) and data/'s
- * own files (jobs, history; not the caches or the company directory, which download again). The last
- * three backups are kept.
+ * Copy everything that's yours before an update or a reinstall: the config, profile/ (resume,
+ * tracking, secrets), all of data/ (jobs, history, scan runs and progress, the data format) except
+ * what downloads again, plus the companies you added to the directory. The last three backups are kept.
  */
 export function backupData(home: string, label: string): string {
   const dir = join(home, "backups", `${new Date().toISOString().replace(/[:.]/g, "-")}-${label}`);
   mkdirSync(dir, { recursive: true });
   for (const f of ["rawjobs.config.local.yaml", "rawjobs.config.local.backup.yaml"]) if (existsSync(join(home, f))) cpSync(join(home, f), join(dir, f));
   if (existsSync(join(home, "profile"))) cpSync(join(home, "profile"), join(dir, "profile"), { recursive: true });
-  if (existsSync(join(home, "data"))) {
+  const data = join(home, "data");
+  if (existsSync(data)) {
     mkdirSync(join(dir, "data"), { recursive: true });
-    for (const f of readdirSync(join(home, "data"))) {
-      const p = join(home, "data", f);
-      if (statSync(p).isFile()) cpSync(p, join(dir, "data", f));
-    }
+    for (const f of readdirSync(data)) if (!REFETCHED.has(f) && !SCAN_FLAGS.has(f)) cpSync(join(data, f), join(dir, "data", f), { recursive: true });
+    const additions = join(data, "catalog/additions.json");
+    if (existsSync(additions)) cpSync(additions, join(dir, "data/catalog/additions.json"));
   }
   const all = readdirSync(join(home, "backups")).sort();
   for (const old of all.slice(0, -3)) rmSync(join(home, "backups", old), { recursive: true, force: true });
   return dir;
 }
 
-/** Put a backup back (after a failed update). Files the backup doesn't have are left as they are. */
+/**
+ * Put a backup back (after a failed update). Files the backup doesn't have are left as they are,
+ * except the data format: without one in the backup, the data is the first format again.
+ */
 export function restoreBackup(home: string, dir: string): void {
   for (const f of readdirSync(dir)) cpSync(join(dir, f), join(home, f), { recursive: true, force: true });
+  if (!existsSync(join(dir, "data/format.json"))) rmSync(join(home, "data/format.json"), { force: true });
+}
+
+/**
+ * Whether going back to the old version also needs the backup put back: only when the new version
+ * had converted the data to a new format, which the old one can't read. Otherwise your data,
+ * including whatever was saved since the update began (a scheduled scan's jobs), stays as it is.
+ */
+export function needsRestore(home: string, backup: string): boolean {
+  return readDataFormat(join(home, "data")) !== readDataFormat(join(backup, "data"));
 }
 
 /** Make `version` the one the launcher runs, remembering the one before it. */
@@ -348,8 +383,8 @@ export type FinishOptions = {
 
 /**
  * Run by the *old* version, in its own process, after the switch: wait for the old server to stop,
- * start the new one, and give it a minute to answer. If it doesn't, go back to the old version, put
- * the backup back, start that, and never install the failed version automatically again.
+ * start the new one, and give it a minute to answer. If it doesn't, go back to the old version (and
+ * to its data, if the new one had converted it), start that, and don't offer the failed version again.
  */
 export async function finishUpdate(o: FinishOptions): Promise<UpdateRecord> {
   const start = o.start ?? startServer;
@@ -384,7 +419,7 @@ export async function finishUpdate(o: FinishOptions): Promise<UpdateRecord> {
       }
     }
     switchBack(o.home, o.from, o.to);
-    if (o.backup && existsSync(o.backup)) restoreBackup(o.home, o.backup);
+    if (o.backup && existsSync(o.backup) && needsRestore(o.home, o.backup)) restoreBackup(o.home, o.backup);
     const f = readUpdateFile(o.home);
     writeUpdateFile(o.home, { skip: [...new Set([...(f.skip ?? []), o.to])] });
     start(o.home);
@@ -418,7 +453,7 @@ type Pending = { from: string; to: string; backup: string; notes: string; pid?: 
 export async function startUpdate(o: { home: string; base: string; manifest: ReleaseManifest; serverPid?: number; fetchImpl?: typeof fetch }): Promise<void> {
   const now = installedVersions(o.home);
   if (!now) throw new Error("This isn't an installed copy of RawJobs.");
-  const { version, node } = await prepareVersion(o.home, o.base, o.manifest, o.fetchImpl);
+  const { version, node } = takeReady(o.home, o.manifest) ?? (await prepareVersion(o.home, o.base, o.manifest, o.fetchImpl));
   const backup = backupData(o.home, `before-${version}`);
   const pending: Pending = { from: now.current, to: version, backup, notes: o.manifest.notes, pid: o.serverPid };
   writeJson(join(o.home, "app/pending-update.json"), pending);
@@ -426,6 +461,26 @@ export async function startUpdate(o: { home: string; base: string; manifest: Rel
   // This very version's CLI, on the Node it runs on: both stay in place until the update is done.
   const how = cliCommand();
   spawn(how.command, [...how.args, "update", "--finish"], { cwd: o.home, detached: true, stdio: "ignore", windowsHide: true }).unref();
+}
+
+/** The version downloaded ahead of time (downloadAhead), moved into app/versions; null when there isn't one. */
+export function takeReady(home: string, m: ReleaseManifest): { version: string; node: string } | null {
+  const r = readUpdateFile(home).ready;
+  const dir = join(home, "app/ready", m.version);
+  if (r?.version !== m.version || !existsSync(join(dir, "cli.mjs")) || !existsSync(join(home, "runtime", r.node))) return null;
+  const target = join(home, "app/versions", m.version);
+  rmSync(target, { recursive: true, force: true });
+  renameSync(dir, target);
+  writeUpdateFile(home, { ready: undefined });
+  return { version: m.version, node: r.node };
+}
+
+/** Download and check `m` ahead of time (unless it already is), so installing it later takes seconds. */
+export async function downloadAhead(home: string, base: string, m: ReleaseManifest, fetchImpl?: typeof fetch): Promise<void> {
+  const r = readUpdateFile(home).ready;
+  if (r?.version === m.version && existsSync(join(home, "app/ready", m.version, "cli.mjs"))) return;
+  const v = await prepareVersion(home, base, m, fetchImpl, "ready");
+  writeUpdateFile(home, { ready: v });
 }
 
 /** `rawjobs update --finish`: the second half of startUpdate. */

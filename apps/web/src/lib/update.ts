@@ -5,14 +5,20 @@ import { canRunLocally } from "./data";
 export type UpdateStatus = {
   installed: boolean;
   current: string;
-  settings: { mode: "auto" | "ask" | "off"; channel: "stable" | "beta" };
+  settings: { mode: "ask" | "off"; channel: "stable" | "beta" };
   lastCheck?: string;
-  available: { version: string; notes: string; critical: boolean; date: string; major: boolean } | null;
+  /** A newer version. `critical`: a required update; `ready`: downloaded already, installs in seconds. */
+  available: { version: string; notes: string; critical: boolean; date: string; major: boolean; ready: boolean } | null;
   tooOld: boolean;
-  state: "idle" | "checking" | "updating";
+  state: "idle" | "checking" | "downloading" | "waiting" | "updating";
   error?: string;
   lastUpdate: { from: string; to: string; ok: boolean; at: string; error?: string; notes?: string } | null;
+  /** Missing from an older server: Settings → About shows what it has. */
+  about?: { since?: { at: string; by: "update" | "install" }; home: string; node: string; platform: string; desktopShortcut: boolean };
 };
+
+export const RELEASES_URL = "https://github.com/Tanmay-Mhatre/rawjobs/releases";
+export const ISSUES_URL = "https://github.com/Tanmay-Mhatre/rawjobs/issues/new/choose";
 
 export const INSTALL_LINE = {
   windows: "irm https://github.com/Tanmay-Mhatre/rawjobs/releases/latest/download/install.ps1 | iex",
@@ -33,6 +39,7 @@ export const updateStatus = () => call("/api/update");
 export const checkForUpdate = () => call("/api/update/check", { method: "POST" });
 export const updateNow = () => call("/api/update/apply", { method: "POST" });
 export const markUpdateSeen = () => call("/api/update/seen", { method: "POST" });
+export const addDesktopShortcut = () => call("/api/update/shortcut", { method: "POST" });
 export const saveUpdateSettings = (s: Partial<UpdateStatus["settings"]>) => call("/api/update/settings", { method: "PUT", body: JSON.stringify(s) });
 
 /** The update status, shared by the notice and Settings, refreshed when the tab comes back. */

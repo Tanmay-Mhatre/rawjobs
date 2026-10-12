@@ -1,6 +1,7 @@
 import type { IncomingMessage, ServerResponse } from "node:http";
 import { APP_VERSION, BUNDLED } from "../../core/src/runtime";
 import {
+  downloadAhead,
   fetchManifest,
   installedVersions,
   judge,
@@ -14,6 +15,7 @@ import {
   type UpdateRecord,
   type UpdateSettings,
 } from "../../core/src/update";
+import { hasDesktopShortcut, makeShortcuts } from "./shortcuts";
 
 export type UpdateStatus = {
   /** An installed copy (from the install line), which can update itself. A checkout updates with git. */
@@ -21,29 +23,58 @@ export type UpdateStatus = {
   current: string;
   settings: UpdateSettings;
   lastCheck?: string;
-  available: { version: string; notes: string; critical: boolean; date: string; major: boolean } | null;
+  available: {
+    version: string;
+    notes: string;
+    /** A required update: the dashboard asks for it in a window that only closes by updating. */
+    critical: boolean;
+    date: string;
+    major: boolean;
+    /** Downloaded and checked already: installing takes a few seconds. */
+    ready: boolean;
+  } | null;
   /** Too old to update straight to the newest release: run the install line again. */
   tooOld: boolean;
-  state: "idle" | "checking" | "updating";
+  /**
+   * idle; checking (for a new version); downloading (it, ahead of time); waiting (you said update,
+   * and it will once the scan that's running is done); updating (restarting into it).
+   */
+  state: "idle" | "checking" | "downloading" | "waiting" | "updating";
   error?: string;
   /** How the last update went, until you've seen it. */
   lastUpdate: UpdateRecord | null;
+  /** For Settings → About. */
+  about: {
+    /** When this version first ran here, and whether it came by an update (else: installed). */
+    since?: { at: string; by: "update" | "install" };
+    home: string;
+    node: string;
+    platform: string;
+    desktopShortcut: boolean;
+  };
 };
 
-const HOUR = 60 * 60 * 1000;
+const MINUTE = 60 * 1000;
+const HOUR = 60 * MINUTE;
 const CHECK_EVERY = 24 * HOUR;
 
 /**
- * Keeps an installed copy up to date: checks once a day, and with updates on Automatic installs a
- * new version (not a new major one) when no scan is running. Ask me only shows it, except a
- * critical fix. Off never checks. The dashboard reads and drives it through /api/update.
+ * Keeps an installed copy up to date without ever installing on its own: once a day it checks for
+ * a new version and downloads it ahead of time (when no scan is running), so the dashboard can say
+ * it's ready. It installs only when you click Update now; if a scan (also a scheduled one) is
+ * running then, it waits for it to finish. Required updates come up in a window the dashboard
+ * shows until you update. Off never checks. The dashboard reads and drives it through /api/update.
  */
 export function createUpdater(o: { home: string; isBusy: () => boolean; exit: () => void }) {
   const { home } = o;
   const installed = BUNDLED && !!process.env.RAWJOBS_LAUNCHER && !!installedVersions(home);
   let state: UpdateStatus["state"] = "idle";
   let error: string | undefined;
-  let timer: ReturnType<typeof setTimeout> | undefined;
+  let daily: ReturnType<typeof setInterval> | undefined;
+  let first: ReturnType<typeof setTimeout> | undefined;
+  let waiter: ReturnType<typeof setInterval> | undefined;
+  /** The download ahead of time was put off (a scan was running): try again at the next hourly tick. */
+  let prefetchLater = false;
 
   const judged = (): UpdateCheck | null => {
     const f = readUpdateFile(home);
@@ -55,20 +86,29 @@ export function createUpdater(o: { home: string; isBusy: () => boolean; exit: ()
     const f = readUpdateFile(home);
     const c = installed ? judged() : null;
     const last = readLastUpdate(home);
+    const since = f.installed?.version === APP_VERSION ? f.installed.at : undefined;
     return {
       installed,
       current: APP_VERSION,
       settings: { mode: f.mode, channel: f.channel },
       lastCheck: f.lastCheck,
-      available: c?.available ? { ...f.latest!, major: c.major } : null,
+      available: c?.available ? { ...f.latest!, major: c.major, ready: f.ready?.version === f.latest!.version } : null,
       tooOld: !!c?.tooOld,
       state,
       error,
       lastUpdate: last && !last.seen ? last : null,
+      about: {
+        since: since ? { at: since, by: last?.ok && last.to === APP_VERSION ? "update" : "install" } : undefined,
+        home,
+        node: process.version,
+        platform: `${process.platform}-${process.arch}`,
+        desktopShortcut: installed && hasDesktopShortcut(home),
+      },
     };
   }
 
   async function check(): Promise<{ check: UpdateCheck; base: string } | null> {
+    if (state !== "idle") return null;
     state = "checking";
     error = undefined;
     try {
@@ -81,30 +121,30 @@ export function createUpdater(o: { home: string; isBusy: () => boolean; exit: ()
       });
       return { check: judge(APP_VERSION, m, f.skip), base };
     } catch (err) {
-      error = `Couldn't check for updates: ${(err as Error).message}`;
+      const offline = /fetch failed|ENOTFOUND|ECONNREFUSED|ETIMEDOUT|EAI_AGAIN|aborted|timeout/i.test(String((err as Error).message) + String((err as { cause?: unknown }).cause ?? ""));
+      error = offline ? "Couldn't reach GitHub to get the update. Check your internet connection, then try again." : `Couldn't check for updates: ${(err as Error).message}`;
       return null;
     } finally {
       state = "idle";
     }
   }
 
-  let applying = false;
-  async function apply(): Promise<void> {
-    // A second click while one is under way would share (and delete) its download folder.
-    if (applying || state === "updating") return;
-    applying = true;
+  /** Download a new version ahead of time, quietly: a failure only means Update now downloads it. */
+  async function prefetch(found: { check: UpdateCheck; base: string }) {
+    if (!found.check.available || found.check.tooOld || state !== "idle") return;
+    prefetchLater = o.isBusy();
+    if (prefetchLater) return;
+    state = "downloading";
     try {
-      await applyOnce();
+      await downloadAhead(home, found.base, found.check.manifest);
+    } catch (err) {
+      console.log(`Couldn't download RawJobs ${found.check.manifest.version} ahead of time: ${(err as Error).message}`);
     } finally {
-      applying = false;
+      state = "idle";
     }
   }
 
-  async function applyOnce(): Promise<void> {
-    if (o.isBusy()) {
-      error = "A scan is running. RawJobs updates when it's done.";
-      return;
-    }
+  async function install(): Promise<void> {
     const found = await check();
     if (!found) return;
     if (found.check.tooOld) {
@@ -123,29 +163,43 @@ export function createUpdater(o: { home: string; isBusy: () => boolean; exit: ()
     }
   }
 
-  /** The daily check, and the automatic install. */
+  /** Update now: right away when nothing is running, else as soon as the scan is done. */
+  async function apply(): Promise<void> {
+    if (state === "updating" || state === "waiting") return;
+    error = undefined;
+    if (!o.isBusy() && state === "idle") return install();
+    state = "waiting";
+    clearInterval(waiter);
+    waiter = setInterval(() => {
+      if (o.isBusy()) return;
+      clearInterval(waiter);
+      state = "idle";
+      void install();
+    }, 15 * 1000);
+  }
+
+  /** The daily check, and the download ahead of time. Never installs. */
   async function tick() {
     const f = readUpdateFile(home);
-    if (f.mode === "off") return;
+    if (f.mode === "off" || state !== "idle") return;
     const due = !f.lastCheck || Date.now() - Date.parse(f.lastCheck) > CHECK_EVERY;
-    const c = due ? (await check())?.check : judged();
-    if (!c?.available || c.tooOld) return;
-    const wanted = f.mode === "auto" ? !c.major || c.manifest.critical : c.manifest.critical;
-    if (!wanted) return;
-    if (o.isBusy()) {
-      // Try again when the scan is likely done.
-      timer = setTimeout(() => void tick(), 10 * 60 * 1000);
-      return;
-    }
-    await apply();
+    if (!due && !prefetchLater) return;
+    const found = await check();
+    if (found) await prefetch(found);
   }
 
   function start() {
     if (!installed) return;
-    timer = setTimeout(() => {
-      void tick();
-      timer = setInterval(() => void tick(), HOUR);
-    }, 60 * 1000);
+    // "Updated on" / "Installed on": the first time this copy runs this version.
+    if (readUpdateFile(home).installed?.version !== APP_VERSION) writeUpdateFile(home, { installed: { version: APP_VERSION, at: new Date().toISOString() } });
+    first = setTimeout(() => void tick(), MINUTE);
+    daily = setInterval(() => void tick(), HOUR);
+  }
+
+  function stop() {
+    clearTimeout(first);
+    clearInterval(daily);
+    clearInterval(waiter);
   }
 
   function json(res: ServerResponse, body: unknown, code = 200) {
@@ -165,13 +219,19 @@ export function createUpdater(o: { home: string; isBusy: () => boolean; exit: ()
       json(res, { ...status(), error: "This copy updates with git (git pull), not by itself." }, 400);
       return true;
     }
-    if (url === "/api/update/check" && req.method === "POST") await check();
-    else if (url === "/api/update/apply" && req.method === "POST") await apply();
+    if (url === "/api/update/check" && req.method === "POST") {
+      const found = await check();
+      // Get it ready in the background; the answer doesn't wait for the download.
+      if (found) void prefetch(found);
+    } else if (url === "/api/update/apply" && req.method === "POST") await apply();
     else if (url === "/api/update/seen" && req.method === "POST") markLastUpdateSeen(home);
-    else if (url === "/api/update/settings" && req.method === "PUT") {
-      const b = JSON.parse((await body()) || "{}") as Partial<UpdateSettings>;
+    else if (url === "/api/update/shortcut" && req.method === "POST") {
+      const r = makeShortcuts(home, process.env.RAWJOBS_LAUNCHER!, { desktop: true, version: APP_VERSION });
+      error = r.ok && r.desktop ? undefined : `Couldn't add the Desktop shortcut${r.error ? `: ${r.error}` : "."}`;
+    } else if (url === "/api/update/settings" && req.method === "PUT") {
+      const b = JSON.parse((await body()) || "{}") as { mode?: unknown; channel?: unknown };
       const patch: Partial<UpdateSettings> = {};
-      if (b.mode === "auto" || b.mode === "ask" || b.mode === "off") patch.mode = b.mode;
+      if (b.mode === "ask" || b.mode === "off") patch.mode = b.mode;
       if (b.channel === "stable" || b.channel === "beta") patch.channel = b.channel;
       // A new channel has a different newest release.
       const channelChanged = patch.channel !== undefined && patch.channel !== readUpdateFile(home).channel;
@@ -181,7 +241,7 @@ export function createUpdater(o: { home: string; isBusy: () => boolean; exit: ()
     return true;
   }
 
-  return { start, status, check, apply, route, stop: () => clearTimeout(timer) };
+  return { start, status, check, apply, route, stop, updating: () => state === "updating" };
 }
 
 export type Updater = ReturnType<typeof createUpdater>;

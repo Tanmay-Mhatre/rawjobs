@@ -20,7 +20,7 @@ export type ReleaseManifest = {
   nodeSha256: Record<string, string>;
   /** Older versions can't update straight to this one: they're asked to run the install line again. */
   minVersion: string;
-  /** A fix that installs even when updates are set to Ask me. */
+  /** A required update: the dashboard asks for it in a window that only closes by updating. */
   critical: boolean;
   notes: string;
 };
@@ -55,6 +55,30 @@ export function verifyRelease(data: Buffer | string, signature: string, publicKe
   } catch {
     return false;
   }
+}
+
+/**
+ * A release's notes, from its tag message, with the lines that set how it's offered taken out:
+ *   Update: mandatory     a required update (critical): the dashboard asks until you update
+ *   Min-version: 0.5.0    older versions can't update by themselves (run the install line again)
+ */
+export function parseReleaseNotes(text: string): { notes: string; critical: boolean; minVersion: string | null } {
+  let critical = false;
+  let minVersion: string | null = null;
+  const kept = text.split(/\r?\n/).filter((line) => {
+    const update = line.match(/^\s*Update:\s*(\S+)\s*$/i);
+    if (update) {
+      critical ||= /^(mandatory|required|critical)$/i.test(update[1]!);
+      return false;
+    }
+    const min = line.match(/^\s*Min-version:\s*v?(\d+\.\d+\.\d+\S*)\s*$/i);
+    if (min) {
+      minVersion = min[1]!;
+      return false;
+    }
+    return true;
+  });
+  return { notes: kept.join("\n").trim(), critical, minVersion };
 }
 
 /** Compare "0.10.2" and "0.9.0" as versions (a pre-release like 0.3.0-beta.1 sorts before 0.3.0). */
