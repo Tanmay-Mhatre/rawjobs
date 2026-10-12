@@ -7,7 +7,23 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import type { ReleaseManifest } from "../src/release";
-import { backupData, fetchManifest, finishUpdate, installedVersions, judge, platformKey, prepareVersion, readLastUpdate, readUpdateFile, switchTo } from "../src/update";
+import { migrateData, readDataFormat } from "../src/migrate";
+import { parseReleaseNotes } from "../src/release";
+import {
+  backupData,
+  downloadAhead,
+  fetchManifest,
+  finishUpdate,
+  installedVersions,
+  judge,
+  platformKey,
+  prepareVersion,
+  readLastUpdate,
+  readUpdateFile,
+  switchTo,
+  takeReady,
+  writeUpdateFile,
+} from "../src/update";
 
 const tar = process.platform === "win32" ? join(process.env.SystemRoot ?? "C:\\Windows", "System32", "tar.exe") : "tar";
 const servers: Server[] = [];
@@ -129,30 +145,37 @@ describe("updating an installed copy", () => {
     expect(existsSync(join(home, "app/versions/0.1.0"))).toBe(true);
   });
 
-  it("goes back, restores the backup, and won't retry when the new version doesn't answer", async () => {
-    const home = installedCopy();
-    const r = await release("0.2.0");
-    const v = await prepareVersion(home, r.base, r.manifest);
-    const backup = backupData(home, "before-0.2.0");
-    switchTo(home, v.version, v.node);
-    writeFileSync(join(home, "profile/resume.md"), "changed by a broken migration");
-    const starts: string[] = [];
-    const record = await finishUpdate({
+  /** Finish an update to 0.2.0 that never answers; 0.1.0 answers once it's started again. */
+  async function failedUpdate(home: string, backup: string, starts: string[] = []) {
+    return finishUpdate({
       home,
       from: "0.1.0",
       to: "0.2.0",
       backup,
       timeoutMs: 2500,
-      // The new version never answers; the old one does once it's started again.
       start: () => {
         const v = installedVersions(home)!.current;
         starts.push(v);
         if (v === "0.1.0") void serve((_q, res) => res.end(JSON.stringify({ ok: true, version: "0.1.0" }))).then((port) => writeFileSync(join(home, "state.json"), JSON.stringify({ port })));
       },
     });
+  }
+
+  it("goes back, keeps the data saved meanwhile, and won't offer it again when the new version doesn't answer", async () => {
+    const home = installedCopy();
+    const r = await release("0.2.0");
+    const v = await prepareVersion(home, r.base, r.manifest);
+    const backup = backupData(home, "before-0.2.0");
+    switchTo(home, v.version, v.node);
+    // A scheduled scan saved its jobs while the update ran.
+    mkdirSync(join(home, "data"), { recursive: true });
+    writeFileSync(join(home, "data/jobs.json"), "found during the update");
+    const starts: string[] = [];
+    const record = await failedUpdate(home, backup, starts);
     expect(record.ok).toBe(false);
     expect(record.error).toMatch(/0\.1\.0 is back/);
     expect(installedVersions(home)?.current).toBe("0.1.0");
+    expect(readFileSync(join(home, "data/jobs.json"), "utf8")).toBe("found during the update");
     expect(readFileSync(join(home, "profile/resume.md"), "utf8")).toBe("v1 resume");
     expect(readUpdateFile(home).skip).toEqual(["0.2.0"]);
     // Started the new version, then the old one again.
@@ -160,5 +183,79 @@ describe("updating an installed copy", () => {
     // The failed version is gone; nothing is left to go back to from 0.1.0.
     expect(existsSync(join(home, "app/versions/0.2.0"))).toBe(false);
     expect(installedVersions(home)?.previous).toBeNull();
+  });
+
+  it("puts the backup back when the new version had converted the data", async () => {
+    const home = installedCopy();
+    const r = await release("0.2.0");
+    const v = await prepareVersion(home, r.base, r.manifest);
+    const backup = backupData(home, "before-0.2.0");
+    switchTo(home, v.version, v.node);
+    mkdirSync(join(home, "data"), { recursive: true });
+    writeFileSync(join(home, "data/format.json"), JSON.stringify({ format: 2 }));
+    writeFileSync(join(home, "profile/resume.md"), "converted by the new version");
+    await failedUpdate(home, backup);
+    expect(readFileSync(join(home, "profile/resume.md"), "utf8")).toBe("v1 resume");
+    expect(readDataFormat(join(home, "data"))).toBe(1);
+  });
+
+  it("downloads a new version ahead of time and installs it from there", async () => {
+    const home = installedCopy();
+    const r = await release("0.2.0");
+    await downloadAhead(home, r.base, r.manifest);
+    expect(readUpdateFile(home).ready?.version).toBe("0.2.0");
+    // Nothing installed: the running version is untouched.
+    expect(installedVersions(home)?.current).toBe("0.1.0");
+    expect(existsSync(join(home, "app/versions/0.2.0"))).toBe(false);
+    expect(takeReady(home, { ...r.manifest, version: "0.3.0" })).toBeNull();
+    expect(takeReady(home, r.manifest)).toMatchObject({ version: "0.2.0" });
+    expect(existsSync(join(home, "app/versions/0.2.0/cli.mjs"))).toBe(true);
+    expect(readUpdateFile(home).ready).toBeUndefined();
+  });
+});
+
+describe("what an update keeps", () => {
+  it("never installs by itself: Automatic from before is Ask me now", () => {
+    const home = installedCopy();
+    expect(readUpdateFile(home).mode).toBe("ask");
+    writeFileSync(join(home, "updates.json"), JSON.stringify({ mode: "auto" }));
+    expect(readUpdateFile(home).mode).toBe("ask");
+    writeUpdateFile(home, { mode: "off" });
+    expect(readUpdateFile(home).mode).toBe("off");
+  });
+
+  it("backs up all your data, but not what downloads again or a scan's flags", () => {
+    const home = installedCopy();
+    for (const d of ["data/runs", "data/cache", "data/catalog"]) mkdirSync(join(home, d), { recursive: true });
+    writeFileSync(join(home, "data/jobs.json"), "jobs");
+    writeFileSync(join(home, "data/runs/2026-10-12.json"), "a run");
+    writeFileSync(join(home, "data/cache/x.json"), "cache");
+    writeFileSync(join(home, "data/catalog/index.json"), "directory");
+    writeFileSync(join(home, "data/catalog/additions.json"), "my additions");
+    writeFileSync(join(home, "data/scan.lock"), "123");
+    writeFileSync(join(home, "rawjobs.config.local.yaml"), "profile: {}");
+    const b = backupData(home, "before-0.2.0");
+    expect(readFileSync(join(b, "data/jobs.json"), "utf8")).toBe("jobs");
+    expect(readFileSync(join(b, "data/runs/2026-10-12.json"), "utf8")).toBe("a run");
+    expect(readFileSync(join(b, "data/catalog/additions.json"), "utf8")).toBe("my additions");
+    expect(readFileSync(join(b, "profile/resume.md"), "utf8")).toBe("v1 resume");
+    expect(existsSync(join(b, "rawjobs.config.local.yaml"))).toBe(true);
+    expect(existsSync(join(b, "data/cache"))).toBe(false);
+    expect(existsSync(join(b, "data/catalog/index.json"))).toBe(false);
+    expect(existsSync(join(b, "data/scan.lock"))).toBe(false);
+  });
+
+  it("reads the data format, the first one when none is recorded", () => {
+    const home = installedCopy();
+    expect(readDataFormat(join(home, "data"))).toBe(1);
+    expect(migrateData(home, join(home, "data"))).toBe(1);
+  });
+});
+
+describe("release notes", () => {
+  it("take the mandatory and minimum-version lines out of the notes", () => {
+    expect(parseReleaseNotes("RawJobs 0.5.1\n\n- Faster scans")).toEqual({ notes: "RawJobs 0.5.1\n\n- Faster scans", critical: false, minVersion: null });
+    expect(parseReleaseNotes("Fixes alerts.\r\nUpdate: mandatory\r\nMin-version: v0.4.0\r\n")).toEqual({ notes: "Fixes alerts.", critical: true, minVersion: "0.4.0" });
+    expect(parseReleaseNotes("Update: optional").critical).toBe(false);
   });
 });

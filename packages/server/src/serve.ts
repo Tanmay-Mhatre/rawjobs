@@ -2,10 +2,11 @@ import { existsSync, mkdirSync } from "node:fs";
 import { createServer, type Server } from "node:http";
 import { parseArgs } from "node:util";
 import { defaultDataDir, rawjobsHome } from "@rawjobs/core";
-import { APP_VERSION, BUNDLED, WEB_DIR } from "@rawjobs/core";
+import { APP_VERSION, BUNDLED, migrateData, scanLockHeld, WEB_DIR } from "@rawjobs/core";
 import { createApi } from "./api";
 import { createUpdater } from "./updater";
 import { DEFAULT_PORT, healthy, logTo, openBrowser, readServerState, writeServerState } from "./desktop";
+import { ensureShortcuts } from "./shortcuts";
 import { serveStatic } from "./static";
 
 const TRIES = 10;
@@ -43,9 +44,15 @@ export async function serve(args: string[]): Promise<number> {
     console.error(`Not a port: ${values.port ?? process.env.RAWJOBS_PORT}`);
     return 2;
   }
+  // The port it had last time comes first, so a bookmark keeps working when 4317 was taken back then.
+  const sticky = !values.port && !process.env.RAWJOBS_PORT && running?.port && running.port !== first ? running.port : null;
+
+  // After an update, the data is converted to this version's format (backed up just before).
+  migrateData(home, dataDir);
 
   let shutdown: () => void = () => process.exit(0);
-  const updater = createUpdater({ home, isBusy: () => api.scanning(), exit: () => shutdown() });
+  // Busy: a scan the dashboard started, or one the computer's schedule started (it holds data/scan.lock).
+  const updater = createUpdater({ home, isBusy: () => api.scanning() || scanLockHeld(dataDir), exit: () => shutdown() });
   const api = createApi({ home, dataDir, updater });
   const server = createServer((req, res) => {
     void api.handle(req, res).then((handled) => {
@@ -56,6 +63,7 @@ export async function serve(args: string[]): Promise<number> {
   });
 
   let port = 0;
+  if (sticky) port = await listen(server, sticky).catch(() => 0);
   for (let p = first; p < first + TRIES && !port; p++) {
     try {
       port = await listen(server, p);
@@ -71,6 +79,8 @@ export async function serve(args: string[]): Promise<number> {
 
   api.startBackground();
   updater.start();
+  // Copies installed before there was a Desktop shortcut (or an icon) get them on this version's first start.
+  if (BUNDLED) ensureShortcuts(home, process.env.RAWJOBS_LAUNCHER, APP_VERSION);
   // Where the shortcut (rawjobs open) finds the dashboard, also when 4317 was taken.
   writeServerState(port, home);
   const url = `http://127.0.0.1:${port}`;

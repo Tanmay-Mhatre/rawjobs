@@ -52,16 +52,21 @@ and look at it. It's [packaging/install.ps1](../packaging/install.ps1) and
    | macOS | A launch agent, `~/Library/LaunchAgents/com.rawjobs.server.plist` |
    | Linux | A systemd user service, `rawjobs.service` |
 
-4. Adds a **RawJobs** shortcut (Windows: Start menu; macOS: `~/Applications`; Linux: your app menu)
-   that opens the dashboard, and starts RawJobs first if it isn't running.
+4. Adds a **RawJobs** shortcut, with its icon, on your Desktop and in the Start menu (Windows),
+   `~/Applications` (macOS) or your app menu (Linux). It opens the dashboard on whatever port
+   RawJobs is on, and starts RawJobs first if it isn't running.
 
 Nothing else on your computer changes. RawJobs only answers on `127.0.0.1`, so other computers on
 your network can't reach it.
 
 ## Using it
 
-- Open **RawJobs** from the shortcut, or go to http://127.0.0.1:4317. Closing the browser doesn't
+- Open **RawJobs** from the shortcut on your Desktop (or the Start menu / Applications / app menu).
+  It always opens the right address. Typing it yourself: http://127.0.0.1:4317, with the `:4317`
+  (`127.0.0.1` alone is a different address, where nothing answers). Closing the browser doesn't
   stop RawJobs; it keeps running in the background, using very little.
+- Deleted the Desktop shortcut? Settings → About → **Add a Desktop shortcut**, or run
+  `rawjobs shortcuts --desktop`.
 - Scheduled scans (Settings → Scans & alerts) run while your computer is on, and catch up when it
   wakes up.
 - From a terminal, the `rawjobs` command is in the `bin` folder of the install folder, for example
@@ -71,16 +76,24 @@ your network can't reach it.
 
 ## Updates
 
-RawJobs checks for a new version once a day and, by default, installs it when no scan is running.
-It takes a few seconds; the dashboard shows "Reconnecting…" and reloads by itself.
+RawJobs never installs an update by itself. Once a day it checks for a new version and downloads
+it in the background (checked against RawJobs' signing key), then the dashboard says it's ready.
+It installs when you click **Update now**: that takes a few seconds, the dashboard shows
+"Reconnecting…" and reloads by itself.
 
-- **Settings → Updates**: Automatic (the default), Ask me, or Off; and whether to get test versions
-  early.
-- Before an update, your profile, tracking and scan data are backed up to the `backups` folder (the
-  last three are kept).
-- If a new version doesn't start within a minute, RawJobs goes back to the one you had, puts the
-  backup back and tells you. It won't try that version again by itself.
-- To update by hand, run the install line again, or `rawjobs update`.
+- **New releases come out at most once a week** (Mondays), however many changes went in that week.
+- **A scan is never cut off.** Click Update now while a scan runs (also a scheduled one) and RawJobs
+  waits for it to finish, then updates.
+- **Required updates** (an important fix) come up in a window that only closes by updating. If the
+  update fails, for example while you're offline, you can continue for now; it asks again next time.
+- **Settings → About** shows your version, when it was installed or updated, the newest version,
+  when RawJobs last checked, and has **Check for updates**. Below it you can turn the daily check
+  off, or get test versions early.
+- **Your data is never removed.** Before every update and every reinstall, your profile, tracking
+  and scan data are copied to the `backups` folder (the last three are kept). If a new version
+  doesn't start within a minute, RawJobs goes back to the one you had and tells you; your data stays
+  as it is (the backup is put back only if the new version had already converted it).
+- To update from a terminal: `rawjobs update`, or run the install line again.
 
 ## Uninstall
 
@@ -102,7 +115,7 @@ It takes a few seconds; the dashboard shows "Reconnecting…" and reloads by its
 ~/.local/share/rawjobs/bin/rawjobs uninstall
 ```
 
-It stops RawJobs and removes it from start-at-login, its scheduled scans, the shortcut and the
+It stops RawJobs and removes it from start-at-login, its scheduled scans, the shortcuts and the
 program files. It asks whether to delete your profile, resume, tracking and scan data too. Add
 `--keep-data` or `--delete-data` to answer in advance.
 

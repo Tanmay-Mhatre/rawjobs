@@ -33,7 +33,7 @@ irm https://github.com/Tanmay-Mhatre/rawjobs/releases/latest/download/install.ps
 curl -fsSL https://github.com/Tanmay-Mhatre/rawjobs/releases/latest/download/install.sh | sh
 ```
 
-It installs RawJobs in your user folder, starts it now and every time you log in, adds a **RawJobs** shortcut, and opens the dashboard at http://127.0.0.1:4317. It keeps itself up to date (Settings → Updates). What it changes on your computer, how to uninstall, and troubleshooting: [docs/install.md](docs/install.md).
+It installs RawJobs in your user folder, starts it now and every time you log in, adds a **RawJobs** shortcut to your Desktop and Start menu / Applications, and opens the dashboard at http://127.0.0.1:4317. New versions download in the background and install when you click Update (Settings → About). What it changes on your computer, how to uninstall, and troubleshooting: [docs/install.md](docs/install.md).
 
 **From the source code** (needs Node 22+ and [pnpm](https://pnpm.io)):
 
@@ -209,7 +209,7 @@ Terms match whole words, case-insensitively: `ai` matches "AI-native" but not "m
 
 ## Privacy
 
-Your profile, resume, config, Telegram token and run history stay on your computer. The app has no telemetry. It talks to the companies' job boards (to scan), GitHub (to download the shared directory and job feed, and, for installed copies, to check for updates once a day; turn that off in Settings → Updates) and, if you set up alerts, Telegram. Installing also downloads Node from nodejs.org.
+Your profile, resume, config, Telegram token and run history stay on your computer. The app has no telemetry. It talks to the companies' job boards (to scan), GitHub (to download the shared directory and job feed, and, for installed copies, to check for updates once a day; turn that off in Settings → About) and, if you set up alerts, Telegram. Installing also downloads Node from nodejs.org.
 
 **Sharing is on by default:** when you add a company by link that the directory doesn't have, its careers board (hiring system, board name, company name) is sent to the project's contribution inbox so everyone can find it. Nothing about you is sent. Turn it off in **Settings → Your data → Sharing** or with `directory.share_additions: false`. Full details: [PRIVACY.md](PRIVACY.md).
 
@@ -239,7 +239,7 @@ pnpm hooks:install  # once per clone: no direct pushes to main, and pnpm check b
 
 See [CONTRIBUTING.md](CONTRIBUTING.md). Changes go through pull requests. `main` is protected: a pull request can only merge once CI passes on its latest commit: `check`, and the install test on Windows, macOS and Linux.
 
-**Releasing:** set the version in `package.json` (and the packages), merge, then push an annotated tag: `git tag -a v0.3.0 -m "What's new…"` and `git push origin v0.3.0`. The [release workflow](.github/workflows/release.yml) builds the bundle, signs it with the `RAWJOBS_SIGNING_KEY` secret, installs and updates it on all three systems, and publishes it. The tag's message is the "What's new" installed copies show. To merge it as soon as CI goes green, run `gh pr merge --auto --merge`.
+**Releasing:** merging a PR never releases anything. Every Monday the [weekly release](.github/workflows/weekly-release.yml) releases what was merged that week, when main's checks are green: the last version with the patch number + 1 (or `package.json`'s version when that's newer, for a minor or major release), with the merged PRs as its "What's new". To release now, push an annotated tag: `git tag -a v0.5.1 -m "What's new…"` and `git push origin v0.5.1` (the tag names the version; no version bump needed), or run the weekly release by hand. A line `Update: mandatory` in the tag's message (or ticking "mandatory" in the manual run) makes it a required update; `Min-version: 0.5.0` makes older versions reinstall instead. The [release workflow](.github/workflows/release.yml) builds the bundle, signs it with the `RAWJOBS_SIGNING_KEY` secret, installs and updates it on all three systems, and publishes it. The tag's message is the "What's new" installed copies show. To merge it as soon as CI goes green, run `gh pr merge --auto --merge`.
 
 ```
 packages/core       connectors, normalise, score, scan scopes, job feed, directory sync,

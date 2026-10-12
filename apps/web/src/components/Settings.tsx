@@ -18,7 +18,7 @@ import { ScanPrefsPicker } from "./ScanButton";
 import { ScheduledScans } from "./ScheduledScans";
 import { TelegramAlerts } from "./TelegramAlerts";
 import { Button, Card, cx, IconButton, Segmented, Toggle } from "./ui";
-import { UpdatesSettings } from "./Updates";
+import { AboutRawJobs, UpdatesSettings } from "./Updates";
 
 type Props = {
   draft: Draft;
@@ -49,8 +49,8 @@ const GROUPS = [
   { id: "my-companies", label: "My companies" },
   { id: "scans", label: "Scans & alerts" },
   { id: "data", label: "Your data" },
-  { id: "updates", label: "Updates" },
   { id: "appearance", label: "Appearance" },
+  { id: "about", label: "About" },
 ] as const;
 type GroupId = (typeof GROUPS)[number]["id"];
 
@@ -265,17 +265,20 @@ export function Settings({
           )}
         </Group>
 
+        <Group id="appearance" label="Appearance">
+          <AppearanceSection />
+        </Group>
+
         {canRunLocally && (
-          <Group id="updates" label="Updates">
-            <Section id="update" title="RawJobs updates" hint="New versions of RawJobs, from its releases on GitHub.">
+          <Group id="about" label="About">
+            <Section id="version" title="RawJobs" hint="Which version you have, and what's newer.">
+              <AboutRawJobs />
+            </Section>
+            <Section id="update" title="Updates" hint="New versions come from RawJobs' releases on GitHub, and install only when you say.">
               <UpdatesSettings />
             </Section>
           </Group>
         )}
-
-        <Group id="appearance" label="Appearance">
-          <AppearanceSection />
-        </Group>
 
         {canRunLocally && (dirty || status) && (
           <div className="sticky bottom-16 z-10 rounded-md border border-line bg-raised/95 p-3 shadow-l2 backdrop-blur md:bottom-4">
@@ -361,7 +364,7 @@ function SettingsNav({ active }: { active: GroupId }) {
     >
       {/* Phones: a scrollable chip row that fades at the edges. Desktop: a vertical list. */}
       <ul className="flex gap-2 overflow-x-auto [mask-image:linear-gradient(to_right,black_calc(100%-1.5rem),transparent)] md:flex-col md:gap-0.5 md:overflow-visible md:[mask-image:none]">
-        {GROUPS.map((g) => (
+        {GROUPS.filter((g) => g.id !== "about" || canRunLocally).map((g) => (
           <li key={g.id} className="shrink-0">
             <a
               href={`#settings?section=${g.id}`}

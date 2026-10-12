@@ -43,8 +43,8 @@ await build({
   platform: "node",
   format: "esm",
   target: "node22",
-  // Tells the code it runs from the bundle (packages/core/src/runtime.ts).
-  define: { __RAWJOBS_BUNDLE__: "true" },
+  // Tells the code it runs from the bundle (packages/core/src/runtime.ts), and which version it is (http.ts).
+  define: { __RAWJOBS_BUNDLE__: "true", __RAWJOBS_VERSION__: JSON.stringify(version) },
   // Some dependencies still call require(); give the ES module one.
   banner: { js: 'import { createRequire as __rawjobsRequire } from "node:module"; const require = __rawjobsRequire(import.meta.url);' },
   legalComments: "linked",
