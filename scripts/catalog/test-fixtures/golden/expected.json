@@ -1,0 +1,145 @@
+{
+ "merged": [
+  {
+   "key": "ashby:gammapay",
+   "confidence": "high",
+   "families": [
+    "commoncrawl",
+    "cryptojobs"
+   ]
+  },
+  {
+   "key": "greenhouse:betapay",
+   "confidence": "high",
+   "families": [
+    "commoncrawl",
+    "wayback"
+   ]
+  },
+  {
+   "key": "lever:acme",
+   "confidence": "high",
+   "families": [
+    "commoncrawl",
+    "wayback"
+   ]
+  },
+  {
+   "key": "greenhouse:takendown",
+   "confidence": "single",
+   "families": [
+    "commoncrawl"
+   ]
+  },
+  {
+   "key": "lever:acmesandbox",
+   "confidence": "single",
+   "families": [
+    "commoncrawl"
+   ]
+  },
+  {
+   "key": "lever:deltaco",
+   "confidence": "single",
+   "families": [
+    "commoncrawl"
+   ]
+  }
+ ],
+ "directory": {
+  "count": 3,
+  "industries": {
+   "saas": 0,
+   "ai": 0,
+   "devtools": 0,
+   "data": 0,
+   "cloud": 0,
+   "cybersecurity": 0,
+   "ecommerce": 0,
+   "marketing": 0,
+   "media": 0,
+   "gaming": 0,
+   "edtech": 0,
+   "hrtech": 0,
+   "fintech": 1,
+   "payments": 0,
+   "banking": 0,
+   "digital-bank": 0,
+   "lending": 0,
+   "wealth": 0,
+   "insurtech": 0,
+   "regtech": 0,
+   "crypto": 0,
+   "crypto-exchange": 0,
+   "digital-assets": 0,
+   "tokenization": 0,
+   "brokerage": 0,
+   "trading-tech": 0,
+   "market-making": 0,
+   "healthtech": 0,
+   "biotech": 0,
+   "climate": 0,
+   "hardware": 0,
+   "robotics": 0,
+   "manufacturing": 0,
+   "automotive": 0,
+   "aerospace": 0,
+   "telecom": 0,
+   "mobility": 0,
+   "logistics": 0,
+   "construction": 0,
+   "agriculture": 0,
+   "retail": 0,
+   "food": 0,
+   "travel": 0,
+   "proptech": 0,
+   "betting": 0,
+   "sports": 0,
+   "consulting": 0,
+   "legal": 0,
+   "government": 0,
+   "nonprofit": 0
+  },
+  "companies": [
+   {
+    "key": "ashby:gammapay",
+    "name": "Gamma Pay",
+    "ats": "ashby",
+    "slug": "gammapay",
+    "careers_url": "https://jobs.ashbyhq.com/gammapay",
+    "tier": "dump",
+    "status": "dormant",
+    "open_jobs": 0,
+    "indexed": false,
+    "tags": [
+     "payments"
+    ]
+   },
+   {
+    "key": "greenhouse:betapay",
+    "name": "Beta Pay",
+    "ats": "greenhouse",
+    "slug": "betapay",
+    "careers_url": "https://job-boards.greenhouse.io/betapay",
+    "tier": "curated",
+    "status": "live",
+    "open_jobs": 3,
+    "indexed": false,
+    "tags": [
+     "fintech"
+    ]
+   },
+   {
+    "key": "lever:acme",
+    "name": "Acme",
+    "ats": "lever",
+    "slug": "acme",
+    "careers_url": "https://jobs.lever.co/acme",
+    "tier": "dump",
+    "status": "live",
+    "open_jobs": 5,
+    "indexed": false
+   }
+  ]
+ }
+}

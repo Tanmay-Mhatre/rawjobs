@@ -1,0 +1,4 @@
+{ "boards": [
+  { "ats": "greenhouse", "slug": "betapay" },
+  { "ats": "lever", "slug": "ACME" }
+] }

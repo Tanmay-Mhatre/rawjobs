@@ -16,6 +16,7 @@
 // The page uses the app's own design files, so the site and the dashboard never drift:
 // tokens and fonts from apps/web/src/design, components from design/components/bundle.css.
 // No dependencies: plain Node, so it runs in CI without installing the workspace.
+import { createHash } from "node:crypto";
 import { copyFileSync, cpSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { gunzipSync } from "node:zlib";
@@ -230,13 +231,30 @@ const page = (name) => {
   if (left) throw new Error(`Unfilled placeholder ${left[0]} in src/${name}`);
   return out;
 };
-const html = page("index.html");
+/**
+ * Inline scripts move to files named by their content (/js/<hash>.js), so the site's CSP can allow
+ * scripts from the site itself only (public/_headers: script-src 'self'). A plain <script src> with
+ * no async or defer runs at the same point as the inline one did. JSON data blocks stay inline:
+ * the browser never runs them.
+ */
+const scripts = new Map();
+const externalize = (pageHtml) =>
+  pageHtml.replace(/<script>([\s\S]*?)<\/script>/g, (_, code) => {
+    const name = `${createHash("sha256").update(code).digest("hex").slice(0, 16)}.js`;
+    scripts.set(name, code);
+    return `<script src="/js/${name}"></script>`;
+  });
+const html = externalize(page("index.html"));
+// Same tokens and theme script as the home page, so it follows all four themes.
+const notFound = externalize(page("404.html"));
+if (/<script>/.test(html + notFound)) throw new Error("An inline script was left in a page: the CSP would block it.");
 
 rmSync(DIST, { recursive: true, force: true });
 mkdirSync(join(DIST, "fonts"), { recursive: true });
+mkdirSync(join(DIST, "js"), { recursive: true });
+for (const [name, code] of scripts) writeFileSync(join(DIST, "js", name), code);
 writeFileSync(join(DIST, "index.html"), html);
-// Same tokens and theme script as the home page, so it follows all four themes.
-writeFileSync(join(DIST, "404.html"), page("404.html"));
+writeFileSync(join(DIST, "404.html"), notFound);
 // The share image's template, only when asked (pnpm site:og renders it to public/og.png).
 if (process.argv.includes("--og")) writeFileSync(join(DIST, "og.html"), page("og.html"));
 for (const f of readdirSync(join(DS, "fonts"))) copyFileSync(join(DS, "fonts", f), join(DIST, "fonts", f));

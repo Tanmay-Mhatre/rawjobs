@@ -18,6 +18,8 @@ profile/
 
 # Local run output
 out/
+# ...except the golden test's fixtures, which are inputs (scripts/catalog/golden.test.ts).
+!scripts/catalog/test-fixtures/**/out/
 
 # Run history written by `rawjobs run` (published on the data branch in phase 1)
 data/
