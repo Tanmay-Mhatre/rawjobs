@@ -1,3 +1,4 @@
+import { generateKeyPairSync, sign as cryptoSign } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { HttpClient } from "../src/http";
@@ -48,3 +49,20 @@ export const profile = (overrides: Record<string, unknown> = {}): Profile =>
     min_score: 70,
     ...overrides,
   });
+
+/**
+ * A throwaway data signing key for tests: sets RAWJOBS_DATA_PUBLIC_KEY to its public half (call
+ * the returned `restore` after) and signs bodies the way scripts/catalog/sign.mjs does.
+ */
+export function testDataKey() {
+  const { publicKey, privateKey } = generateKeyPairSync("ed25519");
+  const before = process.env.RAWJOBS_DATA_PUBLIC_KEY;
+  process.env.RAWJOBS_DATA_PUBLIC_KEY = publicKey.export({ type: "spki", format: "der" }).toString("base64");
+  return {
+    sign: (body: string | Buffer) => `${cryptoSign(null, Buffer.from(body), privateKey).toString("base64")}\n`,
+    restore: () => {
+      if (before === undefined) delete process.env.RAWJOBS_DATA_PUBLIC_KEY;
+      else process.env.RAWJOBS_DATA_PUBLIC_KEY = before;
+    },
+  };
+}

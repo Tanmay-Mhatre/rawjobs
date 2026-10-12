@@ -17,6 +17,7 @@ Three environment variables, read by the CLI and the local server (`packages/cor
 | `RAWJOBS_DIRECTORY_URL` | `https://github.com/Tanmay-Mhatre/rawjobs-directory/releases/latest/download` | Where `manifest.json`, `directory.json.gz` and `index.json.gz` are downloaded from. |
 | `RAWJOBS_CONTRIBUTE_URL` | `https://rawjobs-contribute.rawjobs.workers.dev` | The contribution inbox that shared boards are sent to. Set it to an empty string to send nothing. |
 | `RAWJOBS_JOBS_URL` | `https://github.com/Tanmay-Mhatre/rawjobs-directory/releases/download/jobs` | The shared daily job feed that scans use to skip companies with nothing for you (`packages/core/src/job-feed.ts`). |
+| `RAWJOBS_DATA_PUBLIC_KEY` | `DATA_PUBLIC_KEY` in `packages/core/src/data-signing.ts` | The key the directory's and the job feed's manifests must be signed with. Set it to your own key's public half when you point the two URLs above at your own data. |
 
 For example:
 
@@ -60,7 +61,13 @@ and accept only releases signed with **its** key. To ship your own installs and 
    `wrangler.toml`.
 3. In your fork, set the repository variable `DATA_REPO` to your data repo, and the secrets
    `INBOX_URL`, `INBOX_TOKEN` and `DATA_REPO_TOKEN` (see [Tokens](#tokens)).
-4. Enable Actions in your fork. GitHub turns them off in new forks until you do.
+4. Make a data signing key the same way as the release key above (call the file
+   `data-signing-key.pem`). It must be a different key: the data workflows run every day on crawled
+   data, and a leak there must not be able to sign an app update. Put its public half in
+   `DATA_PUBLIC_KEY` in `packages/core/src/data-signing.ts` and the private key in the
+   `RAWJOBS_DATA_SIGNING_KEY` secret (`gh secret set RAWJOBS_DATA_SIGNING_KEY < data-signing-key.pem`).
+   Apps refuse a directory or job feed whose manifest isn't signed with it.
+5. Enable Actions in your fork. GitHub turns them off in new forks until you do.
 
 ### Rules for forks
 
@@ -88,8 +95,11 @@ The project has one maintainer today. A second maintainer should have:
 | `DATA_REPO_TOKEN` | GitHub secret in `rawjobs` | Push to `rawjobs-directory` and publish its releases. |
 | `INBOX_TOKEN` | Cloudflare Worker secret **and** GitHub secret in `rawjobs` (same value) | Read and acknowledge waiting contributions. |
 | `INBOX_URL` | GitHub secret in `rawjobs` | Not secret, kept with the token for convenience. |
+| `RAWJOBS_DATA_SIGNING_KEY` | GitHub secret in `rawjobs` | Sign the directory's and the job feed's manifests (`scripts/catalog/sign.mjs`). Not the release key: it can't sign an app update. |
 
-Rotate both every 90 days, when a maintainer leaves, and right away if one may have leaked.
+Rotate the two tokens every 90 days, when a maintainer leaves, and right away if one may have leaked.
+The data signing key changes only with an app release (installed apps carry its public half): put the
+new public half in `data-signing.ts`, release the app, then switch the secret once most installs have updated.
 
 ### Rotate `DATA_REPO_TOKEN`
 

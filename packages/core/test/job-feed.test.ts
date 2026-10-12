@@ -3,11 +3,14 @@ import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { gzipSync } from "node:zlib";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterAll, afterEach, describe, expect, it } from "vitest";
 import { parseConfig } from "../src/config";
 import { feedMatches, JOB_FEED_SCHEMA, jobFeedStatus, syncJobFeed, type JobFeedManifest, type JobFeedShard } from "../src/job-feed";
 import { scan } from "../src/scan";
-import { fakeHttp, fixture, json } from "./helpers";
+import { fakeHttp, fixture, json, testDataKey } from "./helpers";
+
+const key = testDataKey();
+afterAll(key.restore);
 
 const NOW = Date.parse("2026-10-09T12:00:00Z");
 const config = parseConfig(`
@@ -47,6 +50,7 @@ function feedServer(shards: Record<string, JobFeedShard>, schema = JOB_FEED_SCHE
     calls.push(url);
     const name = url.split("/").pop()!;
     if (name === "jobs-manifest.json") return json(manifest);
+    if (name === "jobs-manifest.json.sig") return new Response(key.sign(JSON.stringify(manifest)));
     const body = files.get(name);
     return body ? new Response(body) : new Response("", { status: 404 });
   }) as unknown as typeof fetch;
@@ -64,7 +68,7 @@ describe("syncJobFeed", () => {
     server.calls.length = 0;
     expect(await syncJobFeed(dir, { fetchImpl: server.fetchImpl, now: NOW })).toMatchObject({ updated: false });
     // No second-format feed here (404), so the first format is read: just its manifest.
-    expect(server.calls).toEqual(["https://feed.example/jobs/jobs-v2-manifest.json", "https://feed.example/jobs/jobs-manifest.json"]);
+    expect(server.calls.sort()).toEqual(["https://feed.example/jobs/jobs-manifest.json", "https://feed.example/jobs/jobs-manifest.json.sig", "https://feed.example/jobs/jobs-v2-manifest.json", "https://feed.example/jobs/jobs-v2-manifest.json.sig"]);
   });
 
   it("ignores a feed in a format it doesn't know, and never throws offline", async () => {
@@ -87,6 +91,24 @@ describe("syncJobFeed with a tampered manifest", () => {
     expect(r).toMatchObject({ updated: false, message: expect.stringMatching(/unsafe/) });
     expect(existsSync(join(dir, "updates.json"))).toBe(false);
     expect(server.calls.some((u) => u.includes(".."))).toBe(false);
+  });
+});
+
+describe("syncJobFeed signatures", () => {
+  it("refuses a manifest whose signature doesn't match, and doesn't fall back to the other format", async () => {
+    process.env.RAWJOBS_JOBS_URL = "https://feed.example/jobs";
+    const dir = tmp();
+    const server = feedServer({ lever: shard({ "lever:acme": { fetched_at: at(0), jobs: [] } }) });
+    const calls: string[] = [];
+    const fetchImpl = (async (url: string) => {
+      calls.push(url);
+      // A second-format manifest with a signature that isn't the data key's.
+      if (url.endsWith("jobs-v2-manifest.json")) return json({ schema: 2 });
+      if (url.endsWith("jobs-v2-manifest.json.sig")) return new Response("bm90IGEgc2lnbmF0dXJl");
+      return server.fetchImpl(url);
+    }) as unknown as typeof fetch;
+    expect(await syncJobFeed(dir, { fetchImpl, now: NOW })).toMatchObject({ updated: false, message: expect.stringMatching(/signature isn't valid/) });
+    expect(calls.some((u) => u.endsWith("jobs-manifest.json"))).toBe(false);
   });
 });
 
