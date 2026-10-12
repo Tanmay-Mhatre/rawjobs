@@ -1,0 +1,62 @@
+# Twice a day: is the shared data usable, as installed copies see it? Checks the directory's and the
+# job feed's manifests against the app's public key, their age and the files they list
+# (scripts/catalog/data-health.ts). The publishing workflows report their own failures; this catches
+# what they can't: a schedule that silently didn't run, an upload cut off between a manifest and its
+# signature, a release changed by hand. A problem opens (or updates) one issue; once all is well
+# again it closes it.
+name: Data · health
+
+on:
+  schedule:
+    # Off the hour (GitHub's busiest), after the daily job feed has usually published.
+    - cron: "37 11 * * *"
+    - cron: "37 23 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+
+env:
+  DATA_REPO: ${{ vars.DATA_REPO || 'Tanmay-Mhatre/rawjobs-directory' }}
+  TITLE: "Shared data needs attention"
+
+jobs:
+  check:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      # Just the check and the key: nothing is installed.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          # package.json: "type": "module", so Node runs the script as an ES module.
+          sparse-checkout: |
+            package.json
+            scripts/catalog/data-health.ts
+            packages/core/src/data-signing.ts
+          sparse-checkout-cone-mode: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 24
+
+      - name: Check the shared data
+        id: check
+        run: |
+          export DATA_PUBLIC_KEY="$(grep -o 'DATA_PUBLIC_KEY = "[^"]*"' packages/core/src/data-signing.ts | cut -d'"' -f2)"
+          if node scripts/catalog/data-health.ts --report "$RUNNER_TEMP/report.md"; then echo "healthy=true" >> "$GITHUB_OUTPUT"; else echo "healthy=false" >> "$GITHUB_OUTPUT"; fi
+          cat "$RUNNER_TEMP/report.md" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Open, update or close the issue
+        env:
+          GH_TOKEN: ${{ github.token }}
+          HEALTHY: ${{ steps.check.outputs.healthy }}
+        run: |
+          open="$(gh issue list -R "$GITHUB_REPOSITORY" --state open --search "\"$TITLE\" in:title" --json number -q '.[0].number')"
+          body="$(printf '%s\n\nRun: %s/%s/actions/runs/%s\n' "$(cat "$RUNNER_TEMP/report.md")" "$GITHUB_SERVER_URL" "$GITHUB_REPOSITORY" "$GITHUB_RUN_ID")"
+          if [ "$HEALTHY" = true ]; then
+            [ -z "$open" ] || gh issue close "$open" -R "$GITHUB_REPOSITORY" --comment "Healthy again: $GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
+          elif [ -n "$open" ]; then
+            gh issue comment "$open" -R "$GITHUB_REPOSITORY" --body "$body"
+          else
+            gh issue create -R "$GITHUB_REPOSITORY" --title "$TITLE" --body "$body"
+          fi
