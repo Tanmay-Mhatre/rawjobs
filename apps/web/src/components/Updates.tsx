@@ -23,6 +23,7 @@ import { Button, Card, Toggle } from "./ui";
 import { Anchor, ChangeRows, Head, Points, sortedItems, VersionLine } from "./UpdateParts";
 import { WhatsNewDialog } from "./WhatsNew";
 import { Dialog } from "./Dialog";
+import { settingsHash } from "./settings/registry";
 
 function CopyInstallLine() {
   const line = installLine();
@@ -330,7 +331,7 @@ function LatestVersion({ status, busy, onUpdate }: { status: UpdateStatus; busy:
       {top.length > 0 && <ChangeRows items={top} />}
       <div className="flex flex-wrap items-center gap-2">
         <UpdateButton status={status} onClick={onUpdate} busy={busy} label={`Update to ${a.version}`} />
-        <a href="#settings?section=release-notes" className="type-small text-muted underline underline-offset-2 hover:text-ink">
+        <a href={`#${settingsHash("whats-new")}`} className="type-small text-muted underline underline-offset-2 hover:text-ink">
           See all changes
         </a>
       </div>
