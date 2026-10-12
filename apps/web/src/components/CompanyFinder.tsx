@@ -1,5 +1,5 @@
 import { companyLabel } from "@rawjobs/core/display-name";
-import { INDUSTRIES, INDUSTRY_GROUPS } from "@rawjobs/core/catalog/industries";
+import { INDUSTRIES, INDUSTRY_BY_ID, INDUSTRY_GROUPS } from "@rawjobs/core/catalog/industries";
 import { isPlaceholderBoard, safeUrl } from "@rawjobs/core/text";
 import { ChevronDown, CloudDownload, ExternalLink, Link2, LoaderCircle, RefreshCw } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -8,8 +8,7 @@ import { companyIndex, companyMatches, type CompanyIndex } from "../lib/companyS
 import { canRunLocally } from "../lib/data";
 import { DirectoryBar, updateDirectory } from "./DirectoryBar";
 import { AddButton } from "./CompanyButtons";
-import { FitLabel } from "./companies/SuggestionCard";
-import { Button, cx, Pagination, Segmented, Select } from "./ui";
+import { Button, cx, Pagination, Select } from "./ui";
 
 /** Directory entry served at data/catalog/directory.json (see scripts/catalog/publish.ts). */
 export type DirCompany = CompanyRef & {
@@ -30,8 +29,6 @@ const BROWSE_PAGE = 25;
 type Props = {
   /** Keys of the companies in your list (saved or not yet). */
   watched: Set<string>;
-  /** Jobs for you right now per company key (from the Radar). */
-  forYou: ReadonlyMap<string, number>;
   /** The directory, once loaded (shared with the rest of the page). */
   directory: DirCompany[] | null;
   directoryError: string | null;
@@ -51,15 +48,14 @@ type Props = {
   companyCount?: number;
 };
 
-/** Browse all: the whole directory, filtered by the header search, industry, hiring system or jobs for you. */
-export function CompanyFinder({ watched, forYou, directory, directoryError, onAddMany, onRemove, onDirectoryUpdated, fit, industries, q, onAddByLink, companyCount }: Props) {
+/** Browse all: the whole directory, filtered by the header search, industry or hiring system. */
+export function CompanyFinder({ watched, directory, directoryError, onAddMany, onRemove, onDirectoryUpdated, fit, industries, q, onAddByLink, companyCount }: Props) {
   return (
     <div className="space-y-4">
       <DirectoryBar onUpdated={onDirectoryUpdated} companies={companyCount} />
       <Browse
         all={directory}
         error={directoryError}
-        forYou={forYou}
         fit={fit}
         mine={industries ?? []}
         watched={watched}
@@ -78,8 +74,8 @@ export function CompanyFinder({ watched, forYou, directory, directoryError, onAd
 /**
  * Directory search, one row per company (its other careers pages fold under it). Browsing lists companies
  * with open jobs; a search finds any, and yours always show. The search forgives typos (companyMatches):
- * exact and starts-with names first, then close spellings; within each, companies hiring for you now,
- * then the best fit for your profile, then the biggest. Sandbox and test boards never show (unless one
+ * exact and starts-with names first, then close spellings; within each, the best fit for your profile,
+ * then the biggest. Sandbox and test boards never show (unless one
  * is already in My companies).
  */
 export function searchDirectory(
@@ -87,10 +83,8 @@ export function searchDirectory(
   o: {
     q: string;
     watched: ReadonlySet<string>;
-    forYou: ReadonlyMap<string, number>;
     fit?: ReadonlyMap<string, number>;
     system?: "all" | "supported" | "soon";
-    onlyForYou?: boolean;
     industry?: string;
     /** The directory's search index (companyIndex); built here when not given. */
     index?: CompanyIndex<DirCompany>;
@@ -99,16 +93,14 @@ export function searchDirectory(
   const s = o.q.trim().toLowerCase();
   const matches = s ? companyMatches(o.index ?? companyIndex(all), s) : undefined;
   const rank = (c: DirCompany) => matches?.get(c) ?? 0;
-  const jobsFor = (c: DirCompany) => o.forYou.get(c.key) ?? 0;
   const system = o.system ?? "all";
   const sorted = all
     .filter((c) => o.watched.has(c.key) || !isPlaceholderBoard(c.name))
     .filter((c) => c.status === "live" || !!s || o.watched.has(c.key))
     .filter((c) => system === "all" || (system === "supported") === SUPPORTED.has(c.ats))
-    .filter((c) => !o.onlyForYou || jobsFor(c) > 0)
     .filter((c) => !o.industry || !!c.tags?.includes(o.industry) || !!c.title_tags?.includes(o.industry))
     .filter((c) => !matches || matches.has(c))
-    .sort((a, b) => rank(a) - rank(b) || jobsFor(b) - jobsFor(a) || (o.fit?.get(b.key) ?? 0) - (o.fit?.get(a.key) ?? 0) || (b.open_jobs ?? 0) - (a.open_jobs ?? 0));
+    .sort((a, b) => rank(a) - rank(b) || (o.fit?.get(b.key) ?? 0) - (o.fit?.get(a.key) ?? 0) || (b.open_jobs ?? 0) - (a.open_jobs ?? 0));
   return groupBoards(sorted, new Set(o.watched));
 }
 
@@ -152,7 +144,6 @@ function DirectoryMissing({ onReload }: { onReload: () => void }) {
 function Browse({
   all,
   error,
-  forYou,
   fit,
   mine,
   watched,
@@ -164,7 +155,6 @@ function Browse({
 }: {
   all: DirCompany[] | null;
   error: string | null;
-  forYou: ReadonlyMap<string, number>;
   fit?: ReadonlyMap<string, number>;
   mine: string[];
   watched: Set<string>;
@@ -174,22 +164,17 @@ function Browse({
   onAddByLink: () => void;
   onReload: () => void;
 }) {
-  const [onlyForYou, setOnlyForYou] = useState(false);
   const [system, setSystem] = useState<"all" | "supported" | "soon">("all");
   const [industry, setIndustry] = useState("");
   const [page, setPage] = useState(1);
   const top = useRef<HTMLDivElement>(null);
-  const jobsFor = (c: DirCompany) => forYou.get(c.key) ?? 0;
 
   const index = useMemo(() => (all ? companyIndex(all) : undefined), [all]);
-  const results = useMemo(
-    () => (all ? searchDirectory(all, { q, watched, forYou, fit, system, onlyForYou, industry, index }) : []),
-    [all, index, q, onlyForYou, system, industry, watched, forYou, fit],
-  );
+  const results = useMemo(() => (all ? searchDirectory(all, { q, watched, fit, system, industry, index }) : []), [all, index, q, system, industry, watched, fit]);
 
   // Back to page 1 whenever the search or filters change.
   // biome-ignore lint/correctness/useExhaustiveDependencies: back to page 1 whenever the search or a filter changes: they are the triggers
-  useEffect(() => setPage(1), [q, onlyForYou, system, industry]);
+  useEffect(() => setPage(1), [q, system, industry]);
   const goTo = (p: number) => {
     setPage(p);
     top.current?.scrollIntoView({ block: "nearest", behavior: "smooth" });
@@ -203,7 +188,6 @@ function Browse({
       </p>
     );
 
-  const hiring = all.filter((c) => jobsFor(c) > 0).length;
   const pageItems = results.slice((page - 1) * BROWSE_PAGE, page * BROWSE_PAGE);
   const from = (page - 1) * BROWSE_PAGE + 1;
   const to = Math.min(results.length, page * BROWSE_PAGE);
@@ -212,16 +196,6 @@ function Browse({
   return (
     <div className="space-y-3">
       <div ref={top} className="flex scroll-mt-20 flex-wrap items-center gap-2">
-        <Segmented
-          label="Hiring system"
-          value={system}
-          onChange={setSystem}
-          options={[
-            { value: "all", label: "All" },
-            { value: "supported", label: "Can scan now" },
-            { value: "soon", label: "Not supported yet" },
-          ]}
-        />
         <Select value={industry} onChange={(e) => setIndustry(e.target.value)} aria-label="Industry">
           <option value="">All industries</option>
           {mine.length > 0 && (
@@ -243,12 +217,11 @@ function Browse({
             </optgroup>
           ))}
         </Select>
-        {hiring > 0 && (
-          <label className="inline-flex items-center gap-2 type-small text-muted">
-            <input type="checkbox" checked={onlyForYou} onChange={(e) => setOnlyForYou(e.target.checked)} className="size-4 accent-ink" />
-            Only companies with jobs for you ({hiring.toLocaleString()})
-          </label>
-        )}
+        <Select value={system} onChange={(e) => setSystem(e.target.value as typeof system)} aria-label="Hiring system">
+          <option value="all">Any hiring system</option>
+          <option value="supported">Can check now</option>
+          <option value="soon">Coming in a later update</option>
+        </Select>
       </div>
       {/* Filtered counts stay exact, and say what they count (the directory size is the rounded-md one). */}
       <p role="status" className="tabular type-meta text-muted">
@@ -258,7 +231,7 @@ function Browse({
       </p>
       <ul className="divide-y divide-line rounded-md border border-line">
         {pageItems.map((g) => (
-          <BrowseRow key={g.lead.key} lead={g.lead} others={g.others} jobsFor={jobsFor} fitFor={(c) => fit?.get(c.key)} watched={watched} onAdd={onAdd} onRemove={onRemove} />
+          <BrowseRow key={g.lead.key} lead={g.lead} others={g.others} mine={mine} watched={watched} onAdd={onAdd} onRemove={onRemove} />
         ))}
         {results.length === 0 && (
           <li className="space-y-3 px-3 py-6 text-center type-small text-muted">
@@ -273,7 +246,6 @@ function Browse({
                 onClick={() => {
                   setSystem("all");
                   setIndustry("");
-                  setOnlyForYou(false);
                 }}
               >
                 Clear filters
@@ -289,32 +261,36 @@ function Browse({
 
 export type LineProps = {
   watched: Set<string>;
-  jobsFor: (c: DirCompany) => number;
-  fitFor: (c: DirCompany) => number | undefined;
+  /** Your industries: a company's industry line names one of these first. */
+  mine: readonly string[];
   onAdd: (c: DirCompany) => void;
   onRemove: (key: string) => void;
 };
 
-function BoardLine({ c, watched, jobsFor, fitFor, onAdd, onRemove, sub }: LineProps & { c: DirCompany; sub?: boolean }) {
+/** The company's industry, one of yours when it's in several ("Payments"). */
+export function industryOf(c: Pick<DirCompany, "tags" | "title_tags">, mine: readonly string[] = []): string | undefined {
+  const ids = [...(c.tags ?? []), ...(c.title_tags ?? [])].filter((id) => INDUSTRY_BY_ID.has(id));
+  const id = ids.find((i) => mine.includes(i)) ?? ids[0];
+  return id ? INDUSTRY_BY_ID.get(id)!.label : undefined;
+}
+
+/** One careers page: the company and what it is (industry), no job counts (those are on the Radar). */
+function BoardLine({ c, watched, mine, onAdd, onRemove, sub }: LineProps & { c: DirCompany; sub?: boolean }) {
   const soon = !SUPPORTED.has(c.ats);
-  const mine = jobsFor(c);
-  const score = fitFor(c);
   const name = companyLabel(c);
   return (
     <div className={cx("flex items-center gap-3", sub && "pl-4")}>
       <div className="min-w-0 flex-1">
         <p className={cx("flex items-center gap-1.5 type-small", sub ? "text-muted" : "font-semibold")}>
           <span className="truncate">{sub ? `${name} on ${ATS_LABEL[c.ats] ?? c.ats}` : name}</span>
-          {score !== undefined && score >= 45 && <FitLabel score={score} className="font-normal" />}
           <a href={safeUrl(c.careers_url)} target="_blank" rel="noreferrer" className="shrink-0 text-muted hover:text-ink" aria-label={`${name} careers page`}>
             <ExternalLink className="size-3.5" />
           </a>
         </p>
         <p className="type-small text-muted">
-          {mine > 0 && <span className="font-semibold text-ink">{mine === 1 ? "1 job for you · " : `${mine} jobs for you · `}</span>}
           {[
-            !sub && `Hiring system: ${ATS_LABEL[c.ats] ?? c.ats}`,
-            c.open_jobs ? `${c.open_jobs.toLocaleString()} open jobs` : c.status === "dormant" ? "no open jobs right now" : c.status === "unverified" ? "not checked yet" : null,
+            !sub && industryOf(c, mine),
+            c.status === "dormant" ? "not hiring right now" : c.status === "unverified" ? "not checked yet" : null,
             c.origin === "user" && "added by you",
             soon && "not supported yet",
           ]

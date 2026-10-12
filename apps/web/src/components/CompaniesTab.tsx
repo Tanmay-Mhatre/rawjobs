@@ -23,7 +23,7 @@ type Props = {
   /** A valid personal config exists (companies are saved into it). */
   configured: boolean;
   meta?: DataMeta;
-  /** The Radar's jobs (yours, checked and from the directory): "jobs for you" per company. */
+  /** The Radar's jobs (yours, checked and from the directory): the names My companies links to. */
   jobs: Job[];
   draft: Draft;
   /** The saved setup is in the draft (until then it's a blank one, with 0 companies). */
@@ -208,7 +208,7 @@ export function CompaniesTab({ configured, meta, jobs, draft, loaded, saved, upd
   }, [retrying]);
   const fetched = useCompanySuggestions(suggestFrom, configured && !retrying);
   const suggestions: SuggestState = retrying ? { kind: "loading" } : fetched;
-  /** Fit scores from the suggestions, for ordering and labelling search results. */
+  /** Fit scores from the suggestions, for ordering search results (never shown). */
   const fit = useMemo(() => {
     const m = new Map<string, number>();
     if (suggestions.kind !== "ready") return m;
@@ -218,10 +218,13 @@ export function CompaniesTab({ configured, meta, jobs, draft, loaded, saved, upd
     return m;
   }, [suggestions]);
 
-  /** Open jobs for you per company key, from the Radar's data. */
-  const forYou = useMemo(() => {
-    const m = new Map<string, number>();
-    for (const j of jobs) if (j.status === "open" && !j.why.gate) m.set(jobCompanyKey(j), (m.get(jobCompanyKey(j)) ?? 0) + 1);
+  /** The names the Radar's jobs use per company key: My companies links each name to its jobs there. */
+  const jobNames = useMemo(() => {
+    const m = new Map<string, string[]>();
+    for (const j of jobs) {
+      const names = m.get(jobCompanyKey(j)) ?? [];
+      if (!names.includes(j.company)) m.set(jobCompanyKey(j), [...names, j.company]);
+    }
     return m;
   }, [jobs]);
 
@@ -334,7 +337,7 @@ export function CompaniesTab({ configured, meta, jobs, draft, loaded, saved, upd
             rows={draft.companies}
             savedKeys={savedKeys}
             meta={meta}
-            forYou={forYou}
+            jobNames={jobNames}
             onRemove={(k) => removeWithUndo([k])}
             onRemoveMany={removeWithUndo}
             onScan={onScan}
@@ -406,7 +409,6 @@ export function CompaniesTab({ configured, meta, jobs, draft, loaded, saved, upd
         <TabPanel id="browse" ids={ids}>
           <CompanyFinder
             watched={watched}
-            forYou={forYou}
             directory={directory}
             directoryError={directoryError}
             onAddMany={addMany}

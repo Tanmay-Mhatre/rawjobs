@@ -78,3 +78,12 @@ export function useCompanySuggestions(draft: Draft, enabled = true): SuggestStat
 export function visible<T extends CompanySuggestion>(list: readonly T[], skip: ReadonlySet<string>): T[] {
   return list.filter((s) => !skip.has(s.key) && !skip.has(keyOf(s)) && !isPlaceholderBoard(s.name));
 }
+
+/** Reasons that count roles ("3 open roles match you", "2 new this week", "4 similar roles nearby or remote"). */
+const ROLE_COUNT = /^\d+ (open roles? (match|matches) you|new this week|similar roles? nearby or remote)$/;
+
+/**
+ * A suggestion's reasons as the Companies page shows them: about the company (your industry, your
+ * topics, where it hires), never how many roles match you. Roles are read on the Radar.
+ */
+export const companyReasons = (reasons: readonly string[]) => reasons.filter((r) => !ROLE_COUNT.test(r));
