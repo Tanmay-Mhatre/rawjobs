@@ -1,8 +1,11 @@
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { HttpClient } from "../../packages/core/src/index";
 import { checkOrder } from "./check";
 import { checkBoard } from "./lib/live-check";
-import { dueKind, isCurrent, mergeCheck, retryWaitDays, spreadDays } from "./lib/checks";
+import { dueKind, isCurrent, mergeCheck, readChecks, retryWaitDays, spreadDays } from "./lib/checks";
 
 const board = (key: string, confidence: "high" | "single", sources: string[] = []) => ({ key, ats: "workable", slug: key, confidence, sources });
 
@@ -88,5 +91,26 @@ describe("closed boards", () => {
     expect(await checkBoard(client(() => page("Your account is blocked.")), { key: "freshteam:acme", ats: "freshteam", slug: "acme" })).toMatchObject({ status: "dead" });
     // Anything else stays an error.
     expect(await checkBoard(client(() => page("<html>maintenance</html>")), { key: "freshteam:acme", ats: "freshteam", slug: "acme" })).toMatchObject({ status: "error" });
+  });
+});
+
+describe("readChecks", () => {
+  it("reads every process's file, keeps the latest definite answer, and skips a line cut off by a kill", () => {
+    const dir = mkdtempSync(join(tmpdir(), "rawjobs-checks-"));
+    try {
+      const row = (key: string, status: string, at: string) => JSON.stringify({ key, status, checked_at: at });
+      writeFileSync(join(dir, "checks.jsonl"), [row("lever:a", "live", "2026-10-01"), row("lever:b", "dead", "2026-10-01")].join("\n") + "\n");
+      // A check killed mid-write leaves half a line at the end of its file.
+      writeFileSync(join(dir, "checks-workday.jsonl"), `${row("lever:a", "error", "2026-10-02")}\n${row("lever:b", "live", "2026-10-03")}\n{"key":"lever:c","sta`);
+      writeFileSync(join(dir, "other.jsonl"), row("lever:z", "live", "2026-10-01"));
+      const known = readChecks(dir);
+      expect([...known.keys()].sort()).toEqual(["lever:a", "lever:b"]);
+      expect(known.get("lever:a")).toMatchObject({ status: "live", errors: 1 });
+      expect(known.get("lever:b")).toMatchObject({ status: "live" });
+      // settle runs before folding: a settled error counts as a definite answer.
+      expect(readChecks(dir, (r) => (r.status === "error" ? { ...r, status: "unreachable" } : r)).get("lever:a")).toMatchObject({ status: "unreachable" });
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
   });
 });

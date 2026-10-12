@@ -156,7 +156,12 @@ export async function runRadar(config: Config, opts: RunOptions = {}): Promise<R
 
   // One lane per hiring system (yours first within each), all lanes at once, LANE_WORKERS per lane.
   const lanes = new Map<string, (readonly [CompanyRef, boolean])[]>();
-  for (const item of todo) lanes.set(laneOf(item[0]), [...(lanes.get(laneOf(item[0])) ?? []), item]);
+  for (const item of todo) {
+    const lane = laneOf(item[0]);
+    const list = lanes.get(lane);
+    if (list) list.push(item);
+    else lanes.set(lane, [item]);
+  }
   await Promise.all(
     [...lanes.values()].flatMap((lane) => {
       let next = 0;

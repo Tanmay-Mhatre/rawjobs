@@ -169,7 +169,7 @@ withFile(raw("conorscode", "companies.json"), (p) => {
   count("conors", rows.length);
 });
 {
-  const rows = (JSON.parse(readFileSync(join(here, "..", "curate", "sources", "crypto-jobs-fyi.companies.json"), "utf8")) as { companies: { name: string; jobs_url: string }[] }).companies;
+  const rows = (JSON.parse(readFileSync(join(here, "seeds", "crypto-jobs-fyi.companies.json"), "utf8")) as { companies: { name: string; jobs_url: string }[] }).companies;
   for (const r of rows) fromUrl("cryptojobs", r.jobs_url, r.name);
   count("cryptojobs", rows.length);
 }

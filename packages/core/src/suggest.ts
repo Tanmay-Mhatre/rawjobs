@@ -79,7 +79,7 @@ export type CompanySuggestion = BoardPlace & {
 export type SuggestResult = {
   hiringNow: CompanySuggestion[];
   worthWatching: CompanySuggestion[];
-  /** In the user's industries (or shortlist), but on a hiring system we can't scan yet. */
+  /** In the user's industries, but on a hiring system we can't scan yet. */
   notScannable: CompanySuggestion[];
   scanned: number;
 };
@@ -115,7 +115,7 @@ function top(counts: Map<string, number>, n: number): string[] {
  * how many (log-scaled so huge employers don't win on volume), then match quality, topic overlap
  * and near misses. Missing components are dropped and the rest rescaled to 0–100.
  *
- * Worth watching: no matching opening today, but relevant: on the user's shortlist, the user's
+ * Worth watching: no matching opening today, but relevant: the user's industries, the user's
  * topics in their job titles or source tags, the right role in other places, other roles in the
  * user's places, or similar roles nearby. Includes companies with no job rows at all (`others`),
  * since the point is to be watching before the next opening appears.
@@ -257,7 +257,7 @@ export function suggestCompanies(
     if (s) watching.push(s);
   }
 
-  // Companies with no job rows: only the industry, the shortlist and source tags can say they're
+  // Companies with no job rows: only the industry and source tags can say they're
   // relevant. Ones on hiring systems we can't scan yet get their own list.
   const notScannable: CompanySuggestion[] = [];
   for (const c of opts.others ?? []) {
@@ -283,8 +283,8 @@ export function suggestCompanies(
     );
     if (!s) continue;
     if (!supported.has(c.ats)) {
-      // With industries picked, only companies in them; otherwise the shortlist.
-      if (wanted.size ? industries.length : s.tier === "curated") notScannable.push(s);
+      // Only companies in the user's industries: nothing else says one is for them.
+      if (industries.length) notScannable.push(s);
     } else watching.push(s);
   }
 
@@ -328,13 +328,11 @@ function watchSuggestion(
   s: Omit<CompanySuggestion, "score" | "reasons">,
   extra: { topicShare: number; elsewherePlaces: string[]; ownPlaces: string[] },
 ): CompanySuggestion | null {
-  const shortlist = s.tier === "curated";
   const industry = s.industries.length > 0;
   const hires = s.hires_for.length > 0;
-  if (!industry && !hires && !shortlist && !s.topics.length && !s.near_misses && !s.elsewhere && !s.in_your_places) return null;
+  if (!industry && !hires && !s.topics.length && !s.near_misses && !s.elsewhere && !s.in_your_places) return null;
   const raw =
     (industry ? 30 : hires ? INDUSTRY_FROM_TITLES_POINTS : 0) +
-    (shortlist ? 25 : 0) +
     (s.topics.length ? 25 * Math.max(0.4, extra.topicShare) : 0) +
     15 * logScale(s.elsewhere, 5) +
     20 * logScale(s.near_misses, 3) +
@@ -343,7 +341,6 @@ function watchSuggestion(
   const reasons: string[] = [];
   if (industry) reasons.push(industryReason(s.industries));
   else if (hires) reasons.push(hiresReason(s.hires_for));
-  if (shortlist) reasons.push("Curated pick");
   if (s.near_misses) reasons.push(`${plural(s.near_misses, "similar role")} nearby or remote`);
   if (s.elsewhere) reasons.push(`Hires for your roles in ${extra.elsewherePlaces.join(", ")}`);
   if (s.in_your_places) reasons.push(`Hiring in ${[...new Set(extra.ownPlaces.map(placeName))].slice(0, 2).join(", ")} (other roles)`);
@@ -352,9 +349,9 @@ function watchSuggestion(
 }
 
 function bySuggestion(a: CompanySuggestion, b: CompanySuggestion): number {
-  // Companies in the user's industries first; then score. Hand-reviewed companies win ties, then
-  // the bigger matching count.
-  return Number(b.industries.length > 0) - Number(a.industries.length > 0) || b.score - a.score || Number(b.tier === "curated") - Number(a.tier === "curated") || b.matches - a.matches || a.name.localeCompare(b.name);
+  // Companies in the user's industries first; then score, then
+  // the bigger matching count, then the name.
+  return Number(b.industries.length > 0) - Number(a.industries.length > 0) || b.score - a.score || b.matches - a.matches || a.name.localeCompare(b.name);
 }
 
 /**

@@ -137,4 +137,17 @@ describe("contribution inbox", () => {
     expect(await (await post(env, "/v1/ack", { ids: [pending.items[0]!.id] }, auth)).json()).toEqual({ removed: 1 });
     expect(contributions(env)).toHaveLength(0);
   });
+
+  it("hands a damaged record over empty instead of failing the whole list", async () => {
+    const env = fakeEnv();
+    await post(env, "/v1/contributions", { boards: [{ ats: "ashby", slug: "kraken.com" }] });
+    env.store.set("c:damaged", '{"boards": [');
+    const res = await call(env, "/v1/pending", { headers: { authorization: "Bearer secret-token" } });
+    expect(res.status).toBe(200);
+    const { items } = (await res.json()) as { items: { id: string; boards: unknown[] }[] };
+    expect(items.map((i) => [i.id === "c:damaged", i.boards.length]).sort()).toEqual([
+      [false, 1],
+      [true, 0],
+    ]);
+  });
 });

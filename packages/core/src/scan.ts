@@ -204,7 +204,9 @@ export async function scan(config: Config, opts: ScanOptions): Promise<ScanResul
 
   // Directory companies keep their matching jobs between scans (ledger), unless you've added or muted them since.
   // Only ones with matches (or that had some) are recorded, so a scan of the whole directory stays small.
-  const recorded = checks.filter((c) => (result.health.find((h) => h.ats === c.ats && h.slug === c.slug)?.matches ?? 0) > 0 || !!ledger.companies[companyKey(c)]);
+  // One lookup per company: an "all" scan checks ~17,000, and a find() per company was ~10^8 comparisons.
+  const matchesBy = new Map(result.health.map((h) => [`${h.ats}:${h.slug}`, h.matches]));
+  const recorded = checks.filter((c) => (matchesBy.get(`${c.ats}:${c.slug}`) ?? 0) > 0 || !!ledger.companies[companyKey(c)]);
   ledger = recordChecks(ledger, recorded, result.health, now);
   const kept = keptChecked(ledger, now).filter((c) => !tracked.has(companyKey(c)) && !muted.has(companyKey(c)));
   const merged = mergeHistory(previous, result, [...companies, ...kept]);

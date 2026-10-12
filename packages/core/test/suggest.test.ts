@@ -95,7 +95,7 @@ describe("suggestCompanies", () => {
     expect(r.worthWatching[0]!.reasons).toEqual(["Your topics: payments"]);
   });
 
-  it("suggests companies with no openings from the shortlist or a matching source tag", () => {
+  it("suggests companies with no openings from a matching source tag, and gives a hand-reviewed one no head start", () => {
     const dir = (key: string, extra: Partial<DirectoryCompany> = {}): DirectoryCompany => ({
       key,
       name: key.split(":")[1]!,
@@ -110,10 +110,8 @@ describe("suggestCompanies", () => {
       others: [dir("lever:shortlisted", { tier: "curated" }), dir("ashby:cryptoco", { tags: ["crypto"] }), dir("ashby:random"), dir("lever:gone", { tier: "curated" })],
       exclude: new Set(["lever:gone"]),
     });
-    expect(r.worthWatching.map((s) => [s.key, s.reasons])).toEqual([
-      ["lever:shortlisted", ["Curated pick"]],
-      ["ashby:cryptoco", ["Your topics: web3"]],
-    ]);
+    // "curated" only says a board was checked by hand; it says nothing about what this user wants.
+    expect(r.worthWatching.map((s) => [s.key, s.reasons])).toEqual([["ashby:cryptoco", ["Your topics: web3"]]]);
     expect(r.scanned).toBe(4);
   });
 
