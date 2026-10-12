@@ -10,7 +10,7 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { ATS_TYPES, companyKey, detectCompany, type AtsType } from "../../packages/core/src/index";
+import { ATS_TYPES, companyKey, detectCompany, type AtsType } from "@rawjobs/core";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const raw = (...p: string[]) => join(here, "raw", ...p);

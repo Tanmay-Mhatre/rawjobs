@@ -4,8 +4,9 @@ import { fileURLToPath } from "node:url";
 import tailwindcss from "@tailwindcss/vite";
 import react from "@vitejs/plugin-react";
 import { defineConfig, type Plugin } from "vite";
-import { defaultDataDir } from "../../packages/core/src/paths";
-import { createApi } from "../../packages/server/src/api";
+// The scripts load this config with --configLoader runner, so these TypeScript packages can be imported.
+import { defaultDataDir } from "@rawjobs/core";
+import { createApi } from "@rawjobs/server/api";
 
 const repoRoot = fileURLToPath(new URL("../..", import.meta.url));
 /** Your RawJobs folder (RAWJOBS_HOME), else this checkout, as before. */

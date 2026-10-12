@@ -2,7 +2,7 @@ import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-import { HttpClient } from "../../packages/core/src/index";
+import { HttpClient } from "@rawjobs/core";
 import { checkOrder } from "./check";
 import { checkBoard } from "./lib/live-check";
 import { dueKind, isCurrent, mergeCheck, readChecks, retryWaitDays, spreadDays } from "./lib/checks";

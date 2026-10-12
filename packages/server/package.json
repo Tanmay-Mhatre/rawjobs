@@ -3,5 +3,13 @@
   "version": "0.4.0",
   "private": true,
   "type": "module",
-  "description": "The local server behind the dashboard: the /api routes and the built web app, on 127.0.0.1."
+  "description": "The local server behind the dashboard: the /api routes and the built web app, on 127.0.0.1.",
+  "exports": {
+    "./serve": "./src/serve.ts",
+    "./desktop": "./src/desktop.ts",
+    "./api": "./src/api.ts"
+  },
+  "dependencies": {
+    "@rawjobs/core": "workspace:*"
+  }
 }

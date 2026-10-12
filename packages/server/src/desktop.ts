@@ -4,17 +4,17 @@ import { homedir } from "node:os";
 import { join, resolve } from "node:path";
 import { createInterface } from "node:readline/promises";
 import { parseArgs } from "node:util";
-import { defaultDataDir, rawjobsHome } from "../../core/src/paths";
-import { APP_VERSION, BUNDLED, CODE_ROOT, cliCommand } from "../../core/src/runtime";
-import { removeSchedule } from "../../core/src/schedule";
-import { compareVersions } from "../../core/src/release";
-import { AUTOSTART, fetchManifest, finishPendingUpdate, installedVersions, judge, readLastUpdate, readUpdateFile, releaseBase, releaseBaseFor, startUpdate } from "../../core/src/update";
+import { defaultDataDir, rawjobsHome } from "@rawjobs/core";
+import { APP_VERSION, BUNDLED, CODE_ROOT, cliCommand } from "@rawjobs/core";
+import { removeSchedule } from "@rawjobs/core";
+import { compareVersions } from "@rawjobs/core/release";
+import { AUTOSTART, fetchManifest, finishPendingUpdate, installedVersions, judge, readLastUpdate, readUpdateFile, releaseBase, releaseBaseFor, startUpdate } from "@rawjobs/core/update";
 
 /**
  * The parts of an installed copy that live outside the code: the server's state file, its log, how
  * it starts at login, and the shortcut. packaging/install.sh and install.ps1 create the same names.
  */
-export { AUTOSTART } from "../../core/src/update";
+export { AUTOSTART } from "@rawjobs/core/update";
 export const DEFAULT_PORT = 4317;
 
 /** What the running server wrote about itself (RAWJOBS_HOME/state.json). */

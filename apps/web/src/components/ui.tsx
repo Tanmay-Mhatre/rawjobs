@@ -1,9 +1,8 @@
 import type { ButtonHTMLAttributes, ReactNode, SelectHTMLAttributes } from "react";
 import { Button as RjButton, IconButton as RjIconButton, Kbd as RjKbd, type ButtonVariant } from "./primitives";
+import { cx } from "../lib/cx";
 
-export function cx(...parts: (string | false | null | undefined)[]): string {
-  return parts.filter(Boolean).join(" ");
-}
+export { cx } from "../lib/cx";
 
 type ButtonProps = ButtonHTMLAttributes<HTMLButtonElement> & { variant?: "primary" | "ghost" | "outline" | "danger"; size?: "sm" | "md" };
 

@@ -1,5 +1,5 @@
 import { useRef, type KeyboardEvent } from "react";
-import { cx } from "../ui";
+import { cx } from "../../lib/cx";
 
 export type TabItem<T extends string> = { id: T; label: string; count?: number };
 

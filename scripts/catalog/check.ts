@@ -13,7 +13,7 @@
 import { appendFileSync, readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { HttpClient } from "../../packages/core/src/index";
+import { HttpClient } from "@rawjobs/core";
 import { dueKind, isCurrent, mergeCheck, readChecks, type Due } from "./lib/checks";
 import { checkBoard } from "./lib/live-check";
 import { maxMsFromArgs } from "./lib/time-box";

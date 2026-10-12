@@ -1,5 +1,5 @@
 import { useEffect, useId, useRef, useState, type KeyboardEvent, type ReactNode } from "react";
-import { cx } from "../ui";
+import { cx } from "../../lib/cx";
 import { Kbd } from "./Kbd";
 import { useClosing } from "./useClosing";
 

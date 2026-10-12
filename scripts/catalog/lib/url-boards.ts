@@ -1,5 +1,5 @@
 /** Reduce crawled URLs (Common Crawl, Wayback) to job boards, shared by commoncrawl.ts and wayback.ts. */
-import { ATS_TYPES, companyKey, detectCompany } from "../../../packages/core/src/index";
+import { ATS_TYPES, companyKey, detectCompany } from "@rawjobs/core";
 
 export type UrlBoard = { ats: string; slug: string; region?: string; shard?: string; site?: string };
 /** A board plus the crawls (or snapshots) it was seen in. */

@@ -8,7 +8,7 @@
  *    figure the 90% target is measured on.
  * 3. Hold-one-out: how many live boards only one URL source lists (what we'd lose without it).
  */
-import { ATS_TYPES } from "../../../packages/core/src/index";
+import { ATS_TYPES } from "@rawjobs/core";
 import { chao2 } from "./estimate";
 
 /** Families that pick companies rather than crawl URLs: excluded from estimates and from "already known". */

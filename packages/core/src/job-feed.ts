@@ -2,12 +2,12 @@ import { createHash } from "node:crypto";
 import { existsSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { brotliCompressSync, brotliDecompressSync, constants, gunzipSync } from "node:zlib";
-import { applyFeedDiff, feedStateHash, JOB_FEED_SCHEMA_V2, type FeedDiff, type FeedManifestV2, type FeedSnapshot, type FeedState } from "./job-feed-diff";
+import { applyFeedDiff, feedStateHash, JOB_FEED_SCHEMA_V2, type FeedDiff, type FeedManifestV2, type FeedSnapshot, type FeedRow, type FeedState } from "./job-feed-diff";
 import { fetchSignedJson, FILE_TIMEOUT_MS } from "./data-signing";
 import { envSetting } from "./env";
 import { isSafeName, safeJoin } from "./safe-name";
 import { passesLocationGate, passesTitleGate } from "./score";
-import type { Profile, Workplace } from "./schema";
+import type { Profile } from "./schema";
 import { writeFileAtomic } from "./atomic";
 
 /**
@@ -25,8 +25,7 @@ export const JOB_FEED_SCHEMA = 1;
 /** A company's feed entry older than this doesn't count: the scan fetches it live. */
 export const FEED_MAX_AGE_DAYS = 3;
 
-/** [ats job id, title, location, workplace, posted date (YYYY-MM-DD) or null] */
-export type FeedRow = [string, string, string, Workplace, string | null];
+export type { FeedRow } from "./job-feed-diff";
 
 export type JobFeedShard = {
   schema: number;

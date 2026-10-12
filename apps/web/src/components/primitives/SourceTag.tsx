@@ -1,4 +1,4 @@
-import { cx } from "../ui";
+import { cx } from "../../lib/cx";
 
 /**
  * design/components/SourceTag: the hiring system a job was read from and how old the posting is.

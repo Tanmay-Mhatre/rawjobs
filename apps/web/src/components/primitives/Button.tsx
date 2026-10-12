@@ -1,5 +1,5 @@
 import type { ButtonHTMLAttributes, ReactNode } from "react";
-import { cx } from "../ui";
+import { cx } from "../../lib/cx";
 import { Kbd } from "./Kbd";
 
 /** design/components/Button. Secondary is the default; one primary per screen; danger is outlined, never filled. */

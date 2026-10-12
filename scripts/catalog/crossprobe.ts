@@ -19,7 +19,7 @@
 import { appendFileSync, existsSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { companyKey, guessName, HttpClient } from "../../packages/core/src/index";
+import { companyKey, guessName, HttpClient } from "@rawjobs/core";
 import { readChecks } from "./lib/checks";
 import { checkBoard, type Board } from "./lib/live-check";
 import { normalizeName, slugCandidates } from "./lib/slugs";

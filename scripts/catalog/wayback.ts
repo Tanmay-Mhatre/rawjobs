@@ -12,7 +12,7 @@
 import { existsSync, readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { HttpClient } from "../../packages/core/src/index";
+import { HttpClient } from "@rawjobs/core";
 import { writeFileAtomic } from "./lib/fs";
 import { BoardSet, type SeenBoard } from "./lib/url-boards";
 
