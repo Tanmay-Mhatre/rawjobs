@@ -39,7 +39,14 @@ export function ProfileBar({
   const parts = [
     profile.titles.include.slice(0, 3).join(", ") + (profile.titles.include.length > 3 ? ` +${profile.titles.include.length - 3}` : ""),
     yourPlaces.length ? yourPlaces.slice(0, 4).join(", ") + (yourPlaces.length > 4 ? ` +${yourPlaces.length - 4}` : "") : null,
-    profile.locations.remote_ok.length ? (regions.length ? `Remote in ${regions.slice(0, 3).map((r) => (r.length <= 4 ? r.toUpperCase() : displayPlace(r))).join(", ")}` : "Remote") : null,
+    profile.locations.remote_ok.length
+      ? regions.length
+        ? `Remote in ${regions
+            .slice(0, 3)
+            .map((r) => (r.length <= 4 ? r.toUpperCase() : displayPlace(r)))
+            .join(", ")}`
+        : "Remote"
+      : null,
     profile.industries.length ? profile.industries.map((i) => INDUSTRY_BY_ID.get(i)?.label ?? i).join(", ") : null,
   ].filter(Boolean);
 
@@ -74,9 +81,7 @@ export function ProfileBar({
       </div>
       {changed && (
         <div className="mt-2 flex flex-wrap items-center gap-2 border-t border-hairline pt-2">
-          <p className="min-w-0 flex-1 type-small text-ink">
-            Your place filters differ from your profile. This only changes what you see here; your scans and alerts still use your profile.
-          </p>
+          <p className="min-w-0 flex-1 type-small text-ink">Your place filters differ from your profile. This only changes what you see here; your scans and alerts still use your profile.</p>
           <Button size="sm" variant="ghost" onClick={onReset} disabled={saving}>
             Reset to my profile
           </Button>

@@ -31,7 +31,11 @@ export const COUNTRIES: Country[] = [
   c("turkey", ["turkiye", "türkiye"], ["istanbul", "ankara", "izmir"]),
   c("cyprus", [], ["nicosia", "limassol", "larnaca"]),
   // Europe
-  c("united kingdom", ["uk", "great britain", "britain", "england", "scotland", "wales", "northern ireland"], ["london", "manchester", "edinburgh", "birmingham", "bristol", "cambridge", "oxford", "leeds", "glasgow", "belfast"]),
+  c(
+    "united kingdom",
+    ["uk", "great britain", "britain", "england", "scotland", "wales", "northern ireland"],
+    ["london", "manchester", "edinburgh", "birmingham", "bristol", "cambridge", "oxford", "leeds", "glasgow", "belfast"],
+  ),
   c("ireland", [], ["dublin", "cork", "galway", "limerick"]),
   c("france", [], ["paris", "lyon", "marseille", "toulouse", "nice", "bordeaux"]),
   c("germany", ["deutschland"], ["berlin", "munich", "hamburg", "frankfurt", "cologne", "stuttgart", "düsseldorf"]),
@@ -80,7 +84,11 @@ export const COUNTRIES: Country[] = [
   c("san marino", [], ["san marino"]),
   c("gibraltar", [], ["gibraltar"]),
   // North America
-  c("united states", ["usa", "us", "united states of america", "america"], ["new york", "san francisco", "los angeles", "seattle", "austin", "boston", "chicago", "miami", "washington dc", "denver", "atlanta", "dallas"]),
+  c(
+    "united states",
+    ["usa", "us", "united states of america", "america"],
+    ["new york", "san francisco", "los angeles", "seattle", "austin", "boston", "chicago", "miami", "washington dc", "denver", "atlanta", "dallas"],
+  ),
   c("canada", [], ["toronto", "vancouver", "montreal", "calgary", "ottawa", "waterloo"]),
   c("mexico", [], ["mexico city", "guadalajara", "monterrey"]),
   // Central America & Caribbean
@@ -230,10 +238,7 @@ export const REGIONS: Region[] = [
 ];
 
 /** Search hit for the location picker. */
-export type PlaceHit =
-  | { kind: "country"; country: Country }
-  | { kind: "city"; city: string; country: Country }
-  | { kind: "region"; region: Region };
+export type PlaceHit = { kind: "country"; country: Country } | { kind: "city"; city: string; country: Country } | { kind: "region"; region: Region };
 
 /** Prefix matches first, then substring; countries before cities before regions on ties. */
 export function searchPlaces(query: string, limit = 12): PlaceHit[] {
@@ -241,8 +246,7 @@ export function searchPlaces(query: string, limit = 12): PlaceHit[] {
   if (!q) return [];
   const scored: { hit: PlaceHit; score: number }[] = [];
   // Mid-word matches ("uni" in "munich") are noise until the query is long enough to be specific.
-  const rank = (s: string) =>
-    s === q ? 0 : s.startsWith(q) ? 1 : s.split(/[\s-]/).some((w) => w.startsWith(q)) ? 2 : q.length >= 4 && s.includes(q) ? 3 : -1;
+  const rank = (s: string) => (s === q ? 0 : s.startsWith(q) ? 1 : s.split(/[\s-]/).some((w) => w.startsWith(q)) ? 2 : q.length >= 4 && s.includes(q) ? 3 : -1);
   for (const country of COUNTRIES) {
     const r = Math.min(...[country.name, ...country.aliases].map(rank).map((x) => (x < 0 ? 9 : x)));
     if (r < 9) scored.push({ hit: { kind: "country", country }, score: r * 10 });
@@ -326,16 +330,111 @@ const EXTRA_PLACES: Record<string, string> = {
 export const SUBDIVISIONS: Record<string, { names: string[]; codes: string[] }> = {
   "united states": {
     names: [
-      "alabama", "alaska", "arizona", "arkansas", "california", "colorado", "connecticut", "delaware", "florida", "hawaii", "idaho", "illinois",
-      "indiana", "iowa", "kansas", "kentucky", "louisiana", "maine", "maryland", "massachusetts", "michigan", "minnesota", "mississippi",
-      "missouri", "montana", "nebraska", "nevada", "new hampshire", "new jersey", "new mexico", "north carolina", "north dakota", "ohio",
-      "oklahoma", "oregon", "pennsylvania", "rhode island", "south carolina", "south dakota", "tennessee", "texas", "utah", "vermont",
-      "virginia", "west virginia", "wisconsin", "wyoming", "district of columbia", "new york state", "new england", "bay area", "silicon valley",
+      "alabama",
+      "alaska",
+      "arizona",
+      "arkansas",
+      "california",
+      "colorado",
+      "connecticut",
+      "delaware",
+      "florida",
+      "hawaii",
+      "idaho",
+      "illinois",
+      "indiana",
+      "iowa",
+      "kansas",
+      "kentucky",
+      "louisiana",
+      "maine",
+      "maryland",
+      "massachusetts",
+      "michigan",
+      "minnesota",
+      "mississippi",
+      "missouri",
+      "montana",
+      "nebraska",
+      "nevada",
+      "new hampshire",
+      "new jersey",
+      "new mexico",
+      "north carolina",
+      "north dakota",
+      "ohio",
+      "oklahoma",
+      "oregon",
+      "pennsylvania",
+      "rhode island",
+      "south carolina",
+      "south dakota",
+      "tennessee",
+      "texas",
+      "utah",
+      "vermont",
+      "virginia",
+      "west virginia",
+      "wisconsin",
+      "wyoming",
+      "district of columbia",
+      "new york state",
+      "new england",
+      "bay area",
+      "silicon valley",
     ],
     codes: [
-      "AL", "AK", "AZ", "AR", "CA", "CO", "CT", "DE", "FL", "GA", "HI", "ID", "IL", "IN", "IA", "KS", "KY", "LA", "ME", "MD", "MA", "MI", "MN",
-      "MS", "MO", "MT", "NE", "NV", "NH", "NJ", "NM", "NY", "NC", "ND", "OH", "OK", "OR", "PA", "RI", "SC", "SD", "TN", "TX", "UT", "VT", "VA",
-      "WA", "WV", "WI", "WY", "DC",
+      "AL",
+      "AK",
+      "AZ",
+      "AR",
+      "CA",
+      "CO",
+      "CT",
+      "DE",
+      "FL",
+      "GA",
+      "HI",
+      "ID",
+      "IL",
+      "IN",
+      "IA",
+      "KS",
+      "KY",
+      "LA",
+      "ME",
+      "MD",
+      "MA",
+      "MI",
+      "MN",
+      "MS",
+      "MO",
+      "MT",
+      "NE",
+      "NV",
+      "NH",
+      "NJ",
+      "NM",
+      "NY",
+      "NC",
+      "ND",
+      "OH",
+      "OK",
+      "OR",
+      "PA",
+      "RI",
+      "SC",
+      "SD",
+      "TN",
+      "TX",
+      "UT",
+      "VT",
+      "VA",
+      "WA",
+      "WV",
+      "WI",
+      "WY",
+      "DC",
     ],
   },
   canada: {
@@ -410,15 +509,80 @@ export const LOCATION_SEGMENTS = /[;|/()]|\s+or\s+/i;
 
 /** Two-letter country codes some hiring systems put in the country field ("AE", "GB"). */
 const ISO2: Record<string, string> = {
-  AE: "united arab emirates", SA: "saudi arabia", QA: "qatar", BH: "bahrain", KW: "kuwait", OM: "oman", JO: "jordan", LB: "lebanon",
-  EG: "egypt", MA: "morocco", IL: "israel", TR: "turkey", CY: "cyprus", GB: "united kingdom", UK: "united kingdom", IE: "ireland",
-  FR: "france", DE: "germany", NL: "netherlands", BE: "belgium", LU: "luxembourg", CH: "switzerland", AT: "austria", ES: "spain",
-  PT: "portugal", IT: "italy", MT: "malta", GR: "greece", SE: "sweden", NO: "norway", DK: "denmark", FI: "finland", EE: "estonia",
-  LV: "latvia", LT: "lithuania", PL: "poland", CZ: "czech republic", SK: "slovakia", HU: "hungary", RO: "romania", BG: "bulgaria",
-  RS: "serbia", HR: "croatia", SI: "slovenia", UA: "ukraine", GE: "georgia", AM: "armenia", US: "united states", CA: "canada",
-  MX: "mexico", BR: "brazil", AR: "argentina", CL: "chile", CO: "colombia", PE: "peru", UY: "uruguay", IN: "india", PK: "pakistan",
-  CN: "china", HK: "hong kong", TW: "taiwan", JP: "japan", KR: "south korea", SG: "singapore", MY: "malaysia", ID: "indonesia",
-  TH: "thailand", VN: "vietnam", PH: "philippines", AU: "australia", NZ: "new zealand", NG: "nigeria", KE: "kenya", ZA: "south africa",
+  AE: "united arab emirates",
+  SA: "saudi arabia",
+  QA: "qatar",
+  BH: "bahrain",
+  KW: "kuwait",
+  OM: "oman",
+  JO: "jordan",
+  LB: "lebanon",
+  EG: "egypt",
+  MA: "morocco",
+  IL: "israel",
+  TR: "turkey",
+  CY: "cyprus",
+  GB: "united kingdom",
+  UK: "united kingdom",
+  IE: "ireland",
+  FR: "france",
+  DE: "germany",
+  NL: "netherlands",
+  BE: "belgium",
+  LU: "luxembourg",
+  CH: "switzerland",
+  AT: "austria",
+  ES: "spain",
+  PT: "portugal",
+  IT: "italy",
+  MT: "malta",
+  GR: "greece",
+  SE: "sweden",
+  NO: "norway",
+  DK: "denmark",
+  FI: "finland",
+  EE: "estonia",
+  LV: "latvia",
+  LT: "lithuania",
+  PL: "poland",
+  CZ: "czech republic",
+  SK: "slovakia",
+  HU: "hungary",
+  RO: "romania",
+  BG: "bulgaria",
+  RS: "serbia",
+  HR: "croatia",
+  SI: "slovenia",
+  UA: "ukraine",
+  GE: "georgia",
+  AM: "armenia",
+  US: "united states",
+  CA: "canada",
+  MX: "mexico",
+  BR: "brazil",
+  AR: "argentina",
+  CL: "chile",
+  CO: "colombia",
+  PE: "peru",
+  UY: "uruguay",
+  IN: "india",
+  PK: "pakistan",
+  CN: "china",
+  HK: "hong kong",
+  TW: "taiwan",
+  JP: "japan",
+  KR: "south korea",
+  SG: "singapore",
+  MY: "malaysia",
+  ID: "indonesia",
+  TH: "thailand",
+  VN: "vietnam",
+  PH: "philippines",
+  AU: "australia",
+  NZ: "new zealand",
+  NG: "nigeria",
+  KE: "kenya",
+  ZA: "south africa",
 };
 
 let countryPattern: RegExp | undefined;
@@ -565,7 +729,17 @@ function notCityNames(): Set<string> {
       ...COUNTRIES.flatMap((c) => [c.name, ...c.aliases]),
       ...Object.values(SUBDIVISIONS).flatMap((s) => [...s.names, ...s.codes.map((x) => x.toLowerCase())]),
       ...Object.keys(ISO2).map((x) => x.toLowerCase()),
-      "usa", "us", "uk", "uae", "emea", "apac", "amer", "americas", "latam", "remote", "europe",
+      "usa",
+      "us",
+      "uk",
+      "uae",
+      "emea",
+      "apac",
+      "amer",
+      "americas",
+      "latam",
+      "remote",
+      "europe",
     ]);
   }
   return notCity;
@@ -618,7 +792,12 @@ export function citiesIn(location: string): string[] {
     if (known) city = known.toLowerCase().replace(/[\s.-]+/g, " ");
     else {
       for (const part of cleaned.split(/[,(]/)) {
-        const name = part.replace(NOT_A_PLACE, " ").replace(/[^\p{L}\s'.-]/gu, " ").replace(/\s+/g, " ").replace(/^[\s.-]+|[\s.-]+$/g, "").toLowerCase();
+        const name = part
+          .replace(NOT_A_PLACE, " ")
+          .replace(/[^\p{L}\s'.-]/gu, " ")
+          .replace(/\s+/g, " ")
+          .replace(/^[\s.-]+|[\s.-]+$/g, "")
+          .toLowerCase();
         if (name.length < 3 || notCityNames().has(name) || isRegionPhrase(name)) continue;
         city = name;
         break;

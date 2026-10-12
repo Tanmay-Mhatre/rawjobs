@@ -30,7 +30,14 @@ const profileKeyIn = (text: string) => PROFILE_KEYS.find((k) => text.includes(k)
 
 const strList = (v: unknown, max = 40): string[] =>
   Array.isArray(v)
-    ? [...new Set(v.filter((x): x is string => typeof x === "string").map((s) => s.trim().toLowerCase().replace(/\s+/g, " ")).filter(Boolean))].slice(0, max)
+    ? [
+        ...new Set(
+          v
+            .filter((x): x is string => typeof x === "string")
+            .map((s) => s.trim().toLowerCase().replace(/\s+/g, " "))
+            .filter(Boolean),
+        ),
+      ].slice(0, max)
     : [];
 
 function normalizeProfile(raw: unknown): AiProfile | undefined {
@@ -58,18 +65,24 @@ function normalizeProfile(raw: unknown): AiProfile | undefined {
     industries: [...new Set(strList(o.industries, 12).flatMap((x) => industriesForLabel(x)))],
     // Company names keep their casing ("Northwind", "TideWave").
     past_employers: Array.isArray(o.past_employers)
-      ? [...new Set(o.past_employers.filter((x): x is string => typeof x === "string").map((s) => s.trim().replace(/\s+/g, " ")).filter(Boolean))].slice(0, 15)
+      ? [
+          ...new Set(
+            o.past_employers
+              .filter((x): x is string => typeof x === "string")
+              .map((s) => s.trim().replace(/\s+/g, " "))
+              .filter(Boolean),
+          ),
+        ].slice(0, 15)
       : [],
   };
-  const empty =
-    !profile.target_titles.length && !profile.locations.length && !Object.keys(profile.keywords).length && !profile.seniority.length && !profile.industries.length;
+  const empty = !profile.target_titles.length && !profile.locations.length && !Object.keys(profile.keywords).length && !profile.seniority.length && !profile.industries.length;
   return empty ? undefined : profile;
 }
 
 /** Find the JSON object that holds the profile: a ```json fence first, then any balanced {...}. */
 function findProfileJson(text: string): { start: number; end: number; value: unknown } | undefined {
   const fence = /```(?:json)?\s*\n([\s\S]*?)```/gi;
-  for (let m; (m = fence.exec(text)); ) {
+  for (let m: RegExpExecArray | null; (m = fence.exec(text)); ) {
     if (!profileKeyIn(m[1]!)) continue;
     try {
       return { start: m.index, end: m.index + m[0].length, value: JSON.parse(m[1]!) };
@@ -155,22 +168,101 @@ function countMatches(text: string, term: string): number {
 
 // Headings are recognised by their words, not their format: PDF text has no markers, .docx bold arrives as **EXPERIENCE**.
 const KEEP_SECTIONS = new Set([
-  "summary", "professional summary", "executive summary", "career summary", "profile", "professional profile", "personal profile", "personal statement",
-  "objective", "career objective", "about", "about me", "overview", "positioning",
-  "experience", "work experience", "professional experience", "relevant experience", "employment", "employment history", "work history", "career history",
-  "professional background", "career highlights", "highlights", "key achievements", "achievements", "accomplishments", "selected achievements",
-  "education", "academic background", "qualifications", "skills", "technical skills", "core skills", "key skills", "top skills", "skills inventory",
-  "core competencies", "competencies", "expertise", "areas of expertise", "tools", "technologies", "tech stack",
-  "certifications", "certification", "certificates", "licenses", "licences", "courses", "training", "professional development",
-  "projects", "selected projects", "key projects", "awards", "honors", "honours", "honors-awards", "publications",
-  "volunteering", "volunteer work", "volunteer experience", "leadership", "memberships", "affiliations", "professional memberships",
+  "summary",
+  "professional summary",
+  "executive summary",
+  "career summary",
+  "profile",
+  "professional profile",
+  "personal profile",
+  "personal statement",
+  "objective",
+  "career objective",
+  "about",
+  "about me",
+  "overview",
+  "positioning",
+  "experience",
+  "work experience",
+  "professional experience",
+  "relevant experience",
+  "employment",
+  "employment history",
+  "work history",
+  "career history",
+  "professional background",
+  "career highlights",
+  "highlights",
+  "key achievements",
+  "achievements",
+  "accomplishments",
+  "selected achievements",
+  "education",
+  "academic background",
+  "qualifications",
+  "skills",
+  "technical skills",
+  "core skills",
+  "key skills",
+  "top skills",
+  "skills inventory",
+  "core competencies",
+  "competencies",
+  "expertise",
+  "areas of expertise",
+  "tools",
+  "technologies",
+  "tech stack",
+  "certifications",
+  "certification",
+  "certificates",
+  "licenses",
+  "licences",
+  "courses",
+  "training",
+  "professional development",
+  "projects",
+  "selected projects",
+  "key projects",
+  "awards",
+  "honors",
+  "honours",
+  "honors-awards",
+  "publications",
+  "volunteering",
+  "volunteer work",
+  "volunteer experience",
+  "leadership",
+  "memberships",
+  "affiliations",
+  "professional memberships",
 ]);
 /** Sections that say nothing about the industries someone works in ("Interests: gaming", "Work authorization & mobility"). */
 const SKIP_SECTIONS = new Set([
-  "languages", "language", "language skills", "interests", "hobbies", "personal interests", "outside work", "references",
-  "contact", "contact details", "contact information", "personal details", "personal information",
-  "work authorization", "work authorisation", "visa", "visa status", "right to work", "relocation", "mobility", "global mobility",
-  "availability", "notice period", "nationality",
+  "languages",
+  "language",
+  "language skills",
+  "interests",
+  "hobbies",
+  "personal interests",
+  "outside work",
+  "references",
+  "contact",
+  "contact details",
+  "contact information",
+  "personal details",
+  "personal information",
+  "work authorization",
+  "work authorisation",
+  "visa",
+  "visa status",
+  "right to work",
+  "relocation",
+  "mobility",
+  "global mobility",
+  "availability",
+  "notice period",
+  "nationality",
 ]);
 
 function headingKind(line: string): "skip" | "keep" | null {

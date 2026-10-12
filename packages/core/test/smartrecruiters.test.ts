@@ -93,10 +93,7 @@ companies:
     const { http, calls } = fakeHttp(routes);
     const result = await runRadar(config, { http, now });
     const detailCalls = calls.filter((u) => u.includes("/postings/"));
-    expect(detailCalls.sort()).toEqual([
-      "https://api.smartrecruiters.com/v1/companies/AcmeGroup/postings/101",
-      "https://api.smartrecruiters.com/v1/companies/AcmeGroup/postings/103",
-    ]);
+    expect(detailCalls.sort()).toEqual(["https://api.smartrecruiters.com/v1/companies/AcmeGroup/postings/101", "https://api.smartrecruiters.com/v1/companies/AcmeGroup/postings/103"]);
     const pm = result.jobs.find((j) => j.id.endsWith(":101"))!;
     expect(pm.why.keywords).toEqual(["crypto", "kyc"]);
     expect(result.health[0]).toMatchObject({ ok: true, jobsFound: 103, matches: 2 });

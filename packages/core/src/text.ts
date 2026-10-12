@@ -59,7 +59,7 @@ export function termRegex(term: string): RegExp {
   let re = regexCache.get(key);
   if (!re) {
     const body = key
-      .split(/[\s\-]+/)
+      .split(/[\s-]+/)
       .filter(Boolean)
       .map((w) => w.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"))
       .join("[\\s\\-]+");
@@ -127,7 +127,12 @@ function slashVariants(words: string[]): string[][] {
   const out: string[][] = [words.flatMap((w) => w.split("/").filter(Boolean))];
   const slashed = words.flatMap((w, i) => (w.includes("/") ? [i] : [])).slice(0, 2);
   let lists: string[][] = [words];
-  for (const i of slashed) lists = lists.flatMap((l) => l[i]!.split("/").filter(Boolean).map((alt) => l.map((w, j) => (j === i ? alt : w))));
+  for (const i of slashed)
+    lists = lists.flatMap((l) =>
+      l[i]!.split("/")
+        .filter(Boolean)
+        .map((alt) => l.map((w, j) => (j === i ? alt : w))),
+    );
   if (slashed.length) out.push(...lists);
   return out;
 }
@@ -145,6 +150,7 @@ const PLANT_MAINTENANCE = /(?<!\p{L})(sap|eam|maximo)([\s/-]+)pm(?!\p{L})/gu;
 
 function wordsOf(text: string): string[] {
   const lower = text.toLowerCase().replace(TIME_OF_DAY, " ").replace(PLANT_MAINTENANCE, "$1$2plant maintenance");
+  // biome-ignore lint/suspicious/noControlCharactersInRegex: "anything outside ASCII", control characters included
   return (/[^\x00-\x7f]/.test(lower) ? lower.normalize("NFKD") : lower)
     .replace(/[\u0300-\u036f'’.]/g, "")
     .replace(/&/g, " and ")
@@ -229,7 +235,26 @@ export function titleTermsPattern(terms: readonly string[], o: { broad?: boolean
 }
 
 /** Common words that say little on their own: a term's anchor is one of its other words when it has one. */
-const GENERIC_TITLE_WORDS = new Set(["manager", "engineer", "senior", "lead", "head", "of", "director", "principal", "staff", "junior", "associate", "specialist", "and", "the", "chief", "officer", "vice", "president"]);
+const GENERIC_TITLE_WORDS = new Set([
+  "manager",
+  "engineer",
+  "senior",
+  "lead",
+  "head",
+  "of",
+  "director",
+  "principal",
+  "staff",
+  "junior",
+  "associate",
+  "specialist",
+  "and",
+  "the",
+  "chief",
+  "officer",
+  "vice",
+  "president",
+]);
 const anchorCache = new Map<string, Set<string>>();
 
 /**
@@ -246,7 +271,12 @@ function titleAnchors(terms: readonly string[]): Set<string> {
     const telling = words.filter((w) => !GENERIC_TITLE_WORDS.has(w));
     for (const w of telling.length ? [telling.reduce((a, b) => (b.length > a.length ? b : a))] : words) need.add(w);
   };
-  for (const t of terms) pick(wordsOf(t).flatMap((w) => w.split("/")).filter(Boolean));
+  for (const t of terms)
+    pick(
+      wordsOf(t)
+        .flatMap((w) => w.split("/"))
+        .filter(Boolean),
+    );
   for (const t of expandTitleTerms(terms)) pick(t.split(" ").filter((w) => w && w !== "of"));
   raw = new Set(need);
   for (const [abbr, full] of Object.entries(TITLE_ABBREVIATIONS)) if (full.split(" ").some((w) => need.has(w))) raw.add(abbr);
@@ -269,7 +299,10 @@ export function mayMatchTitle(title: string, terms: readonly string[]): boolean 
   // Read as matchesTitle does ("Sr. PM" -> "sr", "pm")...
   for (const word of wordsOf(title)) for (const part of [word, ...word.split(/\/|(?<=[+#])(?=\p{L})/u)]) if (has(part)) return true;
   // ...and as written, where matchesAny's literal check splits "Sr.Product" and "CFO's" at the punctuation.
-  return title.toLowerCase().split(/[^\p{L}\p{N}+#]+/u).some(has);
+  return title
+    .toLowerCase()
+    .split(/[^\p{L}\p{N}+#]+/u)
+    .some(has);
 }
 
 /**
@@ -296,7 +329,8 @@ export function inferWorkplace(location: string): "remote" | "hybrid" | "unknown
  * ("Lever Implementation Training Environment", "Rhaegal - Arago Sandbox", "Acme Test Company").
  * They post fake or years-old jobs, so they're never suggested, listed or scanned.
  */
-const PLACEHOLDER_BOARD = /\b(training environment|implementation (?:training|environment)|test (?:company|account|tenant|environment|site|board)|demo (?:company|account|tenant|site|board)|staging|do not use|dummy|sample company)\b/i;
+const PLACEHOLDER_BOARD =
+  /\b(training environment|implementation (?:training|environment)|test (?:company|account|tenant|environment|site|board)|demo (?:company|account|tenant|site|board)|staging|do not use|dummy|sample company)\b/i;
 /**
  * "Sandbox" alone is a real brand ("Sandbox VR", "The Sandbox"), so it only counts as a tenant label:
  * after a separator ("Rhaegal - Arago Sandbox", "Acme (Sandbox)"), next to a tenant word

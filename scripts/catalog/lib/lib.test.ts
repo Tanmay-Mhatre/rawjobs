@@ -74,7 +74,12 @@ describe("universe", () => {
       { key: "lever:c", ats: "lever", families: ["seeds"] },
       { key: "lever:d", ats: "lever", families: ["kalil"] },
     ];
-    const status = new Map([["lever:a", "live"], ["lever:b", "live"], ["lever:c", "live"], ["lever:d", "dead"]]);
+    const status = new Map([
+      ["lever:a", "live"],
+      ["lever:b", "live"],
+      ["lever:c", "live"],
+      ["lever:d", "dead"],
+    ]);
     const u = universe({ boards, status, sample: ["lever:a", "lever:c", "lever:d"], restrictedOnly: { lever: 5 } });
     const lever = u.rows.find((r) => r.ats === "lever")!;
     // d is dead so it's out of the sample; c was only found company-first.

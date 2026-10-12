@@ -48,15 +48,18 @@ export function NotifyBell({
   if (tg === undefined) return null;
   const ready = telegramReady(tg);
   const on = ready && !!scan.notify?.asked;
-  const label = !tg ? "Checking Telegram" : !ready ? "Get a Telegram message when it's done" : failed ? "No Telegram message for this scan" : on ? "Telegram message when it's done: on" : "Asking for a Telegram message";
+  const label = !tg
+    ? "Checking Telegram"
+    : !ready
+      ? "Get a Telegram message when it's done"
+      : failed
+        ? "No Telegram message for this scan"
+        : on
+          ? "Telegram message when it's done: on"
+          : "Asking for a Telegram message";
   return (
     <>
-      <RjIconButton
-        size="sm"
-        label={label}
-        onClick={() => (tg && !ready ? setSetup(true) : onDetails())}
-        className={cx(on && "text-success-text", failed && "text-warning-text")}
-      >
+      <RjIconButton size="sm" label={label} onClick={() => (tg && !ready ? setSetup(true) : onDetails())} className={cx(on && "text-success-text", failed && "text-warning-text")}>
         {!tg || (ready && !on && !failed) ? (
           <LoaderCircle className="rj-icon animate-spin text-muted" />
         ) : failed ? (

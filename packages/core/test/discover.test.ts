@@ -1,6 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { parseConfig } from "../src/config";
-import { findCandidates, pickChecks, readLedger, recordChecks, toIndexJobs, type IndexFile } from "../src/discover";
+import { findCandidates, pickChecks, recordChecks, toIndexJobs, type IndexFile } from "../src/discover";
 import type { IndexedCompany, IndexRow } from "../src/suggest";
 import { profile } from "./helpers";
 
@@ -13,16 +12,11 @@ const co = (key: string, rows: IndexRow[]): IndexedCompany => {
 };
 const pm = (location: string, age = 2): IndexRow => ["Senior Product Manager", location, "onsite", age, 1];
 const index = (companies: IndexedCompany[], generated = now): IndexFile => ({ generated_at: generated.toISOString(), companies });
-const noLedger = { version: 1 as const, companies: {} };
 
 describe("findCandidates", () => {
   it("keeps rows that pass your gates, best estimate first, ages counted from the index build", () => {
     const built = new Date(now.getTime() - 5 * DAY);
-    const c = findCandidates(
-      profile(),
-      index([co("lever:a", [pm("Dubai", 30), ["Software Engineer", "Dubai", "onsite", 1, 1]]), co("ashby:b", [pm("Dubai", 1), pm("Berlin")])], built),
-      now,
-    );
+    const c = findCandidates(profile(), index([co("lever:a", [pm("Dubai", 30), ["Software Engineer", "Dubai", "onsite", 1, 1]]), co("ashby:b", [pm("Dubai", 1), pm("Berlin")])], built), now);
     expect(c.map((x) => [x.company.key, x.location])).toEqual([
       ["ashby:b", "Dubai"],
       ["lever:a", "Dubai"],

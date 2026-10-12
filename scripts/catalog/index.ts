@@ -12,7 +12,7 @@
 import { appendFileSync, readdirSync, readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { getConnector, HttpClient, HttpError, inferWorkplace, type CompanyRef, type NormalizedJob } from "../../packages/core/src/index";
+import { getConnector, HttpClient, type HttpError, inferWorkplace, type CompanyRef, type NormalizedJob } from "../../packages/core/src/index";
 import { maxMsFromArgs, nextInTime } from "./lib/time-box";
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -41,7 +41,16 @@ async function greenhouseLight(ref: CompanyRef): Promise<NormalizedJob[]> {
   const d = await http.getJson<{ jobs?: G[] }>(`https://boards-api.greenhouse.io/v1/boards/${encodeURIComponent(ref.slug)}/jobs`);
   return (d.jobs ?? []).map((j) => {
     const location = j.location?.name?.trim() ?? "";
-    return { id: String(j.id), ats: "greenhouse", company: ref.name, title: j.title.trim(), location, workplace: inferWorkplace(location), postedAt: j.first_published ?? j.updated_at, url: j.absolute_url };
+    return {
+      id: String(j.id),
+      ats: "greenhouse",
+      company: ref.name,
+      title: j.title.trim(),
+      location,
+      workplace: inferWorkplace(location),
+      postedAt: j.first_published ?? j.updated_at,
+      url: j.absolute_url,
+    };
   });
 }
 

@@ -75,7 +75,14 @@ describe("change files", () => {
 
   it("the fingerprint ignores order", () => {
     const s = stateOf(DAY1);
-    const shuffled: FeedState = { verified: { ...s.verified }, jobs: Object.fromEntries(Object.entries(s.jobs).reverse().map(([k, r]) => [k, [...r].reverse()])) };
+    const shuffled: FeedState = {
+      verified: { ...s.verified },
+      jobs: Object.fromEntries(
+        Object.entries(s.jobs)
+          .reverse()
+          .map(([k, r]) => [k, [...r].reverse()]),
+      ),
+    };
     expect(feedStateHash(shuffled)).toBe(feedStateHash(s));
   });
 });

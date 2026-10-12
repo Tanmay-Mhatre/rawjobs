@@ -35,8 +35,7 @@ const MAX_POSTINGS = 2000;
 const WORKPLACE: Record<string, Workplace> = { remote: "remote", hybrid: "hybrid", onsite: "onsite", "on-site": "onsite", "on site": "onsite" };
 
 const host = (ref: { slug: string; shard?: string }) => `https://${ref.slug}.${ref.shard}.myworkdayjobs.com`;
-const api = (ref: { slug: string; shard?: string; site?: string }) =>
-  `${host(ref)}/wday/cxs/${encodeURIComponent(ref.slug)}/${encodeURIComponent(ref.site ?? "")}`;
+const api = (ref: { slug: string; shard?: string; site?: string }) => `${host(ref)}/wday/cxs/${encodeURIComponent(ref.slug)}/${encodeURIComponent(ref.site ?? "")}`;
 
 export const workday: Connector<WorkdayPosting> = {
   ats: "workday",

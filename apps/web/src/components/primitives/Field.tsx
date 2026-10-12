@@ -10,15 +10,7 @@ type InputProps = Omit<InputHTMLAttributes<HTMLInputElement>, "className"> & { r
  * and is announced with the field. Validate on blur and clear the error once the value is fixed (the
  * caller owns the error text: say what happened and how to fix it).
  */
-export function Field({
-  label,
-  help,
-  error,
-  id,
-  className,
-  inputClassName,
-  ...input
-}: InputProps & { label: string; help?: string; error?: string; className?: string }) {
+export function Field({ label, help, error, id, className, inputClassName, ...input }: InputProps & { label: string; help?: string; error?: string; className?: string }) {
   const auto = useId();
   const inputId = id ?? auto;
   const noteId = `${inputId}-note`;
@@ -27,13 +19,7 @@ export function Field({
       <label className="rj-field__label" htmlFor={inputId}>
         {label}
       </label>
-      <input
-        id={inputId}
-        className={cx("rj-input", inputClassName)}
-        aria-invalid={error ? true : undefined}
-        aria-describedby={error || help ? noteId : undefined}
-        {...input}
-      />
+      <input id={inputId} className={cx("rj-input", inputClassName)} aria-invalid={error ? true : undefined} aria-describedby={error || help ? noteId : undefined} {...input} />
       {error ? (
         <p className="rj-field__error" id={noteId}>
           <CircleAlert className="rj-icon" aria-hidden />

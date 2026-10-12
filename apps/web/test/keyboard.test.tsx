@@ -134,28 +134,28 @@ const noop = () => {};
 const renderRadar = (onStatus: (job: Job, status: string) => void = noop, extra: ReactNode = null) =>
   render(
     <>
-    {extra}
-    <RadarPage
-      jobs={[job({ id: "a" }), job({ id: "b", company: "Beta", score: 40 })]}
-      meta={meta}
-      user={{}}
-      prefs={{ views: [], hiddenCompanies: [], hideRules: [] }}
-      onOpenOverlay={noop}
-      overlayOpen={false}
-      onStatus={onStatus}
-      onUpdate={noop}
-      onApply={noop}
-      onSaveView={() => ({ id: "v", name: "", filters: DEFAULT_FILTERS, sort: "best" })}
-      onRenameView={noop}
-      onDeleteView={noop}
-      onRestoreView={noop}
-      onHideCompany={noop}
-      onSetRule={noop}
-      isYours={() => false}
-      companyCount={0}
-      onCompanies={noop}
-      onEditProfile={noop}
-    />
+      {extra}
+      <RadarPage
+        jobs={[job({ id: "a" }), job({ id: "b", company: "Beta", score: 40 })]}
+        meta={meta}
+        user={{}}
+        prefs={{ views: [], hiddenCompanies: [], hideRules: [] }}
+        onOpenOverlay={noop}
+        overlayOpen={false}
+        onStatus={onStatus}
+        onUpdate={noop}
+        onApply={noop}
+        onSaveView={() => ({ id: "v", name: "", filters: DEFAULT_FILTERS, sort: "best" })}
+        onRenameView={noop}
+        onDeleteView={noop}
+        onRestoreView={noop}
+        onHideCompany={noop}
+        onSetRule={noop}
+        isYours={() => false}
+        companyCount={0}
+        onCompanies={noop}
+        onEditProfile={noop}
+      />
     </>,
   );
 describe("Radar 1-6 pick the views", () => {
@@ -189,7 +189,10 @@ describe("g then a letter goes to a section", () => {
   it("g r, g p, g c and g s go to Radar, Pipeline, Companies and Settings", () => {
     const onGo = vi.fn();
     render(<GoTo onGo={onGo} />);
-    for (const k of ["r", "p", "c", "s"]) (press("g"), press(k));
+    for (const k of ["r", "p", "c", "s"]) {
+      press("g");
+      press(k);
+    }
     expect(onGo.mock.calls.map((c) => c[0])).toEqual(["radar", "pipeline", "companies", "settings"]);
   });
 

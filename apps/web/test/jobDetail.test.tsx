@@ -72,7 +72,9 @@ describe("JobDetail", () => {
   });
 
   it("shows a saved note straight away", () => {
-    render(<JobDetail job={job()} entry={{ note: "Ask Sam for a referral", updatedAt: "", snapshot: { title: "", company: "", url: "", location: "", score: 0 } }} profile={profile} onUpdate={() => {}} />);
+    render(
+      <JobDetail job={job()} entry={{ note: "Ask Sam for a referral", updatedAt: "", snapshot: { title: "", company: "", url: "", location: "", score: 0 } }} profile={profile} onUpdate={() => {}} />,
+    );
     expect((screen.getByLabelText("Notes") as HTMLTextAreaElement).value).toBe("Ask Sam for a referral");
   });
 
@@ -116,7 +118,9 @@ describe("Why it matched", () => {
   });
 
   it("lists the dealbreakers a job breaks, folded or not", () => {
-    const { container } = renderDetail(scored({ score: 32, why: { title: 30, location: 20, keywords: ["payments"], keywordPoints: 14, industry: 10, dealbreakers: ["Only for people already living in the United States"] } }));
+    const { container } = renderDetail(
+      scored({ score: 32, why: { title: 30, location: 20, keywords: ["payments"], keywordPoints: 14, industry: 10, dealbreakers: ["Only for people already living in the United States"] } }),
+    );
     const note = container.querySelector("[data-dealbreakers]")!;
     expect(note.className).toContain("text-warning-text");
     expect(note.textContent).toContain("Breaks one of your dealbreakers");

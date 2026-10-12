@@ -182,7 +182,9 @@ async function main() {
   // The second format: a full copy plus today's change file (see lib/feed-v2.ts).
   const v2 = writeFeedV2(OUT, stateOf(everyone), generated);
   const mb = (n: number) => (n / 1e6).toFixed(2);
-  console.error(`v2: #${v2.seq}, full copy ${mb(v2.snapshotBytes)} MB${v2.diffBytes !== undefined ? `, change file ${mb(v2.diffBytes)} MB (${v2.changedCompanies} companies)` : ""}${v2.note ? ` (${v2.note})` : ""}`);
+  console.error(
+    `v2: #${v2.seq}, full copy ${mb(v2.snapshotBytes)} MB${v2.diffBytes !== undefined ? `, change file ${mb(v2.diffBytes)} MB (${v2.changedCompanies} companies)` : ""}${v2.note ? ` (${v2.note})` : ""}`,
+  );
   writeFileSync(join(OUT, "stats.json"), `${JSON.stringify({ generated_at: generated, http: http.stats, ats: stats, alerts, v2 }, null, 2)}\n`);
   console.error(`Feed: ${total(manifest, "companies")} companies, ${total(manifest, "jobs")} jobs; ${http.stats.requests} requests, ${http.stats.notModified} unchanged.`);
   if (alerts.length) console.error(`Large change since yesterday: ${alerts.join("; ")}`);

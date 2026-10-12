@@ -9,7 +9,11 @@ import { existsSync, readFileSync } from "node:fs";
 type Rule = { key?: string; domain?: string; name?: string; reason?: string; added?: string };
 export type Denylist = (c: { key?: string; name?: string; careers_url?: string }) => boolean;
 
-const norm = (s: string) => s.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
+const norm = (s: string) =>
+  s
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, " ")
+    .trim();
 const hostOf = (url: string | undefined) => {
   try {
     return url ? new URL(url).hostname.toLowerCase().replace(/^www\./, "") : "";

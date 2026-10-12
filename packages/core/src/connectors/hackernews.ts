@@ -11,7 +11,8 @@ export type HnComment = { id: number; text?: string | null; created_at?: string;
 
 const API = "https://hn.algolia.com/api/v1";
 /** Words that make a "|" segment the role. */
-const ROLE = /\b(engineer|developer|manager|designer|scientist|analyst|lead|head|director|architect|researcher|product|marketing|sales|recruiter|founding|intern|devops|sre|cto|vp|officer|specialist|consultant|writer|ops|operations|support|success)\b/i;
+const ROLE =
+  /\b(engineer|developer|manager|designer|scientist|analyst|lead|head|director|architect|researcher|product|marketing|sales|recruiter|founding|intern|devops|sre|cto|vp|officer|specialist|consultant|writer|ops|operations|support|success)\b/i;
 /** Words that make a segment a place or a way of working (any case), or a "City, Country" or "NY"-style code. */
 const PLACE_WORD = /\b(remote|onsite|on-site|in office|hybrid|anywhere|worldwide|usa|uk|eu|europe|emea|apac)\b/i;
 const PLACE_SHAPE = /\b([A-Z]{2}|[A-Z][a-z]+,\s*[A-Z][A-Za-z]+)\b/;
@@ -19,7 +20,15 @@ const PLACE_SHAPE = /\b([A-Z]{2}|[A-Z][a-z]+,\s*[A-Z][A-Za-z]+)\b/;
 /** The post's first line split on "|" (or " — "): company, role and places. */
 export function parseHiringPost(text: string): { company: string; title: string; location: string } {
   const first = text.split("\n").find((l) => l.trim()) ?? "";
-  const parts = first.split(/\s*\|\s*|\s+[—–]\s+/).map((p) => p.replace(/https?:\/\/\S+/g, "").replace(/\s+/g, " ").trim()).filter(Boolean);
+  const parts = first
+    .split(/\s*\|\s*|\s+[—–]\s+/)
+    .map((p) =>
+      p
+        .replace(/https?:\/\/\S+/g, "")
+        .replace(/\s+/g, " ")
+        .trim(),
+    )
+    .filter(Boolean);
   // "Acme (YC W24)" or "Acme (Remote US)": the brackets aren't the name, but may say where.
   const bracket = (parts[0] ?? "").match(/\s*\((.*?)\)\s*$/);
   const company = (parts[0] ?? "").replace(/\s*\(.*?\)\s*$/, "").slice(0, 80);
@@ -44,7 +53,7 @@ export const hackernews: Connector<HnComment> = {
   async fetch(_ref, { http }) {
     const search = await http.getJson<{ hits?: { objectID: string; title?: string }[] }>(`${API}/search_by_date?tags=story,author_whoishiring&hitsPerPage=10`);
     const thread = search.hits?.find((h) => /who is hiring/i.test(h.title ?? ""));
-    if (!thread) throw new Error("no current \"Who is hiring?\" thread found");
+    if (!thread) throw new Error('no current "Who is hiring?" thread found');
     const item = await http.getJson<{ children?: HnComment[] }>(`${API}/items/${thread.objectID}`);
     return (item.children ?? []).filter((c) => c.text);
   },

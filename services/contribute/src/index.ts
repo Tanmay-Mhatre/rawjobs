@@ -88,7 +88,14 @@ function clean(b: unknown): Board | null {
   if ((o.ats === "workday" || o.ats === "oracle") && o.shard === undefined) return null;
   if (o.site !== undefined && !(typeof o.site === "string" && SLUG.test(o.site))) return null;
   if (NEEDS_SITE.has(o.ats) && o.site === undefined) return null;
-  const name = typeof o.name === "string" ? o.name.replace(/[\u0000-\u001f<>]/g, "").trim().slice(0, 100) : "";
+  const name =
+    typeof o.name === "string"
+      ? o.name
+          // biome-ignore lint/suspicious/noControlCharactersInRegex: stripping control characters is the point
+          .replace(/[\u0000-\u001f<>]/g, "")
+          .trim()
+          .slice(0, 100)
+      : "";
   return {
     ats: o.ats,
     slug: o.slug,

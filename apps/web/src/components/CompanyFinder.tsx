@@ -107,13 +107,7 @@ export function searchDirectory(
     .filter((c) => !o.onlyForYou || jobsFor(c) > 0)
     .filter((c) => !o.industry || !!c.tags?.includes(o.industry) || !!c.title_tags?.includes(o.industry))
     .filter((c) => !matches || matches.has(c))
-    .sort(
-      (a, b) =>
-        rank(a) - rank(b) ||
-        jobsFor(b) - jobsFor(a) ||
-        (o.fit?.get(b.key) ?? 0) - (o.fit?.get(a.key) ?? 0) ||
-        (b.open_jobs ?? 0) - (a.open_jobs ?? 0),
-    );
+    .sort((a, b) => rank(a) - rank(b) || jobsFor(b) - jobsFor(a) || (o.fit?.get(b.key) ?? 0) - (o.fit?.get(a.key) ?? 0) || (b.open_jobs ?? 0) - (a.open_jobs ?? 0));
   return groupBoards(sorted, new Set(o.watched));
 }
 
@@ -193,6 +187,7 @@ function Browse({
   );
 
   // Back to page 1 whenever the search or filters change.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: back to page 1 whenever the search or a filter changes: they are the triggers
   useEffect(() => setPage(1), [q, onlyForYou, system, industry]);
   const goTo = (p: number) => {
     setPage(p);
@@ -262,16 +257,7 @@ function Browse({
       </p>
       <ul className="divide-y divide-line rounded-md border border-line">
         {pageItems.map((g) => (
-          <BrowseRow
-            key={g.lead.key}
-            lead={g.lead}
-            others={g.others}
-            jobsFor={jobsFor}
-            fitFor={(c) => fit?.get(c.key)}
-            watched={watched}
-            onAdd={onAdd}
-            onRemove={onRemove}
-          />
+          <BrowseRow key={g.lead.key} lead={g.lead} others={g.others} jobsFor={jobsFor} fitFor={(c) => fit?.get(c.key)} watched={watched} onAdd={onAdd} onRemove={onRemove} />
         ))}
         {results.length === 0 && (
           <li className="space-y-3 px-3 py-6 text-center type-small text-muted">
@@ -360,6 +346,7 @@ export function BrowseRow({ lead, others, ...line }: LineProps & { lead: DirComp
 export function useDirectory(rev: number): { directory: DirCompany[] | null; error: string | null } {
   const [directory, setDirectory] = useState<DirCompany[] | null>(null);
   const [error, setError] = useState<string | null>(null);
+  // biome-ignore lint/correctness/useExhaustiveDependencies: `rev` is the trigger: bumped to load the directory again
   useEffect(() => {
     const get = (path: string) => fetch(path, { cache: "no-store" }).then((r) => (r.ok ? (r.json() as Promise<{ companies: DirCompany[] }>) : null));
     let live = true;

@@ -10,8 +10,7 @@ export const KEEP_CLOSED_DAYS = 60;
 export const REPOST_WITHIN_DAYS = 60;
 
 /** Same company, same title and place: what a repost keeps. */
-const repostKey = (j: Pick<Job, "id" | "title" | "location">) =>
-  `${companyOfJobId(j.id)}|${j.title.toLowerCase().replace(/\s+/g, " ").trim()}|${j.location.toLowerCase().trim()}`;
+const repostKey = (j: Pick<Job, "id" | "title" | "location">) => `${companyOfJobId(j.id)}|${j.title.toLowerCase().replace(/\s+/g, " ").trim()}|${j.location.toLowerCase().trim()}`;
 
 export type MergeResult = {
   jobs: Job[];
@@ -21,18 +20,12 @@ export type MergeResult = {
   closedIds: Set<string>;
 };
 
-
 /**
  * Merge this run into the stored history: new / still open / missing / closed.
  * Jobs of companies that failed or weren't run this time are left untouched, so a
  * broken feed never closes everything. Jobs of companies removed from the config are dropped.
  */
-export function mergeHistory(
-  previous: readonly Job[],
-  run: RunResult,
-  companies: readonly Pick<CompanyRef, "ats" | "slug" | "site">[],
-  now = new Date(run.startedAt),
-): MergeResult {
+export function mergeHistory(previous: readonly Job[], run: RunResult, companies: readonly Pick<CompanyRef, "ats" | "slug" | "site">[], now = new Date(run.startedAt)): MergeResult {
   // Job ids carry their company's jobCompanyKey(); Workday and Taleo ones include the site.
   const configured = new Set(companies.map(jobCompanyKey));
   const fetchedOk = new Set(run.health.filter((h) => h.ok).map((h) => h.key ?? jobCompanyKey(h)));
@@ -52,8 +45,7 @@ export function mergeHistory(
   // Jobs gone from their board that a new id could be a repost of (left out of history once taken over).
   const repostCutoff = now.getTime() - REPOST_WITHIN_DAYS * 86_400_000;
   const gone = new Map<string, Job>();
-  for (const p of previous)
-    if (!current.has(p.id) && Date.parse(p.lastSeen) >= repostCutoff && !gone.has(repostKey(p))) gone.set(repostKey(p), p);
+  for (const p of previous) if (!current.has(p.id) && Date.parse(p.lastSeen) >= repostCutoff && !gone.has(repostKey(p))) gone.set(repostKey(p), p);
   const reposted = new Set<string>();
 
   for (let j of run.jobs) {

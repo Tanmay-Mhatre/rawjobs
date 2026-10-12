@@ -1,17 +1,7 @@
 import { CircleAlert, CloudDownload, Copy, LoaderCircle, RefreshCw, X } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { timeAgo } from "../lib/format";
-import {
-  announceUpdateStatus,
-  checkForUpdate,
-  installLine,
-  markUpdateSeen,
-  saveUpdateSettings,
-  updateNow,
-  useServerHealth,
-  useUpdateStatus,
-  type UpdateStatus,
-} from "../lib/update";
+import { announceUpdateStatus, checkForUpdate, installLine, markUpdateSeen, saveUpdateSettings, updateNow, useServerHealth, useUpdateStatus, type UpdateStatus } from "../lib/update";
 import { toast } from "./Toast";
 import { Button, cx } from "./ui";
 
@@ -31,11 +21,7 @@ function CopyInstallLine() {
   return (
     <div className="mt-1.5 flex flex-wrap items-center gap-2">
       <code className="min-w-0 flex-1 truncate rounded-sm bg-inset px-2 py-1 font-mono type-meta">{line}</code>
-      <Button
-        size="sm"
-        variant="ghost"
-        onClick={() => void navigator.clipboard?.writeText(line).then(() => toast({ message: "Copied the install line" }))}
-      >
+      <Button size="sm" variant="ghost" onClick={() => void navigator.clipboard?.writeText(line).then(() => toast({ message: "Copied the install line" }))}>
         <Copy className="size-3.5" /> Copy
       </Button>
     </div>
@@ -96,11 +82,20 @@ export function ServerNotices() {
             </>
           ) : (
             <p>
-              <b>The update to {last.to} didn't work, so you're still on {last.from}.</b> Nothing of yours changed. RawJobs won't try that version again by itself.
+              <b>
+                The update to {last.to} didn't work, so you're still on {last.from}.
+              </b>{" "}
+              Nothing of yours changed. RawJobs won't try that version again by itself.
             </p>
           )}
         </div>
-        <button type="button" aria-label="Dismiss" title="Dismiss" className="inline-flex size-7 items-center justify-center rounded-md text-muted hover:bg-inset hover:text-ink" onClick={() => void seen()}>
+        <button
+          type="button"
+          aria-label="Dismiss"
+          title="Dismiss"
+          className="inline-flex size-7 items-center justify-center rounded-md text-muted hover:bg-inset hover:text-ink"
+          onClick={() => void seen()}
+        >
           <X className="size-4" />
         </button>
       </div>
@@ -150,7 +145,12 @@ export function UpdatesSettings() {
   const { status, setStatus } = useUpdateStatus();
   const [busy, setBusy] = useState<"check" | "update" | null>(null);
 
-  if (!status) return <p className="flex items-center gap-2 type-small text-muted"><LoaderCircle className="size-4 animate-spin" /> Checking…</p>;
+  if (!status)
+    return (
+      <p className="flex items-center gap-2 type-small text-muted">
+        <LoaderCircle className="size-4 animate-spin" /> Checking…
+      </p>
+    );
   if (!status.installed) {
     return (
       <p className="type-small text-muted">
@@ -174,9 +174,7 @@ export function UpdatesSettings() {
     <div className="space-y-4">
       <p className="type-small">
         You have RawJobs <b>{status.current}</b>.{" "}
-        <span className="text-muted">
-          {a ? `RawJobs ${a.version} is out.` : status.lastCheck ? `That's the newest version (checked ${timeAgo(status.lastCheck)}).` : "Not checked yet."}
-        </span>
+        <span className="text-muted">{a ? `RawJobs ${a.version} is out.` : status.lastCheck ? `That's the newest version (checked ${timeAgo(status.lastCheck)}).` : "Not checked yet."}</span>
       </p>
       <fieldset>
         <legend className="type-label">New versions</legend>
@@ -218,7 +216,9 @@ export function UpdatesSettings() {
           {status.error}
         </p>
       )}
-      <p className="type-small text-muted">Updates come from RawJobs' GitHub releases and are checked against its signing key before they install. Your profile, tracking and scan data are backed up first.</p>
+      <p className="type-small text-muted">
+        Updates come from RawJobs' GitHub releases and are checked against its signing key before they install. Your profile, tracking and scan data are backed up first.
+      </p>
     </div>
   );
 }

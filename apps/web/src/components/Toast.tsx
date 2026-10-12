@@ -26,7 +26,9 @@ type ToastItem = ToastInput & { id: number; closing?: boolean };
 let items: ToastItem[] = [];
 let nextId = 1;
 const listeners = new Set<() => void>();
-const emit = () => listeners.forEach((l) => l());
+const emit = () => {
+  for (const l of listeners) l();
+};
 
 export function toast(t: ToastInput): number {
   const id = nextId++;
@@ -46,7 +48,10 @@ function removeToast(id: number) {
   emit();
 }
 
-const subscribe = (l: () => void) => (listeners.add(l), () => void listeners.delete(l));
+const subscribe = (l: () => void) => {
+  listeners.add(l);
+  return () => void listeners.delete(l);
+};
 const snapshot = () => items;
 
 export function Toaster() {

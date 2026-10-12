@@ -73,7 +73,11 @@ describe("applyFilters", () => {
   it("hides dismissed jobs and hidden companies, and filters by tracking status", () => {
     const tracked: Ctx = {
       ...ctx,
-      user: { a: { status: "saved", updatedAt: "", snapshot: {} as never }, b: { status: "dismissed", updatedAt: "", snapshot: {} as never }, c: { status: "interviewing", updatedAt: "", snapshot: {} as never } },
+      user: {
+        a: { status: "saved", updatedAt: "", snapshot: {} as never },
+        b: { status: "dismissed", updatedAt: "", snapshot: {} as never },
+        c: { status: "interviewing", updatedAt: "", snapshot: {} as never },
+      },
       hiddenCompanies: new Set(["OKX"]),
     };
     expect(applyFilters(jobs, f(), tracked).map((j) => j.id)).toEqual(["a"]);

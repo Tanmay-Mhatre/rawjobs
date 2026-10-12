@@ -55,7 +55,10 @@ export function problems(set: EvalSet): string[] {
   }
   for (const p of set.profiles) {
     const mine = set.labels[p.id];
-    if (!mine) { out.push(`no labels for profile ${p.id}`); continue; }
+    if (!mine) {
+      out.push(`no labels for profile ${p.id}`);
+      continue;
+    }
     for (const j of set.jobs) {
       const l = mine[j.id];
       if (!l) out.push(`${p.id}/${j.id}: not labelled`);
@@ -101,7 +104,10 @@ function dcg(groups: { label: number }[][], k: number): number {
 
 /** NDCG@k of the score order (gain 2^label - 1). 1 when no pair has any gain. */
 export function ndcg(pairs: { score: number; label: number }[], k: number): number {
-  const ideal = dcg([...pairs].sort((a, b) => b.label - a.label).map((p) => [p]), k);
+  const ideal = dcg(
+    [...pairs].sort((a, b) => b.label - a.label).map((p) => [p]),
+    k,
+  );
   return ideal === 0 ? 1 : dcg(tiedGroups(pairs), k) / ideal;
 }
 

@@ -26,7 +26,7 @@ export function AddButton({ added, onAdd, onRemove, soon, name }: { added: boole
 export function AddAll({ items, watched, onAddMany, onRemoveMany }: { items: CompanyRef[]; watched: Set<string>; onAddMany: (c: CompanyRef[]) => string[]; onRemoveMany: (keys: string[]) => void }) {
   const [last, setLast] = useState<{ keys: string[]; soon: number } | null>(null);
   const todo = items.filter((c) => !watched.has(keyOf(c)));
-  if (last && last.keys.some((k) => watched.has(k))) {
+  if (last?.keys.some((k) => watched.has(k))) {
     const scannable = last.keys.length - last.soon;
     return (
       <span className="inline-flex flex-wrap items-center gap-x-2 type-small text-muted">

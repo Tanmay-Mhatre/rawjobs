@@ -1,4 +1,4 @@
-import { ArrowRight, Building2, Keyboard, KanbanSquare, LoaderCircle, Radar as RadarIcon, RefreshCw, Settings as SettingsIcon, TriangleAlert, X } from "lucide-react";
+import { ArrowRight, Building2, Keyboard, KanbanSquare, Radar as RadarIcon, RefreshCw, Settings as SettingsIcon, TriangleAlert, X } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { CompaniesTab } from "./components/CompaniesTab";
 import { Dialog } from "./components/Dialog";
@@ -131,9 +131,10 @@ export function App() {
   const [tg, setTg] = useState<TelegramStatus | null | undefined>(undefined);
   const refreshTg = useCallback(async () => setTg(await telegramStatus().catch(() => null)), []);
   // Checked again as each scan starts: it may have been set up in Settings since.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: rechecks Telegram when a scan starts (or before the first check); a new `tg` value must not trigger it
   useEffect(() => {
     if (canRunLocally && (scanning || tg === undefined)) void refreshTg();
-  }, [scanning, refreshTg]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [scanning, refreshTg]);
   const [notifyFailed, setNotifyFailed] = useState(false);
   const notifyAsked = useRef(false);
   useEffect(() => {
@@ -148,9 +149,10 @@ export function App() {
     void notifyScan().then((ok) => setNotifyFailed(!ok));
   }, [scanning, scan.total, scan.notify, tg, notifyScan]);
   // A message that went out is a toast; one that didn't stays on the page (NotifyFailed).
+  // biome-ignore lint/correctness/useExhaustiveDependencies: fires when the notify result arrives; `tg` is only read for the bot's name
   useEffect(() => {
     if (!scanning && scan.notify?.result === "sent") toast({ message: <>Sent the results to Telegram{tg?.bot ? <> ({tg.bot})</> : null}.</> });
-  }, [scanning, scan.notify?.result]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [scanning, scan.notify?.result]);
   /** Setup just saved and started the first scan: say how it went when it ends. */
   const announceScan = useRef(false);
   useEffect(() => {
@@ -159,7 +161,15 @@ export function App() {
     // A failed scan is explained inline by the scan progress bar; a toast only confirms what worked.
     if (scan.phase === "error") return;
     const m = scan.summary?.matches ?? 0;
-    toast({ message: m ? <>Scan done: <b>{m.toLocaleString()}</b> matching {m === 1 ? "job" : "jobs"}.</> : "Scan done. No matches yet: see why below." });
+    toast({
+      message: m ? (
+        <>
+          Scan done: <b>{m.toLocaleString()}</b> matching {m === 1 ? "job" : "jobs"}.
+        </>
+      ) : (
+        "Scan done. No matches yet: see why below."
+      ),
+    });
   }, [scan.phase, scan.summary]);
 
   /** Radar "Save to my profile": its place and industry picks become your profile, then a rescan. */
@@ -243,10 +253,11 @@ export function App() {
   }, []);
 
   // Only the very first visit opens the Welcome; after Start or Skip, setup is reached through CTAs.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: decides once, when setup status first loads; later route changes mustn't reopen the Welcome
   useEffect(() => {
     if (!status || status.isPersonal || "setup" in route) return;
     if (!load(WELCOME_SEEN_KEY, false)) go({ setup: 0 });
-  }, [status]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [status]);
 
   // Remember how far the wizard got, so "Continue setup" resumes there.
   const wizardStep = "setup" in route ? route.setup : 0;
@@ -272,10 +283,7 @@ export function App() {
   }, [go]);
   const goCompanies = useCallback(() => go({ tab: "companies" }), [go]);
   /** Where a "set up" CTA should take the user right now. */
-  const toSetup = useCallback(
-    () => goStep(setupState === "invalid" ? 0 : progress.started ? progress.nextStep : STEP.resume),
-    [goStep, setupState, progress],
-  );
+  const toSetup = useCallback(() => goStep(setupState === "invalid" ? 0 : progress.started ? progress.nextStep : STEP.resume), [goStep, setupState, progress]);
 
   const jobs = state.kind === "ready" ? state.jobs : [];
   const jobsById = useMemo(() => new Map(jobs.map((j) => [j.id, j])), [jobs]);
@@ -313,7 +321,10 @@ export function App() {
   // Escape too.
   const canScanNow = canRunLocally && setupState === "configured" && !scanning;
   const onPage = !openId && !showKeys && !inSetup;
-  useGoToKeys((section) => go({ tab: section }), () => onPage && !document.querySelector("dialog[open]"));
+  useGoToKeys(
+    (section) => go({ tab: section }),
+    () => onPage && !document.querySelector("dialog[open]"),
+  );
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (ignoreShortcut(e)) return;
@@ -344,322 +355,327 @@ export function App() {
 
   return (
     <NotForMeProvider value={notForMe}>
-    <div className="min-h-dvh">
-      <a href="#main" onClick={(e) => (e.preventDefault(), document.getElementById("main")?.focus())} className="sr-only-focusable fixed left-3 top-3 z-[70] rounded-md bg-raised px-3 py-2 type-label shadow-l3">
-        Skip to content
-      </a>
-      <header className="sticky top-0 z-30 border-b border-line bg-raised/85 backdrop-blur">
-        <div className="mx-auto flex h-14 max-w-6xl items-center gap-3 px-4">
-          <a href="#radar" onClick={() => go({ tab: "radar" })} className="flex shrink-0 items-center rounded-sm" aria-label="RawJobs, go to Radar">
-            {/* The wordmark at every width, 100px (the minimum is 96px): ink on light themes, paper on dark.
+      <div className="min-h-dvh">
+        <a
+          href="#main"
+          onClick={(e) => {
+            e.preventDefault();
+            document.getElementById("main")?.focus();
+          }}
+          className="sr-only-focusable fixed left-3 top-3 z-[70] rounded-md bg-raised px-3 py-2 type-label shadow-l3"
+        >
+          Skip to content
+        </a>
+        <header className="sticky top-0 z-30 border-b border-line bg-raised/85 backdrop-blur">
+          <div className="mx-auto flex h-14 max-w-6xl items-center gap-3 px-4">
+            <a href="#radar" onClick={() => go({ tab: "radar" })} className="flex shrink-0 items-center rounded-sm" aria-label="RawJobs, go to Radar">
+              {/* The wordmark at every width, 100px (the minimum is 96px): ink on light themes, paper on dark.
                 The app mark is for the favicon and app icon only (design/logos). The link names it. */}
-            <img src={wordmarkInk} alt="" className="rj-wordmark-ink h-auto w-25" />
-            <img src={wordmarkPaper} alt="" className="rj-wordmark-paper h-auto w-25" />
-          </a>
-          {inSetup ? (
-            <span className="type-small text-muted">· Setup</span>
-          ) : (
-            <nav className="ml-2 hidden items-center gap-1 md:flex" aria-label="Sections">
-              {TABS.map((t) => (
-                <TabLink key={t.id} tab={t} active={tab === t.id} onClick={() => go({ tab: t.id })} />
-              ))}
-            </nav>
-          )}
-          <div className="ml-auto flex items-center gap-1.5">
+              <img src={wordmarkInk} alt="" className="rj-wordmark-ink h-auto w-25" />
+              <img src={wordmarkPaper} alt="" className="rj-wordmark-paper h-auto w-25" />
+            </a>
             {inSetup ? (
-              <Button size="sm" variant="ghost" onClick={exitSetup}>
-                <X className="size-4" /> Exit setup
-              </Button>
+              <span className="type-small text-muted">· Setup</span>
             ) : (
-              <>
-                {lastRun && (
-                  <span className="hidden type-meta text-muted lg:inline" title={lastRun.startedAt}>
-                    Last scan {timeAgo(lastRun.startedAt)}
+              <nav className="ml-2 hidden items-center gap-1 md:flex" aria-label="Sections">
+                {TABS.map((t) => (
+                  <TabLink key={t.id} tab={t} active={tab === t.id} onClick={() => go({ tab: t.id })} />
+                ))}
+              </nav>
+            )}
+            <div className="ml-auto flex items-center gap-1.5">
+              {inSetup ? (
+                <Button size="sm" variant="ghost" onClick={exitSetup}>
+                  <X className="size-4" /> Exit setup
+                </Button>
+              ) : (
+                <>
+                  {lastRun && (
+                    <span className="hidden type-meta text-muted lg:inline" title={lastRun.startedAt}>
+                      Last scan {timeAgo(lastRun.startedAt)}
+                    </span>
+                  )}
+                  {state.kind === "ready" && failing > 0 && (
+                    <button
+                      type="button"
+                      onClick={goFailing}
+                      title="Review failing companies: usually the careers page moved"
+                      className="hidden h-7 items-center gap-1.5 rounded-md border border-warning/40 bg-warning-subtle/40 px-2 type-label text-warning-text hover:bg-warning-subtle/60 lg:inline-flex"
+                    >
+                      <TriangleAlert className="size-3.5" aria-hidden />
+                      {failing} failing<span className="sr-only">: {failing === 1 ? "1 company" : `${failing} companies`} couldn't be scanned last time. Review failing companies</span>
+                    </button>
+                  )}
+                  {canRunLocally && (setupState === "none" || setupState === "invalid") && (
+                    <Button size="sm" variant="primary" onClick={toSetup}>
+                      {setupState === "invalid" ? "Fix setup" : progress.started ? "Finish setup" : "Set up radar"} <ArrowRight className="size-3.5" />
+                    </Button>
+                  )}
+                  {canRunLocally && setupState === "configured" && (
+                    <ScanButton
+                      scan={scan}
+                      onRequest={requestScan}
+                      onChoose={() => setChoosing(true)}
+                      onStop={() => void stopScan()}
+                      notifyLine={notifyLine(tg, scan, notifyFailed)}
+                      notify={(openDetails) => (
+                        <NotifyBell
+                          tg={tg}
+                          scan={scan}
+                          failed={notifyFailed}
+                          onDetails={openDetails}
+                          onSaved={() => setup.refresh()}
+                          onConnected={() => {
+                            void refreshTg();
+                            void notifyScan().then((ok) => setNotifyFailed(!ok));
+                            notifyAsked.current = true;
+                          }}
+                        />
+                      )}
+                    />
+                  )}
+                  <span className="hidden sm:contents">
+                    <IconButton label="Keyboard shortcuts (?)" onClick={() => setShowKeys((v) => !v)}>
+                      <Keyboard className="size-4" />
+                    </IconButton>
                   </span>
-                )}
-                {state.kind === "ready" && failing > 0 && (
-                  <button
-                    type="button"
-                    onClick={goFailing}
-                    title="Review failing companies: usually the careers page moved"
-                    className="hidden h-7 items-center gap-1.5 rounded-md border border-warning/40 bg-warning-subtle/40 px-2 type-label text-warning-text hover:bg-warning-subtle/60 lg:inline-flex"
-                  >
-                    <TriangleAlert className="size-3.5" aria-hidden />
-                    {failing} failing<span className="sr-only">: {failing === 1 ? "1 company" : `${failing} companies`} couldn't be scanned last time. Review failing companies</span>
-                  </button>
-                )}
-                {canRunLocally && (setupState === "none" || setupState === "invalid") && (
-                  <Button size="sm" variant="primary" onClick={toSetup}>
-                    {setupState === "invalid" ? "Fix setup" : progress.started ? "Finish setup" : "Set up radar"} <ArrowRight className="size-3.5" />
-                  </Button>
-                )}
-                {canRunLocally && setupState === "configured" && (
-                  <ScanButton
-                    scan={scan}
-                    onRequest={requestScan}
-                    onChoose={() => setChoosing(true)}
-                    onStop={() => void stopScan()}
-                    notifyLine={notifyLine(tg, scan, notifyFailed)}
-                    notify={(openDetails) => (
-                      <NotifyBell
-                        tg={tg}
-                        scan={scan}
-                        failed={notifyFailed}
-                        onDetails={openDetails}
-                        onSaved={() => setup.refresh()}
-                        onConnected={() => {
-                          void refreshTg();
-                          void notifyScan().then((ok) => setNotifyFailed(!ok));
-                          notifyAsked.current = true;
-                        }}
-                      />
-                    )}
-                  />
-                )}
-                <span className="hidden sm:contents">
-                  <IconButton label="Keyboard shortcuts (?)" onClick={() => setShowKeys((v) => !v)}>
-                    <Keyboard className="size-4" />
-                  </IconButton>
-                </span>
-              </>
-            )}
-          </div>
-        </div>
-      </header>
-
-      <main
-        id="main"
-        tabIndex={-1}
-        className={cx(
-          "mx-auto max-w-6xl px-4 pt-5 outline-none",
-          inSetup ? "pb-10" : "pb-24 md:pb-10",
-          // The Radar fits the window on laptops and up: the feed and the job scroll inside their panels,
-          // the page itself never does, and Apply stays in view.
-          radarFits && "lg:flex lg:h-[calc(100dvh-3.5rem)] lg:flex-col lg:pb-4",
-        )}
-      >
-        <ServerNotices />
-        {status === undefined || state.kind === "loading" ? (
-          <FeedSkeleton />
-        ) : inSetup ? (
-          <Wizard
-            step={(route as { setup: number }).setup}
-            goStep={goStep}
-            draft={draft}
-            update={update}
-            existing={personal}
-            configErrors={status?.valid === false ? status.errors : undefined}
-            startScan={startScan}
-            onSaved={async () => {
-              await setup.refresh();
-              save(DRAFT_KEY, null);
-              save(WELCOME_SEEN_KEY, true);
-            }}
-            onFinish={() => {
-              announceScan.current = true;
-              go({ tab: "radar" });
-            }}
-            onExit={exitSetup}
-            progress={progress}
-            resumeText={resume.text}
-            saveResume={saveResume}
-            removeResume={removeResume}
-            onStart={() => {
-              save(WELCOME_SEEN_KEY, true);
-              goStep(!personal && progress.started ? progress.nextStep : STEP.resume);
-            }}
-            onStartOver={() => {
-              save(WELCOME_SEEN_KEY, true);
-              setDraft(emptyDraft());
-              goStep(STEP.resume);
-            }}
-          />
-        ) : (
-          <div className={cx("flex flex-col gap-4", radarFits && "lg:min-h-0 lg:flex-1 lg:gap-3")}>
-            {viewLabel && (
-              <h1 ref={headingRef} tabIndex={-1} className="sr-only">
-                {viewLabel}
-              </h1>
-            )}
-            {state.kind === "error" && <ErrorState message={state.message} onRetry={() => void reload()} />}
-            {/* A scan in progress shows in the header (Scan now becomes its status); a Telegram message that failed shows here. */}
-            <NotifyFailed scan={scan} />
-
-            {tab === "radar" && (
-              <>
-                {notSetUp && <SetupHero items={items} started={progress.started} nextStep={progress.nextStep} onStep={goStep} onCompanies={goCompanies} />}
-                {setupState === "invalid" && <ConfigProblemCard errors={status?.errors} onFix={() => goStep(0)} />}
-                {setupState === "configured" && personal && (
-                  <SetupChecklist items={items} onStep={goStep} onScan={requestScan} onCompanies={goCompanies} />
-                )}
-                {setupState === "configured" && personal && state.kind === "empty" && <FirstScanCard scan={scan} onScan={requestScan} />}
-                {/* Laptops show this as a chip next to "Last scan" in the header, so the jobs start higher. */}
-                {state.kind === "ready" && failing > 0 && <FailingBanner className="lg:hidden" count={failing} onOpen={goFailing} />}
-                {state.kind === "ready" && lastRun && matched === 0 && <NoMatches jobs={otherJobs ? [...jobs, ...otherJobs] : jobs} onStep={goStep} onCompanies={goCompanies} />}
-                {state.kind === "ready" && (matched > 0 || !lastRun) && (
-                  <RadarPage
-                    jobs={state.jobs}
-                    meta={state.meta}
-                    user={user.state}
-                    prefs={prefs.prefs}
-                    onOpenOverlay={onOpen}
-                    overlayOpen={!!openJob}
-                    onStatus={onStatus}
-                    onUpdate={(job, patch) => user.update(job, patch)}
-                    onApply={onApply}
-                    onSaveView={prefs.saveView}
-                    onRenameView={prefs.renameView}
-                    onDeleteView={prefs.deleteView}
-                    onRestoreView={prefs.restoreView}
-                    onHideCompany={hideCompany}
-                    onSetRule={prefs.setRule}
-                    isYours={isYours}
-                    companyCount={yourKeys.size}
-                    indexGeneratedAt={state.indexGeneratedAt}
-                    onCompanies={goCompanies}
-                    onTrack={canSave ? trackJob : undefined}
-                    onCheck={canSave ? checkJob : undefined}
-                    profile={status?.config?.profile}
-                    onEditProfile={() => go({ tab: "settings" })}
-                    onSaveProfile={canRunLocally && personal && setupState === "configured" ? saveProfileFromRadar : undefined}
-                  />
-                )}
-              </>
-            )}
-            {tab === "pipeline" && (
-              <Pipeline
-                user={user.state}
-                jobsById={jobsById}
-                min={meta?.profile.min_score ?? 70}
-                onOpen={onOpen}
-                onMove={(id, entry, s) => user.update({ id, ...entry.snapshot, ...pick(jobsById.get(id)) }, { status: s })}
-                onSetup={notSetUp ? toSetup : undefined}
-                goRadar={() => go({ tab: "radar" })}
-              />
-            )}
-            {tab === "companies" && (
-              <CompaniesTab
-                configured={setupState === "configured" && personal}
-                meta={meta}
-                jobs={jobs}
-                hiddenNames={prefs.prefs.hiddenCompanies}
-                onUnhideName={(name) => prefs.setCompanyHidden(name, false)}
-                draft={draft}
-                saved={saved}
-                update={update}
-                onSaved={async () => {
-                  await setup.refresh();
-                }}
-                onScan={() => {
-                  go({ tab: "radar" });
-                  requestScan();
-                }}
-                scanning={scanning}
-                toSetup={toSetup}
-              />
-            )}
-            {tab === "settings" && notSetUp && (
-              <SetupBanner
-                action={
-                  <Button variant="primary" size="sm" onClick={toSetup}>
-                    {progress.started ? "Continue setup" : "Start setup"} <ArrowRight className="size-3.5" />
-                  </Button>
-                }
-              >
-                <b>You haven't finished setup.</b> <span className="text-muted">The guided setup is the quickest way, or fill in the sections below.</span>
-              </SetupBanner>
-            )}
-            {tab === "settings" && setupState === "invalid" && <ConfigProblemCard errors={status?.errors} onFix={() => goStep(0)} />}
-            {tab === "settings" && (
-              <Settings
-                toCompanies={goCompanies}
-                draft={draft}
-                update={update}
-                revert={() => setDraft(saved)}
-                dirty={dirty}
-                onSaved={async () => {
-                  await setup.refresh();
-                  save(DRAFT_KEY, null);
-                }}
-                onScan={() => {
-                  go({ tab: "radar" });
-                  requestScan();
-                }}
-                scanning={scanning}
-                user={user.state}
-                prefs={prefs.prefs}
-                onImport={(state, p) => {
-                  user.replaceAll(state);
-                  if (p) prefs.replacePrefs(p);
-                }}
-                onRemoveRule={(rule) => prefs.setRule(rule, false)}
-                suggest={suggest}
-                resumeText={resume.text}
-                saveResume={saveResume}
-            removeResume={removeResume}
-                onStartOver={canRunLocally && personal ? startOver : undefined}
-              />
-            )}
-          </div>
-        )}
-      </main>
-
-      {!inSetup && (
-        <nav className="fixed inset-x-0 bottom-0 z-30 grid grid-cols-4 border-t border-line bg-raised/95 backdrop-blur md:hidden" aria-label="Sections">
-          {TABS.map((t) => (
-            <button
-              key={t.id}
-              type="button"
-              onClick={() => go({ tab: t.id })}
-              className={cx(
-                "relative flex min-h-14 flex-col items-center justify-center gap-0.5 py-1.5 type-label",
-                // Selected: ink, with the same 2px ink indicator the tabs use (never the accent).
-                tab === t.id ? "text-ink after:absolute after:inset-x-4 after:top-0 after:h-0.5 after:bg-ink" : "text-muted",
+                </>
               )}
-              aria-current={tab === t.id ? "page" : undefined}
-            >
-              <t.icon className="size-5" />
-              {t.label}
-            </button>
-          ))}
-        </nav>
-      )}
+            </div>
+          </div>
+        </header>
 
-      {openJob && meta && (
-        <JobDrawer
-          job={openJob}
-          isNew={(() => {
-            // Same rule as the feed: new since your last visit, never on the first scan.
-            const full = meta.runs.filter((r) => !r.partial);
-            return hasNewTag(openJob, { firstScan: full.length <= 1, newSince: newSinceLastVisit(full[0]?.finishedAt, full[1]?.finishedAt) });
-          })()}
-          entry={user.state[openJob.id]}
-          profile={meta.profile}
-          postings={jobs.filter((j) => j.group === openJob.group)}
-          industries={meta.companies.find((c) => c.name === openJob.company)?.industries ?? openJob.industries}
-          yours={isYours(openJob)}
-          indexGeneratedAt={state.kind === "ready" ? state.indexGeneratedAt : undefined}
-          onTrack={canSave ? (on) => trackJob(openJob, on) : undefined}
-          onCheck={canSave && openJob.estimated ? () => checkJob(openJob) : undefined}
-          onClose={() => setOpenId(null)}
-          onUpdate={(patch) => user.update(openJob, patch)}
-          onApply={onApply}
-          onOpenJob={(j) => setOpenId(j.id)}
+        <main
+          id="main"
+          tabIndex={-1}
+          className={cx(
+            "mx-auto max-w-6xl px-4 pt-5 outline-none",
+            inSetup ? "pb-10" : "pb-24 md:pb-10",
+            // The Radar fits the window on laptops and up: the feed and the job scroll inside their panels,
+            // the page itself never does, and Apply stays in view.
+            radarFits && "lg:flex lg:h-[calc(100dvh-3.5rem)] lg:flex-col lg:pb-4",
+          )}
+        >
+          <ServerNotices />
+          {status === undefined || state.kind === "loading" ? (
+            <FeedSkeleton />
+          ) : inSetup ? (
+            <Wizard
+              step={(route as { setup: number }).setup}
+              goStep={goStep}
+              draft={draft}
+              update={update}
+              existing={personal}
+              configErrors={status?.valid === false ? status.errors : undefined}
+              startScan={startScan}
+              onSaved={async () => {
+                await setup.refresh();
+                save(DRAFT_KEY, null);
+                save(WELCOME_SEEN_KEY, true);
+              }}
+              onFinish={() => {
+                announceScan.current = true;
+                go({ tab: "radar" });
+              }}
+              onExit={exitSetup}
+              progress={progress}
+              resumeText={resume.text}
+              saveResume={saveResume}
+              removeResume={removeResume}
+              onStart={() => {
+                save(WELCOME_SEEN_KEY, true);
+                goStep(!personal && progress.started ? progress.nextStep : STEP.resume);
+              }}
+              onStartOver={() => {
+                save(WELCOME_SEEN_KEY, true);
+                setDraft(emptyDraft());
+                goStep(STEP.resume);
+              }}
+            />
+          ) : (
+            <div className={cx("flex flex-col gap-4", radarFits && "lg:min-h-0 lg:flex-1 lg:gap-3")}>
+              {viewLabel && (
+                <h1 ref={headingRef} tabIndex={-1} className="sr-only">
+                  {viewLabel}
+                </h1>
+              )}
+              {state.kind === "error" && <ErrorState message={state.message} onRetry={() => void reload()} />}
+              {/* A scan in progress shows in the header (Scan now becomes its status); a Telegram message that failed shows here. */}
+              <NotifyFailed scan={scan} />
+
+              {tab === "radar" && (
+                <>
+                  {notSetUp && <SetupHero items={items} started={progress.started} nextStep={progress.nextStep} onStep={goStep} onCompanies={goCompanies} />}
+                  {setupState === "invalid" && <ConfigProblemCard errors={status?.errors} onFix={() => goStep(0)} />}
+                  {setupState === "configured" && personal && <SetupChecklist items={items} onStep={goStep} onScan={requestScan} onCompanies={goCompanies} />}
+                  {setupState === "configured" && personal && state.kind === "empty" && <FirstScanCard scan={scan} onScan={requestScan} />}
+                  {/* Laptops show this as a chip next to "Last scan" in the header, so the jobs start higher. */}
+                  {state.kind === "ready" && failing > 0 && <FailingBanner className="lg:hidden" count={failing} onOpen={goFailing} />}
+                  {state.kind === "ready" && lastRun && matched === 0 && <NoMatches jobs={otherJobs ? [...jobs, ...otherJobs] : jobs} onStep={goStep} onCompanies={goCompanies} />}
+                  {state.kind === "ready" && (matched > 0 || !lastRun) && (
+                    <RadarPage
+                      jobs={state.jobs}
+                      meta={state.meta}
+                      user={user.state}
+                      prefs={prefs.prefs}
+                      onOpenOverlay={onOpen}
+                      overlayOpen={!!openJob}
+                      onStatus={onStatus}
+                      onUpdate={(job, patch) => user.update(job, patch)}
+                      onApply={onApply}
+                      onSaveView={prefs.saveView}
+                      onRenameView={prefs.renameView}
+                      onDeleteView={prefs.deleteView}
+                      onRestoreView={prefs.restoreView}
+                      onHideCompany={hideCompany}
+                      onSetRule={prefs.setRule}
+                      isYours={isYours}
+                      companyCount={yourKeys.size}
+                      indexGeneratedAt={state.indexGeneratedAt}
+                      onCompanies={goCompanies}
+                      onTrack={canSave ? trackJob : undefined}
+                      onCheck={canSave ? checkJob : undefined}
+                      profile={status?.config?.profile}
+                      onEditProfile={() => go({ tab: "settings" })}
+                      onSaveProfile={canRunLocally && personal && setupState === "configured" ? saveProfileFromRadar : undefined}
+                    />
+                  )}
+                </>
+              )}
+              {tab === "pipeline" && (
+                <Pipeline
+                  user={user.state}
+                  jobsById={jobsById}
+                  min={meta?.profile.min_score ?? 70}
+                  onOpen={onOpen}
+                  onMove={(id, entry, s) => user.update({ id, ...entry.snapshot, ...pick(jobsById.get(id)) }, { status: s })}
+                  onSetup={notSetUp ? toSetup : undefined}
+                  goRadar={() => go({ tab: "radar" })}
+                />
+              )}
+              {tab === "companies" && (
+                <CompaniesTab
+                  configured={setupState === "configured" && personal}
+                  meta={meta}
+                  jobs={jobs}
+                  hiddenNames={prefs.prefs.hiddenCompanies}
+                  onUnhideName={(name) => prefs.setCompanyHidden(name, false)}
+                  draft={draft}
+                  saved={saved}
+                  update={update}
+                  onSaved={async () => {
+                    await setup.refresh();
+                  }}
+                  onScan={() => {
+                    go({ tab: "radar" });
+                    requestScan();
+                  }}
+                  scanning={scanning}
+                  toSetup={toSetup}
+                />
+              )}
+              {tab === "settings" && notSetUp && (
+                <SetupBanner
+                  action={
+                    <Button variant="primary" size="sm" onClick={toSetup}>
+                      {progress.started ? "Continue setup" : "Start setup"} <ArrowRight className="size-3.5" />
+                    </Button>
+                  }
+                >
+                  <b>You haven't finished setup.</b> <span className="text-muted">The guided setup is the quickest way, or fill in the sections below.</span>
+                </SetupBanner>
+              )}
+              {tab === "settings" && setupState === "invalid" && <ConfigProblemCard errors={status?.errors} onFix={() => goStep(0)} />}
+              {tab === "settings" && (
+                <Settings
+                  toCompanies={goCompanies}
+                  draft={draft}
+                  update={update}
+                  revert={() => setDraft(saved)}
+                  dirty={dirty}
+                  onSaved={async () => {
+                    await setup.refresh();
+                    save(DRAFT_KEY, null);
+                  }}
+                  onScan={() => {
+                    go({ tab: "radar" });
+                    requestScan();
+                  }}
+                  scanning={scanning}
+                  user={user.state}
+                  prefs={prefs.prefs}
+                  onImport={(state, p) => {
+                    user.replaceAll(state);
+                    if (p) prefs.replacePrefs(p);
+                  }}
+                  onRemoveRule={(rule) => prefs.setRule(rule, false)}
+                  suggest={suggest}
+                  resumeText={resume.text}
+                  saveResume={saveResume}
+                  removeResume={removeResume}
+                  onStartOver={canRunLocally && personal ? startOver : undefined}
+                />
+              )}
+            </div>
+          )}
+        </main>
+
+        {!inSetup && (
+          <nav className="fixed inset-x-0 bottom-0 z-30 grid grid-cols-4 border-t border-line bg-raised/95 backdrop-blur md:hidden" aria-label="Sections">
+            {TABS.map((t) => (
+              <button
+                key={t.id}
+                type="button"
+                onClick={() => go({ tab: t.id })}
+                className={cx(
+                  "relative flex min-h-14 flex-col items-center justify-center gap-0.5 py-1.5 type-label",
+                  // Selected: ink, with the same 2px ink indicator the tabs use (never the accent).
+                  tab === t.id ? "text-ink after:absolute after:inset-x-4 after:top-0 after:h-0.5 after:bg-ink" : "text-muted",
+                )}
+                aria-current={tab === t.id ? "page" : undefined}
+              >
+                <t.icon className="size-5" />
+                {t.label}
+              </button>
+            ))}
+          </nav>
+        )}
+
+        {openJob && meta && (
+          <JobDrawer
+            job={openJob}
+            isNew={(() => {
+              // Same rule as the feed: new since your last visit, never on the first scan.
+              const full = meta.runs.filter((r) => !r.partial);
+              return hasNewTag(openJob, { firstScan: full.length <= 1, newSince: newSinceLastVisit(full[0]?.finishedAt, full[1]?.finishedAt) });
+            })()}
+            entry={user.state[openJob.id]}
+            profile={meta.profile}
+            postings={jobs.filter((j) => j.group === openJob.group)}
+            industries={meta.companies.find((c) => c.name === openJob.company)?.industries ?? openJob.industries}
+            yours={isYours(openJob)}
+            indexGeneratedAt={state.kind === "ready" ? state.indexGeneratedAt : undefined}
+            onTrack={canSave ? (on) => trackJob(openJob, on) : undefined}
+            onCheck={canSave && openJob.estimated ? () => checkJob(openJob) : undefined}
+            onClose={() => setOpenId(null)}
+            onUpdate={(patch) => user.update(openJob, patch)}
+            onApply={onApply}
+            onOpenJob={(j) => setOpenId(j.id)}
+          />
+        )}
+
+        <ApplyPrompt
+          job={applying}
+          onAnswer={(applied) => {
+            if (applied && applying) user.update(applying, { status: "applied" });
+            setApplying(null);
+          }}
         />
-      )}
 
-      <ApplyPrompt
-        job={applying}
-        onAnswer={(applied) => {
-          if (applied && applying) user.update(applying, { status: "applied" });
-          setApplying(null);
-        }}
-      />
-
-      <ShortcutHelp open={showKeys} onClose={() => setShowKeys(false)} canScan={canRunLocally && setupState === "configured"} />
-      <ScanChooser open={choosing} onClose={closeChooser} onStart={(scope) => void startScan(scope)} />
-      <Toaster />
-    </div>
+        <ShortcutHelp open={showKeys} onClose={() => setShowKeys(false)} canScan={canRunLocally && setupState === "configured"} />
+        <ScanChooser open={choosing} onClose={closeChooser} onStart={(scope) => void startScan(scope)} />
+        <Toaster />
+      </div>
     </NotForMeProvider>
   );
 }
@@ -672,10 +688,7 @@ function TabLink({ tab, active, onClick }: { tab: (typeof TABS)[number]; active:
       type="button"
       onClick={onClick}
       aria-current={active ? "page" : undefined}
-      className={cx(
-        "inline-flex h-8 items-center gap-1.5 rounded-md px-2.5 type-label transition-colors",
-        active ? "bg-inset text-ink" : "text-muted hover:text-ink",
-      )}
+      className={cx("inline-flex h-8 items-center gap-1.5 rounded-md px-2.5 type-label transition-colors", active ? "bg-inset text-ink" : "text-muted hover:text-ink")}
     >
       <tab.icon className="size-4" />
       {tab.label}

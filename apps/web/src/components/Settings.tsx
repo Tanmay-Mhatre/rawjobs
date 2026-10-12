@@ -61,7 +61,25 @@ const sectionFromHash = () => new URLSearchParams(location.hash.split("?")[1] ??
 const reducedMotion = () => window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
 
 /** Edit any part of the setup after the wizard, then save (and scan). */
-export function Settings({ draft, update, revert, dirty, onSaved, onScan, scanning, user, prefs, onImport, onRemoveRule, suggest, resumeText, saveResume, removeResume, toCompanies, onStartOver }: Props) {
+export function Settings({
+  draft,
+  update,
+  revert,
+  dirty,
+  onSaved,
+  onScan,
+  scanning,
+  user,
+  prefs,
+  onImport,
+  onRemoveRule,
+  suggest,
+  resumeText,
+  saveResume,
+  removeResume,
+  toCompanies,
+  onStartOver,
+}: Props) {
   const [status, setStatus] = useState<{ tone: "ok" | "bad"; text: string; detail?: string; retry?: boolean } | null>(null);
   const [saving, setSaving] = useState(false);
   const lastSave = useRef(false);
@@ -93,6 +111,7 @@ export function Settings({ draft, update, revert, dirty, onSaved, onScan, scanni
 
   const active = useActiveGroup();
   // "#settings?section=schedule" (from the Radar's checklist): open and scroll to that section.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: registers the hashchange listener once; the section ids it checks never change
   useEffect(() => {
     const go = () => {
       const id = sectionFromHash();
@@ -104,7 +123,7 @@ export function Settings({ draft, update, revert, dirty, onSaved, onScan, scanni
     go();
     window.addEventListener("hashchange", go);
     return () => window.removeEventListener("hashchange", go);
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  }, []);
 
   useEffect(() => {
     if (dirty) setStatus(null);
@@ -137,12 +156,22 @@ export function Settings({ draft, update, revert, dirty, onSaved, onScan, scanni
       <SettingsNav active={active} />
       <div className="space-y-8">
         <Group id="profile" label="Profile">
-          {profile("resume", "Master resume", "Saved on this computer only.", <ResumeStep draft={draft} update={update} resumeText={resumeText} saveResume={saveResume} removeResume={removeResume} hideSkip />)}
+          {profile(
+            "resume",
+            "Master resume",
+            "Saved on this computer only.",
+            <ResumeStep draft={draft} update={update} resumeText={resumeText} saveResume={saveResume} removeResume={removeResume} hideSkip />,
+          )}
           {profile("roles", "Roles", "Only jobs whose title matches are shown.", <RolesStep draft={draft} update={update} suggest={suggest} />)}
           {profile("locations", "Locations", "Jobs outside these places are hidden.", <LocationsStep draft={draft} update={update} suggest={suggest} />)}
           {profile("industries", "Industries", "Industries decide which companies are scanned and suggested.", <IndustriesStep draft={draft} update={update} suggest={suggest} />)}
           {profile("keywords", "Topics", "Topics rank jobs higher when they mention them.", <KeywordsStep draft={draft} update={update} suggest={suggest} resumeText={resumeText} />)}
-          {profile("dealbreakers", "Dealbreakers", "A job that breaks one stays on your Radar with the reason, at half its score and under your threshold.", <DealbreakersStep draft={draft} update={update} />)}
+          {profile(
+            "dealbreakers",
+            "Dealbreakers",
+            "A job that breaks one stays on your Radar with the reason, at half its score and under your threshold.",
+            <DealbreakersStep draft={draft} update={update} />,
+          )}
         </Group>
 
         <Group id="my-companies" label="My companies">
@@ -183,12 +212,17 @@ export function Settings({ draft, update, revert, dirty, onSaved, onScan, scanni
                 <li>
                   <b>{draft.industries.length ? "My companies + my industries" : "My companies"}</b>
                   <span className="text-muted">
-                    {draft.industries.length ? ": My companies, plus every company in the directory tagged with your industries. A few minutes." : ": the companies you've added. Add industries above to scan more. A few minutes."}
+                    {draft.industries.length
+                      ? ": My companies, plus every company in the directory tagged with your industries. A few minutes."
+                      : ": the companies you've added. Add industries above to scan more. A few minutes."}
                   </span>
                 </li>
                 <li>
                   <b>All companies</b>
-                  <span className="text-muted">: every company in the directory that RawJobs can scan. The daily job feed skips companies with nothing for you, so usually minutes; up to 2 hours without it. Stop any time and it carries on later.</span>
+                  <span className="text-muted">
+                    : every company in the directory that RawJobs can scan. The daily job feed skips companies with nothing for you, so usually minutes; up to 2 hours without it. Stop any time and it
+                    carries on later.
+                  </span>
                 </li>
               </ul>
               <p className="type-small text-muted">Every scan first updates the company directory, so new companies and moved careers pages are picked up.</p>
@@ -349,54 +383,54 @@ function AppearanceSection() {
   const maxAge = useMaxAge();
   return (
     <>
-    <Section id="theme" title="Theme" hint="Follows your system's light or dark setting unless you pick one.">
-      <div className="space-y-3">
-        <Segmented<ThemeChoice>
-          label="Theme"
-          value={theme}
-          onChange={setTheme}
-          options={[
-            { value: "system", label: "System" },
-            { value: "light", label: "Light" },
-            { value: "dark", label: "Dark" },
-          ]}
-        />
-        <div>
-          <Toggle checked={contrast === "more"} onChange={(on) => setContrast(on ? "more" : "system")}>
-            Increase contrast
-          </Toggle>
-          <p className="mt-1 type-small text-muted">Darker text and stronger borders. Turns on by itself when your system asks for more contrast.</p>
-        </div>
-      </div>
-    </Section>
-    <Section id="density" title="Job list" hint="How the Radar shows your jobs.">
-      <div className="space-y-4">
-        <div>
-          <p className="mb-1.5 type-small font-medium text-ink">Density</p>
-          <Segmented<Density>
-            label="Job list density"
-            value={density}
-            onChange={setDensityChoice}
+      <Section id="theme" title="Theme" hint="Follows your system's light or dark setting unless you pick one.">
+        <div className="space-y-3">
+          <Segmented<ThemeChoice>
+            label="Theme"
+            value={theme}
+            onChange={setTheme}
             options={[
-              { value: "comfortable", label: "Comfortable" },
-              { value: "compact", label: "Compact" },
+              { value: "system", label: "System" },
+              { value: "light", label: "Light" },
+              { value: "dark", label: "Dark" },
             ]}
           />
+          <div>
+            <Toggle checked={contrast === "more"} onChange={(on) => setContrast(on ? "more" : "system")}>
+              Increase contrast
+            </Toggle>
+            <p className="mt-1 type-small text-muted">Darker text and stronger borders. Turns on by itself when your system asks for more contrast.</p>
+          </div>
         </div>
-        <div>
-          <p className="mb-1.5 type-small font-medium text-ink">Hide jobs older than</p>
-          <Segmented<MaxAge>
-            label="Hide jobs older than"
-            value={maxAge}
-            onChange={setMaxAgeChoice}
-            options={MAX_AGE_CHOICES.map((d) => ({ value: d, label: d === 0 ? "Never hide" : d === 30 ? "1 month" : `${d / 30} months` }))}
-          />
-          <p className="mt-1 type-small text-muted">
-            Most roles are filled within two months, so older postings are often still listed but no longer hiring. Jobs you saved or applied to always show.
-          </p>
+      </Section>
+      <Section id="density" title="Job list" hint="How the Radar shows your jobs.">
+        <div className="space-y-4">
+          <div>
+            <p className="mb-1.5 type-small font-medium text-ink">Density</p>
+            <Segmented<Density>
+              label="Job list density"
+              value={density}
+              onChange={setDensityChoice}
+              options={[
+                { value: "comfortable", label: "Comfortable" },
+                { value: "compact", label: "Compact" },
+              ]}
+            />
+          </div>
+          <div>
+            <p className="mb-1.5 type-small font-medium text-ink">Hide jobs older than</p>
+            <Segmented<MaxAge>
+              label="Hide jobs older than"
+              value={maxAge}
+              onChange={setMaxAgeChoice}
+              options={MAX_AGE_CHOICES.map((d) => ({ value: d, label: d === 0 ? "Never hide" : d === 30 ? "1 month" : `${d / 30} months` }))}
+            />
+            <p className="mt-1 type-small text-muted">
+              Most roles are filled within two months, so older postings are often still listed but no longer hiring. Jobs you saved or applied to always show.
+            </p>
+          </div>
         </div>
-      </div>
-    </Section>
+      </Section>
     </>
   );
 }
@@ -445,7 +479,14 @@ function Section({
             {collapsible && !expanded ? <p className="mt-0.5 truncate type-small text-muted">{summary}</p> : <p className="mt-0.5 type-small text-muted">{hint}</p>}
           </div>
           {collapsible && (
-            <Button size="sm" variant={expanded ? "ghost" : "outline"} aria-expanded={expanded} aria-controls={`body-${id}`} aria-label={`${expanded ? "Done editing" : "Edit"} ${title.toLowerCase()}`} onClick={onToggle}>
+            <Button
+              size="sm"
+              variant={expanded ? "ghost" : "outline"}
+              aria-expanded={expanded}
+              aria-controls={`body-${id}`}
+              aria-label={`${expanded ? "Done editing" : "Edit"} ${title.toLowerCase()}`}
+              onClick={onToggle}
+            >
               {expanded ? "Done" : "Edit"}
             </Button>
           )}
@@ -458,17 +499,7 @@ function Section({
   );
 }
 
-function TrackingData({
-  user,
-  prefs,
-  onImport,
-  onRemoveRule,
-}: {
-  user: UserState;
-  prefs: Prefs;
-  onImport: (s: UserState, prefs?: Partial<Prefs>) => void;
-  onRemoveRule?: (rule: HideRule) => void;
-}) {
+function TrackingData({ user, prefs, onImport, onRemoveRule }: { user: UserState; prefs: Prefs; onImport: (s: UserState, prefs?: Partial<Prefs>) => void; onRemoveRule?: (rule: HideRule) => void }) {
   const fileRef = useRef<HTMLInputElement>(null);
   const [msg, setMsg] = useState<{ tone: "ok" | "bad"; text: string; detail?: string } | null>(null);
   /** A file read and waiting for "Replace N jobs". */
@@ -513,7 +544,10 @@ function TrackingData({
       {prefs.hideRules.length > 0 && (
         <div className="mt-4">
           <h4 className="type-label">Not interested rules</h4>
-          <p className="mt-0.5 type-small text-muted">You turned these on after saying why a job wasn't for you. They hide jobs from the Radar, never ones you saved or applied to. To see them anyway, turn on &ldquo;Include hidden jobs and companies&rdquo; under More on the Radar.</p>
+          <p className="mt-0.5 type-small text-muted">
+            You turned these on after saying why a job wasn't for you. They hide jobs from the Radar, never ones you saved or applied to. To see them anyway, turn on &ldquo;Include hidden jobs and
+            companies&rdquo; under More on the Radar.
+          </p>
           <ul className="mt-2 divide-y divide-line rounded-md border border-line">
             {prefs.hideRules.map((r) => (
               <li key={ruleKey(r)} className="flex items-center justify-between gap-2 px-3 py-1.5 type-small">
@@ -604,8 +638,8 @@ export function StartOver({ onStartOver }: { onStartOver: () => Promise<string |
             </IconButton>
           </div>
           <p className="mt-1 type-small text-muted">
-            Your profile, roles, places, keywords and companies are cleared and setup opens from the start. Tracked jobs, notes, your resume and Telegram
-            alerts stay. A copy of your old setup is kept in <span className="font-mono">rawjobs.config.local.backup.yaml</span>.
+            Your profile, roles, places, keywords and companies are cleared and setup opens from the start. Tracked jobs, notes, your resume and Telegram alerts stay. A copy of your old setup is kept
+            in <span className="font-mono">rawjobs.config.local.backup.yaml</span>.
           </p>
           {error && (
             <p role="alert" className="mt-2 type-small text-danger-text">

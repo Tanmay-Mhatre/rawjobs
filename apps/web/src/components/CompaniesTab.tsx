@@ -1,4 +1,4 @@
-import { ArrowRight, Building2, Check, CircleAlert, EyeOff, LoaderCircle, RefreshCw, X } from "lucide-react";
+import { ArrowRight, Check, CircleAlert, EyeOff, LoaderCircle, RefreshCw, X } from "lucide-react";
 import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
 import { addCompanies, countCompanies, jobCompanyKey, keyOf, wantsAttention, type CompanyRef } from "../lib/companies";
 import { useCompanySuggestions, type SuggestState } from "../lib/companySuggest";
@@ -73,6 +73,7 @@ function useAutoSave(draft: Draft, saved: Draft, onSaved: () => Promise<void>, e
   }, []);
   const pending = companiesKey(draft) !== companiesKey(saved);
   const key = companiesKey(draft);
+  // biome-ignore lint/correctness/useExhaustiveDependencies: `key` (the draft's companies) is the trigger: each change restarts the save delay
   useEffect(() => {
     if (!enabled || !pending) return;
     const t = setTimeout(() => void run(), 800);
@@ -105,7 +106,12 @@ function SaveStatus({ state, retry, onScan, scanning }: { state: SaveState; retr
         <Check className="size-3.5 text-success-text" /> {state.kind === "saved" ? "Saved. Used in your next scan." : "Changes save automatically."}
       </span>
       {state.kind === "saved" && (
-        <button type="button" className="inline-flex min-h-6 items-center gap-1 font-medium text-ink underline underline-offset-2 hover:text-muted disabled:opacity-50" onClick={onScan} disabled={scanning}>
+        <button
+          type="button"
+          className="inline-flex min-h-6 items-center gap-1 font-medium text-ink underline underline-offset-2 hover:text-muted disabled:opacity-50"
+          onClick={onScan}
+          disabled={scanning}
+        >
           <RefreshCw className="size-3" /> Scan now
         </button>
       )}
@@ -135,6 +141,7 @@ export function CompaniesTab({ configured, meta, jobs, draft, saved, update, onS
   };
   /** Bumped each time a "failing" link is followed: My companies switches to Needs attention. */
   const [attention, setAttention] = useState(() => (wantsAttention() ? 1 : 0));
+  // biome-ignore lint/correctness/useExhaustiveDependencies: registers the hashchange listener once; setTab is a state setter
   useEffect(() => {
     const follow = () => {
       if (!wantsAttention()) return;
@@ -146,7 +153,7 @@ export function CompaniesTab({ configured, meta, jobs, draft, saved, update, onS
     follow();
     window.addEventListener("hashchange", follow);
     return () => window.removeEventListener("hashchange", follow);
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  }, []);
   /** The page's one search: its results show in Browse all. */
   const [q, setQ] = useState("");
   const [linkOpen, setLinkOpen] = useState(false);

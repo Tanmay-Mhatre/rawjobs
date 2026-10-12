@@ -19,7 +19,12 @@ export type ComeetPosition = {
 const WORKPLACE: Record<string, Workplace> = { remote: "remote", hybrid: "hybrid", "on-site": "onsite", onsite: "onsite" };
 
 /** The hosted page's address needs the company's name slug; seeds without one fall back to its name ("eToro" -> "etoro"). */
-const nameSlug = (ref: { site?: string; name: string }) => ref.site || ref.name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
+const nameSlug = (ref: { site?: string; name: string }) =>
+  ref.site ||
+  ref.name
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-|-$/g, "");
 
 export const comeet: Connector<ComeetPosition> = {
   ats: "comeet",

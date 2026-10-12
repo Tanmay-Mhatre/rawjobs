@@ -1,4 +1,4 @@
-import { existsSync, readFileSync, renameSync, writeFileSync } from "node:fs";
+import { existsSync, readFileSync, renameSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { parse as parseYaml } from "yaml";
 import { z } from "zod";
@@ -185,7 +185,10 @@ export async function checkCompanies(inputs: readonly string[], opts: CheckOptio
         ...base,
         status: "live",
         open_jobs: jobs.length,
-        top_locations: [...places.entries()].sort((a, b) => b[1] - a[1]).map(([p]) => p).slice(0, 5),
+        top_locations: [...places.entries()]
+          .sort((a, b) => b[1] - a[1])
+          .map(([p]) => p)
+          .slice(0, 5),
         sample_titles: [...new Set(normalized.map((j) => j.title))].slice(0, 3),
       };
       if (opts.profile) {
@@ -199,10 +202,7 @@ export async function checkCompanies(inputs: readonly string[], opts: CheckOptio
       if (realName) Object.assign(result, { name: realName, name_source: "ats" });
       out.push(result);
     } catch (err) {
-      const msg =
-        err instanceof HttpError && err.status === 404
-          ? "Not found. Check the link: open it in a browser and copy the careers page address."
-          : (err as Error).message;
+      const msg = err instanceof HttpError && err.status === 404 ? "Not found. Check the link: open it in a browser and copy the careers page address." : (err as Error).message;
       out.push({ ...base, status: "error", error: msg });
     }
   }

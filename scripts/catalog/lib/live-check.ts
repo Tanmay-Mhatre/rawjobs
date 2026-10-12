@@ -27,9 +27,7 @@ export async function checkBoard(http: HttpClient, b: Board): Promise<CheckResul
         return { status: n ? "live" : "dormant", jobs: n };
       }
       case "smartrecruiters": {
-        const d = await http.getJson<{ totalFound: number; content: { company?: { name?: string } }[] }>(
-          `https://api.smartrecruiters.com/v1/companies/${enc(b.slug)}/postings?limit=1`,
-        );
+        const d = await http.getJson<{ totalFound: number; content: { company?: { name?: string } }[] }>(`https://api.smartrecruiters.com/v1/companies/${enc(b.slug)}/postings?limit=1`);
         // Unknown ids answer 200 with totalFound 0: indistinguishable from dormant, so call it dead.
         return d.totalFound ? { status: "live", jobs: d.totalFound, name: d.content[0]?.company?.name } : { status: "dead", jobs: 0 };
       }
@@ -47,7 +45,15 @@ export async function checkBoard(http: HttpClient, b: Board): Promise<CheckResul
         // The rest have no cheap count: one full list (one request for most of them).
         const connector = getConnector(b.ats as AtsType);
         if (!connector) return { status: "error", jobs: null, error: "unknown ats" };
-        const ref = { name: b.slug, ats: b.ats as AtsType, slug: b.slug, enabled: true, ...(b.region ? { region: b.region as "eu" } : {}), ...(b.shard ? { shard: b.shard } : {}), ...(b.site ? { site: b.site } : {}) };
+        const ref = {
+          name: b.slug,
+          ats: b.ats as AtsType,
+          slug: b.slug,
+          enabled: true,
+          ...(b.region ? { region: b.region as "eu" } : {}),
+          ...(b.shard ? { shard: b.shard } : {}),
+          ...(b.site ? { site: b.site } : {}),
+        };
         const n = (await connector.fetch(ref, { http, now: new Date() })).length;
         return { status: n ? "live" : "dormant", jobs: n };
       }
@@ -60,4 +66,3 @@ export async function checkBoard(http: HttpClient, b: Board): Promise<CheckResul
     return { status: "error", jobs: null, http: e.status, error: e.message.slice(0, 120) };
   }
 }
-

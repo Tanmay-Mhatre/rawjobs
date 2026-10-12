@@ -63,8 +63,18 @@ export const JobCard = forwardRef<HTMLLIElement, Props>(function JobCard({ group
   if (salary) meta.push(salary);
   if (status && status !== "dismissed") meta.push(<span className="text-ink">{STATUS_LABEL[status]}</span>);
   const evergreen = evergreenReason(job);
-  if (evergreen === "pool") meta.push(<span className="text-warning-text" title="A talent pool or open application: it collects applications rather than filling one role">Talent pool</span>);
-  if (evergreen === "reposted") meta.push(<span className="text-warning-text" title="Taken down and posted again: dated from the first posting">Reposted</span>);
+  if (evergreen === "pool")
+    meta.push(
+      <span className="text-warning-text" title="A talent pool or open application: it collects applications rather than filling one role">
+        Talent pool
+      </span>,
+    );
+  if (evergreen === "reposted")
+    meta.push(
+      <span className="text-warning-text" title="Taken down and posted again: dated from the first posting">
+        Reposted
+      </span>,
+    );
   if (job.status === "closed") meta.push(<span className="text-danger-text">Closed</span>);
   if (job.why.gate) meta.push(<span className="text-warning-text">Failed your {job.why.gate} filter</span>);
   // A dealbreaker never hides a job: it shows why it scored low.
@@ -97,13 +107,24 @@ export const JobCard = forwardRef<HTMLLIElement, Props>(function JobCard({ group
           <IconButton label="Save" shortcut="S" size="sm" aria-pressed={status === "saved"} className={cx(status === "saved" && "bg-active text-ink")} onClick={() => onStatus("saved")}>
             <Bookmark className={cx("rj-icon", status === "saved" && "fill-current")} aria-hidden />
           </IconButton>
-          <IconButton label="Not interested" shortcut="X" size="sm" aria-pressed={status === "dismissed"} className={cx(status === "dismissed" && "bg-active text-ink")} onClick={() => onStatus("dismissed")}>
+          <IconButton
+            label="Not interested"
+            shortcut="X"
+            size="sm"
+            aria-pressed={status === "dismissed"}
+            className={cx(status === "dismissed" && "bg-active text-ink")}
+            onClick={() => onStatus("dismissed")}
+          >
             <X className="rj-icon" aria-hidden />
           </IconButton>
         </span>
         <SourceTag
           title={job.estimated || job.status !== "open" ? undefined : `Still listed on the careers page · checked ${timeAgo(job.lastSeen)}`}
-          source={atsLabel(job.ats)} age={shortAge(postedOrSeen(job))} isNew={isNew} older={isOlder(job)} />
+          source={atsLabel(job.ats)}
+          age={shortAge(postedOrSeen(job))}
+          isNew={isNew}
+          older={isOlder(job)}
+        />
       </span>
     </li>
   );

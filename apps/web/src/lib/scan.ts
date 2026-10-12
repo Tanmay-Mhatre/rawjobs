@@ -103,26 +103,25 @@ export function useScan(onFinished: () => void | Promise<void>) {
   finished.current = onFinished;
 
   /** Show a scan's events as they arrive, then refresh the page's data when it ends. */
-  const watch = useCallback(
-    async (stream: (onEvent: (e: RunEvent) => void) => Promise<boolean | void>) => {
-      let failed: string | undefined;
-      let followed: boolean | void = true;
-      try {
-        followed = await stream((e) => {
-          if (e.type === "error") failed = e.message;
-          else setScan((s) => applyScanEvent(s, e));
-        });
-      } catch (err) {
-        failed = (err as Error).message;
-      }
-      if (followed !== false) {
-        await finished.current();
-        setScan((s) => (failed && !s.summary ? { ...s, phase: "error", error: failed } : { ...s, phase: "done", stopping: false }));
-      }
-      busy.current = false;
-    },
-    [],
-  );
+  // biome-ignore lint/suspicious/noConfusingVoidType: streams that don't report whether they followed return void
+  const watch = useCallback(async (stream: (onEvent: (e: RunEvent) => void) => Promise<boolean | void>) => {
+    let failed: string | undefined;
+    // biome-ignore lint/suspicious/noConfusingVoidType: holds what `stream` returns (see above)
+    let followed: boolean | void = true;
+    try {
+      followed = await stream((e) => {
+        if (e.type === "error") failed = e.message;
+        else setScan((s) => applyScanEvent(s, e));
+      });
+    } catch (err) {
+      failed = (err as Error).message;
+    }
+    if (followed !== false) {
+      await finished.current();
+      setScan((s) => (failed && !s.summary ? { ...s, phase: "error", error: failed } : { ...s, phase: "done", stopping: false }));
+    }
+    busy.current = false;
+  }, []);
 
   const start = useCallback(
     async (scope: ScanScope = lastScope(), opts: { fresh?: boolean } = {}) => {

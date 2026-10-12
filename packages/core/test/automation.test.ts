@@ -58,7 +58,10 @@ describe("digest", () => {
   });
 
   it("caps at 10 lines and points to the rest", () => {
-    const text = digest(Array.from({ length: 13 }, (_, i) => job(`Role ${i}`, 50 + i)), { minScore: 90 })!;
+    const text = digest(
+      Array.from({ length: 13 }, (_, i) => job(`Role ${i}`, 50 + i)),
+      { minScore: 90 },
+    )!;
     expect(text.match(/<a /g)).toHaveLength(10);
     expect(text).toContain("…and 3 more on your Radar.");
   });
@@ -73,16 +76,10 @@ describe("finishedMessage", () => {
   });
 
   it("splits the new jobs into your companies, strong fits elsewhere and the rest, adding up", () => {
-    const newJobs = [
-      job("Yours strong", 90, { id: "Greenhouse:Acme:1" }),
-      job("Yours weak", 40, { id: "greenhouse:acme:2" }),
-      job("Strong", 80),
-      job("Other A", 50),
-      job("Other B", 60),
-    ];
+    const newJobs = [job("Yours strong", 90, { id: "Greenhouse:Acme:1" }), job("Yours weak", 40, { id: "greenhouse:acme:2" }), job("Strong", 80), job("Other A", 50), job("Other B", 60)];
     const text = finishedMessage({ scopeLabel: "My companies + my industries", matches: 384, newJobs, minScore: 70, yours: new Set(["greenhouse:acme"]) });
     expect(text).toContain(
-      "<b>5 new jobs</b>\n⭐ 2 from your companies (1 strong fit)\n🎯 1 strong fit (score 70+) from other companies\n• 2 other matches\n\n⭐ <a href=\"https://example.com/Yours%20strong\">Yours strong</a>\nCo &lt;&amp;&gt; · Dubai, UAE · score 90/100 · strong fit",
+      '<b>5 new jobs</b>\n⭐ 2 from your companies (1 strong fit)\n🎯 1 strong fit (score 70+) from other companies\n• 2 other matches\n\n⭐ <a href="https://example.com/Yours%20strong">Yours strong</a>\nCo &lt;&amp;&gt; · Dubai, UAE · score 90/100 · strong fit',
     );
     expect(text.match(/<a /g)).toHaveLength(5);
     expect(text.endsWith("\n\n💻 Open RawJobs on your laptop to see every job: http://127.0.0.1:5173")).toBe(true);
@@ -193,7 +190,10 @@ describe("schedule", () => {
     const home = mkdtempSync(join(tmpdir(), "jh-home-"));
     const dataDir = mkdtempSync(join(tmpdir(), "jh-sched-"));
     const calls: string[][] = [];
-    const exec = (cmd: string, args: string[]) => (calls.push([cmd, ...args]), { status: 0, stdout: "", stderr: "" });
+    const exec = (cmd: string, args: string[]) => {
+      calls.push([cmd, ...args]);
+      return { status: 0, stdout: "", stderr: "" };
+    };
     const ctx = { repoRoot: "/repo", dataDir, exec, platform: "darwin" as const, home };
     const legacy = join(home, "Library/LaunchAgents/com.jobhunter.scan.plist");
     mkdirSync(join(home, "Library/LaunchAgents"), { recursive: true });

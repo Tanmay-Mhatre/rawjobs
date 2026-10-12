@@ -101,10 +101,9 @@ describe("detectCompany for every hiring system", () => {
 describe("checkCompanies", () => {
   it("reports live / error / unknown with the full directory record", async () => {
     const { http, calls } = fakeHttp((url) => (url.includes("greenhouse") ? json(fixture("greenhouse.json")) : json({}, 404)));
-    const res = await checkCompanies(
-      ["https://job-boards.greenhouse.io/acme/jobs/123", " jobs.lever.co/nope ", "https://acme.wd3.myworkdayjobs.com/en-US", "https://example.com/careers", ""],
-      { http },
-    );
+    const res = await checkCompanies(["https://job-boards.greenhouse.io/acme/jobs/123", " jobs.lever.co/nope ", "https://acme.wd3.myworkdayjobs.com/en-US", "https://example.com/careers", ""], {
+      http,
+    });
     expect(res.map((r) => r.status)).toEqual(["live", "error", "error", "unknown"]);
     expect(res[0]).toMatchObject({
       key: "greenhouse:acme",

@@ -79,7 +79,10 @@ export const taleo: Connector<TaleoRequisition> = {
 
   normalize(raw, ref): NormalizedJob {
     const locCols = new Set(raw.locationsColumns ?? []);
-    const location = [...locCols].map((i) => locationText(raw.column[i] ?? "")).filter(Boolean).join("; ");
+    const location = [...locCols]
+      .map((i) => locationText(raw.column[i] ?? ""))
+      .filter(Boolean)
+      .join("; ");
     const date = raw.column.find((c, i) => i > 0 && !locCols.has(i) && /^[A-Z][a-z]{2} \d{1,2}, \d{4}$/.test(c));
     // Columns that are neither title, location nor date: usually the job field.
     const other = raw.column.find((c, i) => i > 0 && !locCols.has(i) && c !== date && c.length < 80);
@@ -103,7 +106,11 @@ export const taleo: Connector<TaleoRequisition> = {
     const field = html.match(/id="initialHistory"[^>]*value="([^"]*)"/)?.[1] ?? html.match(/value="([^"]*)"[^>]*id="initialHistory"/)?.[1];
     if (!field) return "";
     // The longest piece holding markup is the description (qualifications come next).
-    const pieces = field.split("!|!").filter((p) => /%3C|</i.test(p)).map(decodeLoose).sort((a, b) => b.length - a.length);
+    const pieces = field
+      .split("!|!")
+      .filter((p) => /%3C|</i.test(p))
+      .map(decodeLoose)
+      .sort((a, b) => b.length - a.length);
     return pieces.slice(0, 2).map(htmlToText).filter(Boolean).join("\n\n");
   },
 };

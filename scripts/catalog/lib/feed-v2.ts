@@ -11,23 +11,13 @@ import { createHash } from "node:crypto";
 import { existsSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { brotliCompressSync, brotliDecompressSync, constants } from "node:zlib";
-import {
-  applyFeedDiff,
-  diffFeedStates,
-  feedStateHash,
-  JOB_FEED_SCHEMA_V2,
-  type FeedManifestV2,
-  type FeedRow,
-  type FeedSnapshot,
-  type FeedState,
-} from "../../../packages/core/src/index";
+import { applyFeedDiff, diffFeedStates, feedStateHash, JOB_FEED_SCHEMA_V2, type FeedManifestV2, type FeedRow, type FeedSnapshot, type FeedState } from "../../../packages/core/src/index";
 
 /** Change files kept in the manifest: an app more than this many days behind downloads the full copy. */
 export const KEEP_DIFFS = 14;
 const MANIFEST = "jobs-v2-manifest.json";
 
-const brotli = (s: string) =>
-  brotliCompressSync(s, { params: { [constants.BROTLI_PARAM_QUALITY]: 11, [constants.BROTLI_PARAM_LGWIN]: 24, [constants.BROTLI_PARAM_SIZE_HINT]: s.length } });
+const brotli = (s: string) => brotliCompressSync(s, { params: { [constants.BROTLI_PARAM_QUALITY]: 11, [constants.BROTLI_PARAM_LGWIN]: 24, [constants.BROTLI_PARAM_SIZE_HINT]: s.length } });
 const sha = (b: Buffer) => createHash("sha256").update(b).digest("hex");
 
 /** Today's companies (from the first format's shards) as a state: rows by id, day last read. */

@@ -139,19 +139,56 @@ You'll set direction for a platform used by B2B fintech companies, partner with 
 
 const LIVE: Spec[] = [
   // Northwind Payments
-  { company: "Northwind Payments", title: "Senior Product Manager, Payments Platform", location: "London, United Kingdom", workplace: "hybrid", posted: 1, seen: "new", salary: { min: 95000, max: 115000, currency: "GBP", period: "year" }, department: "Product", desc: DESC.payments },
-  { company: "Northwind Payments", title: "Group Product Manager, Merchant Experience", location: "London, United Kingdom", workplace: "hybrid", posted: 4, seen: 4, salary: { min: 120000, max: 140000, currency: "GBP", period: "year" }, desc: DESC.merchant },
+  {
+    company: "Northwind Payments",
+    title: "Senior Product Manager, Payments Platform",
+    location: "London, United Kingdom",
+    workplace: "hybrid",
+    posted: 1,
+    seen: "new",
+    salary: { min: 95000, max: 115000, currency: "GBP", period: "year" },
+    department: "Product",
+    desc: DESC.payments,
+  },
+  {
+    company: "Northwind Payments",
+    title: "Group Product Manager, Merchant Experience",
+    location: "London, United Kingdom",
+    workplace: "hybrid",
+    posted: 4,
+    seen: 4,
+    salary: { min: 120000, max: 140000, currency: "GBP", period: "year" },
+    desc: DESC.merchant,
+  },
   { company: "Northwind Payments", title: "Product Manager, Risk & Compliance", location: "Remote - Europe", workplace: "remote", posted: 12, seen: 12, desc: DESC.risk },
   { company: "Northwind Payments", title: "Product Manager, Card Issuing", location: "London, United Kingdom", workplace: "onsite", posted: 7, seen: 7, desc: DESC.cards, id: "a" },
   { company: "Northwind Payments", title: "Product Manager, Card Issuing", location: "Manchester, United Kingdom", workplace: "onsite", posted: 7, seen: 7, desc: DESC.cards, id: "b" },
   // TideWave
-  { company: "TideWave", title: "Head of Product, Open Banking", location: "London, United Kingdom", workplace: "hybrid", posted: 2, seen: "new", salary: { min: 150000, max: 175000, currency: "GBP", period: "year" }, desc: DESC.openBanking },
+  {
+    company: "TideWave",
+    title: "Head of Product, Open Banking",
+    location: "London, United Kingdom",
+    workplace: "hybrid",
+    posted: 2,
+    seen: "new",
+    salary: { min: 150000, max: 175000, currency: "GBP", period: "year" },
+    desc: DESC.openBanking,
+  },
   { company: "TideWave", title: "Product Manager, Developer Platform", location: "Remote (EMEA)", workplace: "remote", posted: 6, seen: 6, desc: DESC.devPlatform },
   { company: "TideWave", title: "Senior Product Manager, Growth", location: "London, United Kingdom", workplace: "hybrid", posted: 20, seen: 20, desc: DESC.growth },
   { company: "TideWave", title: "Product Manager, Payments", location: "Remote (US)", workplace: "remote", posted: 5, seen: 5, desc: DESC.payments },
   // Acme Ledger
   { company: "Acme Ledger", title: "Director of Product, Payments Infrastructure", location: "London, United Kingdom", workplace: "hybrid", posted: 0, seen: "new", desc: DESC.infra },
-  { company: "Acme Ledger", title: "Product Lead, Billing", location: "Remote, Europe", workplace: "remote", posted: 9, seen: 9, salary: { min: 90000, max: 105000, currency: "EUR", period: "year" }, desc: DESC.billing },
+  {
+    company: "Acme Ledger",
+    title: "Product Lead, Billing",
+    location: "Remote, Europe",
+    workplace: "remote",
+    posted: 9,
+    seen: 9,
+    salary: { min: 90000, max: 105000, currency: "EUR", period: "year" },
+    desc: DESC.billing,
+  },
   { company: "Acme Ledger", title: "Product Manager, Internal Tools", location: "London, United Kingdom", workplace: "onsite", posted: 45, seen: 45, desc: DESC.internal },
   { company: "Acme Ledger", title: "Product Marketing Manager", location: "London, United Kingdom", workplace: "hybrid", posted: 3, seen: 3 },
   // Brightpath Bank
@@ -174,7 +211,11 @@ const ESTIMATED: Spec[] = [
 ];
 
 const companyOf = (name: string) => [...MY_COMPANIES, ...DIRECTORY_COMPANIES].find((c) => c.name === name)!;
-const slugify = (s: string) => s.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
+const slugify = (s: string) =>
+  s
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-|-$/g, "");
 
 function fullJob(s: Spec, n: number): Job {
   const c = companyOf(s.company);
@@ -354,8 +395,20 @@ function suggestion(name: string, o: { score: number; matches: number; newMatche
 }
 
 const hiringNow = [
-  suggestion("Copperkettle Pay", { score: 92, matches: 4, newMatches: 2, examples: ["Senior Product Manager, Checkout (London)", "Product Manager, Payouts (Remote - Europe)"], reasons: ["4 jobs for you", "2 new this week", "In payments"] }),
-  suggestion("Halcyon Clearing", { score: 86, matches: 3, newMatches: 1, examples: ["Product Manager, Settlement (London)", "Principal Product Manager (Remote EMEA)"], reasons: ["3 jobs for you", "In payments"] }),
+  suggestion("Copperkettle Pay", {
+    score: 92,
+    matches: 4,
+    newMatches: 2,
+    examples: ["Senior Product Manager, Checkout (London)", "Product Manager, Payouts (Remote - Europe)"],
+    reasons: ["4 jobs for you", "2 new this week", "In payments"],
+  }),
+  suggestion("Halcyon Clearing", {
+    score: 86,
+    matches: 3,
+    newMatches: 1,
+    examples: ["Product Manager, Settlement (London)", "Principal Product Manager (Remote EMEA)"],
+    reasons: ["3 jobs for you", "In payments"],
+  }),
   suggestion("Juniper Remit", { score: 78, matches: 2, examples: ["Product Manager, FX (London)"], reasons: ["2 jobs for you", "In payments"] }),
   suggestion("Fernhill Ledger", { score: 71, matches: 1, examples: ["Head of Product (London)"], reasons: ["1 job for you", "In fintech"], topics: ["fintech"] }),
   suggestion("Pebblestone Capital", { score: 64, matches: 1, examples: ["Senior Product Manager, Trading (London)"], reasons: ["1 job for you"], topics: ["platform"] }),
@@ -448,7 +501,15 @@ export const SCAN_PLAN = {
 export const TELEGRAM_STATUS = { ok: true, token: "000000000:AAA…000", bot: "demo_radar_bot", connected: true, enabled: true, fromEnv: false };
 
 const scheduledRuns = [0, 1, 2, 3].flatMap((d) => [
-  { startedAt: iso(NOW.getTime() - d * DAY - 1 * HOUR), finishedAt: iso(NOW.getTime() - d * DAY - 1 * HOUR + 7 * 60_000), scope: "mine", ok: true, matches: 22 - d, newMatches: d === 0 ? 3 : 1, notified: "sent" },
+  {
+    startedAt: iso(NOW.getTime() - d * DAY - 1 * HOUR),
+    finishedAt: iso(NOW.getTime() - d * DAY - 1 * HOUR + 7 * 60_000),
+    scope: "mine",
+    ok: true,
+    matches: 22 - d,
+    newMatches: d === 0 ? 3 : 1,
+    notified: "sent",
+  },
 ]);
 export const SCHEDULE_STATUS = {
   ok: true,

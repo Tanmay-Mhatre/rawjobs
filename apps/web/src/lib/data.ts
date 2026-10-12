@@ -91,7 +91,9 @@ let dataGeneration = 0;
 export function loadOtherJobs(): Promise<Job[]> {
   otherJobs ??= legacy
     ? Promise.resolve(legacy.other)
-    : getJson<DashboardJobsFile>("./jobs-other.json").then((f) => (f?.jobs ?? []).map(upgrade)).catch(() => []);
+    : getJson<DashboardJobsFile>("./jobs-other.json")
+        .then((f) => (f?.jobs ?? []).map(upgrade))
+        .catch(() => []);
   return otherJobs;
 }
 
@@ -103,6 +105,7 @@ export function useOtherJobs(enabled: boolean): Job[] | null {
   const [loaded, setLoaded] = useState<{ generation: number; jobs: Job[] } | null>(null);
   const generation = dataGeneration;
   const current = loaded?.generation === generation;
+  // biome-ignore lint/correctness/useExhaustiveDependencies: a new data generation (after a rescan) fetches the jobs again
   useEffect(() => {
     if (!enabled || current) return;
     let live = true;
@@ -118,7 +121,9 @@ let descriptions: Promise<Record<string, string>> | undefined;
 function loadDescriptions(): Promise<Record<string, string>> {
   descriptions ??= legacy
     ? Promise.resolve(legacy.descriptions)
-    : getJson<Record<string, string>>("./descriptions.json").then((d) => d ?? {}).catch(() => ({}));
+    : getJson<Record<string, string>>("./descriptions.json")
+        .then((d) => d ?? {})
+        .catch(() => ({}));
   return descriptions;
 }
 
@@ -169,6 +174,7 @@ export function useIndustryCounts(): Record<string, number> | null {
  */
 export function useDirectorySize(rev = 0): number | null {
   const [n, setN] = useState<number | null>(null);
+  // biome-ignore lint/correctness/useExhaustiveDependencies: `rev` is the trigger: bumped after the directory updates
   useEffect(() => {
     if (!canRunLocally) return;
     let live = true;

@@ -3,30 +3,18 @@ import { act, cleanup, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { useState } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import {
-  Button,
-  Chip,
-  ChipGroup,
-  Field,
-  IconButton,
-  Kbd,
-  Menu,
-  ScoreBadge,
-  scoreBandOf,
-  ScoreBreakdown,
-  scoreParts,
-  SearchField,
-  SourceTag,
-  Status,
-  Tabs,
-} from "../src/components/primitives";
+import { Button, Chip, ChipGroup, Field, IconButton, Kbd, Menu, ScoreBadge, scoreBandOf, ScoreBreakdown, scoreParts, SearchField, SourceTag, Status, Tabs } from "../src/components/primitives";
 import { dismissToast, toast, Toaster } from "../src/components/Toast";
 
 afterEach(cleanup);
 
 describe("Button", () => {
   it("is a button named by its label, with the shortcut announced as a key, not in the name", () => {
-    render(<Button variant="primary" shortcut="R">Scan now</Button>);
+    render(
+      <Button variant="primary" shortcut="R">
+        Scan now
+      </Button>,
+    );
     const b = screen.getByRole("button", { name: "Scan now" });
     expect(b.className).toBe("rj-btn rj-btn--primary");
     expect(b.getAttribute("aria-keyshortcuts")).toBe("R");

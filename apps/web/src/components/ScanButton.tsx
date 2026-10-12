@@ -57,7 +57,17 @@ function ProgressRing({ value }: { value: number | null }) {
   return (
     <svg viewBox="0 0 16 16" className="rj-icon -rotate-90" aria-hidden>
       <circle cx="8" cy="8" r={r} fill="none" stroke="var(--progress-track)" strokeWidth="2.5" />
-      <circle cx="8" cy="8" r={r} fill="none" stroke="var(--progress-fill)" strokeWidth="2.5" strokeDasharray={c} strokeDashoffset={c * (1 - value)} className="transition-[stroke-dashoffset] duration-300" />
+      <circle
+        cx="8"
+        cy="8"
+        r={r}
+        fill="none"
+        stroke="var(--progress-fill)"
+        strokeWidth="2.5"
+        strokeDasharray={c}
+        strokeDashoffset={c * (1 - value)}
+        className="transition-[stroke-dashoffset] duration-300"
+      />
     </svg>
   );
 }

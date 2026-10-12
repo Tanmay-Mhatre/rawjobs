@@ -34,7 +34,14 @@ const job = (over: Partial<Job> = {}): Job => ({
 function renderRow(over: Partial<Parameters<typeof JobCard>[0]> = {}) {
   const lead = job();
   const props = { group: { key: lead.group, lead, jobs: [lead] }, min: 65, isNew: true, selected: false, onSelect: vi.fn(), onStatus: vi.fn(), yours: true, ...over };
-  return { props, ...render(<ul><JobCard {...props} /></ul>) };
+  return {
+    props,
+    ...render(
+      <ul>
+        <JobCard {...props} />
+      </ul>,
+    ),
+  };
 }
 
 describe("feed row (design/components/Feed)", () => {
@@ -68,8 +75,15 @@ describe("feed row (design/components/Feed)", () => {
   });
 
   it("says which dealbreaker a job breaks, in the warning treatment", () => {
-    const lead = job({ score: 37, why: { title: 30, location: 20, keywords: [], keywordPoints: 14, industry: 10, dealbreakers: ["Pay below your floor: up to EUR 55k vs your 60k a year", "About agency, which you avoid"] } });
-    const { container } = render(<ul><JobCard group={{ key: lead.group, lead, jobs: [lead] }} min={65} isNew={false} selected={false} onSelect={vi.fn()} onStatus={vi.fn()} /></ul>);
+    const lead = job({
+      score: 37,
+      why: { title: 30, location: 20, keywords: [], keywordPoints: 14, industry: 10, dealbreakers: ["Pay below your floor: up to EUR 55k vs your 60k a year", "About agency, which you avoid"] },
+    });
+    const { container } = render(
+      <ul>
+        <JobCard group={{ key: lead.group, lead, jobs: [lead] }} min={65} isNew={false} selected={false} onSelect={vi.fn()} onStatus={vi.fn()} />
+      </ul>,
+    );
     const note = screen.getByText(/Pay below your floor/);
     expect(note.className).toBe("text-warning-text");
     expect(note.textContent).toBe("Pay below your floor: up to EUR 55k vs your 60k a year +1");

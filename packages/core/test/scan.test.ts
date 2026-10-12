@@ -61,7 +61,11 @@ describe("scopeCompanies", () => {
   });
 
   it("all: every live company we can read", () => {
-    expect(scopeCompanies(cfg, DIRECTORY, "all").map((c) => `${c.ats}:${c.slug}`).sort()).toEqual(["ashby:quiet", "lever:leverco"]);
+    expect(
+      scopeCompanies(cfg, DIRECTORY, "all")
+        .map((c) => `${c.ats}:${c.slug}`)
+        .sort(),
+    ).toEqual(["ashby:quiet", "lever:leverco"]);
   });
 
   it("one board per company (the one with most jobs), and none for a company you watch under another board", () => {
@@ -77,7 +81,11 @@ describe("scopeCompanies", () => {
       entry("ashby:mysandbox", { name: "Acme Sandbox", origin: "user" }),
     ];
     expect(scopeCompanies(cfg, dir, "mine").map((c) => c.slug)).toEqual(["sandboxvr"]);
-    expect(scopeCompanies(cfg, dir, "all").map((c) => c.slug).sort()).toEqual(["mysandbox", "sandboxvr"]);
+    expect(
+      scopeCompanies(cfg, dir, "all")
+        .map((c) => c.slug)
+        .sort(),
+    ).toEqual(["mysandbox", "sandboxvr"]);
     // Your own companies are always scanned: scopeCompanies only adds directory ones.
     const mine = config(`  - { name: "Rhaegal - Arago Sandbox", ats: greenhouse, slug: "rhaegal" }`);
     expect(scopeCompanies(mine, dir, "all").map((c) => c.slug)).not.toContain("rhaegal");
@@ -99,7 +107,12 @@ describe("estimateSeconds", () => {
     const dir = mkdtempSync(join(tmpdir(), "speed-"));
     const h = (ms: number) => ({ company: "x", ats: "lever" as const, slug: "x", ok: true, jobsFound: 0, matches: 0, durationMs: ms });
     // 8 companies, 4 at a time, 2 s each: the lane takes 4 s, so 0.5 s per company.
-    expect(recordSpeeds(dir, Array.from({ length: 8 }, () => h(2000)))).toEqual({ lever: 0.5 });
+    expect(
+      recordSpeeds(
+        dir,
+        Array.from({ length: 8 }, () => h(2000)),
+      ),
+    ).toEqual({ lever: 0.5 });
     expect(readSpeeds(dir)).toEqual({ lever: 0.5 });
     rmSync(dir, { recursive: true, force: true });
   });
@@ -136,7 +149,9 @@ describe("scan", () => {
     expect(calls.some((u) => u.includes("quiet"))).toBe(true);
     expect(Object.keys(readLedger(dir).companies)).toEqual(["lever:leverco"]);
     // Run history keeps yours, matches and failures, not every board.
-    const health = read<{ runs: { health: { slug: string }[] }[] }>(dir, "meta.json").runs[0]!.health.map((h) => h.slug).sort();
+    const health = read<{ runs: { health: { slug: string }[] }[] }>(dir, "meta.json")
+      .runs[0]!.health.map((h) => h.slug)
+      .sort();
     expect(health).toEqual(["ghco", "leverco", "mutedco", "quiet"]);
   });
 

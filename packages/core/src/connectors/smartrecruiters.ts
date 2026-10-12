@@ -43,8 +43,8 @@ export const smartrecruiters: Connector<SmartRecruitersPosting> = {
       const slug = firstPathSegment(url);
       return slug ? { ats: "smartrecruiters", slug } : null;
     }
-    const api = host === "api.smartrecruiters.com" && url.pathname.match(/\/v1\/companies\/([^/]+)/);
-    return api && api[1] ? { ats: "smartrecruiters", slug: decodeURIComponent(api[1]) } : null;
+    const api = host === "api.smartrecruiters.com" ? url.pathname.match(/\/v1\/companies\/([^/]+)/) : null;
+    return api?.[1] ? { ats: "smartrecruiters", slug: decodeURIComponent(api[1]) } : null;
   },
 
   async fetch(ref, { http }) {

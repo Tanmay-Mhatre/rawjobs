@@ -3,9 +3,7 @@ import { cx } from "../ui";
 import { Kbd } from "./Kbd";
 import { useClosing } from "./useClosing";
 
-export type MenuItem =
-  | { id: string; label: string; icon?: ReactNode; shortcut?: string; danger?: boolean; onSelect: () => void }
-  | { separator: true; id: string };
+export type MenuItem = { id: string; label: string; icon?: ReactNode; shortcut?: string; danger?: boolean; onSelect: () => void } | { separator: true; id: string };
 
 const isAction = (i: MenuItem): i is Extract<MenuItem, { onSelect: () => void }> => !("separator" in i);
 
@@ -24,7 +22,14 @@ export function Menu({
   /** Names the menu ("Job actions"). */
   label: string;
   /** Renders the button that opens it; spread the props onto a <button>. */
-  trigger: (props: { ref: (el: HTMLButtonElement | null) => void; onClick: () => void; onKeyDown: (e: KeyboardEvent) => void; "aria-haspopup": "menu"; "aria-expanded": boolean; "aria-controls": string }) => ReactNode;
+  trigger: (props: {
+    ref: (el: HTMLButtonElement | null) => void;
+    onClick: () => void;
+    onKeyDown: (e: KeyboardEvent) => void;
+    "aria-haspopup": "menu";
+    "aria-expanded": boolean;
+    "aria-controls": string;
+  }) => ReactNode;
   items: MenuItem[];
   align?: "start" | "end";
   className?: string;
@@ -49,6 +54,7 @@ export function Menu({
   }, [open, active]);
 
   // A click outside closes it without stealing focus back.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: re-registered on each open; close only uses refs and setters
   useEffect(() => {
     if (!open) return;
     const onDown = (e: PointerEvent) => {

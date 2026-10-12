@@ -22,7 +22,11 @@ export async function serve(args: string[]): Promise<number> {
   const dataDir = defaultDataDir(home);
   mkdirSync(dataDir, { recursive: true });
   if (!existsSync(`${WEB_DIR}/index.html`)) {
-    console.error(BUNDLED ? `This copy of RawJobs is missing its dashboard (${WEB_DIR}). Run the install line again to repair it.` : "The dashboard isn't built yet. Run `pnpm build` first (or `pnpm start`, which builds it).");
+    console.error(
+      BUNDLED
+        ? `This copy of RawJobs is missing its dashboard (${WEB_DIR}). Run the install line again to repair it.`
+        : "The dashboard isn't built yet. Run `pnpm build` first (or `pnpm start`, which builds it).",
+    );
     return 1;
   }
 

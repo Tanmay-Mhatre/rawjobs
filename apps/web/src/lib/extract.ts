@@ -32,7 +32,7 @@ async function extractPdf(file: File): Promise<Extracted> {
   pdfjs.GlobalWorkerOptions.workerSrc = worker.default;
 
   const task = pdfjs.getDocument({ data: new Uint8Array(await file.arrayBuffer()) });
-  let doc;
+  let doc: Awaited<typeof task.promise>;
   try {
     doc = await task.promise;
   } catch (err) {
@@ -50,9 +50,7 @@ async function extractPdf(file: File): Promise<Extracted> {
 
   const text = tidy(pages.join("\n\n"));
   if (text.replace(/\s/g, "").length < 80) {
-    throw new ExtractError(
-      "This PDF has no selectable text. It's probably a scan or an image. Use “I have several resumes”: Claude and ChatGPT can read scanned PDFs.",
-    );
+    throw new ExtractError("This PDF has no selectable text. It's probably a scan or an image. Use “I have several resumes”: Claude and ChatGPT can read scanned PDFs.");
   }
   return {
     text,
@@ -125,7 +123,7 @@ function htmlToMarkdown(html: string): string {
         for (const li of [...child.children]) {
           const nested = [...li.children].filter((c) => c.tagName === "UL" || c.tagName === "OL");
           const own = li.cloneNode(true) as Element;
-          own.querySelectorAll("ul,ol").forEach((n) => n.remove());
+          for (const n of own.querySelectorAll("ul,ol")) n.remove();
           out.push(`${"  ".repeat(depth)}- ${inline(own).trim()}`);
           for (const n of nested) walk(Object.assign(document.createElement("div"), { innerHTML: n.outerHTML }), depth + 1);
         }

@@ -187,15 +187,7 @@ export function ResumeStep({ draft, update, resumeText, saveResume, removeResume
               body="Merge them into one master resume with Claude or ChatGPT."
               onClick={() => setMode("ai")}
             />
-            {!hideSkip && onSkip && (
-              <ModeCard
-                active={false}
-                icon={<SkipForward className="size-5" />}
-                title="Skip for now"
-                body="Fill in your roles and places yourself."
-                onClick={onSkip}
-              />
-            )}
+            {!hideSkip && onSkip && <ModeCard active={false} icon={<SkipForward className="size-5" />} title="Skip for now" body="Fill in your roles and places yourself." onClick={onSkip} />}
           </div>
           {mode === "single" && (
             <SinglePath
@@ -206,14 +198,7 @@ export function ResumeStep({ draft, update, resumeText, saveResume, removeResume
               save={wizard ? undefined : { saving, error, onSave: () => void run(saveSingle) }}
             />
           )}
-          {mode === "ai" && (
-            <AiPath
-              answer={answer}
-              setAnswer={setAnswer}
-              parsed={parsed}
-              save={wizard ? undefined : { saving, error, onSave: () => parsed && void run(() => saveAi(parsed)) }}
-            />
-          )}
+          {mode === "ai" && <AiPath answer={answer} setAnswer={setAnswer} parsed={parsed} save={wizard ? undefined : { saving, error, onSave: () => parsed && void run(() => saveAi(parsed)) }} />}
           {wizard && error && (
             <p role="alert" className="type-small text-danger-text">
               Couldn't save your resume. {error}
@@ -235,9 +220,7 @@ export function ResumeStep({ draft, update, resumeText, saveResume, removeResume
           )}
         </>
       )}
-      <p className="type-small text-muted">
-        {canRunLocally ? "Your resume stays on this computer. It's never uploaded." : "Your resume is kept in this browser only. It's never uploaded."}
-      </p>
+      <p className="type-small text-muted">{canRunLocally ? "Your resume stays on this computer. It's never uploaded." : "Your resume is kept in this browser only. It's never uploaded."}</p>
       {footer?.(primary)}
     </div>
   );
@@ -249,10 +232,7 @@ function ModeCard({ active, icon, title, body, onClick }: { active: boolean; ico
       type="button"
       aria-pressed={active}
       onClick={onClick}
-      className={cx(
-        "flex flex-col items-start gap-2 rounded-md border p-4 text-left transition-colors",
-        active ? "border-ink bg-active" : "border-line hover:bg-inset",
-      )}
+      className={cx("flex flex-col items-start gap-2 rounded-md border p-4 text-left transition-colors", active ? "border-ink bg-active" : "border-line hover:bg-inset")}
     >
       <span className={cx("flex size-9 items-center justify-center rounded-md", active ? "bg-ink text-raised" : "bg-inset text-muted")}>{icon}</span>
       <span className="type-small font-semibold">{title}</span>
@@ -335,12 +315,7 @@ function SinglePath({ text, setText, tooShort, save }: { text: string; setText: 
       />
       <div className="flex flex-wrap items-center gap-3">
         {save && (
-          <Button
-            variant="primary"
-            onClick={save.onSave}
-            disabled={save.saving || words(text) < MIN_WORDS}
-            aria-describedby={tooShort ? MIN_WORDS_HINT_ID : undefined}
-          >
+          <Button variant="primary" onClick={save.onSave} disabled={save.saving || words(text) < MIN_WORDS} aria-describedby={tooShort ? MIN_WORDS_HINT_ID : undefined}>
             {save.saving ? <LoaderCircle className="size-4 animate-spin" /> : <Check className="size-4" />} Save resume
           </Button>
         )}
@@ -390,7 +365,9 @@ function AiPath({ answer, setAnswer, parsed, save }: { answer: string; setAnswer
           </button>
         </div>
         {copied === "manual" && (
-          <p className="mt-2 type-small text-warning-text">Your browser blocked copying. The prompt is selected below: press <Kbd>Ctrl</Kbd> <Kbd>C</Kbd> (<Kbd>⌘</Kbd> <Kbd>C</Kbd> on Mac).</p>
+          <p className="mt-2 type-small text-warning-text">
+            Your browser blocked copying. The prompt is selected below: press <Kbd>Ctrl</Kbd> <Kbd>C</Kbd> (<Kbd>⌘</Kbd> <Kbd>C</Kbd> on Mac).
+          </p>
         )}
         {showPrompt && (
           <textarea
@@ -431,7 +408,8 @@ function AiPath({ answer, setAnswer, parsed, save }: { answer: string; setAnswer
               Found: master resume ({words(parsed.resume).toLocaleString()} words)
               {parsed.profile ? (
                 <>
-                  {" "}· {parsed.profile.target_titles.length} target titles · {parsed.profile.locations.length} places · {Object.keys(parsed.profile.keywords).length} topics
+                  {" "}
+                  · {parsed.profile.target_titles.length} target titles · {parsed.profile.locations.length} places · {Object.keys(parsed.profile.keywords).length} topics
                 </>
               ) : (
                 " · no profile block (details are suggested from the text)"
@@ -495,9 +473,14 @@ function SavedResume({
   const fills = Object.keys(patch).filter((k) => k !== "remoteExclude");
   // Topics alone are shown in Settings; with no titles, places or industries there is nothing to show here.
   const nothing = !suggest.titles.length && !suggest.places.length && !suggest.industries.length && !(suggest.remote && suggest.remoteRegions.length);
-  const firstLine = text.split("\n").find((l) => l.trim())?.replace(/^#+\s*/, "") ?? "Resume";
+  const firstLine =
+    text
+      .split("\n")
+      .find((l) => l.trim())
+      ?.replace(/^#+\s*/, "") ?? "Resume";
 
-  useEffect(() => onArrive(), []); // eslint-disable-line react-hooks/exhaustive-deps
+  // biome-ignore lint/correctness/useExhaustiveDependencies: once, when the step is shown
+  useEffect(() => onArrive(), []);
 
   return (
     <div className="space-y-4">
@@ -527,52 +510,50 @@ function SavedResume({
         <div role="status" className="flex items-start gap-2 rounded-md bg-warning-subtle/50 p-3 type-small text-warning-text">
           <TriangleAlert className="mt-0.5 size-4 shrink-0" aria-hidden />
           <p>
-            This looks like an empty resume template (it still has placeholders like {suggest.template.slice(0, 2).join(" and ")}), so nothing is filled in from it.
-            Replace it with your filled-in resume, or pick everything yourself in the next steps.
+            This looks like an empty resume template (it still has placeholders like {suggest.template.slice(0, 2).join(" and ")}), so nothing is filled in from it. Replace it with your filled-in
+            resume, or pick everything yourself in the next steps.
           </p>
         </div>
       ) : nothing ? (
         <p className="type-small text-muted">Couldn't find job titles or places in this resume. You'll pick them in the next steps.</p>
       ) : (
-      <div className="rounded-md border border-line bg-inset p-4">
-        <p className="flex items-center gap-1.5 type-small font-semibold">
-          <Sparkles className="size-4 text-muted" aria-hidden /> {suggest.source === "ai" ? "From your master resume" : "Suggested from your resume"}
-        </p>
-        <dl className="mt-2 grid gap-x-4 gap-y-1.5 type-small sm:grid-cols-[110px_1fr]">
-          <Row label="Titles" items={suggest.titles} />
-          <Row label="Places" items={suggest.places.map(displayPlace)} />
-          {suggest.remote && <Row label="Remote" items={suggest.remoteRegions.map(displayPlace)} />}
-          <Row label="Industries" items={suggest.industries.map(industryLabel)} />
-          <Row label="Topics" items={suggest.keywords.map(([k]) => k)} />
-        </dl>
-        {auto ? (
-          <p role="status" className="mt-3 flex items-start gap-1.5 type-label text-ink">
-            <Check className="mt-0.5 size-4 shrink-0" />
-            {filled
-              ? `Pre-filled ${filled} from your resume. You can change anything.`
-              : "Suggestions appear next to each step. Nothing you chose is overwritten."}
+        <div className="rounded-md border border-line bg-inset p-4">
+          <p className="flex items-center gap-1.5 type-small font-semibold">
+            <Sparkles className="size-4 text-muted" aria-hidden /> {suggest.source === "ai" ? "From your master resume" : "Suggested from your resume"}
           </p>
-        ) : applied ? (
-          <p className="mt-3 flex items-center gap-1.5 type-label text-ink">
-            <Check className="size-4" /> Added. You can review and change everything below.
-          </p>
-        ) : fills.length ? (
-          <div className="mt-3 flex flex-wrap items-center gap-2">
-            <Button
-              variant="primary"
-              onClick={() => {
-                update(patch);
-                setApplied(true);
-              }}
-            >
-              <Wand2 className="size-4" /> Fill empty sections from my resume
-            </Button>
-            <span className="type-small text-muted">Nothing you chose is overwritten.</span>
-          </div>
-        ) : (
-          <p className="mt-3 type-small text-muted">Suggestions appear next to each step for you to add.</p>
-        )}
-      </div>
+          <dl className="mt-2 grid gap-x-4 gap-y-1.5 type-small sm:grid-cols-[110px_1fr]">
+            <Row label="Titles" items={suggest.titles} />
+            <Row label="Places" items={suggest.places.map(displayPlace)} />
+            {suggest.remote && <Row label="Remote" items={suggest.remoteRegions.map(displayPlace)} />}
+            <Row label="Industries" items={suggest.industries.map(industryLabel)} />
+            <Row label="Topics" items={suggest.keywords.map(([k]) => k)} />
+          </dl>
+          {auto ? (
+            <p role="status" className="mt-3 flex items-start gap-1.5 type-label text-ink">
+              <Check className="mt-0.5 size-4 shrink-0" />
+              {filled ? `Pre-filled ${filled} from your resume. You can change anything.` : "Suggestions appear next to each step. Nothing you chose is overwritten."}
+            </p>
+          ) : applied ? (
+            <p className="mt-3 flex items-center gap-1.5 type-label text-ink">
+              <Check className="size-4" /> Added. You can review and change everything below.
+            </p>
+          ) : fills.length ? (
+            <div className="mt-3 flex flex-wrap items-center gap-2">
+              <Button
+                variant="primary"
+                onClick={() => {
+                  update(patch);
+                  setApplied(true);
+                }}
+              >
+                <Wand2 className="size-4" /> Fill empty sections from my resume
+              </Button>
+              <span className="type-small text-muted">Nothing you chose is overwritten.</span>
+            </div>
+          ) : (
+            <p className="mt-3 type-small text-muted">Suggestions appear next to each step for you to add.</p>
+          )}
+        </div>
       )}
     </div>
   );
@@ -616,9 +597,7 @@ function RemoveResume({ onRemove }: { onRemove: () => Promise<SaveResult> }) {
           <h2 id="remove-resume-title" className="type-subheading font-semibold">
             Remove your saved resume?
           </h2>
-          <p className="mt-1 type-small text-muted">
-            The resume is deleted from {canRunLocally ? "this computer" : "this browser"}. Roles, places and other answers it filled in stay as they are.
-          </p>
+          <p className="mt-1 type-small text-muted">The resume is deleted from {canRunLocally ? "this computer" : "this browser"}. Roles, places and other answers it filled in stay as they are.</p>
           {error && (
             <p role="alert" className="mt-2 type-small text-danger-text">
               Couldn't remove the resume. {error}

@@ -39,7 +39,14 @@ export type IconButtonProps = Omit<ButtonProps, "icon" | "children" | "aria-labe
 /** Icon-only: the label is the accessible name, and the tooltip also names the shortcut, e.g. "Save (S)". */
 export function IconButton({ label, shortcut, variant = "quiet", size, className, children, type = "button", ...rest }: IconButtonProps) {
   return (
-    <button type={type} aria-label={label} aria-keyshortcuts={shortcut} title={shortcut ? `${label} (${shortcut})` : label} className={buttonClass(variant, size, cx("rj-btn--icon", className))} {...rest}>
+    <button
+      type={type}
+      aria-label={label}
+      aria-keyshortcuts={shortcut}
+      title={shortcut ? `${label} (${shortcut})` : label}
+      className={buttonClass(variant, size, cx("rj-btn--icon", className))}
+      {...rest}
+    >
       {children}
     </button>
   );

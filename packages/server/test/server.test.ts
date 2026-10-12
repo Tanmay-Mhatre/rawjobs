@@ -145,7 +145,10 @@ console.log(JSON.stringify({ type: "done", scope: args[args.indexOf("--scope") +
     const again = await call(port, "GET", "/api/run");
     expect(again.status).toBe(200);
     expect(again.headers["x-rawjobs-scope"]).toBe("all");
-    const types = again.text.trim().split("\n").map((l) => (JSON.parse(l) as { type: string }).type);
+    const types = again.text
+      .trim()
+      .split("\n")
+      .map((l) => (JSON.parse(l) as { type: string }).type);
     expect(types).toEqual(["start", "progress", "done"]);
     expect(api.scanning()).toBe(false);
     expect((await call(port, "GET", "/api/run")).status).toBe(204);

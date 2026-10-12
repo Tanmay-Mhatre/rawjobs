@@ -40,8 +40,7 @@ const COPY: Record<number, { title: string; intro: string }> = {
 };
 
 export function Wizard(props: Props) {
-  const { step, goStep, draft, update, existing, configErrors, startScan, onSaved, onFinish, onExit, onStart, onStartOver, progress, resumeText, saveResume, removeResume } =
-    props;
+  const { step, goStep, draft, update, existing, configErrors, startScan, onSaved, onFinish, onExit, onStart, onStartOver, progress, resumeText, saveResume, removeResume } = props;
   const suggest = useMemo(() => buildSuggestions(resumeText, draft.aiProfile), [resumeText, draft.aiProfile]);
   const heading = useRef<HTMLHeadingElement>(null);
 
@@ -60,9 +59,7 @@ export function Wizard(props: Props) {
   if (skipWelcome) return null;
 
   if (step <= 0) {
-    return (
-      <Welcome headingRef={heading} existing={existing} configErrors={configErrors} progress={progress} onStart={onStart} onStartOver={onStartOver} onExit={onExit} />
-    );
+    return <Welcome headingRef={heading} existing={existing} configErrors={configErrors} progress={progress} onStart={onStart} onStartOver={onStartOver} onExit={onExit} />;
   }
 
   const blocker = stepBlocker(step, draft);
@@ -108,13 +105,7 @@ export function Wizard(props: Props) {
         </HeadingLevel.Provider>
         {step > STEP.resume && step < STEP.review && (
           <StepFooter onBack={() => goStep(step - 1)} blocker={blocker}>
-            <Button
-              variant="primary"
-              className="h-11 px-5 sm:h-10"
-              onClick={() => goStep(step + 1)}
-              disabled={!!blocker}
-              aria-describedby={blocker ? "step-blocker" : undefined}
-            >
+            <Button variant="primary" className="h-11 px-5 sm:h-10" onClick={() => goStep(step + 1)} disabled={!!blocker} aria-describedby={blocker ? "step-blocker" : undefined}>
               {optionalEmpty ? "Skip for now" : "Continue"} <ArrowRight className="size-4" />
             </Button>
           </StepFooter>
@@ -275,6 +266,7 @@ function Review({
   const places = groupPlaces(officePlaces(draft)).map((g) => placeLabel(g.name));
   const remote = groupPlaces(draft.remoteOk).map((g) => (g.name === "remote" ? "anywhere" : placeLabel(g.name)));
 
+  // biome-ignore lint/correctness/useExhaustiveDependencies: any change to the draft clears the last error
   useEffect(() => setError(null), [draft]);
 
   const saveAndScan = async () => {
@@ -315,7 +307,9 @@ function Review({
           Using your <b>master resume</b> for suggestions.
         </>
       ) : (
-        <span className="text-muted">No resume added.</span>
+        <span key="no-resume" className="text-muted">
+          No resume added.
+        </span>
       ),
     ],
     [
@@ -352,7 +346,9 @@ function Review({
       draft.industries.length ? (
         <>Also scan companies in {some(draft.industries.map(industryLabel), 6)}.</>
       ) : (
-        <span className="text-muted">No industries. Jobs are found by your roles and places.</span>
+        <span key="no-industries" className="text-muted">
+          No industries. Jobs are found by your roles and places.
+        </span>
       ),
     ],
   ];
@@ -411,7 +407,8 @@ function Review({
 
       {!canRunLocally && (
         <p className="type-small text-muted">
-          This dashboard is hosted, so it can't save files. Download the config and save it in the app's folder as <code className="font-mono type-small">rawjobs.config.local.yaml</code>. It stays on your computer; don't commit it.
+          This dashboard is hosted, so it can't save files. Download the config and save it in the app's folder as <code className="font-mono type-small">rawjobs.config.local.yaml</code>. It stays on
+          your computer; don't commit it.
         </p>
       )}
 

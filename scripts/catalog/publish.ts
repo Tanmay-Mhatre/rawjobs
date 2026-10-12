@@ -116,7 +116,14 @@ for (const [key, s] of seedBoards) tag(key, s.industries, "seed list");
 // 3. Job titles (needs the industries already known, for "requires").
 for (const [key, v] of index) {
   const known = [...(tags.get(key)?.keys() ?? [])];
-  tag(key, industriesFromTitles(v.rows.map((r) => r[0]), known), "job titles");
+  tag(
+    key,
+    industriesFromTitles(
+      v.rows.map((r) => r[0]),
+      known,
+    ),
+    "job titles",
+  );
 }
 /** The seed list's hand-written name beats one from a source list or the board's address ("Saxobank" -> "Saxo Bank"). */
 const nameOf = (d: Dir) => seedBoards.get(d.key)?.name || d.name;
@@ -174,7 +181,8 @@ for (const [key, v] of index) {
     ats: d.ats,
     slug: d.slug,
     ...(d.region ? { region: d.region } : {}),
-    ...(d.shard ? { shard: d.shard } : {}), ...(d.site ? { site: d.site } : {}),
+    ...(d.shard ? { shard: d.shard } : {}),
+    ...(d.site ? { site: d.site } : {}),
     careers_url: d.careers_url,
     open_jobs: v.open_jobs,
     // Row ages count from this fetch, which can be up to a week older than the index itself.
@@ -193,7 +201,8 @@ const slim = [
     ats: d.ats,
     slug: d.slug,
     ...(d.region ? { region: d.region } : {}),
-    ...(d.shard ? { shard: d.shard } : {}), ...(d.site ? { site: d.site } : {}),
+    ...(d.shard ? { shard: d.shard } : {}),
+    ...(d.site ? { site: d.site } : {}),
     careers_url: d.careers_url,
     tier: seedBoards.has(d.key) ? ("curated" as const) : d.tier,
     status: d.status,
@@ -212,10 +221,7 @@ mkdirSync(OUT, { recursive: true });
 const generated_at = new Date().toISOString();
 writeFileSync(join(OUT, "directory.json"), JSON.stringify({ generated_at, count: slim.length, industries, companies: slim }));
 writeFileSync(join(OUT, "index.json"), JSON.stringify({ generated_at, count: indexed.length, companies: indexed }));
-writeFileSync(
-  join(here, "out", "tags.json"),
-  JSON.stringify(Object.fromEntries([...tags].map(([k, m]) => [k, Object.fromEntries([...m].map(([id, src]) => [id, [...src]]))])), null, 1),
-);
+writeFileSync(join(here, "out", "tags.json"), JSON.stringify(Object.fromEntries([...tags].map(([k, m]) => [k, Object.fromEntries([...m].map(([id, src]) => [id, [...src]]))])), null, 1));
 
 const perIndustry = INDUSTRIES.map((i) => {
   const n = slim.filter((c) => c.tags?.includes(i.id)).length;

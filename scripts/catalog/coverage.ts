@@ -39,7 +39,8 @@ const rows: Row[] = seeds.map((seed) => {
   const board = known ? { ats: known.ats, key: companyKey(known), supported: known.supported } : r?.board;
   if (board) {
     const d = directory.get(board.key);
-    if (board.supported) return { seed, outcome: "trackable", ats: board.ats, detail: d ? `${d.status}${d.open_jobs ? `, ${d.open_jobs} jobs` : ""}` : "found, not in directory yet (run catalog:refresh)" };
+    if (board.supported)
+      return { seed, outcome: "trackable", ats: board.ats, detail: d ? `${d.status}${d.open_jobs ? `, ${d.open_jobs} jobs` : ""}` : "found, not in directory yet (run catalog:refresh)" };
     return { seed, outcome: "not scannable", ats: board.ats, detail: board.key };
   }
   const named = byExactName(seed.name);

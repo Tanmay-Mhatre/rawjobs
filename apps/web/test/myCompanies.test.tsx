@@ -8,8 +8,7 @@ afterEach(cleanup);
 
 const row = (name: string, slug: string): CompanyRow => ({ id: slug, input: `greenhouse: ${slug}`, state: "saved", name, ats: "greenhouse", slug });
 const rows = [row("Acme", "acme"), row("Globex", "globex")];
-const renderList = (attention?: number) =>
-  render(<MyCompanies rows={rows} savedKeys={new Set()} forYou={new Map()} onRemove={() => {}} onRemoveMany={() => {}} attention={attention} />);
+const renderList = (attention?: number) => render(<MyCompanies rows={rows} savedKeys={new Set()} forYou={new Map()} onRemove={() => {}} onRemoveMany={() => {}} attention={attention} />);
 const checked = () => screen.getByRole("radiogroup", { name: "Sort My companies" }).querySelector("[aria-checked=true]")?.textContent;
 
 describe("MyCompanies sort", () => {

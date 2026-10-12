@@ -61,7 +61,11 @@ export const jobvite: Connector<JobviteJob> = {
     const body = html.match(/class="jv-job-detail-description"[^>]*>([\s\S]*?)<div class="jv-job-detail-bottom-actions/)?.[1];
     const meta = inlineText(html.match(/class="jv-job-detail-meta"[^>]*>([\s\S]*?)<\/p>/)?.[1]);
     // The meta line reads "Department · Location" (several locations separated by commas).
-    const location = meta.split(/\s*[·|•]\s*/).slice(1).join(", ") || undefined;
+    const location =
+      meta
+        .split(/\s*[·|•]\s*/)
+        .slice(1)
+        .join(", ") || undefined;
     return { description: htmlToText(body), location: /^\d+ locations?$/i.test(raw.location) ? location : undefined };
   },
 };

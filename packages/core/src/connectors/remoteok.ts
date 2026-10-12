@@ -25,6 +25,7 @@ export type RemoteOkJob = {
 
 /** Some Remote OK text arrives UTF-8 encoded twice ("fÃ¼r"): undo that when it plainly happened. */
 export function fixMojibake(s: string): string {
+  // biome-ignore lint/suspicious/noControlCharactersInRegex: matching Latin-1 bytes (mojibake) is the point
   if (!/[ÃÂ][\u0080-\u00BF]/.test(s) || /[^\u0000-\u00FF]/.test(s)) return s;
   try {
     return new TextDecoder("utf-8", { fatal: true }).decode(Uint8Array.from(s, (ch) => ch.charCodeAt(0)));

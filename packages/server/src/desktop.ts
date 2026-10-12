@@ -56,9 +56,10 @@ export function logTo(file: string): void {
 }
 
 export function openBrowser(target: string) {
-  const [cmd, args] =
-    process.platform === "win32" ? ["cmd", ["/c", "start", "", target]] : process.platform === "darwin" ? ["open", [target]] : ["xdg-open", [target]];
-  spawn(cmd, args as string[], { stdio: "ignore", detached: true, windowsHide: true }).on("error", () => {}).unref();
+  const [cmd, args] = process.platform === "win32" ? ["cmd", ["/c", "start", "", target]] : process.platform === "darwin" ? ["open", [target]] : ["xdg-open", [target]];
+  spawn(cmd, args as string[], { stdio: "ignore", detached: true, windowsHide: true })
+    .on("error", () => {})
+    .unref();
 }
 
 /** A RawJobs server answers at this address. */
@@ -209,7 +210,8 @@ export async function updateCommand(args: string[]): Promise<number> {
   const c = judge(APP_VERSION, m, values.to ? [] : settings.skip);
   if (values.check || (!values.to && !c.available)) {
     if (c.available) console.log(`RawJobs ${m.version} is out (you have ${APP_VERSION}). Run: rawjobs update`);
-    else if (compareVersions(m.version, APP_VERSION) > 0) console.log(`RawJobs ${m.version} didn't start here before, so it isn't installed automatically. Install it with: rawjobs update --to ${m.version}`);
+    else if (compareVersions(m.version, APP_VERSION) > 0)
+      console.log(`RawJobs ${m.version} didn't start here before, so it isn't installed automatically. Install it with: rawjobs update --to ${m.version}`);
     else console.log(`RawJobs ${APP_VERSION} is the newest version.`);
     if (c.tooOld) console.log("This version is too old to update by itself: run the install line again.");
     return 0;

@@ -46,12 +46,21 @@ for (const ind of INDUSTRIES) {
   const keys = byIndustry.get(ind.id)!;
   if (keys.length < min) short.push(`${ind.id} (${keys.length})`);
   const step = Math.max(1, Math.floor(keys.length / samples));
-  const eg = keys.filter((_, i) => i % step === 0).slice(0, samples).map((k) => names.get(k) ?? k);
+  const eg = keys
+    .filter((_, i) => i % step === 0)
+    .slice(0, samples)
+    .map((k) => names.get(k) ?? k);
   console.log(`${ind.id.padEnd(16)} ${String(keys.length).padStart(5)}  ${eg.join(", ")}`);
   if (only) {
     const terms = [...ind.terms, ...(INDUSTRY_BY_ID.get(ind.id)!.titleTerms ?? [])];
     for (const k of keys.filter((_, i) => i % step === 0).slice(0, samples * 3))
-      console.log(`  ${names.get(k) ?? k}: ${index.get(k)!.titles.filter((t) => matchesAny(t, terms)).slice(0, 3).join(" | ")}`);
+      console.log(
+        `  ${names.get(k) ?? k}: ${index
+          .get(k)!
+          .titles.filter((t) => matchesAny(t, terms))
+          .slice(0, 3)
+          .join(" | ")}`,
+      );
   }
 }
 if (short.length) console.log(`\nUnder ${min} companies from job titles: ${short.join(", ")}`);

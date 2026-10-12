@@ -66,9 +66,7 @@ export async function runRadar(config: Config, opts: RunOptions = {}): Promise<R
   const now = opts.now ?? new Date();
   const nowIso = now.toISOString();
   const only = opts.only?.map((s) => s.toLowerCase());
-  const companies = config.companies.filter(
-    (c) => c.enabled && (!only?.length || only.includes(c.name.toLowerCase()) || only.includes(c.slug.toLowerCase())),
-  );
+  const companies = config.companies.filter((c) => c.enabled && (!only?.length || only.includes(c.name.toLowerCase()) || only.includes(c.slug.toLowerCase())));
   const previous = new Map((opts.previous ?? []).map((j) => [j.id, j]));
   const checks = opts.checks ?? [];
 
@@ -76,7 +74,7 @@ export async function runRadar(config: Config, opts: RunOptions = {}): Promise<R
   const order = new Map<string, number>();
   const health: CompanyHealth[] = [];
   const todo = [...companies.map((c) => [c, false] as const), ...checks.map((c) => [c, true] as const)].filter(([c]) => !opts.skip?.has(jobCompanyKey(c)));
-  todo.forEach(([c], i) => order.set(`${c.ats}:${c.slug}`, i));
+  for (const [i, [c]] of todo.entries()) order.set(`${c.ats}:${c.slug}`, i);
 
   /** A company's open jobs from the last fetch, if that was less than `hours` ago. */
   const recentJobs = (key: string, hours: number): Job[] | undefined => {
@@ -142,10 +140,7 @@ export async function runRadar(config: Config, opts: RunOptions = {}): Promise<R
       h.jobsFound = recent?.length ?? raws.length - (h.skipped ?? 0);
       h.ok = true;
     } catch (err) {
-      h.error =
-        err instanceof HttpError && err.status === 404
-          ? `board not found (404): check the slug "${company.slug}" against the careers URL`
-          : (err as Error).message;
+      h.error = err instanceof HttpError && err.status === 404 ? `board not found (404): check the slug "${company.slug}" against the careers URL` : (err as Error).message;
     }
     h.durationMs = Date.now() - started;
     jobs.push(...kept);

@@ -6,7 +6,14 @@ import { Segmented } from "./ui";
 type Props = { draft: Draft; update: (patch: Partial<Draft>) => void };
 
 /** "frontend, credit risk" -> ["frontend", "credit risk"]. */
-export const parseList = (text: string) => [...new Set(text.split(/[,;\n]/).map((s) => s.trim().toLowerCase()).filter(Boolean))];
+export const parseList = (text: string) => [
+  ...new Set(
+    text
+      .split(/[,;\n]/)
+      .map((s) => s.trim().toLowerCase())
+      .filter(Boolean),
+  ),
+];
 
 /**
  * A comma-separated list in one text field. It keeps what you type (a trailing comma, a half-typed
@@ -14,9 +21,10 @@ export const parseList = (text: string) => [...new Set(text.split(/[,;\n]/).map(
  */
 function ListField({ label, help, placeholder, value, onChange }: { label: string; help: string; placeholder: string; value: string[]; onChange: (v: string[]) => void }) {
   const [text, setText] = useState(value.join(", "));
+  // biome-ignore lint/correctness/useExhaustiveDependencies: rewrites the text only when the list changes elsewhere, not on every keystroke
   useEffect(() => {
     if (parseList(text).join("\u0000") !== value.join("\u0000")) setText(value.join(", "));
-  }, [value]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [value]);
   return (
     <Field
       label={label}

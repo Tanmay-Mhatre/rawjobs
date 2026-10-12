@@ -71,10 +71,7 @@ export function useUserState() {
   }, []);
 
   /** Set a status, or clear it if it's already set (toggle). */
-  const toggleStatus = useCallback(
-    (job: JobLike, status: Status) => update(job, { status: state[job.id]?.status === status ? undefined : status }),
-    [state, update],
-  );
+  const toggleStatus = useCallback((job: JobLike, status: Status) => update(job, { status: state[job.id]?.status === status ? undefined : status }), [state, update]);
 
   const replaceAll = useCallback((next: UserState) => setState(next), []);
 

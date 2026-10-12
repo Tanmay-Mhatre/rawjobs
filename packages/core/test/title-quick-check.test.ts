@@ -7,7 +7,10 @@ import { matchesTitle, mayMatchTitle } from "../src/text";
  * 12,449 real job titles from the shared job feed (2026-10-09), weighted toward tricky ones: punctuation,
  * slashes, abbreviations, times of day. The quick check must never rule out a title the full reading accepts.
  */
-const TITLES = gunzipSync(readFileSync(new URL("./fixtures/job-titles.txt.gz", import.meta.url))).toString("utf8").split("\n").filter(Boolean);
+const TITLES = gunzipSync(readFileSync(new URL("./fixtures/job-titles.txt.gz", import.meta.url)))
+  .toString("utf8")
+  .split("\n")
+  .filter(Boolean);
 
 const PROFILES: string[][] = [
   ["product manager", "head of product", "product lead", "group product", "director of product"],

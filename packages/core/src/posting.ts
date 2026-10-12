@@ -13,13 +13,61 @@ export type Pay = { currency: string; min?: number; max?: number; period?: Perio
 
 /** ISO codes we read after or before an amount ("AED 25,000", "65k EUR"). */
 const CODES = [
-  "USD", "EUR", "GBP", "AED", "SAR", "QAR", "KWD", "BHD", "OMR", "SGD", "INR", "CAD", "AUD", "NZD", "CHF", "SEK", "NOK", "DKK", "PLN", "CZK",
-  "HUF", "RON", "JPY", "HKD", "CNY", "ZAR", "BRL", "MXN", "ILS", "TRY", "MYR", "PHP", "IDR", "THB", "KRW", "EGP", "NGN", "KES", "PKR",
+  "USD",
+  "EUR",
+  "GBP",
+  "AED",
+  "SAR",
+  "QAR",
+  "KWD",
+  "BHD",
+  "OMR",
+  "SGD",
+  "INR",
+  "CAD",
+  "AUD",
+  "NZD",
+  "CHF",
+  "SEK",
+  "NOK",
+  "DKK",
+  "PLN",
+  "CZK",
+  "HUF",
+  "RON",
+  "JPY",
+  "HKD",
+  "CNY",
+  "ZAR",
+  "BRL",
+  "MXN",
+  "ILS",
+  "TRY",
+  "MYR",
+  "PHP",
+  "IDR",
+  "THB",
+  "KRW",
+  "EGP",
+  "NGN",
+  "KES",
+  "PKR",
 ];
 /** Symbols, longest first. A bare "$" is read as US dollars; "S$", "A$"… say otherwise. */
 const SYMBOLS: [string, string][] = [
-  ["US$", "USD"], ["SG$", "SGD"], ["S$", "SGD"], ["AU$", "AUD"], ["A$", "AUD"], ["CA$", "CAD"], ["C$", "CAD"], ["HK$", "HKD"], ["NZ$", "NZD"],
-  ["$", "USD"], ["£", "GBP"], ["€", "EUR"], ["₹", "INR"],
+  ["US$", "USD"],
+  ["SG$", "SGD"],
+  ["S$", "SGD"],
+  ["AU$", "AUD"],
+  ["A$", "AUD"],
+  ["CA$", "CAD"],
+  ["C$", "CAD"],
+  ["HK$", "HKD"],
+  ["NZ$", "NZD"],
+  ["$", "USD"],
+  ["£", "GBP"],
+  ["€", "EUR"],
+  ["₹", "INR"],
 ];
 const esc = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 const CUR = `(?:${SYMBOLS.map(([s]) => esc(s)).join("|")}|\\b(?:${CODES.join("|")})\\b)`;
@@ -97,7 +145,7 @@ export function extractPay(text: string | undefined): Pay | undefined {
       const cur = cur1 ?? cur2;
       const [na, ka, nb, kb] = cur1 ? [a1, k1, b1, kb1] : [a2, k2, b2, kb2];
       let lo = amount(na, ka);
-      let hi = amount(nb, kb);
+      const hi = amount(nb, kb);
       if (lo === undefined || !cur) continue;
       // "65-78k": the k on the top of a range counts for the bottom too.
       if (hi !== undefined && kb && !ka && lo < 1000) lo *= 1000;
@@ -141,19 +189,12 @@ const NO_SPONSOR = [
   /\b(?:visa\s+)?sponsorship\s+(?:is\s+)?not\s+(?:available|offered|provided|possible)\b/i,
   /\bwithout\s+(?:the\s+need\s+for\s+)?(?:current\s+or\s+future\s+|any\s+|future\s+)?(?:visa\s+)?sponsorship\b/i,
 ];
-const YES_SPONSOR = [
-  /\b(?:visa\s+)?sponsorship\s+(?:is\s+)?(?:available|offered|provided)\b/i,
-  /\bwe\s+(?:can\s+|will\s+|do\s+)?sponsor\b/i,
-  /\b(?:offer|provide)s?\s+visa\s+sponsorship\b/i,
-];
+const YES_SPONSOR = [/\b(?:visa\s+)?sponsorship\s+(?:is\s+)?(?:available|offered|provided)\b/i, /\bwe\s+(?:can\s+|will\s+|do\s+)?sponsor\b/i, /\b(?:offer|provide)s?\s+visa\s+sponsorship\b/i];
 const NO_RELOCATION = [
   /\b(?:no|unable to offer|not able to offer|cannot offer|can't offer|do not offer|don't offer|does not offer|not offering)\s+(?:[\w-]+\s+){0,2}?relocation\b/i,
   /\brelocation\s+(?:support\s+|assistance\s+)?(?:is\s+)?not\s+(?:available|offered|provided|possible)\b/i,
 ];
-const YES_RELOCATION = [
-  /\brelocation\s+(?:support|assistance|package|help)\s+(?:is\s+)?(?:available|offered|provided)\b/i,
-  /\b(?:support|offer|provide)s?\s+relocation\b/i,
-];
+const YES_RELOCATION = [/\brelocation\s+(?:support|assistance|package|help)\s+(?:is\s+)?(?:available|offered|provided)\b/i, /\b(?:support|offer|provide)s?\s+relocation\b/i];
 
 /**
  * The place a phrase starts with: "the Netherlands and have the right…" -> Netherlands, "Amsterdam
@@ -161,7 +202,11 @@ const YES_RELOCATION = [
  * to act on). Undefined when it doesn't start with one: "commuting distance of London" is not London.
  */
 export function leadingPlace(phrase: string): { place: string; country: string } | undefined {
-  const words = phrase.replace(/^\s*the\s+/i, "").split(/[^\p{L}.'-]+/u).filter(Boolean).slice(0, 4);
+  const words = phrase
+    .replace(/^\s*the\s+/i, "")
+    .split(/[^\p{L}.'-]+/u)
+    .filter(Boolean)
+    .slice(0, 4);
   for (let n = words.length; n >= 1; n--) {
     const place = words.slice(0, n).join(" ").replace(/\.$/, "");
     const norm = place.replace(/\./g, "").toLowerCase();
@@ -173,7 +218,10 @@ export function leadingPlace(phrase: string): { place: string; country: string }
 
 /** The same, for the words just before a marker: "for US residents only" -> US. */
 function trailingPlace(phrase: string): { place: string; country: string } | undefined {
-  const words = phrase.split(/[^\p{L}.'-]+/u).filter(Boolean).slice(-3);
+  const words = phrase
+    .split(/[^\p{L}.'-]+/u)
+    .filter(Boolean)
+    .slice(-3);
   for (let n = words.length; n >= 1; n--) {
     const hit = leadingPlace(words.slice(-n).join(" "));
     if (hit && hit.place.split(" ").length === n) return hit;
@@ -200,7 +248,10 @@ export function extractEligibility(text: string | undefined): Eligibility {
   const t = text ?? "";
   const no = NO_SPONSOR.some((re) => re.test(t));
   const yes = YES_SPONSOR.some((re) => re.test(t));
-  const out: Eligibility = { sponsorship: no ? "no" : yes ? "yes" : "unknown", relocation: NO_RELOCATION.some((re) => re.test(t)) ? "no" : YES_RELOCATION.some((re) => re.test(t)) ? "yes" : "unknown" };
+  const out: Eligibility = {
+    sponsorship: no ? "no" : yes ? "yes" : "unknown",
+    relocation: NO_RELOCATION.some((re) => re.test(t)) ? "no" : YES_RELOCATION.some((re) => re.test(t)) ? "yes" : "unknown",
+  };
   const auth = AUTHORISED.exec(t);
   const authPlace = auth && leadingPlace(auth[1]!);
   if (authPlace) out.authorisedIn = authPlace.country;

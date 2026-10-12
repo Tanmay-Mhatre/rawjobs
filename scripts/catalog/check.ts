@@ -68,20 +68,20 @@ async function main() {
   await Promise.all(
     [...lanes.entries()].flatMap(([ats, list]) =>
       Array.from({ length: WORKERS[ats] ?? 1 }, async () => {
-      while (list.length && Date.now() - started < MAX_MS) {
-        const b = list.shift()!;
-        const r = await checkBoard(http, b);
-        const checked_at = new Date().toISOString();
-        // An error extends the board's streak, which sets how long until its next retry.
-        const row: Result = { key: b.key, ...r, checked_at, ...(r.status === "error" ? { errors: mergeCheck(known.get(b.key), { key: b.key, ...r, checked_at }).errors } : {}) };
-        appendFileSync(OUT, `${JSON.stringify(row)}\n`);
-        tally[r.status] = (tally[r.status] ?? 0) + 1;
-        if (++n % 500 === 0) {
-          const rate = n / ((Date.now() - started) / 1000);
-          console.error(`  ${n}/${todo.length} (${rate.toFixed(1)}/s, ~${Math.round((todo.length - n) / rate / 60)} min left)`, JSON.stringify(tally));
+        while (list.length && Date.now() - started < MAX_MS) {
+          const b = list.shift()!;
+          const r = await checkBoard(http, b);
+          const checked_at = new Date().toISOString();
+          // An error extends the board's streak, which sets how long until its next retry.
+          const row: Result = { key: b.key, ...r, checked_at, ...(r.status === "error" ? { errors: mergeCheck(known.get(b.key), { key: b.key, ...r, checked_at }).errors } : {}) };
+          appendFileSync(OUT, `${JSON.stringify(row)}\n`);
+          tally[r.status] = (tally[r.status] ?? 0) + 1;
+          if (++n % 500 === 0) {
+            const rate = n / ((Date.now() - started) / 1000);
+            console.error(`  ${n}/${todo.length} (${rate.toFixed(1)}/s, ~${Math.round((todo.length - n) / rate / 60)} min left)`, JSON.stringify(tally));
+          }
         }
-      }
-    }),
+      }),
     ),
   );
   const left = [...lanes.values()].reduce((sum, list) => sum + list.length, 0);

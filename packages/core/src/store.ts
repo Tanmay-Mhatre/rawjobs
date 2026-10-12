@@ -67,7 +67,13 @@ function directoryIndustries(companies: readonly DirectoryRow[]): Map<string, st
  *   descriptions.json  dashboard: id -> description, loaded when a job is opened
  *   meta.json, runs/<time>.json
  */
-export function saveRun(dir: string, config: Config, run: RunResult, merged: MergeResult, opts: { /** Add this run to the run history (not for a one-company "Check now"). */ record?: boolean } = {}): RunSummary {
+export function saveRun(
+  dir: string,
+  config: Config,
+  run: RunResult,
+  merged: MergeResult,
+  opts: { /** Add this run to the run history (not for a one-company "Check now"). */ record?: boolean } = {},
+): RunSummary {
   mkdirSync(join(dir, "runs"), { recursive: true });
   const summary = summarize(run, merged);
   const generatedAt = run.finishedAt;

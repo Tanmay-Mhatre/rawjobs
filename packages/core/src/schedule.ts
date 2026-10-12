@@ -100,17 +100,7 @@ export function scanCommand(ctx: ScheduleContext, scope: ScanScope): string[] {
     command: process.execPath,
     args: [resolve(ctx.repoRoot, "node_modules/tsx/dist/cli.mjs"), resolve(ctx.repoRoot, "packages/cli/src/index.ts")],
   };
-  return [
-    launch.command,
-    ...launch.args,
-    "scan",
-    "--scope",
-    scope,
-    "--notify",
-    "--scheduled",
-    "--data",
-    resolve(ctx.dataDir),
-  ];
+  return [launch.command, ...launch.args, "scan", "--scope", scope, "--notify", "--scheduled", "--data", resolve(ctx.dataDir)];
 }
 
 /** Hours a scan may run before the scheduler stops it: "all" takes about 2 h. */
@@ -167,7 +157,9 @@ const plistPath = (ctx: ScheduleContext, n: SchedulerNames) => join(ctx.home ?? 
 const xml = (s: string) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 
 function installMac(ctx: ScheduleContext, s: ScheduleSettings, n: SchedulerNames): void {
-  const args = scanCommand(ctx, s.scope).map((a) => `    <string>${xml(a)}</string>`).join("\n");
+  const args = scanCommand(ctx, s.scope)
+    .map((a) => `    <string>${xml(a)}</string>`)
+    .join("\n");
   const times = s.times
     .map((t) => {
       const [h, m] = t.split(":").map(Number);
@@ -227,7 +219,10 @@ function installLinux(ctx: ScheduleContext, s: ScheduleSettings, n: SchedulerNam
     `[Unit]\nDescription=RawJobs scan\n\n[Service]\nType=oneshot\nWorkingDirectory=${workDir(ctx)}\nExecStart=${cmd}\nTimeoutStartSec=${timeLimitHours(s.scope)}h\n`,
   );
   // Persistent: a run missed while the computer was off happens at the next boot.
-  writeFileSync(join(dir, `${n.unit}.timer`), `[Unit]\nDescription=RawJobs scan\n\n[Timer]\n${s.times.map((t) => `OnCalendar=*-*-* ${t}:00`).join("\n")}\nPersistent=true\n\n[Install]\nWantedBy=timers.target\n`);
+  writeFileSync(
+    join(dir, `${n.unit}.timer`),
+    `[Unit]\nDescription=RawJobs scan\n\n[Timer]\n${s.times.map((t) => `OnCalendar=*-*-* ${t}:00`).join("\n")}\nPersistent=true\n\n[Install]\nWantedBy=timers.target\n`,
+  );
   exec("systemctl", ["--user", "daemon-reload"]);
   const r = exec("systemctl", ["--user", "enable", "--now", `${n.unit}.timer`]);
   if (r.status !== 0) throw new Error(`systemd refused the schedule: ${(r.stderr || r.stdout).trim().slice(0, 500)}`);

@@ -5,7 +5,13 @@ import { gate, type Candidate, type Row } from "./guard";
 const LIVE = { companies: 44_157, indexed: 16_970 };
 
 function candidate(companies: number, indexed: number, edit: (rows: Row[], index: { key?: string }[]) => void = () => {}): Candidate {
-  const rows: Row[] = Array.from({ length: companies }, (_, i) => ({ key: `greenhouse:c${i}`, ats: "greenhouse", slug: `c${i}`, name: `C${i}`, careers_url: `https://job-boards.greenhouse.io/c${i}` }));
+  const rows: Row[] = Array.from({ length: companies }, (_, i) => ({
+    key: `greenhouse:c${i}`,
+    ats: "greenhouse",
+    slug: `c${i}`,
+    name: `C${i}`,
+    careers_url: `https://job-boards.greenhouse.io/c${i}`,
+  }));
   const index = rows.slice(0, indexed).map((r) => ({ key: r.key }));
   edit(rows, index);
   return { manifest: { companies, indexed }, directory: { count: companies, companies: rows }, index: { count: indexed, companies: index } };
@@ -28,7 +34,11 @@ describe("release gate", () => {
     const shrunk = gate(LIVE, candidate(39_000, 14_000), true);
     expect(shrunk.ok).toBe(true);
     expect(shrunk.warnings).toHaveLength(2);
-    const broken = gate(LIVE, candidate(39_000, 14_000, (rows) => (rows[1]!.key = rows[0]!.key)), true);
+    const broken = gate(
+      LIVE,
+      candidate(39_000, 14_000, (rows) => (rows[1]!.key = rows[0]!.key)),
+      true,
+    );
     expect(broken.ok).toBe(false);
     expect(broken.reasons).toEqual([expect.stringMatching(/duplicate keys/), expect.stringMatching(/indexed companies not in the directory/)]);
   });
@@ -43,15 +53,33 @@ describe("release gate", () => {
     const c = candidate(30_000, 12_000);
     c.manifest.companies = 30_001;
     expect(gate(null, c).reasons).toEqual([expect.stringMatching(/^directory counts disagree/)]);
-    expect(gate(null, candidate(30_000, 12_000, (rows) => delete rows[5]!.slug)).reasons).toEqual(["1 rows missing key, ats, slug or name"]);
-    expect(gate(null, candidate(30_000, 12_000, (_, index) => (index[0]!.key = "lever:gone"))).reasons).toEqual([expect.stringMatching(/^1 indexed companies not in the directory/)]);
+    expect(
+      gate(
+        null,
+        candidate(30_000, 12_000, (rows) => delete rows[5]!.slug),
+      ).reasons,
+    ).toEqual(["1 rows missing key, ats, slug or name"]);
+    expect(
+      gate(
+        null,
+        candidate(30_000, 12_000, (_, index) => (index[0]!.key = "lever:gone")),
+      ).reasons,
+    ).toEqual([expect.stringMatching(/^1 indexed companies not in the directory/)]);
   });
 
   it("warns about a few rows without a careers_url and refuses many", () => {
-    const few = gate(null, candidate(30_000, 12_000, (rows) => (rows[0]!.careers_url = "")));
+    const few = gate(
+      null,
+      candidate(30_000, 12_000, (rows) => (rows[0]!.careers_url = "")),
+    );
     expect(few.ok).toBe(true);
     expect(few.warnings).toEqual(["1 rows without a careers_url"]);
-    const many = gate(null, candidate(30_000, 12_000, (rows) => rows.slice(0, 400).forEach((r) => (r.careers_url = ""))));
+    const many = gate(
+      null,
+      candidate(30_000, 12_000, (rows) => {
+        for (const r of rows.slice(0, 400)) r.careers_url = "";
+      }),
+    );
     expect(many.reasons).toEqual([expect.stringMatching(/^400 rows without a careers_url \(over 1%\)/)]);
   });
 });

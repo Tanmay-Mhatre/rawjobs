@@ -35,7 +35,8 @@ export function gate(prev: Counts | null, next: Candidate, allowShrink = false):
 
   if (prev) {
     const shrinks = [
-      manifest.companies < MIN_COMPANIES_SHARE * prev.companies && `companies ${manifest.companies} is ${pct(manifest.companies, prev.companies)} of the live ${prev.companies} (minimum ${MIN_COMPANIES_SHARE * 100}%)`,
+      manifest.companies < MIN_COMPANIES_SHARE * prev.companies &&
+        `companies ${manifest.companies} is ${pct(manifest.companies, prev.companies)} of the live ${prev.companies} (minimum ${MIN_COMPANIES_SHARE * 100}%)`,
       manifest.indexed < MIN_INDEXED_SHARE * prev.indexed && `indexed ${manifest.indexed} is ${pct(manifest.indexed, prev.indexed)} of the live ${prev.indexed} (minimum ${MIN_INDEXED_SHARE * 100}%)`,
     ].filter((s): s is string => !!s);
     if (allowShrink) warnings.push(...shrinks.map((s) => `allowed shrink: ${s}`));
@@ -46,7 +47,8 @@ export function gate(prev: Counts | null, next: Candidate, allowShrink = false):
 
   if (manifest.companies !== directory.count || directory.count !== directory.companies.length)
     reasons.push(`directory counts disagree: manifest ${manifest.companies}, file ${directory.count}, rows ${directory.companies.length}`);
-  if (manifest.indexed !== index.count || index.count !== index.companies.length) reasons.push(`index counts disagree: manifest ${manifest.indexed}, file ${index.count}, rows ${index.companies.length}`);
+  if (manifest.indexed !== index.count || index.count !== index.companies.length)
+    reasons.push(`index counts disagree: manifest ${manifest.indexed}, file ${index.count}, rows ${index.companies.length}`);
 
   const keys = new Set<string>();
   const dupes = new Set<string>();
@@ -66,7 +68,13 @@ export function gate(prev: Counts | null, next: Candidate, allowShrink = false):
     else warnings.push(msg);
   }
   const orphans = index.companies.filter((c) => !c.key || !keys.has(c.key));
-  if (orphans.length) reasons.push(`${orphans.length} indexed companies not in the directory, e.g. ${orphans.slice(0, 3).map((c) => c.key).join(", ")}`);
+  if (orphans.length)
+    reasons.push(
+      `${orphans.length} indexed companies not in the directory, e.g. ${orphans
+        .slice(0, 3)
+        .map((c) => c.key)
+        .join(", ")}`,
+    );
 
   return { ok: reasons.length === 0, reasons, warnings };
 }

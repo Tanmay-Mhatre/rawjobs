@@ -48,8 +48,8 @@ export const ashby: Connector<AshbyJob> = {
   detect(url) {
     const host = url.hostname.toLowerCase();
     // API URL: api.ashbyhq.com/posting-api/job-board/acme
-    const api = host === "api.ashbyhq.com" && url.pathname.match(/^\/posting-api\/job-board\/([^/?]+)/);
-    if (api && api[1]) return { ats: "ashby", slug: decodeURIComponent(api[1]) };
+    const api = host === "api.ashbyhq.com" ? url.pathname.match(/^\/posting-api\/job-board\/([^/?]+)/) : null;
+    if (api?.[1]) return { ats: "ashby", slug: decodeURIComponent(api[1]) };
     if (host !== "jobs.ashbyhq.com") return null;
     const slug = firstPathSegment(url);
     // jobs.ashbyhq.com/api/... is the board's own API, not a company.
@@ -57,18 +57,14 @@ export const ashby: Connector<AshbyJob> = {
   },
 
   async fetch(ref, { http }) {
-    const data = await http.getJson<{ jobs?: AshbyJob[] }>(
-      `https://api.ashbyhq.com/posting-api/job-board/${encodeURIComponent(ref.slug)}?includeCompensation=true`,
-    );
+    const data = await http.getJson<{ jobs?: AshbyJob[] }>(`https://api.ashbyhq.com/posting-api/job-board/${encodeURIComponent(ref.slug)}?includeCompensation=true`);
     if (!Array.isArray(data.jobs)) throw new Error("unexpected Ashby response: no jobs array");
     // Unlisted jobs are reachable only by direct link; the company chose not to advertise them.
     return data.jobs.filter((j) => j.isListed !== false);
   },
 
   normalize(raw, ref): NormalizedJob {
-    const location = [raw.location, ...(raw.secondaryLocations ?? []).map((l) => l.location)]
-      .filter((l): l is string => !!l?.trim())
-      .join("; ");
+    const location = [raw.location, ...(raw.secondaryLocations ?? []).map((l) => l.location)].filter((l): l is string => !!l?.trim()).join("; ");
     return {
       id: jobId("ashby", ref.slug, raw.id),
       ats: "ashby",

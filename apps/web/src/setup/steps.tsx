@@ -93,10 +93,7 @@ function PickButton({ active, onClick, children }: { active: boolean; onClick: (
       type="button"
       aria-pressed={active}
       onClick={onClick}
-      className={cx(
-        "inline-flex h-9 items-center gap-1.5 rounded-md border px-3 type-label transition-colors",
-        active ? "border-ink bg-ink text-raised" : "border-line bg-raised hover:bg-inset",
-      )}
+      className={cx("inline-flex h-9 items-center gap-1.5 rounded-md border px-3 type-label transition-colors", active ? "border-ink bg-ink text-raised" : "border-line bg-raised hover:bg-inset")}
     >
       {active && <Check className="size-4" aria-hidden />}
       {children}
@@ -161,7 +158,10 @@ export function RolesStep({ draft, update, suggest }: StepProps) {
 
   const famTitles = fam?.titles ?? [];
   const extras = draft.include.filter((t) => !famTitles.includes(t));
-  const otherOptions = union((suggest?.titles ?? []).filter((t) => !famTitles.includes(t)), extras);
+  const otherOptions = union(
+    (suggest?.titles ?? []).filter((t) => !famTitles.includes(t)),
+    extras,
+  );
   const q = query.trim().toLowerCase();
   const families = ROLE_FAMILIES.filter((f) => !q || f.label.toLowerCase().includes(q) || f.titles.some((t) => t.includes(q)));
   const suggestedFamily = !fam && suggest?.titles.length ? ROLE_FAMILIES.find((f) => f.titles.some((t) => suggest.titles.includes(t)))?.id : undefined;
@@ -194,15 +194,17 @@ export function RolesStep({ draft, update, suggest }: StepProps) {
   const search = useCallback(
     (text: string): ComboItem[] => {
       const s = text.trim().toLowerCase();
-      return TITLE_INDEX.filter((t) => t.title.includes(s) || t.families.some((f) => f.toLowerCase().includes(s)))
-        .filter((t) => !draft.include.includes(t.title))
-        // Title starts with it, then contains it, then only its family matches.
-        .sort((a, b) => {
-          const rank = (t: string) => (t.startsWith(s) ? 0 : matchesTerm(t, s) ? 1 : t.includes(s) ? 2 : 3);
-          return rank(a.title) - rank(b.title) || a.title.length - b.title.length;
-        })
-        .slice(0, 30)
-        .map((t) => ({ key: t.title, label: t.title, hint: t.families.join(" · ") }));
+      return (
+        TITLE_INDEX.filter((t) => t.title.includes(s) || t.families.some((f) => f.toLowerCase().includes(s)))
+          .filter((t) => !draft.include.includes(t.title))
+          // Title starts with it, then contains it, then only its family matches.
+          .sort((a, b) => {
+            const rank = (t: string) => (t.startsWith(s) ? 0 : matchesTerm(t, s) ? 1 : t.includes(s) ? 2 : 3);
+            return rank(a.title) - rank(b.title) || a.title.length - b.title.length;
+          })
+          .slice(0, 30)
+          .map((t) => ({ key: t.title, label: t.title, hint: t.families.join(" · ") }))
+      );
     },
     [draft.include],
   );
@@ -219,12 +221,7 @@ export function RolesStep({ draft, update, suggest }: StepProps) {
               <Button size="sm" onClick={() => setChoosing(true)}>
                 Change
               </Button>
-              <ClearButton
-                count={1}
-                noun={["job family", "job family"]}
-                message="Cleared the job family and its titles."
-                {...clearFamily}
-              />
+              <ClearButton count={1} noun={["job family", "job family"]} message="Cleared the job family and its titles." {...clearFamily} />
             </div>
           ) : undefined
         }
@@ -253,10 +250,7 @@ export function RolesStep({ draft, update, suggest }: StepProps) {
                     type="button"
                     aria-pressed={active}
                     onClick={() => pickFamily(f.id)}
-                    className={cx(
-                      "flex items-center gap-2 rounded-md border px-3 py-2.5 text-left transition-colors",
-                      active ? "border-ink bg-active" : "border-line hover:bg-inset",
-                    )}
+                    className={cx("flex items-center gap-2 rounded-md border px-3 py-2.5 text-left transition-colors", active ? "border-ink bg-active" : "border-line hover:bg-inset")}
                   >
                     <span className="min-w-0 flex-1">
                       <span className="line-clamp-2 block type-small font-semibold">{f.label}</span>
@@ -322,13 +316,11 @@ export function RolesStep({ draft, update, suggest }: StepProps) {
           )}
           {otherOptions.length > 0 && (
             <div>
-              <p className="mb-1.5 type-label text-muted">{fam ? "Other titles" : "Your titles"}{suggest?.titles.length ? ` (incl. ${RESUME_LABEL(suggest).toLowerCase()})` : ""}</p>
-              <ToggleChips
-                label="Other titles"
-                options={otherOptions}
-                selected={extras}
-                onChange={(next) => update({ include: [...draft.include.filter((t) => famTitles.includes(t)), ...next] })}
-              />
+              <p className="mb-1.5 type-label text-muted">
+                {fam ? "Other titles" : "Your titles"}
+                {suggest?.titles.length ? ` (incl. ${RESUME_LABEL(suggest).toLowerCase()})` : ""}
+              </p>
+              <ToggleChips label="Other titles" options={otherOptions} selected={extras} onChange={(next) => update({ include: [...draft.include.filter((t) => famTitles.includes(t)), ...next] })} />
             </div>
           )}
           <div>
@@ -350,28 +342,28 @@ export function RolesStep({ draft, update, suggest }: StepProps) {
           hint="Hide titles with these words."
           action={<ClearButton count={draft.exclude.length} noun={["hidden word", "hidden words"]} {...clearing(draft, update, { exclude: [] })} />}
         >
-        <ToggleChips
-          label="Titles to hide"
-          tone="bad"
-          options={union(union(fam?.exclude ?? [], suggest?.exclude ?? []), COMMON_EXCLUDES)}
-          selected={draft.exclude}
-          onChange={(exclude) => update({ exclude })}
-          addPlaceholder="Add another…"
-        />
+          <ToggleChips
+            label="Titles to hide"
+            tone="bad"
+            options={union(union(fam?.exclude ?? [], suggest?.exclude ?? []), COMMON_EXCLUDES)}
+            selected={draft.exclude}
+            onChange={(exclude) => update({ exclude })}
+            addPlaceholder="Add another…"
+          />
         </Field>
         <Field
           label="Seniority"
           hint="Titles with these words rank higher."
           action={<ClearButton count={draft.seniority.length} noun={["seniority word", "seniority words"]} {...clearing(draft, update, { seniority: [] })} />}
         >
-        <ToggleChips
-          label="Seniority words"
-          tone="plain"
-          options={union(union(suggest?.seniority ?? [], SENIORITY), draft.seniority)}
-          selected={draft.seniority}
-          onChange={(seniority) => update({ seniority })}
-          addPlaceholder="Add another…"
-        />
+          <ToggleChips
+            label="Seniority words"
+            tone="plain"
+            options={union(union(suggest?.seniority ?? [], SENIORITY), draft.seniority)}
+            selected={draft.seniority}
+            onChange={(seniority) => update({ seniority })}
+            addPlaceholder="Add another…"
+          />
         </Field>
       </MoreOptions>
     </div>
@@ -380,19 +372,7 @@ export function RolesStep({ draft, update, suggest }: StepProps) {
 
 // ---------- 3. Locations ----------
 
-const POPULAR_COUNTRIES = [
-  "united arab emirates",
-  "saudi arabia",
-  "qatar",
-  "united kingdom",
-  "united states",
-  "india",
-  "singapore",
-  "germany",
-  "netherlands",
-  "canada",
-  "australia",
-];
+const POPULAR_COUNTRIES = ["united arab emirates", "saudi arabia", "qatar", "united kingdom", "united states", "india", "singapore", "germany", "netherlands", "canada", "australia"];
 const QUICK_REGIONS = ["emea", "europe", "mena", "gcc", "north america", "latam", "apac", "asia", "africa"];
 const countryByName = new Map(COUNTRIES.map((c) => [c.name, c]));
 const regionByName = new Map(REGIONS.map((r) => [r.name, r]));
@@ -471,10 +451,7 @@ function GroupedPlaces({ terms, onChange, label, remote }: { terms: string[]; on
             <span
               key={g.key}
               role="listitem"
-              className={cx(
-                "inline-flex h-8 items-center rounded-md border type-label",
-                open === g.key ? "border-ink bg-active text-ink" : "border-line bg-raised text-ink",
-              )}
+              className={cx("inline-flex h-8 items-center rounded-md border type-label", open === g.key ? "border-ink bg-active text-ink" : "border-line bg-raised text-ink")}
             >
               <button
                 type="button"
@@ -485,7 +462,11 @@ function GroupedPlaces({ terms, onChange, label, remote }: { terms: string[]; on
                 title={g.terms.join(", ")}
               >
                 {name}
-                {expandable && !citiesOnly && <span className="tabular font-normal text-muted">· {g.terms.length}/{g.options.length}</span>}
+                {expandable && !citiesOnly && (
+                  <span className="tabular font-normal text-muted">
+                    · {g.terms.length}/{g.options.length}
+                  </span>
+                )}
                 {expandable && <ChevronDown className={cx("size-3.5 transition-transform", open === g.key && "rotate-180")} />}
               </button>
               <button
@@ -549,7 +530,14 @@ export function LocationsStep({ draft, update, suggest }: StepProps) {
   const officeGroups = new Set(groupPlaces(draft.places).map((g) => g.key));
   const remoteGroups = new Set(groupPlaces(draft.remoteOk).map((g) => g.key));
   // Your own country first, then the usual list.
-  const popular = useMemo(() => union([localeCountry()].filter((c): c is string => !!c), POPULAR_COUNTRIES), []);
+  const popular = useMemo(
+    () =>
+      union(
+        [localeCountry()].filter((c): c is string => !!c),
+        POPULAR_COUNTRIES,
+      ),
+    [],
+  );
   const office = draft.office.length > 0;
 
   /** Quick toggle: on adds the group's terms, off removes every term the group could have added. */
@@ -569,13 +557,7 @@ export function LocationsStep({ draft, update, suggest }: StepProps) {
     <div className="space-y-8">
       <Field
         label="Work style"
-        action={
-          <ClearButton
-            count={draft.office.length + (draft.remote ? 1 : 0)}
-            noun={["work style", "work styles"]}
-            {...clearing(draft, update, { office: [], remote: false })}
-          />
-        }
+        action={<ClearButton count={draft.office.length + (draft.remote ? 1 : 0)} noun={["work style", "work styles"]} {...clearing(draft, update, { office: [], remote: false })} />}
       >
         <div className="flex flex-wrap gap-2">
           {WORK_STYLES.map((w) => (
@@ -637,10 +619,7 @@ export function LocationsStep({ draft, update, suggest }: StepProps) {
       )}
 
       {draft.remote && (
-        <Field
-          label="Remote from"
-          action={<ClearButton count={groupPlaces(draft.remoteOk).length} noun={["remote region", "remote regions"]} {...clearing(draft, update, { remoteOk: [] })} />}
-        >
+        <Field label="Remote from" action={<ClearButton count={groupPlaces(draft.remoteOk).length} noun={["remote region", "remote regions"]} {...clearing(draft, update, { remoteOk: [] })} />}>
           <Combobox
             label="Search remote regions"
             placeholder="Region or country, e.g. EMEA, Germany…"
@@ -649,14 +628,16 @@ export function LocationsStep({ draft, update, suggest }: StepProps) {
             onFreeText={(t) => update({ remoteOk: union(draft.remoteOk, [t]) })}
           />
           <div className="flex flex-wrap gap-1.5">
-            {[{ key: "term:remote", label: "Anywhere", add: ["remote"] }, ...QUICK_REGIONS.map((r) => ({ key: `region:${r}`, label: regionLabel(r), add: termsFor(`region:${r}`, false) }))].map((g) => {
-              const active = g.key === "term:remote" ? draft.remoteOk.includes("remote") : remoteGroups.has(g.key);
-              return (
-                <PickButton key={g.key} active={active} onClick={() => toggleGroup("remoteOk", g.key, g.add)}>
-                  {g.label}
-                </PickButton>
-              );
-            })}
+            {[{ key: "term:remote", label: "Anywhere", add: ["remote"] }, ...QUICK_REGIONS.map((r) => ({ key: `region:${r}`, label: regionLabel(r), add: termsFor(`region:${r}`, false) }))].map(
+              (g) => {
+                const active = g.key === "term:remote" ? draft.remoteOk.includes("remote") : remoteGroups.has(g.key);
+                return (
+                  <PickButton key={g.key} active={active} onClick={() => toggleGroup("remoteOk", g.key, g.add)}>
+                    {g.label}
+                  </PickButton>
+                );
+              },
+            )}
           </div>
           {suggest?.remoteRegions.length ? (
             <div>
@@ -721,9 +702,13 @@ export function IndustriesStep({ draft, update, suggest }: StepProps) {
   const fromResume = (suggest?.industries ?? []).filter((id) => INDUSTRY_BY_ID.has(id));
   // No resume industries: suggest from the chosen roles instead ("Registered Nurse" -> Healthcare).
   const rolesKey = draft.include.join("\n");
-  const fromRoles = useMemo(() => industriesFromTitles(draft.include).slice(0, 5), [rolesKey]); // eslint-disable-line react-hooks/exhaustive-deps
+  // biome-ignore lint/correctness/useExhaustiveDependencies: rolesKey stands for the roles' contents (a new array each render)
+  const fromRoles = useMemo(() => industriesFromTitles(draft.include).slice(0, 5), [rolesKey]);
   const suggested = fromResume.length ? fromResume : suggest?.template ? [] : fromRoles;
-  const why = fromResume.flatMap((id) => suggest?.industryWhy[id] ?? []).sort((a, b) => b[1] - a[1]).slice(0, 3);
+  const why = fromResume
+    .flatMap((id) => suggest?.industryWhy[id] ?? [])
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 3);
   const query = q.trim().toLowerCase();
   const matches = (id: string) => {
     const ind = INDUSTRY_BY_ID.get(id);
@@ -913,9 +898,7 @@ export function KeywordsStep({ draft, update, suggest, resumeText = "" }: StepPr
 
       <Field label={fam || resumeTopics.length ? "Add your own" : "Your topics"} action={<ClearButton {...clearTopics(yours, "Clear your own topics")} />}>
         <AddKeyword onAdd={(k) => setWeight(k, DEFAULT_WEIGHT)} />
-        {yours.length > 0 && (
-          <ToggleChips label="Your topics" options={yours} selected={yours} onChange={(next) => toggleGroup(yours, next, () => DEFAULT_WEIGHT)} />
-        )}
+        {yours.length > 0 && <ToggleChips label="Your topics" options={yours} selected={yours} onChange={(next) => toggleGroup(yours, next, () => DEFAULT_WEIGHT)} />}
       </Field>
 
       <MoreOptions summary={entries.length ? `${entries.length} topics` : undefined}>
@@ -941,7 +924,15 @@ export function KeywordsStep({ draft, update, suggest, resumeText = "" }: StepPr
         {entries.length > 0 && (
           <Field
             label="Importance"
-            action={<ClearButton label="Clear all" {...clearTopics(entries.map(([k]) => k), "Clear all topics")} />}
+            action={
+              <ClearButton
+                label="Clear all"
+                {...clearTopics(
+                  entries.map(([k]) => k),
+                  "Clear all topics",
+                )}
+              />
+            }
             hint={
               <>
                 <b className="text-ink">5</b> = core, <b className="text-ink">1</b> = nice to have.
@@ -1018,7 +1009,11 @@ function AddKeyword({ onAdd }: { onAdd: (k: string) => void }) {
       <input
         value={text}
         onChange={(e) => setText(e.target.value)}
-        onKeyDown={(e) => e.key === "Enter" && (e.preventDefault(), submit())}
+        onKeyDown={(e) => {
+          if (e.key !== "Enter") return;
+          e.preventDefault();
+          submit();
+        }}
         placeholder="Add a keyword, e.g. tokenization"
         aria-label="Add a keyword"
         className="h-9 min-w-0 flex-1 rounded-md border border-line bg-raised px-3 type-small placeholder:text-muted"
@@ -1048,10 +1043,7 @@ export function ThresholdPicker({ draft, update }: StepProps) {
           type="button"
           onClick={() => update({ minScore: t.value })}
           aria-pressed={draft.minScore === t.value}
-          className={cx(
-            "rounded-md border p-3 text-left transition-colors",
-            draft.minScore === t.value ? "border-ink bg-active" : "border-line hover:bg-inset",
-          )}
+          className={cx("rounded-md border p-3 text-left transition-colors", draft.minScore === t.value ? "border-ink bg-active" : "border-line hover:bg-inset")}
         >
           <span className="block type-small font-semibold">
             {t.label} <span className="tabular font-normal text-muted">({t.value}+)</span>

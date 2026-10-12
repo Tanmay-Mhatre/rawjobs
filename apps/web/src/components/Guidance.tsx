@@ -16,7 +16,7 @@ export const goDailyAlerts = () => {
   location.hash = "settings?section=schedule";
 };
 
-type Item = { key: string; label: string; detail: string; done: boolean; step?: number; /** Nice to have: not counted in progress. */ optional?: boolean };
+type Item = { key: string; label: string; detail: string; done: boolean; step?: number /** Nice to have: not counted in progress. */; optional?: boolean };
 
 /** What's set up and what's missing, from the saved config and the latest run. */
 export function checklistItems(config: Config | undefined, meta: DataMeta | undefined, hasResume = false): Item[] {
@@ -68,12 +68,7 @@ function ChecklistRows({ items, ...actions }: { items: Item[] } & Actions) {
         const action = actionFor(i, actions);
         return (
           <li key={i.key} className="sm:border-b sm:border-line sm:odd:border-r">
-            <button
-              type="button"
-              disabled={!action}
-              onClick={action}
-              className="flex w-full items-center gap-3 px-4 py-2.5 text-left enabled:hover:bg-inset/60 disabled:cursor-default"
-            >
+            <button type="button" disabled={!action} onClick={action} className="flex w-full items-center gap-3 px-4 py-2.5 text-left enabled:hover:bg-inset/60 disabled:cursor-default">
               <span
                 className={cx(
                   "flex size-6 shrink-0 items-center justify-center rounded-sm border",
@@ -117,17 +112,7 @@ function ProgressBar({ done, total, className }: { done: number; total: number; 
 }
 
 /** Configured, but something's still missing (or it's all done and collapses to one line). */
-export function SetupChecklist({
-  items,
-  onStep,
-  onScan,
-  onCompanies,
-}: {
-  items: Item[];
-  onStep: (n: number) => void;
-  onScan: () => void;
-  onCompanies: () => void;
-}) {
+export function SetupChecklist({ items, onStep, onScan, onCompanies }: { items: Item[]; onStep: (n: number) => void; onScan: () => void; onCompanies: () => void }) {
   const [dismissed, setDismissed] = useState(() => load(DISMISS_KEY, false));
   const [expanded, setExpanded] = useState(false);
   const { done, total } = countDone(items);
@@ -135,7 +120,11 @@ export function SetupChecklist({
   // Already scanning on a schedule: no need to point at it.
   const [scheduled, setScheduled] = useState(false);
   useEffect(() => {
-    if (complete && !dismissed && canRunLocally) void scheduleStatus().then((s) => setScheduled(!!s.installed), () => {});
+    if (complete && !dismissed && canRunLocally)
+      void scheduleStatus().then(
+        (s) => setScheduled(!!s.installed),
+        () => {},
+      );
   }, [complete, dismissed]);
   // "Setup complete" shows on one visit only: it stays up now, and is remembered as seen for next time,
   // so it doesn't take room above the jobs every day.
@@ -239,28 +228,14 @@ export function SetupChecklist({
 }
 
 /** Not set up yet: what RawJobs does, how far they got, and one clear next step. */
-export function SetupHero({
-  items,
-  started,
-  nextStep,
-  onStep,
-  onCompanies,
-}: {
-  items: Item[];
-  started: boolean;
-  nextStep: number;
-  onStep: (n: number) => void;
-  onCompanies: () => void;
-}) {
+export function SetupHero({ items, started, nextStep, onStep, onCompanies }: { items: Item[]; started: boolean; nextStep: number; onStep: (n: number) => void; onCompanies: () => void }) {
   const { done, total } = countDone(items);
   return (
     <Card className="overflow-hidden">
       <div className="flex flex-col gap-4 p-5 sm:flex-row sm:items-center sm:p-6">
         <div className="min-w-0 flex-1">
           <h2 className="type-subheading font-semibold">{started ? "Finish setting up your radar" : "Set up your radar"}</h2>
-          <p className="mt-0.5 type-small text-muted">
-            Pick the roles and places you want. RawJobs finds and ranks matching jobs across thousands of companies. Setup takes about 3 minutes.
-          </p>
+          <p className="mt-0.5 type-small text-muted">Pick the roles and places you want. RawJobs finds and ranks matching jobs across thousands of companies. Setup takes about 3 minutes.</p>
           <div className="mt-3 flex items-center gap-3">
             <ProgressBar done={done} total={total} className="w-40" />
             <span className="tabular type-meta text-muted">
@@ -336,9 +311,8 @@ export function NoMatches({ jobs, onStep, onCompanies }: { jobs: Job[]; onStep: 
         <div>
           <h2 className="type-subheading font-semibold">No matches yet. Here's why.</h2>
           <p className="mt-1 type-small text-muted">
-            Checked <b className="tabular font-semibold text-ink">{d.scanned.toLocaleString()}</b> open jobs:{" "}
-            <b className="tabular font-semibold text-ink">{d.titleMiss.toLocaleString()}</b> had other job titles and{" "}
-            <b className="tabular font-semibold text-ink">{d.locationMiss.toLocaleString()}</b> had the right title but were in other places.
+            Checked <b className="tabular font-semibold text-ink">{d.scanned.toLocaleString()}</b> open jobs: <b className="tabular font-semibold text-ink">{d.titleMiss.toLocaleString()}</b> had other
+            job titles and <b className="tabular font-semibold text-ink">{d.locationMiss.toLocaleString()}</b> had the right title but were in other places.
           </p>
         </div>
       </div>
@@ -396,7 +370,10 @@ export function FailingBanner({ count, onOpen, className }: { count: number; onO
     <button
       type="button"
       onClick={onOpen}
-      className={cx(className, "flex w-full flex-wrap items-center gap-x-2.5 gap-y-1 rounded-md border border-warning/40 bg-warning-subtle/40 px-4 py-2.5 text-left type-small hover:bg-warning-subtle/60")}
+      className={cx(
+        className,
+        "flex w-full flex-wrap items-center gap-x-2.5 gap-y-1 rounded-md border border-warning/40 bg-warning-subtle/40 px-4 py-2.5 text-left type-small hover:bg-warning-subtle/60",
+      )}
     >
       <TriangleAlert className="size-4 shrink-0 text-warning-text" />
       <span className="min-w-48 flex-1">
@@ -409,4 +386,3 @@ export function FailingBanner({ count, onOpen, className }: { count: number; onO
     </button>
   );
 }
-

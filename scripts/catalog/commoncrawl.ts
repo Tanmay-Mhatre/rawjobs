@@ -29,7 +29,15 @@ const arg = (name: string) => {
 };
 /** Few retries and a breaker: a 503 from an overloaded index is a reason to back off, not to insist. */
 export const newCrawlClient = (opts: Partial<ConstructorParameters<typeof HttpClient>[0]> = {}) =>
-  new HttpClient({ retries: 2, hostDelayMs: 1500, timeoutMs: 90_000, backoffMs: 10_000, breakAfter: 4, userAgent: "RawJobs-catalog/0.1 (open-source job radar; reads the CC URL index only)", ...opts });
+  new HttpClient({
+    retries: 2,
+    hostDelayMs: 1500,
+    timeoutMs: 90_000,
+    backoffMs: 10_000,
+    breakAfter: 4,
+    userAgent: "RawJobs-catalog/0.1 (open-source job radar; reads the CC URL index only)",
+    ...opts,
+  });
 
 /** URL patterns per host, including the boards' public APIs; workday tenants are subdomains so they use a domain match. */
 const QUERIES: { url: string; matchType?: "domain" }[] = [

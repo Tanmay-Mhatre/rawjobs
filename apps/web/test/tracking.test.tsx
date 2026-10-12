@@ -76,7 +76,10 @@ describe("useSavedOnDisk", () => {
   });
 
   it("saves nothing when the local API can't be reached, so an old copy never overwrites the file", async () => {
-    vi.stubGlobal("fetch", vi.fn(async () => new Response("", { status: 500 })));
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => new Response("", { status: 500 })),
+    );
     const { result } = renderHook(() => useTracked({ j1: "saved" }));
     await act(async () => {
       await vi.advanceTimersByTimeAsync(10);

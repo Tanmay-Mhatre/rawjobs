@@ -80,12 +80,19 @@ describe("the industry catalog", () => {
       expect(i.fromTitles || !!i.aliases?.length, i.id).toBe(true);
       expect(i.terms.length, i.id).toBeGreaterThan(0);
     }
-    for (const g of INDUSTRY_GROUPS) expect(INDUSTRIES.some((i) => i.group === g.id), g.id).toBe(true);
+    for (const g of INDUSTRY_GROUPS)
+      expect(
+        INDUSTRIES.some((i) => i.group === g.id),
+        g.id,
+      ).toBe(true);
   });
 
   it("covers industries beyond finance", () => {
     for (const id of ["saas", "biotech", "climate", "hardware", "consulting", "government", "retail", "manufacturing", "legal", "nonprofit"])
-      expect(INDUSTRIES.some((i) => i.id === id), id).toBe(true);
+      expect(
+        INDUSTRIES.some((i) => i.id === id),
+        id,
+      ).toBe(true);
   });
 });
 

@@ -51,8 +51,7 @@ describe("site scoring demo", () => {
 
   it("matches core for every keyword, seniority and industry choice", () => {
     for (const kw of subsets(KEYWORDS))
-      for (const seniority of ["head", "lead", ""] as const)
-        for (const industry of ["mine", "unknown", "other"] as const) expectSame({ ...DEFAULT, kw, seniority, industry });
+      for (const seniority of ["head", "lead", ""] as const) for (const industry of ["mine", "unknown", "other"] as const) expectSame({ ...DEFAULT, kw, seniority, industry });
   });
 
   it("matches core's title and place gates", () => {

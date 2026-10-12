@@ -152,7 +152,11 @@ for (const f of ["greenhouse", "lever", "ashby", "smartrecruiters", "workday"]) 
 }
 withFile(raw("lastround", "ats-directory.csv"), (p) => {
   // Columns by header name: ats_vendor, company_name, board_slug, last_crawled.
-  const header = readFileSync(p, "utf8").replace(/^﻿/, "").split(/\r?\n/, 1)[0]!.split(",").map((h) => h.trim().toLowerCase());
+  const header = readFileSync(p, "utf8")
+    .replace(/^﻿/, "")
+    .split(/\r?\n/, 1)[0]!
+    .split(",")
+    .map((h) => h.trim().toLowerCase());
   const col = (name: string) => header.indexOf(name);
   const [ats, name, slug] = [col("ats_vendor"), col("company_name"), col("board_slug")];
   if (ats < 0 || slug < 0) return console.error("! lastround/ats-directory.csv: unexpected columns, skipped");
@@ -257,7 +261,8 @@ const out = [...boards.values()]
       ats: b.ats,
       slug: b.slug,
       ...(b.region ? { region: b.region } : {}),
-      ...(b.shard ? { shard: b.shard } : {}), ...(b.site ? { site: b.site } : {}),
+      ...(b.shard ? { shard: b.shard } : {}),
+      ...(b.site ? { site: b.site } : {}),
       ...(b.name ? { name: b.name } : {}),
       sources: [...b.sources].sort(),
       families,
@@ -273,7 +278,10 @@ for (const b of out) {
   s[b.confidence] = (s[b.confidence] ?? 0) + 1;
 }
 mkdirSync(join(here, "out"), { recursive: true });
-writeFileSync(join(here, "out", "merged.json"), JSON.stringify({ generated_at: new Date().toISOString(), input_rows: counts, stats, restricted_only: Object.fromEntries([...restrictedOnly].map(([ats, keys]) => [ats, keys.size])), boards: out }));
+writeFileSync(
+  join(here, "out", "merged.json"),
+  JSON.stringify({ generated_at: new Date().toISOString(), input_rows: counts, stats, restricted_only: Object.fromEntries([...restrictedOnly].map(([ats, keys]) => [ats, keys.size])), boards: out }),
+);
 console.log("input rows:", counts);
 console.log("merged boards (publishable):", out.length);
 console.table(stats);

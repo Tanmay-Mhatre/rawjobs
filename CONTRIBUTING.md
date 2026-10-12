@@ -10,7 +10,9 @@ Requires Node 22+ and [pnpm](https://pnpm.io).
 ```bash
 pnpm install
 pnpm hooks:install   # once per clone: no direct pushes to main, and pnpm check before every push
-pnpm check           # design tokens + design lint + typecheck + tests
+pnpm check           # lint + format check + design tokens + design lint + typecheck + tests
+pnpm format          # format, and apply Biome's safe lint fixes
+git config blame.ignoreRevsFile .git-blame-ignore-revs   # once: git blame skips formatting-only commits
 ```
 
 The copy people install is a bundle that needs only Node: `pnpm bundle` builds it in

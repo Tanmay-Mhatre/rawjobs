@@ -53,7 +53,14 @@ export function cleanBoard(b: SharedBoard): SharedBoard | string {
   if (b.ats === "oracle" && b.shard === undefined) return "oracle needs shard";
   if (b.site !== undefined && !(typeof b.site === "string" && SLUG.test(b.site))) return "bad site";
   if (NEEDS_SITE.has(b.ats) && b.site === undefined) return `${b.ats} needs site`;
-  const name = typeof b.name === "string" ? b.name.replace(/[\u0000-\u001f<>]/g, "").trim().slice(0, 100) : undefined;
+  const name =
+    typeof b.name === "string"
+      ? b.name
+          // biome-ignore lint/suspicious/noControlCharactersInRegex: stripping control characters is the point
+          .replace(/[\u0000-\u001f<>]/g, "")
+          .trim()
+          .slice(0, 100)
+      : undefined;
   return {
     ats: b.ats,
     slug: b.slug,
@@ -103,7 +110,8 @@ async function main() {
         ats: board.ats,
         slug: board.slug,
         ...(board.region ? { region: board.region } : {}),
-        ...(board.shard ? { shard: board.shard } : {}), ...(board.site ? { site: board.site } : {}),
+        ...(board.shard ? { shard: board.shard } : {}),
+        ...(board.site ? { site: board.site } : {}),
         careers_url: careersUrl(board as never) || `https://${board.slug}`,
         status: result.status,
         open_jobs: result.jobs,

@@ -221,9 +221,7 @@ export function suggestCompanies(
     const titles = rows.map((r) => r[0]).join(" | ");
     const minHits = Math.max(1, Math.ceil(rows.length * 0.05));
     const titleTopics = keywordRes.filter(([, re]) => (titles.match(re)?.length ?? 0) >= minHits).map(([k]) => k);
-    const topics = [...new Set([...keywords.filter((k) => (c.terms?.[k] ?? 0) > 0), ...titleTopics, ...tagTopics(allTags(c))])].sort(
-      (a, b) => (profile.keywords[b] ?? 0) - (profile.keywords[a] ?? 0),
-    );
+    const topics = [...new Set([...keywords.filter((k) => (c.terms?.[k] ?? 0) > 0), ...titleTopics, ...tagTopics(allTags(c))])].sort((a, b) => (profile.keywords[b] ?? 0) - (profile.keywords[a] ?? 0));
 
     const { industries, hires_for } = fitOf(c);
     const base = { ...boardOf(c), open_jobs: c.open_jobs, tier: c.tier, topics, industries, hires_for };
@@ -233,7 +231,15 @@ export function suggestCompanies(
       // Components and their maximum points; topics only count when this company has topic data.
       const parts: [number, number][] = [
         [50 * logScale(matches, 5), 50],
-        [0.2 * (scores.sort((a, b) => b - a).slice(0, 3).reduce((s, x) => s + x, 0) / Math.min(3, scores.length)), 20],
+        [
+          0.2 *
+            (scores
+              .sort((a, b) => b - a)
+              .slice(0, 3)
+              .reduce((s, x) => s + x, 0) /
+              Math.min(3, scores.length)),
+          20,
+        ],
         [10 * Math.min(1, nearMisses / 3), 10],
       ];
       if ((c.terms || topics.length) && topWeights > 0) parts.push([20 * topicShare(topics), 20]);
@@ -319,15 +325,13 @@ function boardOf(c: DirectoryCompany | IndexedCompany) {
     slug: c.slug,
     careers_url: c.careers_url,
     ...(c.region ? { region: c.region } : {}),
-    ...(c.shard ? { shard: c.shard } : {}), ...(c.site ? { site: c.site } : {}),
+    ...(c.shard ? { shard: c.shard } : {}),
+    ...(c.site ? { site: c.site } : {}),
   };
 }
 
 /** Score a company with no matching opening on a fixed 0–100 scale; null when nothing makes it relevant. */
-function watchSuggestion(
-  s: Omit<CompanySuggestion, "score" | "reasons">,
-  extra: { topicShare: number; elsewherePlaces: string[]; ownPlaces: string[] },
-): CompanySuggestion | null {
+function watchSuggestion(s: Omit<CompanySuggestion, "score" | "reasons">, extra: { topicShare: number; elsewherePlaces: string[]; ownPlaces: string[] }): CompanySuggestion | null {
   const industry = s.industries.length > 0;
   const hires = s.hires_for.length > 0;
   if (!industry && !hires && !s.topics.length && !s.near_misses && !s.elsewhere && !s.in_your_places) return null;

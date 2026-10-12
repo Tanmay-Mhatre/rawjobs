@@ -440,7 +440,13 @@ export async function finishPendingUpdate(home: string, start?: (home: string) =
     console.error(`The update failed: ${(err as Error).stack ?? err}`);
     if (installedVersions(home)?.current === p.to) switchBack(home, p.from, p.to);
     (start ?? startServer)(home);
-    const record: UpdateRecord = { from: p.from, to: p.to, ok: false, at: new Date().toISOString(), error: `The update to ${p.to} failed (${(err as Error).message}), so ${p.from} is back. See logs/update.log.` };
+    const record: UpdateRecord = {
+      from: p.from,
+      to: p.to,
+      ok: false,
+      at: new Date().toISOString(),
+      error: `The update to ${p.to} failed (${(err as Error).message}), so ${p.from} is back. See logs/update.log.`,
+    };
     writeJson(join(home, "app/last-update.json"), record);
     return record;
   }

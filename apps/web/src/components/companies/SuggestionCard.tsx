@@ -45,7 +45,10 @@ export function shortExample(example: string): string {
   }
   if (open <= 0) return text;
   const title = text.slice(0, open).trim();
-  const parts = text.slice(open + 1, -1).split(/\s*;\s*/).filter(Boolean);
+  const parts = text
+    .slice(open + 1, -1)
+    .split(/\s*;\s*/)
+    .filter(Boolean);
   const more = parts.reduce((n, p) => n + (Number(p.match(/(\d+) more/)?.[1]) || 0), 0);
   const places = parts.filter((p) => !/^…?\s*\d+ more$/.test(p));
   if (!places.length) return title;
@@ -57,7 +60,10 @@ export function shortExample(example: string): string {
 const MONOGRAM_SIZE = { xs: "size-5 rounded-sm type-meta", sm: "size-7 rounded-sm type-meta", md: "size-10 rounded-sm type-label" };
 
 export function Monogram({ name, size = "md" }: { name: string; size?: keyof typeof MONOGRAM_SIZE }) {
-  const words = name.replace(/[^\p{L}\p{N}\s]/gu, " ").split(/\s+/).filter(Boolean);
+  const words = name
+    .replace(/[^\p{L}\p{N}\s]/gu, " ")
+    .split(/\s+/)
+    .filter(Boolean);
   const text = (words.length > 1 ? words[0]![0]! + words[1]![0]! : (words[0] ?? "?").slice(0, 2)).toUpperCase();
   // Neutral, like the feed's avatars: color is kept for scores and status.
   return (
@@ -114,9 +120,7 @@ export function SuggestionCard({ s, added, onAdd, onRemove, onHide }: Props) {
           e.g. {shortExample(s.examples[0])}
         </p>
       )}
-      {chips.length > 0 && (
-        <p className="type-small text-muted">{chips.slice(0, open ? chips.length : 2).join(" · ")}</p>
-      )}
+      {chips.length > 0 && <p className="type-small text-muted">{chips.slice(0, open ? chips.length : 2).join(" · ")}</p>}
       {open && (
         <div className="space-y-1 rounded-md border border-line p-2.5 type-small text-muted">
           <p>
@@ -137,7 +141,14 @@ export function SuggestionCard({ s, added, onAdd, onRemove, onHide }: Props) {
       <footer className="mt-auto flex items-center gap-1.5 pt-1">
         <AddButton added={added} onAdd={onAdd} onRemove={onRemove} soon={soon} name={s.name} />
         {onHide && !added && (
-          <Button size="sm" variant="ghost" onClick={onHide} className="text-muted" aria-label={`Don't suggest ${s.name}`} title="Hides this company: no more suggestions, and its jobs leave your Radar">
+          <Button
+            size="sm"
+            variant="ghost"
+            onClick={onHide}
+            className="text-muted"
+            aria-label={`Don't suggest ${s.name}`}
+            title="Hides this company: no more suggestions, and its jobs leave your Radar"
+          >
             <EyeOff className="size-3.5" /> Don't suggest
           </Button>
         )}

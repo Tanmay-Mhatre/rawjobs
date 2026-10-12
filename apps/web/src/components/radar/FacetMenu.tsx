@@ -46,7 +46,13 @@ export function FacetMenu({ label, options, selected, onChange, single, searchab
   }, [open]);
 
   const active = selected.length > 0;
-  const summary = active ? (single ? options.find((o) => o.value === selected[0])?.label : selected.length === 1 ? options.find((o) => o.value === selected[0])?.label ?? selected[0] : `${label} · ${selected.length}`) : label;
+  const summary = active
+    ? single
+      ? options.find((o) => o.value === selected[0])?.label
+      : selected.length === 1
+        ? (options.find((o) => o.value === selected[0])?.label ?? selected[0])
+        : `${label} · ${selected.length}`
+    : label;
 
   return (
     <div

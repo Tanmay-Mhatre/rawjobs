@@ -24,7 +24,8 @@ export function companyWords(name: string): string[] {
 const SECTION_START = /^(?:#{1,3}\s*)?(?:professional\s+|work\s+|relevant\s+|career\s+)?(?:experience|employment(?:\s+history)?|work\s+history|career\s+history)\s*:?\s*$/i;
 const KNOWN_SECTIONS = /^(?:#{1,3}\s*)?(?:education|skills|core skills|technical skills|projects|certifications?|awards|languages|publications|interests|summary|profile|volunteering|references)\b/i;
 const DATE = /\b(?:19|20)\d{2}\b|\bpresent\b|\bcurrent\b|\bnow\b/i;
-const DATE_CHUNK = /\(?\s*(?:(?:jan|feb|mar|apr|may|jun|jul|aug|sep|sept|oct|nov|dec)[a-z]*\.?\s+|\d{1,2}\/)?(?:19|20)\d{2}\s*(?:[-–—to]+\s*(?:(?:(?:jan|feb|mar|apr|may|jun|jul|aug|sep|sept|oct|nov|dec)[a-z]*\.?\s+|\d{1,2}\/)?(?:19|20)\d{2}|present|current|now))?\s*\)?/gi;
+const DATE_CHUNK =
+  /\(?\s*(?:(?:jan|feb|mar|apr|may|jun|jul|aug|sep|sept|oct|nov|dec)[a-z]*\.?\s+|\d{1,2}\/)?(?:19|20)\d{2}\s*(?:[-–—to]+\s*(?:(?:(?:jan|feb|mar|apr|may|jun|jul|aug|sep|sept|oct|nov|dec)[a-z]*\.?\s+|\d{1,2}\/)?(?:19|20)\d{2}|present|current|now))?\s*\)?/gi;
 const TITLE_WORD =
   /\b(manager|engineer|lead|head|director|analyst|designer|developer|officer|consultant|specialist|associate|intern|vp|vice president|president|founder|co-founder|owner|architect|scientist|executive|coordinator|administrator|strategist|researcher|advisor|partner|product|marketing|sales|operations|chief|cto|ceo|cfo|coo|cpo|principal|staff|senior|junior)\b/i;
 
@@ -173,8 +174,7 @@ export function matchEmployers<T extends Named>(names: readonly string[], direct
     const k = companyWords(c.name).join(" ");
     if (k) byName.set(k, [...(byName.get(k) ?? []), c]);
   }
-  const best = (list: T[] | undefined) =>
-    list?.slice().sort((a, b) => Number(b.status === "live") - Number(a.status === "live") || (b.open_jobs ?? 0) - (a.open_jobs ?? 0))[0];
+  const best = (list: T[] | undefined) => list?.slice().sort((a, b) => Number(b.status === "live") - Number(a.status === "live") || (b.open_jobs ?? 0) - (a.open_jobs ?? 0))[0];
   return names.map((name) => {
     const words = companyWords(name);
     let match = best(byName.get(words.join(" "))) ?? best(byName.get(words.join("")));
@@ -189,8 +189,7 @@ export function matchEmployers<T extends Named>(names: readonly string[], direct
 // ---------- lookalikes ----------
 
 let familyRes: { id: string; re: RegExp }[] | undefined;
-const families = () =>
-  (familyRes ??= ROLE_FAMILIES.map((f) => ({ id: f.id, re: new RegExp(f.titles.map((t) => termRegex(t).source).join("|"), "iu") })));
+const families = () => (familyRes ??= ROLE_FAMILIES.map((f) => ({ id: f.id, re: new RegExp(f.titles.map((t) => termRegex(t).source).join("|"), "iu") })));
 
 /** What a company looks like: its industries, the role families it hires and the countries it hires in. */
 export type CompanyShape = { industries: Set<string>; families: Map<string, number>; countries: Set<string> };
@@ -283,7 +282,10 @@ export function lookalikes(
     const sim = similarity(s, shape);
     if (sim < (opts.minSimilarity ?? 30)) continue;
     const sharedInd = [...s.industries].filter((i) => shape.industries.has(i)).map((i) => INDUSTRY_BY_ID.get(i)?.label ?? i);
-    const topFam = [...s.families.entries()].sort((x, y) => y[1] - x[1]).map(([f]) => f).find((f) => shape.families.has(f));
+    const topFam = [...s.families.entries()]
+      .sort((x, y) => y[1] - x[1])
+      .map(([f]) => f)
+      .find((f) => shape.families.has(f));
     const famLabel = topFam ? ROLE_FAMILIES.find((f) => f.id === topFam)?.label : undefined;
     const why = [sharedInd.slice(0, 2).join(", "), famLabel && `hires ${famLabel}`].filter(Boolean).join(" · ");
     out.push({ ...c, similarity: sim, like: seed.name, reasons: [`Like ${seed.name}: ${why}`, ...c.reasons] });

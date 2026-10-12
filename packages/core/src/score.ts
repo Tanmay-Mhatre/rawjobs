@@ -85,7 +85,11 @@ export function scoreJob(job: Scorable, profile: Profile, company: CompanyFit = 
   const weights = Object.values(profile.keywords);
   const totalWeight = weights.reduce((sum, w) => sum + w, 0);
   const weigh = (list: [string, number][]) =>
-    list.reduce((sum, [k, w]) => sum + (own(k) ? w : 0), 0) + Math.min(POINTS.industryTopicCap, list.reduce((sum, [k, w]) => sum + (own(k) ? 0 : w), 0));
+    list.reduce((sum, [k, w]) => sum + (own(k) ? w : 0), 0) +
+    Math.min(
+      POINTS.industryTopicCap,
+      list.reduce((sum, [k, w]) => sum + (own(k) ? 0 : w), 0),
+    );
   const matchedWeight = weigh(matched);
   const titleWeight = weigh(matched.filter(([k]) => inTitle.has(k)));
   const keywordPoints =
@@ -246,7 +250,11 @@ type LocationRules = {
 /** "remote - us", "US remote", "Remote (USA)" -> "us" / "usa"; undefined when the term isn't remote plus a place. */
 function remotePlace(term: string): string | undefined {
   if (!matchesTerm(term, "remote")) return undefined;
-  const place = term.toLowerCase().replace(/\bremote\b/g, " ").replace(/[^\p{L}\p{N}]+/gu, " ").trim();
+  const place = term
+    .toLowerCase()
+    .replace(/\bremote\b/g, " ")
+    .replace(/[^\p{L}\p{N}]+/gu, " ")
+    .trim();
   return place || undefined;
 }
 
@@ -266,11 +274,14 @@ function rulesFor(profile: Profile): LocationRules {
     const owners = new Map(mine.map((t) => [t, placeOwner(t)]));
     // "New South Wales" hides "wales", "North America" hides "america", unless the user picked them
     // or they belong to the same place ("united arab emirates" never hides "emirates").
-    const hide = allPlaceNames().filter(
-      (p) => p.includes(" ") && !mine.includes(p) && mine.some((t) => t !== p && matchesTerm(p, t) && (!owners.get(t) || owners.get(t) !== placeOwner(p))),
-    );
+    const hide = allPlaceNames().filter((p) => p.includes(" ") && !mine.includes(p) && mine.some((t) => t !== p && matchesTerm(p, t) && (!owners.get(t) || owners.get(t) !== placeOwner(p))));
     // Countries the user picked (by any of their names or cities).
-    const countries = new Set(include.map((t) => placeOwner(t)).filter((o): o is string => !!o?.startsWith("country:")).map((o) => o.slice(8)));
+    const countries = new Set(
+      include
+        .map((t) => placeOwner(t))
+        .filter((o): o is string => !!o?.startsWith("country:"))
+        .map((o) => o.slice(8)),
+    );
     const subs = [...countries].map((c) => SUBDIVISIONS[c]).filter((x) => !!x);
     const codes = subs.flatMap((x) => x!.codes);
     rules = {
@@ -301,7 +312,13 @@ function inYourPlaces(text: string, r: LocationRules): boolean {
     if (!hits.length) continue;
     const named = countriesIn(segment).map((c) => c.toLowerCase());
     if (!named.length) return true;
-    if (hits.some((t) => { const owner = placeOwner(t); return !owner?.startsWith("country:") || named.includes(owner.slice(8)); })) return true;
+    if (
+      hits.some((t) => {
+        const owner = placeOwner(t);
+        return !owner?.startsWith("country:") || named.includes(owner.slice(8));
+      })
+    )
+      return true;
   }
   return false;
 }
@@ -316,7 +333,10 @@ function inYourPlaces(text: string, r: LocationRules): boolean {
 export function locationFit(location: string, profile: Profile): { points: number; note?: string } {
   const r = rulesFor(profile);
   // "U.S." -> "US", "D.C." -> "DC", so abbreviations match like the plain words.
-  const plain = location.replace(/\bU\.S\.A\.?/g, "USA").replace(/\bU\.S\.?/g, "US").replace(/\bD\.C\.?/g, "DC");
+  const plain = location
+    .replace(/\bU\.S\.A\.?/g, "USA")
+    .replace(/\bU\.S\.?/g, "US")
+    .replace(/\bD\.C\.?/g, "DC");
   const spelled = spellOutPlaces(plain);
   const text = r.mask ? spelled.replace(r.mask, " ") : spelled;
   if (inYourPlaces(text, r)) return { points: POINTS.locationCity };
@@ -325,7 +345,10 @@ export function locationFit(location: string, profile: Profile): { points: numbe
   if (!excluded && (remote ? matchesAny(text, r.regions) || matchesAny(text, r.remoteRegions) : namesRegion(text, r.regions))) return { points: POINTS.locationRemote };
   if (!remote) return { points: 0 };
   // What's left once remote wording and punctuation are gone is a place: the job is remote there only.
-  const rest = plain.replace(REMOTE_WORDS, " ").replace(/[^\p{L}\p{N}]+/gu, " ").trim();
+  const rest = plain
+    .replace(REMOTE_WORDS, " ")
+    .replace(/[^\p{L}\p{N}]+/gu, " ")
+    .trim();
   // "Remote (Worldwide)", "Remote - Anywhere": open to everyone, so plain remote.
   const anywhere = !!rest && rest.split(" ").every((w) => GENERIC_REMOTE.includes(w.toLowerCase()));
   if ((!rest || anywhere) && r.bareRemote && !excluded) return { points: POINTS.locationRemote };
@@ -348,7 +371,12 @@ const PLACE_PIECES = /\s*>\s*|\s+[-–—]\s+/;
  */
 function namesRegion(text: string, regions: readonly string[]): boolean {
   if (!regions.length || !matchesAny(text, regions)) return false;
-  const clean = (s: string) => s.replace(OFFICE_WORDS, " ").replace(/[^\p{L}\p{N}]+/gu, " ").trim().toLowerCase();
+  const clean = (s: string) =>
+    s
+      .replace(OFFICE_WORDS, " ")
+      .replace(/[^\p{L}\p{N}]+/gu, " ")
+      .trim()
+      .toLowerCase();
   const isPlace = (p: string) => !p || regions.includes(p) || !!placeOwner(p) || countriesIn(p).length > 0;
   return text
     .split(LOCATION_SEGMENTS)
