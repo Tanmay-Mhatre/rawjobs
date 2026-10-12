@@ -1,9 +1,8 @@
-import { CircleAlert, CloudDownload, Copy, ExternalLink, LoaderCircle, Monitor, RefreshCw, X } from "lucide-react";
+import { CircleAlert, CloudDownload, Copy, ExternalLink, LoaderCircle, RefreshCw, X } from "lucide-react";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { formatDate, timeAgo } from "../lib/format";
 import { load, save } from "../lib/storage";
 import {
-  addDesktopShortcut,
   announceUpdateStatus,
   checkForUpdate,
   installLine,
@@ -16,6 +15,7 @@ import {
   useUpdateStatus,
   type UpdateStatus,
 } from "../lib/update";
+import { DesktopShortcutNotice, Row } from "./DesktopShortcut";
 import { Dialog } from "./Dialog";
 import { toast } from "./Toast";
 import { Button, Card, cx, Toggle } from "./ui";
@@ -60,9 +60,11 @@ const DISMISSED_KEY = "rawjobs.update.dismissed";
  * Above the page, on an installed copy: "RawJobs is restarting" while the server is away (the page
  * reloads by itself when it's back as a new version), then how the last update went, or a new
  * version (a quiet note you can dismiss). A required update, or a version too old to update by
- * itself, comes up in a window instead (RequiredUpdate).
+ * itself, comes up in a window instead (RequiredUpdate). The first time you land on the Radar,
+ * once per computer, a popup says where the RawJobs shortcuts are (DesktopShortcutNotice); never
+ * on top of another notice.
  */
-export function ServerNotices() {
+export function ServerNotices({ onRadar = false }: { onRadar?: boolean }) {
   const { down } = useServerHealth();
   const { status, setStatus, refresh } = useUpdateStatus();
   const [busy, setBusy] = useState(false);
@@ -143,8 +145,9 @@ export function ServerNotices() {
     );
   }
 
+  const intro = onRadar && !required && status.about?.shortcuts?.notice ? <DesktopShortcutNotice status={status} onSeen={(s) => s && setStatus(s)} /> : null;
   const a = status.available;
-  if (required || !a || dismissed === a.version) return dialog;
+  if (required || !a || dismissed === a.version) return dialog ?? intro;
   const dismiss = () => {
     save(DISMISSED_KEY, a.version);
     setDismissed(a.version);
@@ -253,21 +256,12 @@ export function UpdatesSettings() {
   );
 }
 
-function Row({ label, children }: { label: string; children: ReactNode }) {
-  return (
-    <div className="grid gap-0.5 py-2 sm:grid-cols-[10rem_1fr] sm:gap-4">
-      <dt className="type-small text-muted">{label}</dt>
-      <dd className="min-w-0 type-small text-ink">{children}</dd>
-    </div>
-  );
-}
-
 const linkClass = "inline-flex h-8 items-center gap-1.5 rounded-md px-2.5 type-small text-muted hover:bg-inset hover:text-ink";
 
 /** Settings → About: which version this is, since when, what's newer, and where everything is. */
 export function AboutRawJobs() {
   const { status, setStatus } = useUpdateStatus();
-  const [busy, setBusy] = useState<"check" | "update" | "shortcut" | null>(null);
+  const [busy, setBusy] = useState<"check" | "update" | null>(null);
 
   if (!status)
     return (
@@ -286,12 +280,11 @@ export function AboutRawJobs() {
     );
   }
 
-  const run = async (kind: "check" | "update" | "shortcut") => {
+  const run = async (kind: "check" | "update") => {
     setBusy(kind);
-    const s = kind === "check" ? await checkForUpdate() : kind === "update" ? await updateNow() : await addDesktopShortcut();
+    const s = kind === "check" ? await checkForUpdate() : await updateNow();
     if (s) setStatus(s);
     announceUpdateStatus();
-    if (kind === "shortcut" && s?.about?.desktopShortcut) toast({ message: "Added RawJobs to your Desktop" });
     setBusy(null);
   };
 
@@ -320,9 +313,6 @@ export function AboutRawJobs() {
         <Row label="Last checked">
           {status.settings.mode === "off" ? "Checking is off (Updates, below)." : status.lastCheck ? `${timeAgo(status.lastCheck)}, ${formatDate(status.lastCheck)}` : "Not yet"}
         </Row>
-        <Row label="Dashboard">
-          <code className="font-mono">{location.origin}</code> <span className="text-muted">(the RawJobs shortcut always opens the right address)</span>
-        </Row>
         {about && (
           <>
             <Row label="Your RawJobs folder">
@@ -341,11 +331,6 @@ export function AboutRawJobs() {
           {busy === "check" || status.state === "checking" ? <LoaderCircle className="size-3.5 animate-spin" /> : <RefreshCw className="size-3.5" />} Check for updates
         </Button>
         {a && !status.tooOld && <UpdateButton status={status} onClick={() => void run("update")} busy={busy === "update"} label={`Update to ${a.version}`} />}
-        {about && !about.desktopShortcut && (
-          <Button onClick={() => void run("shortcut")} disabled={!!busy}>
-            {busy === "shortcut" ? <LoaderCircle className="size-3.5 animate-spin" /> : <Monitor className="size-3.5" />} Add a Desktop shortcut
-          </Button>
-        )}
         <a className={linkClass} href={RELEASES_URL} target="_blank" rel="noreferrer">
           All releases <ExternalLink className="size-3.5" aria-hidden />
         </a>

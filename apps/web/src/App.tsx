@@ -456,7 +456,7 @@ export function App() {
             radarFits && "lg:flex lg:h-[calc(100dvh-3.5rem)] lg:flex-col lg:pb-4",
           )}
         >
-          <ServerNotices />
+          <ServerNotices onRadar={!inSetup && tab === "radar" && !openId && !showKeys && status !== undefined} />
           {status === undefined || state.kind === "loading" ? (
             <FeedSkeleton />
           ) : inSetup ? (

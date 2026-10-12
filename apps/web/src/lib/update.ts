@@ -14,7 +14,14 @@ export type UpdateStatus = {
   error?: string;
   lastUpdate: { from: string; to: string; ok: boolean; at: string; error?: string; notes?: string } | null;
   /** Missing from an older server: Settings → About shows what it has. */
-  about?: { since?: { at: string; by: "update" | "install" }; home: string; node: string; platform: string; desktopShortcut: boolean };
+  about?: {
+    since?: { at: string; by: "update" | "install" };
+    home: string;
+    node: string;
+    platform: string;
+    /** The RawJobs shortcuts on this computer (null: not an installed copy). */
+    shortcuts: { desktop: boolean; menu: boolean; desktopFolder: boolean; desktopError: string | null; notice: boolean } | null;
+  };
 };
 
 export const RELEASES_URL = "https://github.com/Tanmay-Mhatre/rawjobs/releases";
@@ -39,7 +46,10 @@ export const updateStatus = () => call("/api/update");
 export const checkForUpdate = () => call("/api/update/check", { method: "POST" });
 export const updateNow = () => call("/api/update/apply", { method: "POST" });
 export const markUpdateSeen = () => call("/api/update/seen", { method: "POST" });
+/** Add the Desktop shortcut, or repair both. */
 export const addDesktopShortcut = () => call("/api/update/shortcut", { method: "POST" });
+/** The "RawJobs is on your Desktop" popup was seen: it doesn't show again on this computer. */
+export const markShortcutNoticeSeen = () => call("/api/update/shortcut-seen", { method: "POST" });
 export const saveUpdateSettings = (s: Partial<UpdateStatus["settings"]>) => call("/api/update/settings", { method: "PUT", body: JSON.stringify(s) });
 
 /** The update status, shared by the notice and Settings, refreshed when the tab comes back. */
