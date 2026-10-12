@@ -82,3 +82,35 @@ export function visitGroups(v: Visit, watched: ReadonlySet<string>): { pack: str
 }
 
 export const visitCount = (v: Visit, watched: ReadonlySet<string>) => [...v.added.keys()].filter((k) => watched.has(k)).length;
+
+/**
+ * "Next in this pack": after you pick one company in a pack, up to 2 of the pack's extras join its
+ * end, the new ones marked for one render (`fresh`). Nothing is fetched and nothing above them moves.
+ * By industry: the extras shown so far, in order, and the pick they followed.
+ */
+export type NextUp = Record<string, { keys: string[]; after: string; fresh: string[] }>;
+
+/** No company marked new any more (any other change in the packs). */
+export function clearFresh(state: NextUp): NextUp {
+  if (!Object.values(state).some((p) => p.fresh.length)) return state;
+  return Object.fromEntries(Object.entries(state).map(([k, p]) => [k, { ...p, fresh: [] }]));
+}
+
+/** After picking `after` in this pack: show the next `n` extras you don't have yet. */
+export function revealNext<T extends Member>(state: NextUp, pack: { industry: string; more?: readonly T[] }, after: string, watched: ReadonlySet<string>, n = 2): NextUp {
+  const next = clearFresh(state);
+  const shown = next[pack.industry]?.keys ?? [];
+  const add = (pack.more ?? [])
+    .filter((c) => !shown.includes(c.key) && !isAdded(watched, c))
+    .slice(0, n)
+    .map((c) => c.key);
+  if (!add.length) return next;
+  return { ...next, [pack.industry]: { keys: [...shown, ...add], after, fresh: add } };
+}
+
+/** A pack's companies as shown: its own, then the extras revealed so far. */
+export function packMembers<T extends Member>(pack: { industry: string; items: readonly T[]; more?: readonly T[] }, state: NextUp): T[] {
+  const keys = state[pack.industry]?.keys ?? [];
+  const extra = keys.map((k) => (pack.more ?? []).find((c) => c.key === k)).filter((c): c is T => !!c);
+  return [...pack.items, ...extra];
+}

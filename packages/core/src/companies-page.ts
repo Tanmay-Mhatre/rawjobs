@@ -14,6 +14,10 @@ import type { IndexedCompany, SuggestResult } from "./suggest";
  * directory has them) and the page's extras (past employers, lookalikes, packs, coverage).
  */
 
+/** Companies in a starter pack, and the extras after them ("Next in this pack"). */
+export const PACK_SIZE = 8;
+export const PACK_MORE = 4;
+
 const isAts = (ats: string | undefined) => (ATS_TYPES as readonly string[]).includes(ats ?? "");
 
 /** Remember live boards you added that the shared directory doesn't have yet (catalog/additions.json). */
@@ -96,13 +100,14 @@ export function companyExtras(
   }));
 
   const wanted = new Set(profile.industries);
-  const packs = profile.industries.map((id) => ({
-    industry: id,
-    items: candidates
+  // The best 8 per industry, and the next few ("more") the page shows one pick at a time.
+  const packs = profile.industries.map((id) => {
+    const ranked = candidates
       .filter((c) => c.industries.includes(id) && connectors[c.ats as keyof typeof connectors])
       .sort((a, b) => b.score - a.score)
-      .slice(0, 8),
-  }));
+      .slice(0, PACK_SIZE + PACK_MORE);
+    return { industry: id, items: ranked.slice(0, PACK_SIZE), more: ranked.slice(PACK_SIZE) };
+  });
   const inIndustries = directory.filter((c) => c.tags?.some((t) => wanted.has(t)));
   const coverage = {
     in_industries: new Set(inIndustries.map((c) => companyWords(c.name).join(" "))).size,

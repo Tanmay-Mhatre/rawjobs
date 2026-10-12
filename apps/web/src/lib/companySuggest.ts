@@ -1,4 +1,5 @@
-import type { CompanySuggestion } from "@rawjobs/core/suggest";
+import { INDUSTRY_BY_ID } from "@rawjobs/core/catalog/industries";
+import type { CompanySuggestion, HiresIn } from "@rawjobs/core/suggest";
 import { isPlaceholderBoard } from "@rawjobs/core/text";
 import { useEffect, useMemo, useState } from "react";
 import { keyOf, type CompanyRef } from "./companies";
@@ -18,8 +19,8 @@ export type CompanySuggestions = {
   pastEmployers: { name: string; company?: CompanyRef & { key: string; open_jobs: number | null; status?: string }; watched: boolean }[];
   /** Companies like a past employer, per employer. */
   lookalikes: { seed: string; in_directory: boolean; items: Lookalike[] }[];
-  /** Best companies per industry you picked. */
-  packs: { industry: string; items: CompanySuggestion[] }[];
+  /** Best companies per industry you picked, and the next few after them (older answers have no `more`). */
+  packs: { industry: string; items: CompanySuggestion[]; more?: CompanySuggestion[] }[];
   /** Companies in your industries in the directory, and how many we can check. */
   coverage: { in_industries: number; trackable: number };
   index_generated_at: string;
@@ -87,3 +88,59 @@ const ROLE_COUNT = /^\d+ (open roles? (match|matches) you|new this week|similar 
  * topics, where it hires), never how many roles match you. Roles are read on the Radar.
  */
 export const companyReasons = (reasons: readonly string[]) => reasons.filter((r) => !ROLE_COUNT.test(r));
+
+/** Short names for the countries companies hire in most, so a card's line stays short. */
+const SHORT_COUNTRY: Record<string, string> = { "United Arab Emirates": "UAE", "United Kingdom": "UK", "United States": "US" };
+
+/** "Hires in UAE, UK", "Hires in UAE, remote", "Hires remote"; null when the index doesn't say. */
+export function whereTheyHire(h: HiresIn | undefined): string | null {
+  if (!h) return null;
+  const places = h.countries.slice(0, 2).map((c) => SHORT_COUNTRY[c] ?? c);
+  if (places.length) return `Hires in ${places.join(", ")}${h.remote ? ", remote" : ""}`;
+  return h.remote ? "Hires remote" : null;
+}
+
+/** Suggestions that share one reason: shown once in the group's header, not on every card. */
+export type SuggestionGroup = { id: string; title: string; reason: string; inside: boolean; items: CompanySuggestion[] };
+
+const industryLabel = (id: string) => INDUSTRY_BY_ID.get(id)?.label ?? id;
+const andList = (xs: string[]) => (xs.length < 2 ? (xs[0] ?? "") : `${xs.slice(0, -1).join(", ")} and ${xs.at(-1)}`);
+
+/**
+ * Cards grouped by the reason they share, in the order of each group's best card: one group per
+ * industry of yours ("Crypto & Web3 · Your industry, and your topics crypto and web3"), then one per
+ * industry their job titles point to, then the rest. `lens` words the rest: in Hiring for you now
+ * they all pass your title and place filters; otherwise the group says what they have in common.
+ */
+export function groupSuggestions(items: readonly CompanySuggestion[], lens: "hiring" | "watching"): SuggestionGroup[] {
+  const groups = new Map<string, SuggestionGroup>();
+  for (const s of items) {
+    const ind = s.industries[0];
+    const hires = s.hires_for[0];
+    const id = ind ? `in:${ind}` : hires ? `for:${hires}` : "other";
+    let g = groups.get(id);
+    if (!g) {
+      const title = ind ? industryLabel(ind) : hires ? industryLabel(hires) : "Other companies";
+      const reason = ind ? "Your industry" : hires ? `Hires for ${industryLabel(hires)} roles` : "";
+      g = { id, title, reason, inside: !!ind, items: [] };
+      groups.set(id, g);
+    }
+    g.items.push(s);
+  }
+  return [...groups.values()].map((g) => {
+    // Topics every card in the group has (each card's top 3), in the first card's order.
+    const shared = g.items[0]!.topics.slice(0, 3).filter((t) => g.items.every((s) => s.topics.slice(0, 3).includes(t)));
+    const topics = shared.length ? `your ${shared.length === 1 ? "topic" : "topics"} ${andList(shared)}` : "";
+    if (g.id !== "other") return { ...g, reason: topics ? `${g.reason}, and ${topics}` : g.reason };
+    return { ...g, reason: lens === "hiring" ? "Open roles that pass your title and place filters" : otherReason(g.items, topics) };
+  });
+}
+
+/** What every company in Not hiring yet's catch-all group has in common. */
+function otherReason(items: readonly CompanySuggestion[], topics: string): string {
+  if (items.every((s) => s.near_misses > 0)) return "Your roles, nearby or remote";
+  if (items.every((s) => s.elsewhere > 0)) return "Your roles, in other places";
+  if (items.every((s) => s.in_your_places > 0)) return "Other roles, in your places";
+  if (topics) return topics.charAt(0).toUpperCase() + topics.slice(1);
+  return "Your roles, places or topics";
+}

@@ -13,6 +13,16 @@ export const NAME_OVERRIDES: ReadonlyMap<string, string> = new Map([
   ["magiceden", "Magic Eden"],
   ["trmlabs", "TRM Labs"],
   ["orderlynetwork", "Orderly Network"],
+  ["oplabs", "OP Labs"],
+  ["coinmarketcap", "CoinMarketCap"],
+  ["aptoslabs", "Aptos Labs"],
+  ["mystenlabs", "Mysten Labs"],
+  ["seilabs", "Sei Labs"],
+  ["bvnk", "BVNK"],
+  ["truelayer", "TrueLayer"],
+  ["smartasset", "SmartAsset"],
+  ["momentmarkets", "Moment"],
+  ["swingdev", "SwingDev"],
   ["redgate", "Redgate"],
   ["think-cell", "think-cell"],
   ["cargo-partner", "cargo-partner"],
@@ -24,6 +34,12 @@ export const NAME_OVERRIDES: ReadonlyMap<string, string> = new Map([
  * "Apollo.io", "Character.AI". Endings that read as words ("Talon.One", "Rocket.Chat") stay.
  */
 const MACHINE_TLD = /^([^\s.]{3,})\.(Com|Io|Xyz|Me|Cash|Fi|Co|Inc|Dev|Net|Org|Ai|App)$/;
+
+/**
+ * Title-cased endings that are the brand's last word: "Sui.Foundation" is the Sui Foundation. Only
+ * this casing, like MACHINE_TLD; "Ramp.Network" stays as its owner writes it.
+ */
+const WORD_TLD = /^([^\s.]{2,})\.(Foundation|Finance|Labs|Protocol)$/;
 
 /** Domain prefixes that sit in front of the brand: getrecharge.com is Recharge. */
 const DOMAIN_PREFIXES = ["get", "try", "join", "use", "hello", "meet", "with", "go"];
@@ -48,6 +64,9 @@ export function displayName(name: string, slug?: string): string {
   const override = NAME_OVERRIDES.get(raw.toLowerCase());
   if (override) return override;
   const s = (slug ?? "").trim().toLowerCase();
+
+  const word = WORD_TLD.exec(raw);
+  if (word) return `${word[1]} ${word[2]}`;
 
   const domain = MACHINE_TLD.exec(raw);
   if (domain) {

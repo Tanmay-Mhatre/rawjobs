@@ -2,7 +2,7 @@ import { companyLabel } from "@rawjobs/core/display-name";
 import { safeUrl } from "@rawjobs/core/text";
 import { ExternalLink, EyeOff } from "lucide-react";
 import { SUPPORTED } from "../../lib/companies";
-import { companyReasons, type CompanySuggestion } from "../../lib/companySuggest";
+import { type CompanySuggestion, whereTheyHire } from "../../lib/companySuggest";
 import { AddButton } from "../CompanyButtons";
 import { Button, cx } from "../ui";
 
@@ -24,21 +24,25 @@ export function Monogram({ name, size = "md" }: { name: string; size?: keyof typ
 }
 
 type Props = {
-  s: CompanySuggestion & { like?: string };
+  s: CompanySuggestion;
   added: boolean;
   onAdd: () => void;
   onRemove: () => void;
   onHide?: () => void;
+  /** What only this card says (why it's like your past employer); the group's header says the rest. */
+  note?: string;
+  /** What an added one says ("Watching" in Not hiring yet). */
+  addedText?: string;
 };
 
 /**
- * One suggested company: its name, careers page and why it's here, then Add / Don't suggest. No role
- * counts, example roles or fit labels: a company's jobs are read on the Radar.
+ * One suggested company: its name, careers page and where it hires, then Add / Hide. Why it's here
+ * sits once in its group's header. No role counts, example roles or fit labels: a company's jobs are
+ * read on the Radar.
  */
-export function SuggestionCard({ s, added, onAdd, onRemove, onHide }: Props) {
+export function SuggestionCard({ s, added, onAdd, onRemove, onHide, note, addedText }: Props) {
   const soon = !SUPPORTED.has(s.ats);
-  const reasons = companyReasons(s.reasons).filter((r) => !r.startsWith("Like "));
-  const like = s.reasons.find((r) => r.startsWith("Like "));
+  const where = whereTheyHire(s.hires_in);
   const name = companyLabel(s);
   return (
     <article className={cx("flex min-w-0 flex-col gap-3 rounded-md border bg-raised p-4 transition-colors", added ? "border-ink/40" : "border-line hover:border-muted/40")}>
@@ -51,18 +55,17 @@ export function SuggestionCard({ s, added, onAdd, onRemove, onHide }: Props) {
               <ExternalLink className="size-3.5" />
             </a>
           </p>
-          {soon && <p className="type-small text-muted">Not supported yet</p>}
+          {(soon || where) && <p className="type-small text-muted">{soon ? "Not supported yet" : where}</p>}
         </div>
       </header>
 
-      {like && <p className="rounded-md bg-inset px-2.5 py-1.5 type-small text-ink">{like}</p>}
-      {reasons.length > 0 && <p className="type-small text-muted">{reasons.join(" · ")}</p>}
+      {note && <p className="type-small text-muted">{note}</p>}
 
       <footer className="mt-auto flex items-center gap-1.5 pt-1">
-        <AddButton added={added} onAdd={onAdd} onRemove={onRemove} soon={soon} name={name} />
+        <AddButton added={added} onAdd={onAdd} onRemove={onRemove} soon={soon} name={name} addedText={addedText} />
         {onHide && !added && (
-          <Button size="sm" variant="ghost" onClick={onHide} className="text-muted" aria-label={`Don't suggest ${name}`} title="Hides this company: no more suggestions, and its jobs leave your Radar">
-            <EyeOff className="size-3.5" /> Don't suggest
+          <Button size="sm" variant="ghost" onClick={onHide} className="text-muted" aria-label={`Hide ${name}`} title="No more suggestions, and its jobs leave your Radar">
+            <EyeOff className="size-3.5" /> Hide
           </Button>
         )}
       </footer>

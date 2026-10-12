@@ -48,11 +48,13 @@ const suggestion = (patch: Partial<CompanySuggestion> = {}): CompanySuggestion =
 });
 
 describe("SuggestionCard", () => {
-  it("shows the company and why, with no roles, fit label, job counts or hiring system", () => {
-    const { container } = render(<SuggestionCard s={suggestion()} added={false} onAdd={() => {}} onRemove={() => {}} />);
+  it("shows the company and where it hires, with no roles, fit label, job counts or hiring system", () => {
+    const { container } = render(<SuggestionCard s={suggestion({ hires_in: { remote: true, countries: ["United Arab Emirates"] } })} added={false} onAdd={() => {}} onRemove={() => {}} />);
     const text = container.textContent ?? "";
     expect(text).toContain("Kraken");
-    expect(text).toContain("Your industry: Crypto & Web3");
+    expect(text).toContain("Hires in UAE, remote");
+    // Why it's suggested sits once over its group, not on each card.
+    expect(text).not.toContain("Your industry");
     for (const gone of ["roles match", "new this week", "Senior Product Manager", "fit", "open jobs", "Hiring system", "Greenhouse", "Why?"]) expect(text).not.toContain(gone);
   });
 });
