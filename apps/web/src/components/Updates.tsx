@@ -62,7 +62,7 @@ const DISMISSED_KEY = "rawjobs.update.dismissed";
  * version (a quiet note you can dismiss). A required update, or a version too old to update by
  * itself, comes up in a window instead (RequiredUpdate). The first time you land on the Radar,
  * once per computer, a popup says where the RawJobs shortcuts are (DesktopShortcutNotice); never
- * on top of another notice.
+ * on top of the required-update window or after an update that didn't work.
  */
 export function ServerNotices({ onRadar = false }: { onRadar?: boolean }) {
   const { down } = useServerHealth();
@@ -102,8 +102,12 @@ export function ServerNotices({ onRadar = false }: { onRadar?: boolean }) {
   };
   const required = !!status.available?.critical || status.tooOld;
   const dialog = required ? <RequiredUpdate status={status} update={update} busy={busy} /> : null;
-
   const last = status.lastUpdate;
+  // The shortcut popup shows next to the quiet notes ("Updated to…", "… is ready"): an update is
+  // exactly when existing users land on the Radar. It waits only for a window that needs an
+  // answer (a required update) or an update that didn't work.
+  const intro = onRadar && !required && last?.ok !== false && status.about?.shortcuts?.notice ? <DesktopShortcutNotice status={status} onSeen={(s) => s && setStatus(s)} /> : null;
+
   if (last) {
     const seen = async () => {
       const s = await markUpdateSeen();
@@ -111,7 +115,7 @@ export function ServerNotices({ onRadar = false }: { onRadar?: boolean }) {
     };
     return (
       <>
-        {dialog}
+        {dialog ?? intro}
         <div role={last.ok ? "status" : "alert"} className={cx("mb-3 flex items-start gap-2 rounded-md px-3 py-2 type-small", last.ok ? "bg-inset/60" : "bg-warning-subtle/50 text-warning-text")}>
           {last.ok ? <CloudDownload className="mt-0.5 size-4 shrink-0 text-muted" aria-hidden /> : <CircleAlert className="mt-0.5 size-4 shrink-0" aria-hidden />}
           <div className="min-w-0 flex-1">
@@ -145,7 +149,6 @@ export function ServerNotices({ onRadar = false }: { onRadar?: boolean }) {
     );
   }
 
-  const intro = onRadar && !required && status.about?.shortcuts?.notice ? <DesktopShortcutNotice status={status} onSeen={(s) => s && setStatus(s)} /> : null;
   const a = status.available;
   if (required || !a || dismissed === a.version) return dialog ?? intro;
   const dismiss = () => {
@@ -153,33 +156,36 @@ export function ServerNotices({ onRadar = false }: { onRadar?: boolean }) {
     setDismissed(a.version);
   };
   return (
-    <div role="status" className="mb-3 flex flex-wrap items-start gap-x-3 gap-y-1.5 rounded-md bg-inset/60 px-3 py-2 type-small">
-      <CloudDownload className="mt-0.5 size-4 shrink-0 text-muted" aria-hidden />
-      <div className="min-w-0 flex-1">
-        <p>
-          <b>RawJobs {a.version} is ready.</b>{" "}
-          <span className="text-muted">
-            {status.state === "waiting" ? "It installs as soon as the scan that's running is done." : "Install it when it suits you: it takes a few seconds, and your data stays."}
-          </span>
-        </p>
-        <Notes text={a.notes} />
-        {status.error && <p className="mt-1 text-danger-text">{status.error}</p>}
+    <>
+      {intro}
+      <div role="status" className="mb-3 flex flex-wrap items-start gap-x-3 gap-y-1.5 rounded-md bg-inset/60 px-3 py-2 type-small">
+        <CloudDownload className="mt-0.5 size-4 shrink-0 text-muted" aria-hidden />
+        <div className="min-w-0 flex-1">
+          <p>
+            <b>RawJobs {a.version} is ready.</b>{" "}
+            <span className="text-muted">
+              {status.state === "waiting" ? "It installs as soon as the scan that's running is done." : "Install it when it suits you: it takes a few seconds, and your data stays."}
+            </span>
+          </p>
+          <Notes text={a.notes} />
+          {status.error && <p className="mt-1 text-danger-text">{status.error}</p>}
+        </div>
+        <div className="flex items-center gap-1">
+          <UpdateButton status={status} onClick={() => void update()} busy={busy} label="Update now" />
+          {status.state === "idle" && (
+            <button
+              type="button"
+              aria-label="Not now"
+              title="Not now (it's in Settings → About too)"
+              className="inline-flex size-7 items-center justify-center rounded-md text-muted hover:bg-inset hover:text-ink"
+              onClick={dismiss}
+            >
+              <X className="size-4" />
+            </button>
+          )}
+        </div>
       </div>
-      <div className="flex items-center gap-1">
-        <UpdateButton status={status} onClick={() => void update()} busy={busy} label="Update now" />
-        {status.state === "idle" && (
-          <button
-            type="button"
-            aria-label="Not now"
-            title="Not now (it's in Settings → About too)"
-            className="inline-flex size-7 items-center justify-center rounded-md text-muted hover:bg-inset hover:text-ink"
-            onClick={dismiss}
-          >
-            <X className="size-4" />
-          </button>
-        )}
-      </div>
-    </div>
+    </>
   );
 }
 
