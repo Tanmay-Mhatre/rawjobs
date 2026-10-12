@@ -1,5 +1,5 @@
 import { parseAiAnswer, type AiProfile, type ParsedAnswer } from "@rawjobs/core/resume-parse";
-import { ArrowRight, Check, ClipboardCopy, ExternalLink, FileText, Files, LoaderCircle, SkipForward, Sparkles, Upload, Wand2 } from "lucide-react";
+import { ArrowRight, Check, ClipboardCopy, ExternalLink, FileText, Files, LoaderCircle, SkipForward, Sparkles, TriangleAlert, Upload, Wand2 } from "lucide-react";
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { Dialog } from "../components/Dialog";
 import { Kbd } from "../components/primitives";
@@ -11,7 +11,7 @@ import { displayPlace } from "../lib/format";
 import { STEP, type Draft } from "../lib/setup";
 import { buildSuggestions, prefillDraft } from "../lib/suggest";
 import { MASTER_RESUME_PROMPT } from "./prompt";
-import { ClearButton } from "./steps";
+import { ClearButton, industryLabel } from "./steps";
 
 type Mode = "single" | "ai" | null;
 type SaveResult = { ok: true } | { ok: false; error: string };
@@ -493,8 +493,8 @@ function SavedResume({
   const suggest = useMemo(() => buildSuggestions(text, draft.aiProfile), [text, draft.aiProfile]);
   const patch = useMemo(() => prefillDraft(draft, suggest), [draft, suggest]);
   const fills = Object.keys(patch).filter((k) => k !== "remoteExclude");
-  // Topics alone are shown in Settings; with no titles or places there is nothing to show here.
-  const nothing = !suggest.titles.length && !suggest.places.length && !(suggest.remote && suggest.remoteRegions.length);
+  // Topics alone are shown in Settings; with no titles, places or industries there is nothing to show here.
+  const nothing = !suggest.titles.length && !suggest.places.length && !suggest.industries.length && !(suggest.remote && suggest.remoteRegions.length);
   const firstLine = text.split("\n").find((l) => l.trim())?.replace(/^#+\s*/, "") ?? "Resume";
 
   useEffect(() => onArrive(), []); // eslint-disable-line react-hooks/exhaustive-deps
@@ -523,7 +523,15 @@ function SavedResume({
         </div>
       </div>
 
-      {nothing ? (
+      {suggest.template ? (
+        <div role="status" className="flex items-start gap-2 rounded-md bg-warning-subtle/50 p-3 type-small text-warning-text">
+          <TriangleAlert className="mt-0.5 size-4 shrink-0" aria-hidden />
+          <p>
+            This looks like an empty resume template (it still has placeholders like {suggest.template.slice(0, 2).join(" and ")}), so nothing is filled in from it.
+            Replace it with your filled-in resume, or pick everything yourself in the next steps.
+          </p>
+        </div>
+      ) : nothing ? (
         <p className="type-small text-muted">Couldn't find job titles or places in this resume. You'll pick them in the next steps.</p>
       ) : (
       <div className="rounded-md border border-line bg-inset p-4">
@@ -534,6 +542,7 @@ function SavedResume({
           <Row label="Titles" items={suggest.titles} />
           <Row label="Places" items={suggest.places.map(displayPlace)} />
           {suggest.remote && <Row label="Remote" items={suggest.remoteRegions.map(displayPlace)} />}
+          <Row label="Industries" items={suggest.industries.map(industryLabel)} />
           <Row label="Topics" items={suggest.keywords.map(([k]) => k)} />
         </dl>
         {auto ? (
