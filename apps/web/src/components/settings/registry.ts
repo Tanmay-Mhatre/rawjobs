@@ -20,32 +20,33 @@ export const SETTINGS_PAGES = [
 ] as const satisfies readonly { id: string; label: string; group: SettingsGroup; hint: string }[];
 export type SettingsPageId = (typeof SETTINGS_PAGES)[number]["id"];
 
-export type SettingsSection = { id: string; page: SettingsPageId; title: string };
+/** A card. `words` are what people might type for it besides its title: synonyms and the controls on it. */
+export type SettingsSection = { id: string; page: SettingsPageId; title: string; words: string };
 
 /** Each card, in page order. */
 export const SETTINGS_SECTIONS: readonly SettingsSection[] = [
-  { id: "resume", page: "profile", title: "Master resume" },
-  { id: "roles", page: "profile", title: "Roles" },
-  { id: "locations", page: "profile", title: "Locations" },
-  { id: "industries", page: "profile", title: "Industries" },
-  { id: "keywords", page: "profile", title: "Topics" },
-  { id: "dealbreakers", page: "profile", title: "Dealbreakers" },
-  { id: "threshold", page: "matching", title: "Strong match threshold" },
-  { id: "max-age", page: "matching", title: "Hide jobs older than" },
-  { id: "rules", page: "matching", title: "Not interested rules" },
-  { id: "companies", page: "companies", title: "My companies" },
-  { id: "directory", page: "scans", title: "How scans work" },
-  { id: "schedule", page: "scans", title: "Scheduled scans" },
-  { id: "alerts", page: "notifications", title: "Telegram alerts" },
-  { id: "theme", page: "appearance", title: "Theme" },
-  { id: "density", page: "appearance", title: "Job list" },
-  { id: "tracking", page: "data", title: "Your tracking data" },
-  { id: "sharing", page: "data", title: "Sharing" },
-  { id: "reset", page: "data", title: "Start setup over" },
-  { id: "version", page: "updates", title: "RawJobs" },
-  { id: "shortcut", page: "updates", title: "Desktop shortcut" },
-  { id: "update", page: "updates", title: "Updates" },
-  { id: "release-notes", page: "whats-new", title: "Release notes" },
+  { id: "resume", page: "profile", title: "Master resume", words: "cv pdf upload paste file several resumes merge" },
+  { id: "roles", page: "profile", title: "Roles", words: "job titles title role family exclude seniority senior junior level position" },
+  { id: "locations", page: "profile", title: "Locations", words: "places city cities country office remote regions relocate where hybrid onsite" },
+  { id: "industries", page: "profile", title: "Industries", words: "sector domain field market" },
+  { id: "keywords", page: "profile", title: "Topics", words: "keywords skills boost rank interests technologies tech stack" },
+  { id: "dealbreakers", page: "profile", title: "Dealbreakers", words: "salary pay money minimum compensation visa sponsorship work authorization permit avoid" },
+  { id: "threshold", page: "matching", title: "Strong match threshold", words: "score minimum min score highlight good match best" },
+  { id: "max-age", page: "matching", title: "Hide jobs older than", words: "old stale age posted date fresh months" },
+  { id: "rules", page: "matching", title: "Not interested rules", words: "hide hidden not for me filter mute dismiss" },
+  { id: "companies", page: "companies", title: "My companies", words: "favourite favorite starred dream target employers hidden muted" },
+  { id: "directory", page: "scans", title: "How scans work", words: "what to scan scope all companies ask every time scan now directory catalog background update startup" },
+  { id: "schedule", page: "scans", title: "Scheduled scans", words: "automatic daily time times timer cron run now" },
+  { id: "alerts", page: "notifications", title: "Telegram alerts", words: "phone push mobile bot message notify notification test" },
+  { id: "theme", page: "appearance", title: "Theme", words: "dark mode light night colour color contrast accessibility" },
+  { id: "density", page: "appearance", title: "Job list", words: "density compact comfortable spacing rows" },
+  { id: "tracking", page: "data", title: "Your tracking data", words: "backup export import move device transfer json notes statuses saved views" },
+  { id: "sharing", page: "data", title: "Sharing", words: "privacy share send directory contribute companies added by link" },
+  { id: "reset", page: "data", title: "Start setup over", words: "reset wizard clear restart onboarding" },
+  { id: "version", page: "updates", title: "RawJobs", words: "version about check for updates install upgrade" },
+  { id: "shortcut", page: "updates", title: "Desktop shortcut", words: "icon start menu address bookmark" },
+  { id: "update", page: "updates", title: "Updates", words: "watch new versions beta channel upgrade" },
+  { id: "release-notes", page: "whats-new", title: "Release notes", words: "changelog what's new whats new changes history versions" },
 ];
 
 /** Links made before Settings had pages pointed at a group ("#settings?section=scans"): where each one lives now. */
