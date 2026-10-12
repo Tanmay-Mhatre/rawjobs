@@ -15,8 +15,11 @@ import { ServerNotices } from "./components/Updates";
 import { UpdatePill } from "./components/WhatsNew";
 import { ScanButton, ScanChooser } from "./components/ScanButton";
 import { Settings } from "./components/Settings";
-import { Toaster } from "./components/Toast";
-import { Button, Card, cx, IconButton, Kbd } from "./components/ui";
+import { settingsHash } from "./components/settings/registry";
+import { ShortcutList } from "./components/ShortcutList";
+import { Toaster, toast } from "./components/Toast";
+import { offerWhat } from "./lib/notForMe";
+import { Button, Card, cx, IconButton } from "./components/ui";
 import { keyOf } from "./lib/companies";
 import { canRunLocally, useData, useOtherJobs, type Job } from "./lib/data";
 import { newSinceLastVisit } from "./lib/newSince";
@@ -384,7 +387,6 @@ export function App() {
                       onDeleteView={prefs.deleteView}
                       onRestoreView={prefs.restoreView}
                       onHideCompany={hideCompany}
-                      onSetRule={prefs.setRule}
                       isYours={isYours}
                       companyCount={yourKeys.size}
                       indexGeneratedAt={state.indexGeneratedAt}
@@ -449,6 +451,9 @@ export function App() {
                   update={update}
                   revert={() => setDraft(saved)}
                   dirty={dirty}
+                  saved={saved}
+                  setupSaved={canSave}
+                  canScan={canRunLocally && setupState === "configured"}
                   onSaved={async () => {
                     await setup.refresh();
                     save(DRAFT_KEY, null);
@@ -464,7 +469,10 @@ export function App() {
                     user.replaceAll(state);
                     if (p) prefs.replacePrefs(p);
                   }}
-                  onRemoveRule={(rule) => prefs.setRule(rule, false)}
+                  onRemoveRule={(rule) => {
+                    prefs.setRule(rule, false);
+                    toast({ message: <>Showing {offerWhat({ kind: "rule", rule })} again.</>, actionLabel: "Undo", onAction: () => prefs.setRule(rule, true) });
+                  }}
                   suggest={suggest}
                   resumeText={resume.text}
                   saveResume={saveResume}
@@ -571,29 +579,8 @@ function ErrorState({ message, onRetry }: { message: string; onRetry: () => void
   );
 }
 
-/** Every single-key shortcut the dashboard handles, and only those (design/README.md, Interaction). */
+/** The "?" window: every shortcut, and where they're listed for good. */
 function ShortcutHelp({ open, onClose, canScan }: { open: boolean; onClose: () => void; canScan: boolean }) {
-  // Two digits are a range ("1–6"), "G" starts a sequence ("G then R"), other keys a pair ("J / K").
-  const rows: [string[], string][] = [
-    [["J", "K"], "Next / previous job"],
-    [["Enter"], "Open job"],
-    [["S"], "Save"],
-    [["A"], "Mark as applied"],
-    [["X"], "Not interested"],
-    [["C"], "Copy description"],
-    [["F"], "Expand job to full window"],
-    ...(canScan ? [[["R"], "Scan now"] as [string[], string]] : []),
-    [["/"], "Search"],
-    [["1", "6"], "Radar views, in order"],
-    [["1", "4"], "Switch section, outside the Radar"],
-    [["G", "R"], "Go to Radar"],
-    [["G", "P"], "Go to Pipeline"],
-    [["G", "C"], "Go to Companies"],
-    [["G", "S"], "Go to Settings"],
-    [["[", "]"], "Move a pipeline card back / forward"],
-    [["?"], "Show these shortcuts"],
-    [["Esc"], "Close"],
-  ];
   return (
     <Dialog open={open} onClose={onClose} labelledBy="shortcut-help-title" className="max-w-sm">
       <Card className="w-full p-5 shadow-l3">
@@ -605,21 +592,10 @@ function ShortcutHelp({ open, onClose, canScan }: { open: boolean; onClose: () =
             <X className="size-4" />
           </IconButton>
         </div>
-        <ul className="mt-3 space-y-2 type-small">
-          {rows.map(([keys, label]) => (
-            <li key={label} className="flex items-center justify-between">
-              <span className="text-muted">{label}</span>
-              <span className="flex items-center gap-1">
-                {keys.map((k, i) => (
-                  <span key={k} className="flex items-center gap-1">
-                    {i > 0 && <span className="type-meta text-muted">{/^\d$/.test(k) ? "–" : keys[0] === "G" ? "then" : "/"}</span>}
-                    <Kbd>{k}</Kbd>
-                  </span>
-                ))}
-              </span>
-            </li>
-          ))}
-        </ul>
+        <ShortcutList canScan={canScan} className="mt-3 space-y-2 type-small" />
+        <a href={`#${settingsHash("keyboard")}`} onClick={onClose} className="mt-4 inline-block type-small font-medium text-ink underline underline-offset-2 hover:text-muted">
+          Also in Settings › Keyboard
+        </a>
       </Card>
     </Dialog>
   );

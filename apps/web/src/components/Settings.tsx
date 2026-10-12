@@ -1,6 +1,6 @@
 import { INDUSTRY_BY_ID } from "@rawjobs/core/catalog/industries";
 import { groupPlaces } from "@rawjobs/core/catalog/places";
-import { ArrowRight, ChevronLeft, ChevronRight, Download, RefreshCw, RotateCcw, Save, Upload, X } from "lucide-react";
+import { ArrowRight, Check, ChevronLeft, ChevronRight, Download, RefreshCw, RotateCcw, Save, Upload, X } from "lucide-react";
 import { Fragment, useEffect, useRef, useState, type MouseEvent, type ReactNode } from "react";
 import { canRunLocally, useDirectorySize } from "../lib/data";
 import { DealbreakersStep } from "./Dealbreakers";
@@ -20,9 +20,15 @@ import { TelegramAlerts } from "./TelegramAlerts";
 import { Button, Card, cx, IconButton, Segmented, Toggle } from "./ui";
 import { useUpdateStatus } from "../lib/update";
 import { DesktopShortcutSettings } from "./DesktopShortcut";
-import { AboutRawJobs, UpdatesSettings } from "./Updates";
+import { AboutRawJobs, UpdatesSettings, UpdateTelegramSetting } from "./Updates";
+import { ShortcutList } from "./ShortcutList";
+import { DISMISS_KEY as CHECKLIST_DISMISSED_KEY } from "./Guidance";
+import { DISMISSED_KEY as GO_BACK_DISMISSED_KEY } from "./companies/ForYou";
+import { save } from "../lib/storage";
 import { ReleaseNotes } from "./WhatsNew";
 import { parseSettingsHash, SETTINGS_GROUPS, SETTINGS_PAGES, SETTINGS_SECTIONS, settingsHash, type SettingsPageId } from "./settings/registry";
+import { searchSettings, type SettingsHit } from "./settings/search";
+import { SettingsSearchBox, SettingsSearchResults, useSearchShortcut } from "./settings/SettingsSearch";
 
 type Props = {
   draft: Draft;
@@ -30,6 +36,10 @@ type Props = {
   /** Throw away unsaved edits (reload from the saved config). */
   revert: () => void;
   dirty: boolean;
+  /** The setup as saved, for settings that save on their own (written on top of it). */
+  saved: Draft;
+  /** A finished setup is saved on this computer; until then every change waits for Save. */
+  setupSaved: boolean;
   onSaved: () => Promise<void>;
   onScan: () => void;
   scanning: boolean;
@@ -45,6 +55,8 @@ type Props = {
   toCompanies: () => void;
   /** Clear the saved setup and open the wizard again; an error message, or null. Only on a saved local setup. */
   onStartOver?: () => Promise<string | null>;
+  /** R scans now (for the shortcut list). */
+  canScan?: boolean;
 };
 
 /** "a, b, c +2", or "" when empty. */
@@ -66,7 +78,9 @@ export function Settings({
   draft,
   update,
   revert,
-  dirty,
+  dirty: anyDirty,
+  saved,
+  setupSaved,
   onSaved,
   onScan,
   scanning,
@@ -80,11 +94,41 @@ export function Settings({
   removeResume,
   toCompanies,
   onStartOver,
+  canScan = false,
 }: Props) {
   const [status, setStatus] = useState<{ tone: "ok" | "bad"; text: string; detail?: string; retry?: boolean } | null>(null);
   const [saving, setSaving] = useState(false);
   const lastSave = useRef(false);
   const blockers = saveBlockers(draft).map((b) => b.message);
+  // Once setup is saved, the switches outside Profile and Matching save on their own, so only those two pages' edits wait for Save.
+  const instant = canRunLocally && setupSaved;
+  const same = (a: Draft, b: Draft) => JSON.stringify(draftToConfig(a)) === JSON.stringify(draftToConfig(b));
+  /** The draft without the edits that save on their own. */
+  const waiting = { ...draft, directory: saved.directory, alerts: { ...draft.alerts, only_new: saved.alerts.only_new } };
+  const dirty = anyDirty && (!instant || !same(waiting, saved));
+  /** The page holding the unsaved edits: Matching when only the threshold changed. */
+  const dirtyPage: SettingsPageId = same({ ...waiting, minScore: saved.minScore }, saved) ? "matching" : "profile";
+  /** Until setup is saved, the Save bar shows on every page: the directory switches wait for it too. */
+  const saveHere = (page: SettingsPageId) => !instant || page === "profile" || page === "matching";
+  const [switchSave, setSwitchSave] = useState<Partial<Record<InstantSwitch, FieldSave>>>({});
+  /** Save one switch now: written on top of the saved setup, leaving Profile and Matching edits unsaved. */
+  const saveSwitch = async (key: InstantSwitch, on: boolean) => {
+    // Both directory switches may be saving at once, so each save carries the other's latest value.
+    const patch: Partial<Draft> = key === "only_new" ? { alerts: { ...draft.alerts, only_new: on } } : { directory: { ...draft.directory, [key]: on } };
+    update(patch);
+    if (!instant) return;
+    const note = (state: FieldSave) => setSwitchSave((s) => ({ ...s, [key]: state }));
+    note({ kind: "saving" });
+    try {
+      const next = key === "only_new" ? { ...saved, alerts: { ...saved.alerts, only_new: on } } : { ...saved, directory: patch.directory! };
+      const res = await saveConfig(draftToConfig(next));
+      if (!res.ok) return note({ kind: "error", retry: () => void saveSwitch(key, on) });
+      await onSaved();
+      note({ kind: "saved" });
+    } catch {
+      note({ kind: "error", retry: () => void saveSwitch(key, on) });
+    }
+  };
   const directorySize = useDirectorySize();
   const updates = useUpdateStatus();
 
@@ -99,6 +143,12 @@ export function Settings({
     "release-notes": canRunLocally,
   };
   const isShown = (id: string) => shown[id] ?? true;
+  /** Why search shows a card it can't open here. */
+  const unavailable = (id: string) => {
+    if (isShown(id)) return undefined;
+    if (!canRunLocally) return "Only when RawJobs runs on your computer";
+    return id === "reset" ? "Once your setup is saved" : "Only in the installed app";
+  };
   const pages = SETTINGS_PAGES.filter((p) => SETTINGS_SECTIONS.some((s) => s.page === p.id && isShown(s.id)));
 
   const route = useSettingsRoute();
@@ -120,6 +170,33 @@ export function Settings({
   };
   // Dealbreakers are optional, so they start folded even when empty.
   const [open, setOpen] = useState<Set<string>>(() => new Set(Object.keys(summaries).filter((k) => !summaries[k] && k !== "dealbreakers")));
+  // What's saved in each card, in full, for search ("berlin" finds Locations).
+  const values = (id: string): string[] =>
+    ({
+      roles: [...draft.include, ...draft.exclude],
+      locations: [...groupPlaces(officePlaces(draft)).map((g) => displayPlace(g.name)), ...(draft.remote ? ["Remote"] : [])],
+      industries: draft.industries.map((i) => INDUSTRY_BY_ID.get(i)?.label ?? i),
+      keywords: Object.keys(draft.keywords),
+      dealbreakers: [...(draft.workAuthorization ?? []), ...(draft.avoid ?? [])],
+    })[id] ?? [];
+
+  const [query, setQuery] = useState("");
+  const [active, setActive] = useState(0);
+  const searching = !!query.trim();
+  /** Profile and Matching collect edits for Save; every other page saves each change at once. */
+  const onDraftPage = !searching && saveHere(current);
+  const hits = searching ? searchSettings(query, { unavailable, values }) : [];
+  useSearchShortcut();
+  /** The card a search result opened: outlined for a moment once it's on screen. */
+  const flash = useRef<string | null>(null);
+  const openHit = (hit: SettingsHit) => {
+    setQuery("");
+    flash.current = hit.section.id;
+    const target = `#${settingsHash(hit.section.id)}`;
+    if (location.hash === target) reveal(hit.section.id);
+    else location.hash = target;
+  };
+
   const toggle = (id: string) =>
     setOpen((o) => {
       const next = new Set(o);
@@ -137,18 +214,32 @@ export function Settings({
       window.scrollTo({ top: 0 });
       return;
     }
+    return reveal(id);
+  }, [route.page, route.section]);
+
+  /** Open a card (if it folds), scroll to it and, when search led here, outline it and move focus to it. */
+  function reveal(id: string) {
     if (id in summaries) setOpen((o) => new Set(o).add(id));
     // After the page has rendered. Some cards appear once their data loads (Desktop shortcut): keep looking for a moment.
     let tries = 0;
     let timer: ReturnType<typeof setTimeout> | undefined;
     const scroll = () => {
       const el = document.getElementById(`settings-${id}`);
-      if (el) el.scrollIntoView({ block: "start" });
-      else if (++tries < 20) timer = setTimeout(scroll, 100);
+      if (!el) {
+        if (++tries < 20) timer = setTimeout(scroll, 100);
+        return;
+      }
+      el.scrollIntoView({ block: "start" });
+      if (flash.current !== id) return;
+      flash.current = null;
+      el.tabIndex = -1;
+      el.focus({ preventScroll: true });
+      el.classList.add("ring-2", "ring-focus");
+      timer = setTimeout(() => el.classList.remove("ring-2", "ring-focus"), 1600);
     };
     timer = setTimeout(scroll, 60);
     return () => clearTimeout(timer);
-  }, [route.page, route.section]);
+  }
 
   useEffect(() => {
     if (dirty) setStatus(null);
@@ -178,15 +269,28 @@ export function Settings({
 
   // Every page stays mounted (just hidden), as when Settings was one long page, so nothing typed is lost on a page switch.
   const page = (id: SettingsPageId, children: ReactNode) => (
-    <SettingsPage id={id} current={current} onList={!route.page}>
+    <SettingsPage id={id} current={searching ? null : current} onList={!route.page}>
       {children}
     </SettingsPage>
   );
 
   return (
     <div className="md:grid md:grid-cols-[12rem_minmax(0,1fr)] md:items-start md:gap-8">
-      <SettingsNav pages={pages} current={current} onList={!route.page} />
-      <div className={cx("min-w-0", !route.page && "max-md:hidden")}>
+      <SettingsNav pages={pages} current={current} onList={!route.page} searching={searching}>
+        <SettingsSearchBox
+          query={query}
+          onQuery={(q) => {
+            setQuery(q);
+            setActive(0);
+          }}
+          hits={hits}
+          active={active}
+          onActive={setActive}
+          onOpen={openHit}
+        />
+      </SettingsNav>
+      <div className={cx("min-w-0", !route.page && !searching && "max-md:hidden")}>
+        {searching && <SettingsSearchResults query={query} hits={hits} active={active} onOpen={openHit} />}
         {page(
           "profile",
           <>
@@ -212,7 +316,7 @@ export function Settings({
         {page(
           "matching",
           <>
-            <Section id="threshold" title="Strong match threshold" hint="Strong matches get a highlighted score on your Radar and are sent in Telegram alerts.">
+            <Section id="threshold" title="Strong match threshold" hint="Strong matches get a highlighted score on your Radar and are sent in Telegram alerts. Applies when you save.">
               <ThresholdPicker draft={draft} update={update} />
             </Section>
             <MaxAgeSection />
@@ -228,11 +332,26 @@ export function Settings({
 
         {page(
           "companies",
-          <Section id="companies" title="My companies" hint="Companies you'd love to work at: scanned every time, starred on your Radar, and their newest jobs shown on top.">
+          <Section
+            id="companies"
+            title="My companies"
+            hint="Companies you'd love to work at: scanned every time, starred on your Radar, and their newest jobs shown on top. Hidden companies and past employers are on the Companies tab too."
+          >
             <div className="flex flex-wrap items-center gap-3">
               <p className="type-small">
                 You've picked <b className="tabular">{draft.companies.length}</b> compan{draft.companies.length === 1 ? "y" : "ies"}
-                {draft.muted.length > 0 && <> and hidden {draft.muted.length}</>}.
+                {draft.muted.length > 0 && (
+                  <>
+                    , hidden <b className="tabular">{draft.muted.length}</b>
+                  </>
+                )}
+                {draft.pastEmployers.length > 0 && (
+                  <>
+                    {" "}
+                    and listed <b className="tabular">{draft.pastEmployers.length}</b> past employer{draft.pastEmployers.length === 1 ? "" : "s"}
+                  </>
+                )}
+                .
               </p>
               <Button size="sm" onClick={toCompanies}>
                 Manage in Companies tab <ArrowRight className="size-3.5" />
@@ -244,34 +363,29 @@ export function Settings({
         {page(
           "scans",
           <>
-            <Section
-              id="directory"
-              title="How scans work"
-              hint={`The shared company directory lists ${directorySize ? roughCount(directorySize) : "~47,000"} companies and where each one posts jobs. Jobs are always fetched live by your own scans; nothing about you is sent.`}
-            >
+            <Section id="scope" title="What to scan" hint="What Scan now does. Saved in this browser, right away.">
               <div className="space-y-3">
-                <ul className="space-y-1.5 type-small">
-                  <li>
-                    <b>{draft.industries.length ? "My companies + my industries" : "My companies"}</b>
-                    <span className="text-muted">
-                      {draft.industries.length
-                        ? ": My companies, plus every company in the directory tagged with your industries. A few minutes."
-                        : ": the companies you've added. Add industries under Profile to scan more. A few minutes."}
-                    </span>
-                  </li>
-                  <li>
-                    <b>All companies</b>
-                    <span className="text-muted">
-                      : every company in the directory that RawJobs can scan. The daily job feed skips companies with nothing for you, so usually minutes; up to 2 hours without it. Stop any time and
-                      it carries on later.
-                    </span>
-                  </li>
-                </ul>
-                <p className="type-small text-muted">Every scan first updates the company directory, so new companies and moved careers pages are picked up.</p>
                 <ScanPrefsPicker />
-                <Toggle checked={draft.directory.auto_update} onChange={(v) => update({ directory: { ...draft.directory, auto_update: v } })}>
-                  Also update the company directory in the background when the app starts
-                </Toggle>
+                <details className="type-small">
+                  <summary className="cursor-pointer font-medium text-ink">How long each one takes</summary>
+                  <ul className="mt-2 space-y-1.5">
+                    <li>
+                      <b>{draft.industries.length ? "My companies + my industries" : "My companies"}</b>
+                      <span className="text-muted">
+                        {draft.industries.length
+                          ? ": My companies, plus every company in the directory tagged with your industries. A few minutes."
+                          : ": the companies you've added. Add industries under Profile to scan more. A few minutes."}
+                      </span>
+                    </li>
+                    <li>
+                      <b>All companies</b>
+                      <span className="text-muted">
+                        : every company in the directory that RawJobs can scan. The daily job feed skips companies with nothing for you, so usually minutes; up to 2 hours without it. Stop any time and
+                        it carries on later.
+                      </span>
+                    </li>
+                  </ul>
+                </details>
               </div>
             </Section>
             {shown.schedule && (
@@ -279,29 +393,70 @@ export function Settings({
                 <ScheduledScans />
               </Section>
             )}
+            <Section
+              id="directory"
+              title="Company directory"
+              hint={`The shared directory lists ${directorySize ? roughCount(directorySize) : "~47,000"} companies and where each one posts jobs. Jobs are always fetched live by your own scans; nothing about you is sent.`}
+            >
+              <div className="space-y-2">
+                <p className="type-small text-muted">Every scan first updates the directory, so new companies and moved careers pages are picked up.</p>
+                <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+                  <Toggle checked={draft.directory.auto_update} onChange={(v) => void saveSwitch("auto_update", v)}>
+                    Also update it in the background when the app starts
+                  </Toggle>
+                  <SaveNote state={switchSave.auto_update} />
+                </div>
+              </div>
+            </Section>
           </>,
         )}
 
         {page(
           "notifications",
           shown.alerts && (
-            <Section id="alerts" title="Telegram alerts" hint="Get new jobs from scheduled scans on your phone. Saved right away.">
-              <TelegramAlerts onChanged={onSaved} />
-            </Section>
+            <>
+              <Section id="alerts" title="Telegram alerts" hint="Get new jobs from scheduled scans on your phone. Saved right away.">
+                <TelegramAlerts onChanged={onSaved} />
+              </Section>
+              <Section id="send" title="What to send" hint="Which Telegram messages you get once it's connected. Saved right away.">
+                <div className="space-y-4">
+                  <div>
+                    <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+                      <Toggle checked={draft.alerts.only_new} onChange={(v) => void saveSwitch("only_new", v)}>
+                        After a scheduled scan, only jobs I haven't been sent before
+                      </Toggle>
+                      <SaveNote state={switchSave.only_new} />
+                    </div>
+                    <p className="mt-1 type-small text-muted">Turn off to get every strong match after each scheduled scan, even ones you've had.</p>
+                  </div>
+                  <UpdateTelegramSetting />
+                </div>
+              </Section>
+            </>
           ),
         )}
 
         {page("appearance", <AppearanceSection />)}
 
         {page(
+          "keyboard",
+          <Section id="shortcuts" title="Keyboard shortcuts" hint="Single keys work anywhere except while you type in a field. Press ? to see them at any time.">
+            <ShortcutList canScan={canScan} className="max-w-md space-y-2 type-small" />
+          </Section>,
+        )}
+
+        {page(
           "data",
           <>
             <TrackingData user={user} prefs={prefs} onImport={onImport} />
-            <Section id="sharing" title="Sharing" hint="Help everyone find more companies. On by default; turn it off here.">
+            <Section id="sharing" title="Sharing" hint="Help everyone find more companies. On by default; turn it off here. Saved right away.">
               <div className="space-y-2">
-                <Toggle checked={draft.directory.share_additions} onChange={(v) => update({ directory: { ...draft.directory, share_additions: v } })}>
-                  Share companies I add by link with everyone
-                </Toggle>
+                <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+                  <Toggle checked={draft.directory.share_additions} onChange={(v) => void saveSwitch("share_additions", v)}>
+                    Share companies I add by link with everyone
+                  </Toggle>
+                  <SaveNote state={switchSave.share_additions} />
+                </div>
                 <p className="type-small text-muted">
                   Only the careers link is shared: the company's name, its hiring system and its board name. Never your profile, resume, searches or which jobs you look at.{" "}
                   <a
@@ -315,14 +470,20 @@ export function Settings({
                 </p>
               </div>
             </Section>
+            <Section id="tips" title="Tips you've closed" hint="The setup checklist on the Radar and the suggestions to go back to past employers.">
+              <ShowTipsAgain />
+            </Section>
             {onStartOver && (
-              <Section
-                id="reset"
-                title="Start setup over"
-                hint="Clears your setup answers: profile, roles, places, keywords and companies. Your tracked jobs, notes, saved views, resume and Telegram alerts stay."
-              >
-                <StartOver onStartOver={onStartOver} />
-              </Section>
+              <div className="space-y-2 pt-4">
+                <h3 className="type-label text-danger-text">Danger zone</h3>
+                <Section
+                  id="reset"
+                  title="Start setup over"
+                  hint="Clears your setup answers: profile, roles, places, keywords and companies. Your tracked jobs, notes, saved views, resume and Telegram alerts stay."
+                >
+                  <StartOver onStartOver={onStartOver} />
+                </Section>
+              </div>
             )}
           </>,
         )}
@@ -357,7 +518,18 @@ export function Settings({
           ),
         )}
 
-        {canRunLocally && (dirty || status) && (
+        {!canRunLocally && dirty && onDraftPage && (
+          <p className="mt-6 rounded-md border border-line bg-raised p-3 type-small text-muted">This online copy doesn't save changes. To keep your setup, run RawJobs on your computer.</p>
+        )}
+        {canRunLocally && dirty && !onDraftPage && (
+          <div className="sticky bottom-16 z-10 mt-6 flex flex-wrap items-center gap-2 rounded-md border border-line bg-raised/95 p-3 shadow-l2 backdrop-blur md:bottom-4">
+            <span className="mr-auto type-small text-muted">You have unsaved changes on {dirtyPage === "matching" ? "Matching" : "Profile"}.</span>
+            <Button size="sm" onClick={() => (location.hash = settingsHash(dirtyPage))}>
+              Review and save <ArrowRight className="size-3.5" />
+            </Button>
+          </div>
+        )}
+        {canRunLocally && ((dirty && onDraftPage) || status) && (
           <div className="sticky bottom-16 z-10 mt-6 rounded-md border border-line bg-raised/95 p-3 shadow-l2 backdrop-blur md:bottom-4">
             {status && (
               <div role={status.tone === "bad" ? "alert" : "status"} className="mb-2 type-small">
@@ -375,7 +547,7 @@ export function Settings({
                 )}
               </div>
             )}
-            {dirty && (
+            {dirty && onDraftPage && (
               <div className="flex flex-wrap items-center gap-2">
                 <span className="mr-auto type-small text-muted">{blockers[0] ?? "You have unsaved changes."}</span>
                 <Button variant="ghost" onClick={revert} disabled={saving}>
@@ -396,6 +568,59 @@ export function Settings({
   );
 }
 
+type FieldSave = { kind: "idle" | "saving" | "saved" } | { kind: "error"; retry: () => void };
+/** The switches outside Profile and Matching that are kept in the config file. */
+type InstantSwitch = "auto_update" | "share_additions" | "only_new";
+
+/** Bring back the tips you've closed; each shows again where it applies. */
+function ShowTipsAgain() {
+  const [done, setDone] = useState(false);
+  return (
+    <div className="flex flex-wrap items-center gap-3">
+      <Button
+        size="sm"
+        onClick={() => {
+          save(CHECKLIST_DISMISSED_KEY, false);
+          save(GO_BACK_DISMISSED_KEY, []);
+          setDone(true);
+        }}
+      >
+        Show them again
+      </Button>
+      {done && (
+        <span role="status" className="inline-flex items-center gap-1 type-small text-muted">
+          <Check className="size-3.5 text-success-text" aria-hidden="true" /> Done. They show again where they apply.
+        </span>
+      )}
+    </div>
+  );
+}
+
+/** Next to a switch that saves on its own: "Saving…", "Saved", or what went wrong with Try again. */
+function SaveNote({ state }: { state?: FieldSave }) {
+  if (!state || state.kind === "idle") return null;
+  if (state.kind === "error")
+    return (
+      <span role="alert" className="inline-flex items-center gap-1.5 type-small text-danger-text">
+        Couldn't save. Make sure RawJobs is still running.
+        <button type="button" className="min-h-6 font-medium underline" onClick={state.retry}>
+          Try again
+        </button>
+      </span>
+    );
+  return (
+    <span role="status" className="inline-flex items-center gap-1 type-small text-muted">
+      {state.kind === "saving" ? (
+        "Saving…"
+      ) : (
+        <>
+          <Check className="size-3.5 text-success-text" aria-hidden="true" /> Saved
+        </>
+      )}
+    </span>
+  );
+}
+
 type NavPage = (typeof SETTINGS_PAGES)[number];
 
 /** Move to a page and put focus on its heading, so a screen reader starts there. */
@@ -409,48 +634,54 @@ function goToPage(e: MouseEvent, id: SettingsPageId) {
  * The pages, under their group headings. On a computer, a sidebar beside the page. On a phone, a bare
  * "#settings" shows this list as the whole screen (`onList`); a page then has a Back link to it.
  */
-function SettingsNav({ pages, current, onList }: { pages: readonly NavPage[]; current: SettingsPageId; onList: boolean }) {
+function SettingsNav({ pages, current, onList, searching, children }: { pages: readonly NavPage[]; current: SettingsPageId; onList: boolean; searching: boolean; children: ReactNode }) {
   return (
-    <nav aria-label="Settings pages" className={cx("mb-6 md:sticky md:top-20 md:mb-0", !onList && "max-md:hidden")}>
-      <h1 className="mb-3 type-subheading md:hidden">Settings</h1>
-      {SETTINGS_GROUPS.map((group) => {
-        const inGroup = pages.filter((p) => p.group === group);
-        if (!inGroup.length) return null;
-        return (
-          <Fragment key={group}>
-            <p className="mb-1 mt-5 px-3 type-meta font-medium text-muted first:mt-0 md:px-2" aria-hidden="true">
-              {group}
-            </p>
-            <ul aria-label={group} className="divide-y divide-line overflow-hidden rounded-md border border-line bg-raised md:divide-y-0 md:overflow-visible md:border-0 md:bg-transparent">
-              {inGroup.map((p) => (
-                <li key={p.id}>
-                  <a
-                    href={`#${settingsHash(p.id)}`}
-                    aria-current={p.id === current ? "page" : undefined}
-                    onClick={(e) => goToPage(e, p.id)}
-                    className={cx(
-                      "flex min-h-11 items-center gap-2 px-3 type-label md:min-h-9 md:rounded-md md:px-2",
-                      p.id === current ? "md:bg-active md:text-ink" : "text-ink md:text-muted md:hover:bg-inset md:hover:text-ink",
-                    )}
-                  >
-                    <span className="min-w-0 flex-1">
-                      {p.label}
-                      <span className="block truncate type-meta font-normal text-muted md:hidden">{p.hint}</span>
-                    </span>
-                    <ChevronRight className="size-4 text-muted md:hidden" aria-hidden="true" />
-                  </a>
-                </li>
-              ))}
-            </ul>
-          </Fragment>
-        );
-      })}
+    <nav aria-label="Settings pages" className={cx("mb-6 md:sticky md:top-20 md:mb-0", !onList && !searching && "max-md:hidden")}>
+      <p className="mb-3 type-subheading md:hidden" aria-hidden="true">
+        Settings
+      </p>
+      {children}
+      {/* While searching on a phone, the results take the list's place. */}
+      <div className={cx(searching && "max-md:hidden")}>
+        {SETTINGS_GROUPS.map((group) => {
+          const inGroup = pages.filter((p) => p.group === group);
+          if (!inGroup.length) return null;
+          return (
+            <Fragment key={group}>
+              <p className="mb-1 mt-5 px-3 type-meta font-medium text-muted first:mt-0 md:px-2" aria-hidden="true">
+                {group}
+              </p>
+              <ul aria-label={group} className="divide-y divide-line overflow-hidden rounded-md border border-line bg-raised md:divide-y-0 md:overflow-visible md:border-0 md:bg-transparent">
+                {inGroup.map((p) => (
+                  <li key={p.id}>
+                    <a
+                      href={`#${settingsHash(p.id)}`}
+                      aria-current={p.id === current ? "page" : undefined}
+                      onClick={(e) => goToPage(e, p.id)}
+                      className={cx(
+                        "flex min-h-11 items-center gap-2 px-3 type-label md:min-h-9 md:rounded-md md:px-2",
+                        p.id === current ? "md:bg-active md:text-ink" : "text-ink md:text-muted md:hover:bg-inset md:hover:text-ink",
+                      )}
+                    >
+                      <span className="min-w-0 flex-1">
+                        {p.label}
+                        <span className="block truncate type-meta font-normal text-muted md:hidden">{p.hint}</span>
+                      </span>
+                      <ChevronRight className="size-4 text-muted md:hidden" aria-hidden="true" />
+                    </a>
+                  </li>
+                ))}
+              </ul>
+            </Fragment>
+          );
+        })}
+      </div>
     </nav>
   );
 }
 
 /** One Settings page: its heading and cards. Hidden unless it's the current one. */
-function SettingsPage({ id, current, onList, children }: { id: SettingsPageId; current: SettingsPageId; onList: boolean; children: ReactNode }) {
+function SettingsPage({ id, current, onList, children }: { id: SettingsPageId; current: SettingsPageId | null; onList: boolean; children: ReactNode }) {
   const meta = SETTINGS_PAGES.find((p) => p.id === id)!;
   return (
     <div hidden={id !== current} className="space-y-4">

@@ -34,7 +34,7 @@ type Props = {
   onRetry?: () => void;
 };
 
-const DISMISSED_KEY = "rawjobs.goBackDismissed";
+export const DISMISSED_KEY = "rawjobs.goBackDismissed";
 /** "Off" for less than this right after mount or a change is just the request starting: keep the skeleton (M3). */
 const OFF_GRACE_MS = 1000;
 const PAGE = 9;

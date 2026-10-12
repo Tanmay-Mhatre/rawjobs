@@ -550,7 +550,6 @@ export function demoDraft(furthestStep = 5) {
     alerts: CONFIG.alerts,
     directory: CONFIG.directory,
     muted: [],
-    discovery: CONFIG.discovery,
     furthestStep,
     ...(family ? { family } : {}),
   };

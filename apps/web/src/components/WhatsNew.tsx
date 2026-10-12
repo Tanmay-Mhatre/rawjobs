@@ -1,12 +1,14 @@
 import type { ChangelogEntry, ReleaseChange } from "@rawjobs/core/release-notes";
 import { releaseItems } from "@rawjobs/core/release-notes";
-import { ArrowDownToLine, LoaderCircle } from "lucide-react";
-import { useEffect, useState } from "react";
+import { ArrowDownToLine, ChevronDown, LoaderCircle, RefreshCw, ShieldCheck } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
 import { formatDate } from "../lib/format";
 import { settingsHash } from "./settings/registry";
 import { announceUpdateStatus, loadChangelog, markUpdateSeen, updateNow, useUpdateStatus, type Changelog, type UpdateStatus } from "../lib/update";
 import { Dialog } from "./Dialog";
 import { Button, Card, cx, Segmented } from "./ui";
+import { Anchor, ChangeRows, ChangeTag, Head, Points, sortedItems, VersionLine } from "./UpdateParts";
+import { toast } from "./Toast";
 
 /**
  * What changed, version by version: the tag on each line (New, Improved, Fixed), a release's list,
@@ -14,20 +16,6 @@ import { Button, Card, cx, Segmented } from "./ui";
  * each release's tag message (packages/core/src/release-notes.ts); the bundle carries every version's
  * (changelog.json), so a copy knows what changed in every version up to its own.
  */
-
-// Orange is kept for the primary button, the star and the new dot (design/README.md, One accent):
-// the tags are a word on a quiet tint, told apart by the word first.
-const TAG: Record<ReleaseChange["type"], { label: string; className: string }> = {
-  new: { label: "New", className: "bg-success-subtle text-success-text" },
-  improved: { label: "Improved", className: "bg-inset text-ink" },
-  fixed: { label: "Fixed", className: "border border-line text-muted" },
-};
-
-/** A change's kind, as a word on a tint (never color alone). */
-export function ChangeTag({ type }: { type: ReleaseChange["type"] }) {
-  const t = TAG[type];
-  return <span className={cx("inline-flex h-5 shrink-0 items-center justify-self-start rounded-sm px-1.5 type-meta font-medium", t.className)}>{t.label}</span>;
-}
 
 /** One release's changes: a tag and a sentence each (a release from before tags: its lines, untagged). */
 export function ReleaseList({ notes, changes, filter }: { notes: string; changes?: ReleaseChange[]; filter?: ReleaseChange["type"] | "all" }) {
@@ -67,50 +55,82 @@ function VersionHead({ e, mark }: { e: ChangelogEntry; mark?: string }) {
 }
 
 /**
- * Once after an update: everything new since the version you had, also the versions in between
- * that you skipped. "Got it" (or closing it) marks the update seen.
+ * Once after an update, in the same look as the required-update window: the app icon and
+ * "0.6.0 → 0.6.1 · Updated", then the changes, New first. When versions were skipped on the way
+ * ("What's new since 0.5.3"), each version gets its own group, newest first, with its first two
+ * lines, so a version's new features aren't hidden behind the next one's fixes; "See all n
+ * changes" opens the rest. "Got it" (or Escape, or the backdrop) marks the update seen.
  */
 export function WhatsNewDialog({ from, to, notes, onSeen }: { from: string; to: string; notes?: string; onSeen: (s: UpdateStatus | null) => void }) {
   const [log, setLog] = useState<Changelog | null>(null);
   const [open, setOpen] = useState(true);
+  const [all, setAll] = useState(false);
   useEffect(() => {
     void loadChangelog().then(setLog);
   }, []);
   const between = (log?.entries ?? []).filter((e) => newer(e.version, from) && !newer(e.version, to));
   // A copy without a changelog (or an old release): the update's own notes.
   const shown: ChangelogEntry[] = between.length ? between : [{ version: to, date: "", notes: notes ?? "", changes: [], critical: false }];
+  const groups = shown.map((e) => ({ e, items: sortedItems(e.notes, e.changes) })).filter((g) => g.items.length);
+  const skipped = groups.length > 1;
+  const total = groups.reduce((n, g) => n + g.items.length, 0);
   const close = () => {
     setOpen(false);
     void markUpdateSeen().then(onSeen);
   };
   if (!open) return null;
   return (
-    <Dialog open onClose={close} labelledBy="whats-new-title" initialFocus="[data-autofocus]">
+    <Dialog open onClose={close} labelledBy="whats-new-title" describedBy="whats-new-desc" initialFocus="[data-autofocus]" className="max-w-[30rem]">
       <Card className="p-5 shadow-l3 sm:p-6">
-        <div className="flex flex-wrap items-baseline justify-between gap-x-3">
-          <h2 id="whats-new-title" className="type-subheading font-semibold">
-            What's new in RawJobs
-          </h2>
-          <p className="type-meta text-muted tabular-nums">
-            {from} → {to}
-          </p>
-        </div>
-        <div className="mt-4 max-h-[min(60dvh,28rem)] space-y-5 overflow-y-auto pr-1">
+        <Head
+          id="whats-new-title"
+          anchor={<Anchor kind="mark" />}
+          title={skipped ? `What's new since ${from}` : `What's new in ${to}`}
+          from={from}
+          to={to}
+          label={skipped ? `${groups.length} versions` : "Updated"}
+        />
+        <p id="whats-new-desc" className="mt-4 type-body">
+          Updated. Your data is as it was.
+        </p>
+        <div className="mt-6 max-h-[min(50dvh,24rem)] overflow-y-auto border-t border-hairline pt-4">
           {log === null ? (
             <p className="flex items-center gap-2 type-small text-muted">
               <LoaderCircle className="size-4 animate-spin" aria-hidden /> Loading…
             </p>
+          ) : !groups.length ? (
+            <p className="type-small text-muted">Fixes and small improvements.</p>
+          ) : !skipped ? (
+            <ChangeRows items={groups[0]!.items} />
           ) : (
-            shown.map((e) => (
-              <section key={e.version} className="space-y-2">
-                {shown.length > 1 && <VersionHead e={e} />}
-                <ReleaseList notes={e.notes} changes={e.changes} />
-                {!e.notes.trim() && !e.changes.length && <p className="type-small text-muted">Fixes and small improvements.</p>}
-              </section>
-            ))
+            <>
+              <div className="space-y-4">
+                {groups.map((g) => (
+                  <section key={g.e.version} aria-labelledby={`wn-${g.e.version}`}>
+                    <h3 id={`wn-${g.e.version}`} className="mb-2 flex items-baseline gap-2 type-label text-ink">
+                      <span className="font-semibold tabular-nums">{g.e.version}</span>
+                      {g.e.date && <span className="type-meta font-normal text-muted">{formatDate(g.e.date)}</span>}
+                    </h3>
+                    {/* Two lines per version until See all, so one version's fixes don't hide another's new features. */}
+                    <ChangeRows items={all ? g.items : g.items.slice(0, 2)} />
+                  </section>
+                ))}
+              </div>
+              {total > groups.reduce((n, g) => n + Math.min(2, g.items.length), 0) && (
+                <button
+                  type="button"
+                  aria-expanded={all}
+                  onClick={() => setAll((v) => !v)}
+                  className="-ml-2 mt-2 inline-flex h-7 items-center gap-1 rounded-md px-2 type-label text-muted hover:bg-hover hover:text-ink"
+                >
+                  {all ? "Show fewer" : `See all ${total} changes`}
+                  <ChevronDown className={cx("size-4 transition-transform duration-150 motion-reduce:transition-none", all && "rotate-180")} aria-hidden />
+                </button>
+              )}
+            </>
           )}
         </div>
-        <div className="mt-5 flex flex-col-reverse items-stretch gap-2 sm:flex-row sm:items-center sm:justify-between">
+        <div className="mt-6 flex flex-col-reverse items-stretch gap-2 sm:flex-row sm:items-center sm:justify-between">
           <button
             type="button"
             onClick={() => {
@@ -121,7 +141,7 @@ export function WhatsNewDialog({ from, to, notes, onSeen }: { from: string; to: 
           >
             All release notes
           </button>
-          <Button variant="primary" data-autofocus onClick={close}>
+          <Button variant="primary" data-autofocus onClick={close} className="max-sm:h-11">
             Got it
           </Button>
         </div>
@@ -196,42 +216,105 @@ export function ReleaseNotes() {
 
 /**
  * The header's Update pill, like the Claude desktop app's: there once a new version is downloaded
- * and ready (or being got), and one click updates. While a scan runs, it updates when the scan is
- * done. A required update keeps its window (Updates.tsx); the pill then opens nothing new.
+ * and ready, and one click (or tap) updates. Hovering it, or tabbing to it, shows a small card with
+ * what's in it; nothing on the card needs a click, so touch loses nothing. Every click gets an
+ * answer where you clicked: Updating (the card over the page, ServerNotices), a toast when a scan
+ * has to finish first, or a card under the pill when RawJobs couldn't get the update.
+ * A required update keeps its own window (RequiredUpdate); the pill only shows it waiting.
  */
 export function UpdatePill() {
   const { status, setStatus } = useUpdateStatus();
   const [busy, setBusy] = useState(false);
+  const [hint, setHint] = useState(false);
+  const [failed, setFailed] = useState<string | null>(null);
   const a = status?.available;
   const waiting = status?.state === "waiting";
-  // A required update asks in its own window (RequiredUpdate); once you said yes during a scan, the
-  // pill is where it waits.
   if (!status?.installed || !a || status.tooOld || (a.critical && !waiting)) return null;
   const updating = busy || status.state === "updating";
   const click = async () => {
+    setHint(false);
+    setFailed(null);
     setBusy(true);
     const s = await updateNow();
     if (s) setStatus(s);
     announceUpdateStatus();
     setBusy(false);
+    if (s?.state === "waiting") toast({ message: "RawJobs updates when the scan finishes. Keep working." });
+    else if (s && s.state === "idle" && s.error) setFailed(s.error);
   };
   const label = updating ? "Updating…" : waiting ? "Update after scan" : `Update to ${a.version}`;
-  const hint = waiting
-    ? `RawJobs ${a.version} installs as soon as the scan that's running is done.`
-    : `RawJobs ${a.version} is ${a.ready ? "downloaded and ready" : "out"}. Updating takes a few seconds; your data stays as it is.`;
+  const top = sortedItems(a.notes, a.changes).slice(0, 2);
   return (
-    <button
-      type="button"
-      onClick={() => void click()}
-      disabled={updating || waiting}
-      title={hint}
-      aria-label={`${label}. ${hint}`}
-      className="inline-flex h-7 shrink-0 items-center gap-1.5 rounded-md border border-control bg-raised px-2 type-label text-ink transition-colors duration-150 hover:bg-hover disabled:cursor-default disabled:text-muted"
-    >
-      {/* The new dot (the app's mark for something new), then what clicking does. */}
-      {!updating && !waiting && <span className="rj-dot" aria-hidden />}
-      {updating || waiting ? <LoaderCircle className="size-3.5 animate-spin motion-reduce:animate-none" aria-hidden /> : <ArrowDownToLine className="size-3.5" aria-hidden />}
-      <span className="whitespace-nowrap">{label}</span>
-    </button>
+    // biome-ignore lint/a11y/noStaticElementInteractions: hover only shows the preview; the button inside is the control
+    <div className="relative" onMouseEnter={() => setHint(!failed)} onMouseLeave={() => setHint(false)}>
+      <button
+        type="button"
+        onClick={() => void click()}
+        onFocus={() => setHint(!failed)}
+        onBlur={() => setHint(false)}
+        onKeyDown={(e) => e.key === "Escape" && setHint(false)}
+        disabled={updating || waiting}
+        aria-describedby={hint && !updating && !waiting ? "update-pill-preview" : undefined}
+        title={waiting ? `RawJobs ${a.version} installs as soon as the scan that's running is done.` : undefined}
+        className="inline-flex h-7 shrink-0 items-center gap-1.5 rounded-md border border-control bg-raised px-2 type-label text-ink transition-colors duration-150 hover:bg-hover disabled:cursor-default disabled:text-muted"
+      >
+        {/* The new dot (the app's mark for something new), then what clicking does. */}
+        {!updating && !waiting && <span className="rj-dot" aria-hidden />}
+        {updating || waiting ? <LoaderCircle className="size-3.5 animate-spin motion-reduce:animate-none" aria-hidden /> : <ArrowDownToLine className="size-3.5" aria-hidden />}
+        <span className="whitespace-nowrap">{label}</span>
+      </button>
+      {hint && !updating && !waiting && !failed && (
+        <div id="update-pill-preview" role="tooltip" className={POP}>
+          <div className="flex items-center gap-3">
+            <Anchor kind="mark" size="sm" />
+            <div className="min-w-0">
+              <p className="type-label text-ink">RawJobs {a.version} is ready</p>
+              <VersionLine from={status.current} to={a.version} />
+            </div>
+          </div>
+          {top.length > 0 && (
+            <div className="mt-3">
+              <ChangeRows items={top} />
+            </div>
+          )}
+          <p className="mt-3 border-t border-hairline pt-2 type-meta text-muted">Click to update. Takes a few seconds. Your data stays.</p>
+        </div>
+      )}
+      {failed && <CouldntUpdate to={a.version} from={status.current} error={failed} onDismiss={() => setFailed(null)} onRetry={() => void click()} />}
+    </div>
+  );
+}
+
+/** Under the pill, on phones across the page under the header. */
+const POP = "absolute top-full right-0 z-40 mt-2 w-[min(20rem,calc(100vw-2rem))] rounded-md border border-line bg-overlay p-3 text-left shadow-l2";
+
+/** The pill's click didn't get the update (offline, GitHub away): what happened, Try again, right where you clicked. */
+function CouldntUpdate({ from, to, error, onDismiss, onRetry }: { from: string; to: string; error: string; onDismiss: () => void; onRetry: () => void }) {
+  // Focus goes to Try again, so Enter retries and Escape dismisses.
+  const card = useRef<HTMLDivElement>(null);
+  useEffect(() => card.current?.querySelector<HTMLButtonElement>("[data-retry]")?.focus(), []);
+  const offline = /^Couldn't reach GitHub/.test(error);
+  return (
+    <div ref={card} role="alert" aria-labelledby="couldnt-update-title" className={POP} onKeyDown={(e) => e.key === "Escape" && onDismiss()}>
+      <div className="flex items-center gap-3">
+        <Anchor kind="alert" size="sm" />
+        <div className="min-w-0">
+          <p id="couldnt-update-title" className="type-label text-ink">
+            Couldn't update to {to}
+          </p>
+          <p className="type-small text-muted">Not installed</p>
+        </div>
+      </div>
+      <p className="mt-3 type-small text-ink">{offline ? "RawJobs couldn't reach GitHub. Check your internet connection, then try again." : error}</p>
+      <Points className="mt-2" items={[[ShieldCheck, `Nothing changed. You're still on ${from}.`]]} />
+      <div className="mt-3 flex justify-end gap-2">
+        <Button size="sm" variant="ghost" onClick={onDismiss}>
+          Dismiss
+        </Button>
+        <Button size="sm" variant="primary" data-retry onClick={onRetry}>
+          <RefreshCw className="size-3.5" aria-hidden /> Try again
+        </Button>
+      </div>
+    </div>
   );
 }

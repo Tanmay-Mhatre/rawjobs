@@ -229,7 +229,6 @@ describe("Radar keys", () => {
         onDeleteView={noop}
         onRestoreView={noop}
         onHideCompany={noop}
-        onSetRule={noop}
         isYours={() => false}
         companyCount={0}
         onCompanies={noop}
