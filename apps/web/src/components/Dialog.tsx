@@ -12,6 +12,7 @@ export function Dialog({
   onClose,
   label,
   labelledBy,
+  describedBy,
   placement = "center",
   className,
   initialFocus,
@@ -23,6 +24,8 @@ export function Dialog({
   /** Accessible name when there's no visible heading to point `labelledBy` at. */
   label?: string;
   labelledBy?: string;
+  /** Id of the text that explains the dialog, read out when it opens. */
+  describedBy?: string;
   placement?: "center" | "right" | "bottom";
   className?: string;
   /** CSS selector inside the dialog to focus first; defaults to the first focusable element. */
@@ -67,6 +70,7 @@ export function Dialog({
       ref={ref}
       aria-label={label}
       aria-labelledby={labelledBy}
+      aria-describedby={describedBy}
       className={cx(
         "jh-dialog",
         placement === "center" && "m-auto w-[calc(100%-2rem)] max-w-lg",
