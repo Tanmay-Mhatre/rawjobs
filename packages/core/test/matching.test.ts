@@ -16,13 +16,9 @@ const job = (o: Partial<Parameters<typeof scoreJob>[0]> = {}) => ({
 describe("title gate reads titles the way people write them", () => {
   const gate = (title: string) => gateOf({ title, location: "Dubai", workplace: "onsite" }, profile());
 
-  it.each(["Sr. PM", "Manager, Product", "Senior Manager, Product - Payments", "Product Managers", "Head of Product, Crypto", "PM II"])("passes %s", (title) =>
-    expect(gate(title)).toBeUndefined(),
-  );
+  it.each(["Sr. PM", "Manager, Product", "Senior Manager, Product - Payments", "Product Managers", "Head of Product, Crypto", "PM II"])("passes %s", (title) => expect(gate(title)).toBeUndefined());
 
-  it.each(["Production Manager", "Sr. Product Marketing Manager", "PMM", "APM", "Product Owner", "Project Manager"])("drops %s", (title) =>
-    expect(gate(title)).toBe("title"),
-  );
+  it.each(["Production Manager", "Sr. Product Marketing Manager", "PMM", "APM", "Product Owner", "Project Manager"])("drops %s", (title) => expect(gate(title)).toBe("title"));
 
   it("counts short-form seniority", () => {
     expect(scoreJob(job({ title: "Sr. PM" }), profile()).why.title).toBe(30);

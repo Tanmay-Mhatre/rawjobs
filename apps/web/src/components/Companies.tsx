@@ -79,10 +79,7 @@ function ScanHistory({ history }: { history: Row["history"] }) {
           key={i}
           aria-hidden
           title={!h ? "Not in this scan" : h.ok ? `${h.jobsFound} jobs, ${h.matches} for you` : h.unsupported ? "Not supported yet" : "Scan failed"}
-          className={cx(
-            "w-1.5 rounded-md",
-            !h ? "h-1 bg-line" : h.unsupported ? "h-1.5 bg-warning/50" : !h.ok ? "h-5 bg-danger" : h.matches > 0 ? "h-5 bg-ink" : "h-2.5 bg-line",
-          )}
+          className={cx("w-1.5 rounded-md", !h ? "h-1 bg-line" : h.unsupported ? "h-1.5 bg-warning/50" : !h.ok ? "h-5 bg-danger" : h.matches > 0 ? "h-5 bg-ink" : "h-2.5 bg-line")}
         />
       ))}
     </div>
@@ -126,7 +123,10 @@ export function MyCompanies({
       list.map((r) => {
         const key = keyOf(r);
         const seen = healthOf(meta, key);
-        const history = (meta?.runs ?? []).slice(0, 14).map((run) => run.health.find((x) => keyOf(x) === key)).reverse();
+        const history = (meta?.runs ?? [])
+          .slice(0, 14)
+          .map((run) => run.health.find((x) => keyOf(x) === key))
+          .reverse();
         return { r, key, isNew: !savedKeys.has(key), forYou: forYou.get(key) ?? 0, last: seen[0], history, quiet: quietOf(seen) };
       }),
     [list, savedKeys, meta, forYou],
@@ -138,7 +138,10 @@ export function MyCompanies({
     if (sort === "attention") return Number(failing(b)) - Number(failing(a)) || b.quiet.scans - a.quiet.scans || a.forYou - b.forYou;
     return b.forYou - a.forYou || (b.last?.h.jobsFound ?? 0) - (a.last?.h.jobsFound ?? 0);
   });
-  const oldestQuiet = quiet.map((x) => x.quiet.since).filter(Boolean).sort()[0];
+  const oldestQuiet = quiet
+    .map((x) => x.quiet.since)
+    .filter(Boolean)
+    .sort()[0];
 
   return (
     <Card className="overflow-hidden">
@@ -174,8 +177,8 @@ export function MyCompanies({
               {quiet.length} compan{quiet.length === 1 ? "y has" : "ies have"} had no jobs for you
             </b>{" "}
             <span className="text-muted">
-              in {QUIET_SCANS}+ scans in a row over {QUIET_DAYS}+ days{oldestQuiet ? ` (some since ${formatDate(oldestQuiet)})` : ""}. Removing them keeps scans quick; jobs there still
-              reach your Radar from the directory.
+              in {QUIET_SCANS}+ scans in a row over {QUIET_DAYS}+ days{oldestQuiet ? ` (some since ${formatDate(oldestQuiet)})` : ""}. Removing them keeps scans quick; jobs there still reach your
+              Radar from the directory.
             </span>
           </p>
           <Button size="sm" onClick={() => onRemoveMany(quiet.map((x) => x.key))} aria-label={`Remove ${quiet.length} quiet compan${quiet.length === 1 ? "y" : "ies"}`}>
@@ -190,63 +193,63 @@ export function MyCompanies({
         </p>
       ) : (
         <>
-        {/* Phones: one card per company. */}
-        <ul className="divide-y divide-line md:hidden">
-          {sorted.map((x) => (
-            <li key={x.r.id} className={cx("flex items-start gap-3 px-4 py-3 type-small", x.isNew && "bg-inset")}>
-              <div className="min-w-0 flex-1 space-y-1.5">
-                <NameCell x={x} />
-                <p className="type-small text-muted">
-                  <span className={cx("tabular", x.forYou > 0 && "font-semibold text-ink")}>{x.forYou || "No"} for you</span>
-                  {x.last?.h.ok && <span className="tabular"> · {x.last.h.jobsFound} open jobs</span>}
-                </p>
-                <ScanHistory history={x.history} />
-                <Status row={x} onScan={onScan} scanning={scanning} />
-              </div>
-              <IconButton label={`Remove ${x.r.name || x.r.slug}`} onClick={() => onRemove(x.key)} className="-mr-1 shrink-0 hover:text-danger-text">
-                <X className="size-4" />
-              </IconButton>
-            </li>
-          ))}
-        </ul>
-        <div className="hidden md:block">
-          <table className="w-full type-small">
-            <thead className="border-b border-line text-left type-label text-muted">
-              <tr>
-                <th className="px-4 py-2.5 font-medium">Company</th>
-                <th className="px-3 py-2.5 text-right font-semibold">For you</th>
-                <th className="px-3 py-2.5 text-right font-semibold">Open jobs</th>
-                <th className="px-3 py-2.5 font-medium">Recent scans</th>
-                <th className="px-3 py-2.5 font-medium">Status</th>
-                <th className="w-10 px-2 py-2.5">
-                  <span className="sr-only">Remove</span>
-                </th>
-              </tr>
-            </thead>
-            <tbody>
-              {sorted.map((x) => (
-                <tr key={x.r.id} className={cx("border-b border-line last:border-b-0", x.isNew && "bg-inset")}>
-                  <td className="px-4 py-2.5">
-                    <NameCell x={x} />
-                  </td>
-                  <td className={cx("tabular px-3 py-2.5 text-right", x.forYou > 0 ? "font-semibold text-ink" : "text-muted")}>{x.forYou || "—"}</td>
-                  <td className="tabular px-3 py-2.5 text-right text-muted">{x.last?.h.ok ? x.last.h.jobsFound : "—"}</td>
-                  <td className="px-3 py-2.5">
-                    <ScanHistory history={x.history} />
-                  </td>
-                  <td className="px-3 py-2.5">
-                    <Status row={x} onScan={onScan} scanning={scanning} />
-                  </td>
-                  <td className="px-2 py-2.5 text-right">
-                    <IconButton label={`Remove ${x.r.name || x.r.slug}`} onClick={() => onRemove(x.key)} className="hover:text-danger-text">
-                      <X className="size-4" />
-                    </IconButton>
-                  </td>
+          {/* Phones: one card per company. */}
+          <ul className="divide-y divide-line md:hidden">
+            {sorted.map((x) => (
+              <li key={x.r.id} className={cx("flex items-start gap-3 px-4 py-3 type-small", x.isNew && "bg-inset")}>
+                <div className="min-w-0 flex-1 space-y-1.5">
+                  <NameCell x={x} />
+                  <p className="type-small text-muted">
+                    <span className={cx("tabular", x.forYou > 0 && "font-semibold text-ink")}>{x.forYou || "No"} for you</span>
+                    {x.last?.h.ok && <span className="tabular"> · {x.last.h.jobsFound} open jobs</span>}
+                  </p>
+                  <ScanHistory history={x.history} />
+                  <Status row={x} onScan={onScan} scanning={scanning} />
+                </div>
+                <IconButton label={`Remove ${x.r.name || x.r.slug}`} onClick={() => onRemove(x.key)} className="-mr-1 shrink-0 hover:text-danger-text">
+                  <X className="size-4" />
+                </IconButton>
+              </li>
+            ))}
+          </ul>
+          <div className="hidden md:block">
+            <table className="w-full type-small">
+              <thead className="border-b border-line text-left type-label text-muted">
+                <tr>
+                  <th className="px-4 py-2.5 font-medium">Company</th>
+                  <th className="px-3 py-2.5 text-right font-semibold">For you</th>
+                  <th className="px-3 py-2.5 text-right font-semibold">Open jobs</th>
+                  <th className="px-3 py-2.5 font-medium">Recent scans</th>
+                  <th className="px-3 py-2.5 font-medium">Status</th>
+                  <th className="w-10 px-2 py-2.5">
+                    <span className="sr-only">Remove</span>
+                  </th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+              </thead>
+              <tbody>
+                {sorted.map((x) => (
+                  <tr key={x.r.id} className={cx("border-b border-line last:border-b-0", x.isNew && "bg-inset")}>
+                    <td className="px-4 py-2.5">
+                      <NameCell x={x} />
+                    </td>
+                    <td className={cx("tabular px-3 py-2.5 text-right", x.forYou > 0 ? "font-semibold text-ink" : "text-muted")}>{x.forYou || "—"}</td>
+                    <td className="tabular px-3 py-2.5 text-right text-muted">{x.last?.h.ok ? x.last.h.jobsFound : "—"}</td>
+                    <td className="px-3 py-2.5">
+                      <ScanHistory history={x.history} />
+                    </td>
+                    <td className="px-3 py-2.5">
+                      <Status row={x} onScan={onScan} scanning={scanning} />
+                    </td>
+                    <td className="px-2 py-2.5 text-right">
+                      <IconButton label={`Remove ${x.r.name || x.r.slug}`} onClick={() => onRemove(x.key)} className="hover:text-danger-text">
+                        <X className="size-4" />
+                      </IconButton>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         </>
       )}
     </Card>
@@ -260,7 +263,13 @@ function NameCell({ x }: { x: Row }) {
       <div className="flex items-center gap-1.5 font-medium">
         {x.r.name || x.r.slug}
         {/^https?:/.test(x.r.input) && (
-          <a href={safeUrl(x.r.input)} target="_blank" rel="noreferrer" className="inline-flex size-6 items-center justify-center rounded-md text-muted hover:text-ink" aria-label={`${x.r.name || x.r.slug} careers page`}>
+          <a
+            href={safeUrl(x.r.input)}
+            target="_blank"
+            rel="noreferrer"
+            className="inline-flex size-6 items-center justify-center rounded-md text-muted hover:text-ink"
+            aria-label={`${x.r.name || x.r.slug} careers page`}
+          >
             <ExternalLink className="size-3.5" />
           </a>
         )}
@@ -283,7 +292,12 @@ function Status({ row, onScan, scanning }: { row: Row; onScan?: () => void; scan
         <div className="flex flex-wrap items-center gap-2">
           <BoardStatus state="broken" />
           {onScan && (
-            <button type="button" className="inline-flex min-h-6 items-center gap-1 type-label text-ink underline underline-offset-2 hover:text-muted disabled:opacity-50" onClick={onScan} disabled={scanning}>
+            <button
+              type="button"
+              className="inline-flex min-h-6 items-center gap-1 type-label text-ink underline underline-offset-2 hover:text-muted disabled:opacity-50"
+              onClick={onScan}
+              disabled={scanning}
+            >
               <RefreshCw className="size-3" /> Retry
             </button>
           )}
@@ -300,9 +314,7 @@ function Status({ row, onScan, scanning }: { row: Row; onScan?: () => void; scan
   return (
     <span className="flex flex-wrap items-center gap-x-2 gap-y-1">
       <BoardStatus state={last.h.jobsFound > 0 ? "healthy" : "dormant"} />
-      <span className="type-small text-muted">
-        {isQuiet(quiet) && !row.forYou ? `Nothing for you since ${formatDate(quiet.since)}` : `Scanned ${timeAgo(last.at)}`}
-      </span>
+      <span className="type-small text-muted">{isQuiet(quiet) && !row.forYou ? `Nothing for you since ${formatDate(quiet.since)}` : `Scanned ${timeAgo(last.at)}`}</span>
     </span>
   );
 }

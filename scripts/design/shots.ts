@@ -52,9 +52,15 @@ const { values: args } = parseArgs({
 
 /** Laptop screens are short: 760px tall is the case the Radar must fit (Apply in view, no page scroll). */
 const HEIGHTS: Record<number, number> = { 1280: 760, 1100: 760, 390: 844, 375: 812 };
-const themes = args.themes.split(",").map((t) => t.trim()).filter(Boolean) as ThemeId[];
+const themes = args.themes
+  .split(",")
+  .map((t) => t.trim())
+  .filter(Boolean) as ThemeId[];
 for (const t of themes) if (!(t in THEMES)) fail(`Unknown theme "${t}". Use: ${Object.keys(THEMES).join(", ")}`);
-const widths = args.viewports.split(",").map((w) => Number(w.trim())).filter((w) => w > 0);
+const widths = args.viewports
+  .split(",")
+  .map((w) => Number(w.trim()))
+  .filter((w) => w > 0);
 if (!widths.length) fail("No viewports.");
 
 function fail(msg: string): never {
@@ -112,7 +118,7 @@ const SCREENS: Screen[] = [
       }
     },
   },
-  { id: "radar-new",what: "Radar, New view (views bar)", scenario: "demo", hash: "#radar", ready: strong, act: clickView(/^New\b/) },
+  { id: "radar-new", what: "Radar, New view (views bar)", scenario: "demo", hash: "#radar", ready: strong, act: clickView(/^New\b/) },
   { id: "radar-strong", what: "Radar, Strong matches view (views bar)", scenario: "demo", hash: "#radar", ready: strong, act: clickView(/^Strong\b/) },
   {
     id: "radar-fit",
@@ -148,9 +154,16 @@ const SCREENS: Screen[] = [
     widths: [375],
     ready: strong,
     act: async (page) => {
-      await page.locator("li.rj-row").filter({ hasNot: page.locator(".rj-star") }).first().locator("[data-job-link]").click();
+      await page
+        .locator("li.rj-row")
+        .filter({ hasNot: page.locator(".rj-star") })
+        .first()
+        .locator("[data-job-link]")
+        .click();
       await page.getByRole("dialog").waitFor();
-      const cut = await page.evaluate<string[]>(`[...document.querySelectorAll("dialog .rj-drawer__foot a, dialog .rj-drawer__foot button")].filter((b) => b.scrollWidth > b.clientWidth + 1).map((b) => b.textContent.trim() + " (" + b.scrollWidth + "px in " + b.clientWidth + "px)")`);
+      const cut = await page.evaluate<string[]>(
+        `[...document.querySelectorAll("dialog .rj-drawer__foot a, dialog .rj-drawer__foot button")].filter((b) => b.scrollWidth > b.clientWidth + 1).map((b) => b.textContent.trim() + " (" + b.scrollWidth + "px in " + b.clientWidth + "px)")`,
+      );
       if (cut.length) throw new Error(`footer labels cut off: ${cut.join(", ")}`);
     },
   },
@@ -417,7 +430,10 @@ async function capture(browser: Browser, baseUrl: string, screen: Screen, theme:
     await page.clock.setFixedTime(demo.NOW);
     await page.emulateMedia({ colorScheme: t.colorScheme, contrast: t.contrast === "more" ? "more" : "no-preference", reducedMotion: "reduce" });
     // Nothing leaves this machine: only the demo server answers.
-    await page.route((url) => !url.href.startsWith(baseUrl), (route) => route.abort());
+    await page.route(
+      (url) => !url.href.startsWith(baseUrl),
+      (route) => route.abort(),
+    );
     await page.route(/\/api\//, api(screen.scenario));
     if (screen.scenario !== "demo") await page.route(DATA_FILES, (route) => route.fulfill({ status: 404, body: "" }));
     await page.addInitScript(initScript(storageFor(screen, theme)));
@@ -426,7 +442,10 @@ async function capture(browser: Browser, baseUrl: string, screen: Screen, theme:
 
     await page.goto(`${baseUrl}${screen.path ?? ""}${screen.hash}`, { waitUntil: "networkidle" });
     await page.addStyleTag({ content: NO_MOTION });
-    await page.getByText("Loading…", { exact: true }).waitFor({ state: "detached", timeout: 15_000 }).catch(() => {});
+    await page
+      .getByText("Loading…", { exact: true })
+      .waitFor({ state: "detached", timeout: 15_000 })
+      .catch(() => {});
     if (screen.ready) await page.getByText(screen.ready).filter({ visible: true }).first().waitFor({ timeout: 15_000 });
     if (screen.act) await screen.act(page);
     // Let delayed requests (suggestions wait 600 ms) and their renders finish.
@@ -445,9 +464,7 @@ async function capture(browser: Browser, baseUrl: string, screen: Screen, theme:
 
     if (!runAxe) return null;
     await page.addScriptTag({ path: require.resolve("axe-core/axe.min.js") });
-    const violations = (await page.evaluate(
-      `axe.run(document, { runOnly: ["wcag2a", "wcag2aa", "wcag21a", "wcag21aa", "best-practice"] }).then((r) => r.violations)`,
-    )) as AxeResult[];
+    const violations = (await page.evaluate(`axe.run(document, { runOnly: ["wcag2a", "wcag2aa", "wcag21a", "wcag21aa", "best-practice"] }).then((r) => r.violations)`)) as AxeResult[];
     return { screen: screen.id, theme, width, violations };
   } finally {
     await context.close();

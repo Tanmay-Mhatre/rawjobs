@@ -49,10 +49,7 @@ export function useNotForMeApi(o: {
   const entryOf = useCallback((id: string) => user[id], [user]);
   const setReason = useCallback((job: Job, reason: Reason | undefined) => update(job, { reason }), [update]);
   const restore = useCallback((job: Job, prev: Status | undefined) => update(job, { status: prev, reason: undefined }), [update]);
-  const isOn = useCallback(
-    (offer: Offer) => (offer.kind === "company" ? prefs.hiddenCompanies.includes(offer.company) : prefs.hideRules.some((r) => ruleKey(r) === ruleKey(offer.rule))),
-    [prefs],
-  );
+  const isOn = useCallback((offer: Offer) => (offer.kind === "company" ? prefs.hiddenCompanies.includes(offer.company) : prefs.hideRules.some((r) => ruleKey(r) === ruleKey(offer.rule))), [prefs]);
   const apply = useCallback(
     (offer: Offer) => {
       const { user: u, prefs: p, jobs: all } = live.current;

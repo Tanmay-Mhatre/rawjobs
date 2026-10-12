@@ -41,7 +41,16 @@ async function greenhouseLight(ref: CompanyRef): Promise<NormalizedJob[]> {
   const d = await http.getJson<{ jobs?: G[] }>(`https://boards-api.greenhouse.io/v1/boards/${encodeURIComponent(ref.slug)}/jobs`);
   return (d.jobs ?? []).map((j) => {
     const location = j.location?.name?.trim() ?? "";
-    return { id: String(j.id), ats: "greenhouse", company: ref.name, title: j.title.trim(), location, workplace: inferWorkplace(location), postedAt: j.first_published ?? j.updated_at, url: j.absolute_url };
+    return {
+      id: String(j.id),
+      ats: "greenhouse",
+      company: ref.name,
+      title: j.title.trim(),
+      location,
+      workplace: inferWorkplace(location),
+      postedAt: j.first_published ?? j.updated_at,
+      url: j.absolute_url,
+    };
   });
 }
 

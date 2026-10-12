@@ -25,26 +25,13 @@ export function IconButton({ label, active, className, children, ...rest }: Butt
 
 export function Select({ className, children, ...rest }: SelectHTMLAttributes<HTMLSelectElement>) {
   return (
-    <select
-      className={cx("h-9 rounded-md border border-line bg-raised px-2.5 type-small text-ink", className)}
-      {...rest}
-    >
+    <select className={cx("h-9 rounded-md border border-line bg-raised px-2.5 type-small text-ink", className)} {...rest}>
       {children}
     </select>
   );
 }
 
-export function Segmented<T extends string | number>({
-  value,
-  options,
-  onChange,
-  label,
-}: {
-  value: T;
-  options: { value: T; label: string }[];
-  onChange: (v: T) => void;
-  label: string;
-}) {
+export function Segmented<T extends string | number>({ value, options, onChange, label }: { value: T; options: { value: T; label: string }[]; onChange: (v: T) => void; label: string }) {
   return (
     <div role="radiogroup" aria-label={label} className="inline-flex h-9 rounded-md border border-line bg-raised p-0.5">
       {options.map((o) => (
@@ -54,10 +41,7 @@ export function Segmented<T extends string | number>({
           role="radio"
           aria-checked={o.value === value}
           onClick={() => onChange(o.value)}
-          className={cx(
-            "rounded-md px-2.5 type-label transition-colors",
-            o.value === value ? "bg-inset text-ink shadow-l1" : "text-muted hover:text-ink",
-          )}
+          className={cx("rounded-md px-2.5 type-label transition-colors", o.value === value ? "bg-inset text-ink shadow-l1" : "text-muted hover:text-ink")}
         >
           {o.label}
         </button>
@@ -130,10 +114,7 @@ export function Pagination({ page, pageSize, total, onPage }: { page: number; pa
                 type="button"
                 onClick={() => onPage(p)}
                 aria-current={p === page ? "page" : undefined}
-                className={cx(
-                  "tabular hidden h-8 min-w-8 rounded-md px-2 type-meta sm:inline-block",
-                  p === page ? "bg-ink text-raised" : "text-muted hover:bg-inset hover:text-ink",
-                )}
+                className={cx("tabular hidden h-8 min-w-8 rounded-md px-2 type-meta sm:inline-block", p === page ? "bg-ink text-raised" : "text-muted hover:bg-inset hover:text-ink")}
               >
                 {p.toLocaleString()}
               </button>

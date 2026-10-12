@@ -38,7 +38,16 @@ const SYSTEMS = ["greenhouse", "lever", "ashby", "smartrecruiters"] as const;
 // ≤ 4 requests/s per API host; Workday tenants are separate hosts.
 const http = new HttpClient({ retries: 1, hostDelayMs: 250, timeoutMs: 20_000, backoffMs: 3_000, userAgent: "RawJobs-catalog/0.1 (open-source job radar; low-rate board validation)" });
 
-type Attempt = { key: string; company: string; result: "found" | "no board" | "empty" | "other company" | "error"; board?: Omit<Board, "key">; board_name?: string; jobs?: number | null; why?: string; tried_at: string };
+type Attempt = {
+  key: string;
+  company: string;
+  result: "found" | "no board" | "empty" | "other company" | "error";
+  board?: Omit<Board, "key">;
+  board_name?: string;
+  jobs?: number | null;
+  why?: string;
+  tried_at: string;
+};
 type Merged = { key: string; ats: string; slug: string; shard?: string; site?: string; name?: string };
 type Job = { company: string; why: string; boards: Board[]; nameCheck: boolean };
 
@@ -96,7 +105,22 @@ async function tryBoard(job: Job, b: Board): Promise<Attempt> {
 
 function workdaySites(tenant: string): string[] {
   const T = tenant.charAt(0).toUpperCase() + tenant.slice(1);
-  return [...new Set(["External", "Careers", "careers", "External_Careers", "ExternalCareers", T, `${T}_Careers`, `${T}Careers`, `${T}_External`, `${T}External`, `${T}_External_Careers`, `${tenant}_careers`])];
+  return [
+    ...new Set([
+      "External",
+      "Careers",
+      "careers",
+      "External_Careers",
+      "ExternalCareers",
+      T,
+      `${T}_Careers`,
+      `${T}Careers`,
+      `${T}_External`,
+      `${T}External`,
+      `${T}_External_Careers`,
+      `${tenant}_careers`,
+    ]),
+  ];
 }
 
 /** What to try this run, and every attempt on record. */

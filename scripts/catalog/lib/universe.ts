@@ -78,8 +78,17 @@ export function universeMarkdown(u: ReturnType<typeof universe>): string[] {
     "",
     "| Hiring system | Ours (live + dormant) | Estimate | Ours / estimate | Sample boards | Already had | Sample coverage | Listed only by restricted sources |",
     "|---|---|---|---|---|---|---|---|",
-    ...u.rows.map((r) => `| ${r.ats} | ${r.ours.toLocaleString()} | ${r.estimate.toLocaleString()} | ${pct(r.ours, r.estimate)} | ${r.sampleBoards} | ${r.sampleKnown} | ${pct(r.sampleKnown, r.sampleBoards)} | ${r.restrictedOnly.toLocaleString()} |`),
-    `| **All** | ${sum((r) => r.ours).toLocaleString()} | ${sum((r) => r.estimate).toLocaleString()} | ${pct(sum((r) => r.ours), sum((r) => r.estimate))} | ${sum((r) => r.sampleBoards)} | ${sum((r) => r.sampleKnown)} | ${pct(sum((r) => r.sampleKnown), sum((r) => r.sampleBoards))} | ${sum((r) => r.restrictedOnly).toLocaleString()} |`,
+    ...u.rows.map(
+      (r) =>
+        `| ${r.ats} | ${r.ours.toLocaleString()} | ${r.estimate.toLocaleString()} | ${pct(r.ours, r.estimate)} | ${r.sampleBoards} | ${r.sampleKnown} | ${pct(r.sampleKnown, r.sampleBoards)} | ${r.restrictedOnly.toLocaleString()} |`,
+    ),
+    `| **All** | ${sum((r) => r.ours).toLocaleString()} | ${sum((r) => r.estimate).toLocaleString()} | ${pct(
+      sum((r) => r.ours),
+      sum((r) => r.estimate),
+    )} | ${sum((r) => r.sampleBoards)} | ${sum((r) => r.sampleKnown)} | ${pct(
+      sum((r) => r.sampleKnown),
+      sum((r) => r.sampleBoards),
+    )} | ${sum((r) => r.restrictedOnly).toLocaleString()} |`,
     "",
     "### Which URL source carries its weight (live + dormant boards)",
     "",

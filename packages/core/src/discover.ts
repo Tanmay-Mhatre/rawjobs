@@ -100,7 +100,8 @@ const toRef = (c: Pick<CompanyRef, "name" | "ats" | "slug" | "region" | "shard" 
   ats: c.ats,
   slug: c.slug,
   ...(c.region ? { region: c.region } : {}),
-  ...(c.shard ? { shard: c.shard } : {}), ...(c.site ? { site: c.site } : {}),
+  ...(c.shard ? { shard: c.shard } : {}),
+  ...(c.site ? { site: c.site } : {}),
   ...(c.careers_url ? { careers_url: c.careers_url } : {}),
   enabled: true,
 });
@@ -109,10 +110,7 @@ const toRef = (c: Pick<CompanyRef, "name" | "ats" | "slug" | "region" | "shard" 
  * Companies to check live this scan: not yours, not muted, on a hiring system we can read, and not
  * checked in the last CHECK_AGAIN_AFTER_DAYS. Best candidate job first, then the freshest.
  */
-export function pickChecks(
-  candidates: readonly Candidate[],
-  opts: { tracked: ReadonlySet<string>; muted: ReadonlySet<string>; ledger: DiscoveryLedger; limit: number; now?: Date },
-): CompanyRef[] {
+export function pickChecks(candidates: readonly Candidate[], opts: { tracked: ReadonlySet<string>; muted: ReadonlySet<string>; ledger: DiscoveryLedger; limit: number; now?: Date }): CompanyRef[] {
   const now = (opts.now ?? new Date()).getTime();
   const out: CompanyRef[] = [];
   const seen = new Set<string>();
@@ -151,7 +149,8 @@ export function recordChecks(
       ats: c.ats,
       slug: c.slug,
       ...(c.region ? { region: c.region } : {}),
-      ...(c.shard ? { shard: c.shard } : {}), ...(c.site ? { site: c.site } : {}),
+      ...(c.shard ? { shard: c.shard } : {}),
+      ...(c.site ? { site: c.site } : {}),
       ...(c.careers_url ? { careers_url: c.careers_url } : {}),
       lastChecked: now.toISOString(),
       matches: h.matches,
@@ -172,10 +171,7 @@ function hash(s: string): string {
  * Index jobs for the dashboard: candidates at companies that aren't live (not yours, not checked
  * recently, not muted), best first, at most `limit`. Ids are stable across scans: index:{company}:{hash}.
  */
-export function toIndexJobs(
-  candidates: readonly Candidate[],
-  opts: { live: ReadonlySet<string>; muted: ReadonlySet<string>; indexGeneratedAt: string; limit?: number },
-): DashboardJob[] {
+export function toIndexJobs(candidates: readonly Candidate[], opts: { live: ReadonlySet<string>; muted: ReadonlySet<string>; indexGeneratedAt: string; limit?: number }): DashboardJob[] {
   const out: DashboardJob[] = [];
   for (const c of candidates) {
     if (out.length >= (opts.limit ?? MAX_INDEX_JOBS)) break;

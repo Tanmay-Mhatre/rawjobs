@@ -138,10 +138,7 @@ export function Pipeline({ user, jobsById, min, onOpen, onMove, onSetup, goRadar
                       onDragStart={(ev) => ev.dataTransfer.setData("text/plain", id)}
                       // Mouse shortcut: the whole card opens the job; the title button is the keyboard / screen-reader way in.
                       onClick={() => job && onOpen(job)}
-                      className={cx(
-                        "rounded-md border border-line bg-raised p-3 shadow-l1 transition-shadow hover:shadow-l2",
-                        job ? "cursor-pointer" : "cursor-grab",
-                      )}
+                      className={cx("rounded-md border border-line bg-raised p-3 shadow-l1 transition-shadow hover:shadow-l2", job ? "cursor-pointer" : "cursor-grab")}
                     >
                       <div className="flex items-start justify-between gap-2">
                         {job ? (

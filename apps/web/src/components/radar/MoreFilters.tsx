@@ -49,7 +49,8 @@ export function MoreMenu({
   hideRules: HideRule[];
   onRemoveRule: (rule: HideRule) => void;
 }) {
-  const extra = [filters.salaryOnly, filters.hideEvergreen, filters.showOld, filters.showFailed, filters.showClosed, filters.showHidden, filters.olderIndex].filter(Boolean).length + filters.ats.length;
+  const extra =
+    [filters.salaryOnly, filters.hideEvergreen, filters.showOld, filters.showFailed, filters.showClosed, filters.showHidden, filters.olderIndex].filter(Boolean).length + filters.ats.length;
   return (
     <FacetMenu
       label={extra ? `More · ${extra}` : "More"}

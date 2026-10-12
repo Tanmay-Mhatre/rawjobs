@@ -48,10 +48,7 @@ describe("HttpClient", () => {
 
   it("retries 429 and 5xx with backoff, honouring Retry-After", async () => {
     const sleeps: number[] = [];
-    const { http, seen } = client(
-      [new Response("", { status: 429, headers: { "retry-after": "3" } }), new Response("", { status: 503 }), json([1])],
-      { sleeps },
-    );
+    const { http, seen } = client([new Response("", { status: 429, headers: { "retry-after": "3" } }), new Response("", { status: 503 }), json([1])], { sleeps });
     await expect(http.getJson("https://a.example/x")).resolves.toEqual([1]);
     expect(seen).toHaveLength(3);
     // Retry-After 3s, then 200ms backoff; the 429 also slowed the host to 500ms between requests.
@@ -80,7 +77,16 @@ describe("HttpClient", () => {
   it("skips a host after it fails several times in a row, but not after a 404", async () => {
     const down = () => new Response("", { status: 503 });
     const { http, seen } = client([new Response("", { status: 404 }), down(), down()], { breakAfter: 2 });
-    const noRetry = new HttpClient({ hostDelayMs: 0, retries: 0, breakAfter: 2, sleep: async () => {}, fetchImpl: (async () => { seen.push({ url: "", ua: "" }); return down(); }) as unknown as typeof fetch });
+    const noRetry = new HttpClient({
+      hostDelayMs: 0,
+      retries: 0,
+      breakAfter: 2,
+      sleep: async () => {},
+      fetchImpl: (async () => {
+        seen.push({ url: "", ua: "" });
+        return down();
+      }) as unknown as typeof fetch,
+    });
     await expect(http.getJson("https://a.example/404")).rejects.toMatchObject({ status: 404 });
     await expect(noRetry.getJson("https://h.example/1")).rejects.toMatchObject({ status: 503 });
     await expect(noRetry.getJson("https://h.example/2")).rejects.toMatchObject({ status: 503 });

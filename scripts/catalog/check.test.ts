@@ -86,11 +86,31 @@ describe("closed boards", () => {
   const page = (body: string, url = "") => Object.defineProperty(new Response(body, { headers: { "content-type": "text/html" } }), "url", { value: url });
 
   it("records a board its hiring system calls gone as dead, not as an error to retry", async () => {
-    expect(await checkBoard(client(() => page("<!DOCTYPE html>", "https://www.bamboohr.com/")), { key: "bamboohr:acme", ats: "bamboohr", slug: "acme" })).toMatchObject({ status: "dead" });
-    expect(await checkBoard(client(() => new Response("", { status: 401 })), { key: "bamboohr:acme", ats: "bamboohr", slug: "acme" })).toMatchObject({ status: "dead" });
-    expect(await checkBoard(client(() => page("Your account is blocked.")), { key: "freshteam:acme", ats: "freshteam", slug: "acme" })).toMatchObject({ status: "dead" });
+    expect(
+      await checkBoard(
+        client(() => page("<!DOCTYPE html>", "https://www.bamboohr.com/")),
+        { key: "bamboohr:acme", ats: "bamboohr", slug: "acme" },
+      ),
+    ).toMatchObject({ status: "dead" });
+    expect(
+      await checkBoard(
+        client(() => new Response("", { status: 401 })),
+        { key: "bamboohr:acme", ats: "bamboohr", slug: "acme" },
+      ),
+    ).toMatchObject({ status: "dead" });
+    expect(
+      await checkBoard(
+        client(() => page("Your account is blocked.")),
+        { key: "freshteam:acme", ats: "freshteam", slug: "acme" },
+      ),
+    ).toMatchObject({ status: "dead" });
     // Anything else stays an error.
-    expect(await checkBoard(client(() => page("<html>maintenance</html>")), { key: "freshteam:acme", ats: "freshteam", slug: "acme" })).toMatchObject({ status: "error" });
+    expect(
+      await checkBoard(
+        client(() => page("<html>maintenance</html>")),
+        { key: "freshteam:acme", ats: "freshteam", slug: "acme" },
+      ),
+    ).toMatchObject({ status: "error" });
   });
 });
 

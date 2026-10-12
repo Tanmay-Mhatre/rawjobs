@@ -13,15 +13,15 @@ type Result = CompanyCheck & { id: string };
 let seq = 0;
 
 /** A check result My companies can take: a real careers page, or a recognised "not supported yet" one with what it needs. */
-const addable = (r: CompanyCheck) =>
-  !!r.ats && !!r.slug && (r.status === "live" || r.status === "dormant" || (r.status === "soon" && (r.ats !== "workday" || !!r.site)));
+const addable = (r: CompanyCheck) => !!r.ats && !!r.slug && (r.status === "live" || r.status === "dormant" || (r.status === "soon" && (r.ats !== "workday" || !!r.site)));
 
 const toRef = (r: CompanyCheck, name: string): CompanyRef => ({
   name: name.trim() || r.name || r.slug!,
   ats: r.ats!,
   slug: r.slug!,
   ...(r.region && r.region !== "global" ? { region: r.region } : {}),
-  ...(r.shard ? { shard: r.shard } : {}), ...(r.site ? { site: r.site } : {}),
+  ...(r.shard ? { shard: r.shard } : {}),
+  ...(r.site ? { site: r.site } : {}),
   careers_url: r.careers_url ?? r.input,
 });
 
@@ -32,17 +32,7 @@ const FORMATS = "Paste the link to the company's jobs page, e.g. jobs.lever.co/a
  * Paste careers links, see what each one is (the same details as the company directory, plus how
  * many jobs match you), then choose which to add to My companies. New careers pages are remembered in the directory.
  */
-export function AddByLink({
-  watched,
-  onAddMany,
-  onRemove,
-  autoFocus,
-}: {
-  watched: Set<string>;
-  onAddMany: (c: CompanyRef[]) => string[];
-  onRemove: (key: string) => void;
-  autoFocus?: boolean;
-}) {
+export function AddByLink({ watched, onAddMany, onRemove, autoFocus }: { watched: Set<string>; onAddMany: (c: CompanyRef[]) => string[]; onRemove: (key: string) => void; autoFocus?: boolean }) {
   const helpId = useId();
   const [text, setText] = useState("");
   const [checking, setChecking] = useState(false);
@@ -52,7 +42,14 @@ export function AddByLink({
   const [names, setNames] = useState<Record<string, string>>({});
 
   const check = async (only?: string[]) => {
-    const urls = only ?? [...new Set(text.split(/[\n\s,]+/).map((s) => s.trim()).filter(Boolean))];
+    const urls = only ?? [
+      ...new Set(
+        text
+          .split(/[\n\s,]+/)
+          .map((s) => s.trim())
+          .filter(Boolean),
+      ),
+    ];
     if (!urls.length) return;
     setChecking(true);
     setError(null);
@@ -130,14 +127,24 @@ export function AddByLink({
           <div id={helpId} className="rounded-md bg-inset p-3 type-small">
             <p>Open the company's careers page and click any job. If the address looks like one of these, paste it (anything after the company name is fine):</p>
             <ul className="mt-2 space-y-1 font-mono type-small text-muted">
-              <li>job-boards.greenhouse.io/<b className="text-ink">company</b></li>
-              <li>jobs.lever.co/<b className="text-ink">company</b></li>
-              <li>jobs.ashbyhq.com/<b className="text-ink">company</b></li>
-              <li>careers.smartrecruiters.com/<b className="text-ink">Company</b></li>
+              <li>
+                job-boards.greenhouse.io/<b className="text-ink">company</b>
+              </li>
+              <li>
+                jobs.lever.co/<b className="text-ink">company</b>
+              </li>
+              <li>
+                jobs.ashbyhq.com/<b className="text-ink">company</b>
+              </li>
+              <li>
+                careers.smartrecruiters.com/<b className="text-ink">Company</b>
+              </li>
               <li>
                 <b className="text-ink">company</b>.wd3.myworkdayjobs.com/en-US/<b className="text-ink">Site</b>
               </li>
-              <li>apply.workable.com/<b className="text-ink">company</b></li>
+              <li>
+                apply.workable.com/<b className="text-ink">company</b>
+              </li>
               <li>
                 <b className="text-ink">company</b>.recruitee.com, .bamboohr.com, .breezy.hr, .teamtailor.com, .jobs.personio.com
               </li>
@@ -301,16 +308,10 @@ function ResultCard({
         )
       )}
       {r.status === "dormant" && <p className="type-small text-muted">The careers page exists but has no openings. Add it and you'll see its jobs as soon as one appears.</p>}
-      {r.status === "soon" && r.ats && (
-        <p className="type-small text-muted">{ATS_LABEL[r.ats] ?? "This hiring system"} isn't supported yet. Add it now and it's scanned once support ships.</p>
-      )}
+      {r.status === "soon" && r.ats && <p className="type-small text-muted">{ATS_LABEL[r.ats] ?? "This hiring system"} isn't supported yet. Add it now and it's scanned once support ships.</p>}
       {!ok && r.status !== "soon" && (
         <div className="space-y-1.5 type-small text-muted">
-          <p>
-            {r.status === "unknown"
-              ? FORMATS
-              : "The page didn't answer, or the company name in the link is wrong. Open the link in your browser to check it, then try again."}
-          </p>
+          <p>{r.status === "unknown" ? FORMATS : "The page didn't answer, or the company name in the link is wrong. Open the link in your browser to check it, then try again."}</p>
           <div className="flex flex-wrap items-center gap-3">
             {r.status !== "unknown" && (
               <button type="button" className="min-h-8 font-medium text-ink underline underline-offset-2 hover:text-muted" onClick={onRetry}>

@@ -93,7 +93,8 @@ function recordAdditions(dataDir: string, results: CompanyCheck[]): void {
       ats: r.ats!,
       slug: r.slug!,
       ...(r.region ? { region: r.region } : {}),
-      ...(r.shard ? { shard: r.shard } : {}), ...(r.site ? { site: r.site } : {}),
+      ...(r.shard ? { shard: r.shard } : {}),
+      ...(r.site ? { site: r.site } : {}),
       careers_url: r.careers_url!,
       status: r.status,
       open_jobs: r.open_jobs ?? null,
@@ -134,7 +135,20 @@ function companyExtras(profile: Profile, pool: SuggestResult, indexed: readonly 
   const pastEmployers = matched.map(({ name, match }) => ({
     name,
     ...(match && !exclude.has(match.key)
-      ? { company: { key: match.key, name: match.name, ats: match.ats, slug: match.slug, careers_url: match.careers_url, region: match.region, shard: match.shard, site: match.site, open_jobs: match.open_jobs, status: match.status } }
+      ? {
+          company: {
+            key: match.key,
+            name: match.name,
+            ats: match.ats,
+            slug: match.slug,
+            careers_url: match.careers_url,
+            region: match.region,
+            shard: match.shard,
+            site: match.site,
+            open_jobs: match.open_jobs,
+            status: match.status,
+          },
+        }
       : {}),
     watched: !!match && exclude.has(match.key),
   }));
@@ -142,7 +156,10 @@ function companyExtras(profile: Profile, pool: SuggestResult, indexed: readonly 
   const wanted = new Set(profile.industries);
   const packs = profile.industries.map((id) => ({
     industry: id,
-    items: candidates.filter((c) => c.industries.includes(id) && connectors[c.ats as keyof typeof connectors]).sort((a, b) => b.score - a.score).slice(0, 8),
+    items: candidates
+      .filter((c) => c.industries.includes(id) && connectors[c.ats as keyof typeof connectors])
+      .sort((a, b) => b.score - a.score)
+      .slice(0, 8),
   }));
   const inIndustries = directory.filter((c) => c.tags?.some((t) => wanted.has(t)));
   const coverage = {
@@ -190,9 +207,7 @@ async function cmdCompanies(args: string[]): Promise<number> {
   // Directory companies without job rows (no openings, or not indexed): candidates to watch.
   const others = directory.filter((c) => !c.indexed);
   // Leave out companies already watched and ones the user said no to.
-  const exclude = new Set(
-    [...(input.watched ?? config?.companies.map(companyKey) ?? []), ...(input.hidden ?? []), ...(config?.companies_muted ?? [])].map((k) => k.toLowerCase()),
-  );
+  const exclude = new Set([...(input.watched ?? config?.companies.map(companyKey) ?? []), ...(input.hidden ?? []), ...(config?.companies_muted ?? [])].map((k) => k.toLowerCase()));
   const started = Date.now();
   const limit = Number(values.limit) || 30;
   // A deep pool for lookalikes and packs; the lists shown are its first `limit` (same order).
@@ -445,7 +460,8 @@ async function cmdRun(args: string[]): Promise<number> {
     }
 
     const notified = values.notify && !values["dry-run"] ? await notifyScan(config, result, merged, scope) : undefined;
-    if (notified) console.error(`Telegram: ${notified === "sent" ? "sent the new jobs" : notified === "nothing-new" ? "nothing new to send" : notified === "off" ? "not set up (Settings → Alerts)" : notified}`);
+    if (notified)
+      console.error(`Telegram: ${notified === "sent" ? "sent the new jobs" : notified === "nothing-new" ? "nothing new to send" : notified === "off" ? "not set up (Settings → Alerts)" : notified}`);
     log({ ok: true, matches: matches.length, newMatches: fresh, notified, stopped });
     return 0;
   } catch (err) {
@@ -504,12 +520,23 @@ async function runNdjson(values: RunValues): Promise<number> {
         checkKeys: values.check,
         dryRun: values["dry-run"],
         resume: !values.fresh,
-      feed: !values.full,
+        feed: !values.full,
         stopped: stopSignal(dataDir),
         onStart: (s) => {
           done = s.resumed;
           doneByAts = { ...s.resumedByAts };
-          emit({ type: "start", companies: s.yours, total: s.total, extra: s.extra, resumed: s.resumed, scope: s.scope, seconds: s.seconds, skippedByFeed: s.skippedByFeed, byAts: s.byAts, doneByAts });
+          emit({
+            type: "start",
+            companies: s.yours,
+            total: s.total,
+            extra: s.extra,
+            resumed: s.resumed,
+            scope: s.scope,
+            seconds: s.seconds,
+            skippedByFeed: s.skippedByFeed,
+            byAts: s.byAts,
+            doneByAts,
+          });
         },
         onCompanyDone: (h) => {
           done++;
@@ -535,7 +562,16 @@ async function runNdjson(values: RunValues): Promise<number> {
       });
       if (existsSync(notifyFile(dataDir))) {
         rmSync(notifyFile(dataDir), { force: true });
-        emit({ type: "notified", result: await notifyFinished(config, matches.length, matches.filter((j) => merged.newIds.has(j.id)), scope, { stopped, done: result.health.length, total: checks.length + config.companies.filter((c) => c.enabled).length }) });
+        emit({
+          type: "notified",
+          result: await notifyFinished(
+            config,
+            matches.length,
+            matches.filter((j) => merged.newIds.has(j.id)),
+            scope,
+            { stopped, done: result.health.length, total: checks.length + config.companies.filter((c) => c.enabled).length },
+          ),
+        });
       }
       return 0;
     } finally {
@@ -572,7 +608,10 @@ async function notifyFinished(config: Config, matches: number, newJobs: Job[], s
   const secrets = telegramSecrets();
   if (!secrets.token || !secrets.chatId) return "off";
   try {
-    await sendTelegram(finishedMessage({ scopeLabel: scope === "all" ? "All companies" : "My companies + my industries", matches, newJobs, minScore: config.profile.min_score, yours: yourCompanies(config), ...o }), secrets);
+    await sendTelegram(
+      finishedMessage({ scopeLabel: scope === "all" ? "All companies" : "My companies + my industries", matches, newJobs, minScore: config.profile.min_score, yours: yourCompanies(config), ...o }),
+      secrets,
+    );
     return "sent";
   } catch (err) {
     return `failed: ${(err as Error).message}`;
@@ -615,7 +654,7 @@ async function cmdAlerts(args: string[]): Promise<number> {
     if (!secrets.token) return out({ ok: false, error: "Add your bot token first." }), 0;
     if (action === "connect") {
       const chat = await findTelegramChat(secrets.token);
-      if (!chat) return out({ ok: false, error: "No message from you yet. Open your bot in Telegram, press Start (or send it \"hi\"), then try again." }), 0;
+      if (!chat) return out({ ok: false, error: 'No message from you yet. Open your bot in Telegram, press Start (or send it "hi"), then try again.' }), 0;
       saveTelegramSecrets({ chatId: chat.chatId });
       setEnabled(true);
       await sendTelegram("✅ RawJobs is connected. New jobs from your scans will arrive here.", { ...secrets, chatId: chat.chatId });
@@ -806,7 +845,14 @@ async function cmdSetup(args: string[]): Promise<number> {
         if (fresh.length) {
           queueContributions(
             values.data,
-            fresh.map((r) => ({ ats: r.ats!, slug: r.slug!, ...(r.region === "eu" ? { region: "eu" } : {}), ...(r.shard ? { shard: r.shard } : {}), ...(r.site ? { site: r.site } : {}), ...(r.name ? { name: r.name } : {}) })),
+            fresh.map((r) => ({
+              ats: r.ats!,
+              slug: r.slug!,
+              ...(r.region === "eu" ? { region: "eu" } : {}),
+              ...(r.shard ? { shard: r.shard } : {}),
+              ...(r.site ? { site: r.site } : {}),
+              ...(r.name ? { name: r.name } : {}),
+            })),
           );
           await sendContributions(values.data);
         }

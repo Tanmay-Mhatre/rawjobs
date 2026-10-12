@@ -47,7 +47,8 @@ export function ScanProgress({ scan, onRetry }: { scan: ScanState; onRetry?: () 
       )}
       {s && (
         <p className="rounded-md bg-inset p-3 type-small" role="status">
-          Scanned <b className="tabular font-semibold text-ink">{s.jobsFound.toLocaleString()}</b> jobs and found <b className="tabular font-semibold text-ink">{s.matches}</b> match{s.matches === 1 ? "" : "es"}
+          Scanned <b className="tabular font-semibold text-ink">{s.jobsFound.toLocaleString()}</b> jobs and found <b className="tabular font-semibold text-ink">{s.matches}</b> match
+          {s.matches === 1 ? "" : "es"}
           {s.strong > 0 && (
             <>
               , <b className="tabular font-semibold text-ink">{s.strong} strong</b>
@@ -112,13 +113,7 @@ export function ScanProgress({ scan, onRetry }: { scan: ScanState; onRetry?: () 
                 )}
                 <span className="min-w-0 flex-1 truncate font-medium">{name}</span>
                 <span className={cx("tabular shrink-0", h && !h.ok && !h.unsupported ? "text-danger-text" : "text-muted")}>
-                  {!h
-                    ? ""
-                    : h.ok
-                      ? `${h.jobsFound} jobs · ${h.matches} match${h.matches === 1 ? "" : "es"}`
-                      : h.unsupported
-                        ? "not supported yet"
-                        : "couldn't scan"}
+                  {!h ? "" : h.ok ? `${h.jobsFound} jobs · ${h.matches} match${h.matches === 1 ? "" : "es"}` : h.unsupported ? "not supported yet" : "couldn't scan"}
                 </span>
               </li>
             );

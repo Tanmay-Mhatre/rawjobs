@@ -46,9 +46,7 @@ export const greenhouse: Connector<GreenhouseJob> = {
    * gzipped, 2026-10-09) and answers 304 when unchanged; describe() fetches the jobs that match.
    */
   async fetch(ref, { http }) {
-    const data = await http.getJson<{ jobs?: GreenhouseJob[] }>(
-      `${API}/v1/boards/${encodeURIComponent(ref.slug)}/jobs?content=false`,
-    );
+    const data = await http.getJson<{ jobs?: GreenhouseJob[] }>(`${API}/v1/boards/${encodeURIComponent(ref.slug)}/jobs?content=false`);
     if (!Array.isArray(data.jobs)) throw new Error("unexpected Greenhouse response: no jobs array");
     return data.jobs;
   },

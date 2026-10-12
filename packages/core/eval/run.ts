@@ -24,20 +24,33 @@ const report = evaluate(set);
 const base: Baseline | undefined = args.includes("--compare") && existsSync(baselinePath) ? JSON.parse(readFileSync(baselinePath, "utf8")) : undefined;
 if (args.includes("--compare") && !base) console.log("No baseline.json yet: run with --json first.\n");
 
-const KEYS: [keyof Metrics, string][] = [["ndcg5", "NDCG@5"], ["ndcg10", "NDCG@10"], ["p5", "P@5"], ["spearman", "Spearman"]];
+const KEYS: [keyof Metrics, string][] = [
+  ["ndcg5", "NDCG@5"],
+  ["ndcg10", "NDCG@10"],
+  ["p5", "P@5"],
+  ["spearman", "Spearman"],
+];
 const fmt = (x: number) => x.toFixed(3);
 const delta = (now: number, was: number | undefined) => {
   if (was === undefined) return "";
   const d = now - was;
   return Math.abs(d) < 0.0005 ? "  (=)" : `  (${d > 0 ? "+" : ""}${d.toFixed(3)})`;
 };
-const row = (name: string, m: Metrics, was?: Metrics) =>
-  `${name.padEnd(18)}${KEYS.map(([k]) => `${fmt(m[k])}${delta(m[k], was?.[k])}`.padEnd(base ? 18 : 10)).join("")}`;
+const row = (name: string, m: Metrics, was?: Metrics) => `${name.padEnd(18)}${KEYS.map(([k]) => `${fmt(m[k])}${delta(m[k], was?.[k])}`.padEnd(base ? 18 : 10)).join("")}`;
 
 const labelled = Object.values(set.labels).flatMap((m) => Object.values(m));
-console.log(`${set.profiles.length} profiles x ${set.jobs.length} postings = ${report.overall.pairs} pairs (${labelled.filter((l) => l.by === "reconciled").length} reconciled, ${labelled.filter((l) => l.by === "user").length} reviewed by a person)\n`);
+console.log(
+  `${set.profiles.length} profiles x ${set.jobs.length} postings = ${report.overall.pairs} pairs (${labelled.filter((l) => l.by === "reconciled").length} reconciled, ${labelled.filter((l) => l.by === "user").length} reviewed by a person)\n`,
+);
 console.log(`${"".padEnd(18)}${KEYS.map(([, n]) => n.padEnd(base ? 18 : 10)).join("")}`);
-for (const p of report.profiles) console.log(row(p.id, p, base?.profiles.find((b) => b.id === p.id)));
+for (const p of report.profiles)
+  console.log(
+    row(
+      p.id,
+      p,
+      base?.profiles.find((b) => b.id === p.id),
+    ),
+  );
 console.log(row("overall (mean)", report.overall, base?.overall));
 
 console.log("\nBand agreement, all pairs (rows: label band 4-3 / 2 / 1-0; columns: score band >= min / >= min-20 / below)");
@@ -48,7 +61,9 @@ console.log(`${agree} of ${report.overall.pairs} pairs in the same band (${((100
 
 console.log("\nWorst disagreements (score / 25 against the label)");
 for (const w of report.worst)
-  console.log(`  ${w.gap > 0 ? "too high" : "too low "}  ${`${w.profile}/${w.job}`.padEnd(26)} score ${String(w.score).padStart(3)}  label ${w.label}  ${w.title} @ ${w.company}\n${"".padEnd(12)}${w.why}`);
+  console.log(
+    `  ${w.gap > 0 ? "too high" : "too low "}  ${`${w.profile}/${w.job}`.padEnd(26)} score ${String(w.score).padStart(3)}  label ${w.label}  ${w.title} @ ${w.company}\n${"".padEnd(12)}${w.why}`,
+  );
 
 if (base) {
   const moved = report.pairs.filter((x) => base.scores[`${x.profile}/${x.job}`] !== undefined && base.scores[`${x.profile}/${x.job}`] !== x.score);

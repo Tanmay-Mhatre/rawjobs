@@ -45,9 +45,7 @@ export const lever: Connector<LeverPosting> = {
 
   async fetch(ref, { http }) {
     const base = API[ref.region ?? "global"];
-    const data = await http.getJson<LeverPosting[] | { ok: false; error: string }>(
-      `${base}/v0/postings/${encodeURIComponent(ref.slug)}?mode=json`,
-    );
+    const data = await http.getJson<LeverPosting[] | { ok: false; error: string }>(`${base}/v0/postings/${encodeURIComponent(ref.slug)}?mode=json`);
     if (!Array.isArray(data)) throw new Error(`unexpected Lever response: ${JSON.stringify(data).slice(0, 200)}`);
     return data;
   },
@@ -55,14 +53,7 @@ export const lever: Connector<LeverPosting> = {
   normalize(raw, ref): NormalizedJob {
     const c = raw.categories ?? {};
     const location = (c.allLocations?.length ? c.allLocations.join("; ") : c.location) ?? "";
-    const description = [
-      raw.descriptionPlain,
-      ...(raw.lists ?? []).map((l) => `${l.text}\n${htmlToText(l.content)}`),
-      raw.additionalPlain,
-    ]
-      .filter(Boolean)
-      .join("\n\n")
-      .trim();
+    const description = [raw.descriptionPlain, ...(raw.lists ?? []).map((l) => `${l.text}\n${htmlToText(l.content)}`), raw.additionalPlain].filter(Boolean).join("\n\n").trim();
     const s = raw.salaryRange;
     return {
       id: jobId("lever", ref.slug, raw.id),
@@ -73,10 +64,7 @@ export const lever: Connector<LeverPosting> = {
       country: raw.country ?? undefined,
       workplace: WORKPLACE[raw.workplaceType ?? ""] ?? inferWorkplace(location),
       department: c.department ?? c.team,
-      salary:
-        s && (s.min || s.max)
-          ? { min: s.min, max: s.max, currency: s.currency, period: salaryPeriod(s.interval) }
-          : undefined,
+      salary: s && (s.min || s.max) ? { min: s.min, max: s.max, currency: s.currency, period: salaryPeriod(s.interval) } : undefined,
       postedAt: raw.createdAt ? new Date(raw.createdAt).toISOString() : undefined,
       url: raw.hostedUrl,
       description,

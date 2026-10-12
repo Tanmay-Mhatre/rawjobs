@@ -43,11 +43,7 @@ describe("suggestCompanies", () => {
   it("ranks companies by how many open jobs pass the user's own filters", () => {
     const r = suggestCompanies(
       profile(),
-      [
-        co("greenhouse:one", [pm("Dubai"), eng("Dubai")]),
-        co("lever:three", [pm("Dubai"), pm("Abu Dhabi"), pm("Dubai, UAE", 30)]),
-        co("ashby:none", [eng("Dubai"), pm("Berlin")]),
-      ],
+      [co("greenhouse:one", [pm("Dubai"), eng("Dubai")]), co("lever:three", [pm("Dubai"), pm("Abu Dhabi"), pm("Dubai, UAE", 30)]), co("ashby:none", [eng("Dubai"), pm("Berlin")])],
       { now },
     );
     expect(r.hiringNow.map((s) => s.key)).toEqual(["lever:three", "greenhouse:one"]);

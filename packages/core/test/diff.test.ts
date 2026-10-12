@@ -29,9 +29,7 @@ const job = (id: string, o: Partial<Job> = {}): Job => ({
   ...o,
 });
 
-const health = (ok: boolean): CompanyHealth[] => [
-  { company: "Acme", ats: "greenhouse", slug: "acme", ok, jobsFound: 0, matches: 0, durationMs: 1 },
-];
+const health = (ok: boolean): CompanyHealth[] => [{ company: "Acme", ats: "greenhouse", slug: "acme", ok, jobsFound: 0, matches: 0, durationMs: 1 }];
 const run = (at: string, jobs: Job[], ok = true): RunResult => ({ startedAt: at, finishedAt: at, jobs, health: health(ok), partial: false, checked: 0 });
 const companies = [{ ats: "greenhouse" as const, slug: "acme" }];
 
@@ -65,7 +63,14 @@ describe("mergeHistory: Workday and Taleo", () => {
   it("handles Taleo career sections", () => {
     const tl = { ats: "taleo" as const, slug: "corp", site: "ext" };
     const tlJob = job("9", { id: "taleo:corp|ext:9", ats: "taleo" });
-    const r: RunResult = { startedAt: T1, finishedAt: T1, jobs: [], health: [{ company: "Corp", ats: "taleo", slug: "corp", key: "taleo:corp|ext", ok: true, jobsFound: 0, matches: 0, durationMs: 1 }], partial: false, checked: 0 };
+    const r: RunResult = {
+      startedAt: T1,
+      finishedAt: T1,
+      jobs: [],
+      health: [{ company: "Corp", ats: "taleo", slug: "corp", key: "taleo:corp|ext", ok: true, jobsFound: 0, matches: 0, durationMs: 1 }],
+      partial: false,
+      checked: 0,
+    };
     expect(mergeHistory([tlJob], r, [tl]).jobs[0]?.missedRuns).toBe(1);
   });
 });
@@ -182,7 +187,11 @@ companies:
     expect(read("descriptions.json")).toEqual({ "greenhouse:acme:1": "payments" });
     expect(readMeta(dir)!.companies[0]!.industries).toEqual(["crypto"]);
     // Merge still reads every job, with descriptions.
-    expect(readJobs(dir).map((j) => j.id).sort()).toEqual(["greenhouse:acme:1", "greenhouse:acme:2"]);
+    expect(
+      readJobs(dir)
+        .map((j) => j.id)
+        .sort(),
+    ).toEqual(["greenhouse:acme:1", "greenhouse:acme:2"]);
   });
 
   it("reads the old single jobs.json until history.json exists", () => {

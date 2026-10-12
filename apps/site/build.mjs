@@ -27,9 +27,29 @@ const DATA_REPO = process.env.DATA_REPO || "Tanmay-Mhatre/rawjobs-directory";
 
 // The 23 hiring systems with a connector in packages/core (README, "Adding companies").
 const SYSTEMS = [
-  "Greenhouse", "Lever", "Ashby", "SmartRecruiters", "Workday", "Workable", "Recruitee", "Personio",
-  "BambooHR", "Breezy HR", "Teamtailor", "Pinpoint", "Rippling", "HiBob", "Freshteam", "Comeet",
-  "Oracle Recruiting", "SAP SuccessFactors", "Taleo", "iCIMS", "Jobvite", "JazzHR", "Zoho Recruit",
+  "Greenhouse",
+  "Lever",
+  "Ashby",
+  "SmartRecruiters",
+  "Workday",
+  "Workable",
+  "Recruitee",
+  "Personio",
+  "BambooHR",
+  "Breezy HR",
+  "Teamtailor",
+  "Pinpoint",
+  "Rippling",
+  "HiBob",
+  "Freshteam",
+  "Comeet",
+  "Oracle Recruiting",
+  "SAP SuccessFactors",
+  "Taleo",
+  "iCIMS",
+  "Jobvite",
+  "JazzHR",
+  "Zoho Recruit",
 ];
 
 const read = (p) => readFileSync(p, "utf8");
@@ -57,7 +77,11 @@ const WALL_SIZE = 520;
 const WALL_FALLBACK = join(SITE, "src/wall-fallback.json");
 /** "https://jobs.ashbyhq.com/airwallex/" -> "jobs.ashbyhq.com/airwallex"; hosts that carry the company in the path keep it. */
 export function wallHost(url) {
-  const parts = String(url).replace(/^https?:\/\//, "").replace(/^www\./, "").replace(/\/$/, "").split("/");
+  const parts = String(url)
+    .replace(/^https?:\/\//, "")
+    .replace(/^www\./, "")
+    .replace(/\/$/, "")
+    .split("/");
   let h = parts[0];
   if (/greenhouse|ashbyhq|lever\.co|smartrecruiters|workable|rippling|comeet|jobvite/.test(h) && parts[1]) h += "/" + parts[1];
   h = h.toLowerCase();
@@ -70,18 +94,37 @@ export function wallHost(url) {
  */
 export function wallSample(companies, size = WALL_SIZE) {
   let seed = 20261011;
-  const rnd = () => ((seed = (seed * 16807) % 2147483647) / 2147483647);
-  const shuffle = (a) => { for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(rnd() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; } return a; };
+  const rnd = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
+  const shuffle = (a) => {
+    for (let i = a.length - 1; i > 0; i--) {
+      const j = Math.floor(rnd() * (i + 1));
+      [a[i], a[j]] = [a[j], a[i]];
+    }
+    return a;
+  };
   const live = companies.filter((c) => c.status === "live" && c.careers_url).sort((a, b) => String(a.key ?? a.name).localeCompare(String(b.key ?? b.name)));
   const by = new Map();
   let usable = 0;
-  for (const c of live) { const h = wallHost(c.careers_url); if (h) { (by.get(c.ats) ?? by.set(c.ats, []).get(c.ats)).push(h); usable++; } }
+  for (const c of live) {
+    const h = wallHost(c.careers_url);
+    if (h) {
+      (by.get(c.ats) ?? by.set(c.ats, []).get(c.ats)).push(h);
+      usable++;
+    }
+  }
   const seen = new Set();
   const out = [];
   for (const [, hosts] of [...by].sort((a, b) => a[0].localeCompare(b[0]))) {
     const take = Math.max(6, Math.ceil((size * hosts.length) / usable));
     let n = 0;
-    for (const h of shuffle(hosts)) { if (n >= take) break; if (!seen.has(h)) { seen.add(h); out.push(h); n++; } }
+    for (const h of shuffle(hosts)) {
+      if (n >= take) break;
+      if (!seen.has(h)) {
+        seen.add(h);
+        out.push(h);
+        n++;
+      }
+    }
   }
   return shuffle(out).slice(0, size);
 }
@@ -133,9 +176,7 @@ const block = (id) => {
   return m[1];
 };
 const [dark, lightHc, darkHc] = ["dark", "light-hc", "dark-hc"].map(block);
-tokens = tokens
-  .replace('[data-theme="dark"] {', '[data-theme="dark"] { color-scheme: dark;')
-  .replace('[data-theme="dark-hc"] {', '[data-theme="dark-hc"] { color-scheme: dark;');
+tokens = tokens.replace('[data-theme="dark"] {', '[data-theme="dark"] { color-scheme: dark;').replace('[data-theme="dark-hc"] {', '[data-theme="dark-hc"] { color-scheme: dark;');
 tokens += `
 @media (prefers-color-scheme: dark) { :root:not([data-theme]) {${dark}\n  color-scheme: dark;\n} }
 @media (prefers-contrast: more) { :root:not([data-theme]) {${lightHc}\n} }
@@ -160,9 +201,7 @@ const wallMarkup = wallHosts.map((h) => `<span>${escHtml(h)}</span>`).join("");
 const ats = SYSTEMS.map((s) => `<li class="ats">${s}</li>`).join("");
 // The scoring demo's rules, inlined as a plain script (packages/core/test/site-demo.test.ts checks them).
 const score = read(join(SITE, "src/score.js")).replace(/^export /gm, "");
-const analytics = ANALYTICS_TOKEN
-  ? `<script defer src="https://static.cloudflareinsights.com/beacon.min.js" data-cf-beacon='${JSON.stringify({ token: ANALYTICS_TOKEN })}'></script>`
-  : "";
+const analytics = ANALYTICS_TOKEN ? `<script defer src="https://static.cloudflareinsights.com/beacon.min.js" data-cf-beacon='${JSON.stringify({ token: ANALYTICS_TOKEN })}'></script>` : "";
 
 const page = (name) => {
   let out = read(join(SITE, "src", name))
@@ -195,10 +234,7 @@ cpSync(join(SITE, "public"), DIST, { recursive: true });
 mkdirSync(join(DIST, "images"));
 for (const f of ["radar-light.png", "radar-dark.png"]) copyFileSync(join(ROOT, "docs/images", f), join(DIST, "images", f));
 writeFileSync(join(DIST, "robots.txt"), `User-agent: *\nAllow: /\n\nSitemap: ${SITE_URL}/sitemap.xml\n`);
-writeFileSync(
-  join(DIST, "sitemap.xml"),
-  `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n  <url><loc>${SITE_URL}/</loc></url>\n</urlset>\n`,
-);
+writeFileSync(join(DIST, "sitemap.xml"), `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n  <url><loc>${SITE_URL}/</loc></url>\n</urlset>\n`);
 
 console.log(
   `Built ${DIST} for ${SITE_URL}${ANALYTICS_TOKEN ? " (with Web Analytics)" : ""}: ${Math.round(Buffer.byteLength(html) / 1024)} KB page, ` +

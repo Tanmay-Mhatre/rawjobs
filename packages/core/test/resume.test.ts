@@ -263,7 +263,10 @@ describe("detectFromResume industries", () => {
     const d = detectFromResume(RESUME, CATALOGS);
     expect(d.industries[0]).toBe("payments");
     expect(d.industries.slice(0, 3)).toEqual(expect.arrayContaining(["crypto", "regtech"]));
-    expect(d.industryWhy?.payments).toEqual([["payments", 3], ["card issuing", 1]]);
+    expect(d.industryWhy?.payments).toEqual([
+      ["payments", 3],
+      ["card issuing", 1],
+    ]);
     expect(d.industryCounts).toMatchObject({ payments: 4, crypto: 3 });
   });
 

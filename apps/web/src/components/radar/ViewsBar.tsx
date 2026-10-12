@@ -15,7 +15,7 @@ const BUILT_IN: { id: string; label: string; filters: Partial<Filters>; count: k
 ];
 /** The built-in views in tab order; the first scan has no New view (every job would be new). Keys 1-6 pick them. */
 export const builtInViews = (hideNew?: boolean) => BUILT_IN.filter((b) => !(b.id === "new" && hideNew));
-export type ViewCounts ={ all: number; mine: number; new: number; strong: number; saved: number; applied: number };
+export type ViewCounts = { all: number; mine: number; new: number; strong: number; saved: number; applied: number };
 
 export function ViewsBar(props: {
   className?: string;

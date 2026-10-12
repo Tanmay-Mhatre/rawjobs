@@ -16,7 +16,14 @@ const noop = () => {};
 
 describe("SetupChecklist", () => {
   it("before the first scan, shows the full card", () => {
-    render(<SetupChecklist items={[item("roles", "Target roles", true, { step: 2 }), item("keywords", "Topics to rank by", false, { step: 4 }), item("scan", "First scan", false)]} onStep={noop} onScan={noop} onCompanies={noop} />);
+    render(
+      <SetupChecklist
+        items={[item("roles", "Target roles", true, { step: 2 }), item("keywords", "Topics to rank by", false, { step: 4 }), item("scan", "First scan", false)]}
+        onStep={noop}
+        onScan={noop}
+        onCompanies={noop}
+      />,
+    );
     expect(screen.getByRole("heading", { name: "Finish setting up" })).toBeTruthy();
     expect(screen.queryByRole("button", { name: /show all/i })).toBeNull();
   });

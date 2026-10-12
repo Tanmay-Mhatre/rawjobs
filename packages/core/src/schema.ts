@@ -179,7 +179,7 @@ export type DataMeta = {
   version: 1;
   generatedAt: string;
   profile: Profile;
-  companies: { name: string; ats: AtsType; slug: string; enabled: boolean; careers_url?: string; /** Industry ids from the company directory. */ industries?: string[] }[];
+  companies: { name: string; ats: AtsType; slug: string; enabled: boolean; careers_url?: string /** Industry ids from the company directory. */; industries?: string[] }[];
   /** Newest first, capped. */
   runs: RunSummary[];
 };

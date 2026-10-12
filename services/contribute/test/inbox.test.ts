@@ -19,8 +19,7 @@ function fakeEnv(limitOk = true, extra: Partial<Env> = {}): Env & { store: Map<s
 const call = (env: Env, path: string, init: RequestInit = {}) => worker.fetch(new Request(`https://inbox.test${path}`, init), env);
 const post = (env: Env, path: string, body: unknown, headers: Record<string, string> = {}) => call(env, path, { method: "POST", body: JSON.stringify(body), headers });
 /** The stored contributions (what the workflow sees), oldest first. */
-const contributions = (env: { store: Map<string, string> }) =>
-  [...env.store.entries()].filter(([k]) => k.startsWith("c:")).map(([, v]) => JSON.parse(v) as Record<string, unknown>);
+const contributions = (env: { store: Map<string, string> }) => [...env.store.entries()].filter(([k]) => k.startsWith("c:")).map(([, v]) => JSON.parse(v) as Record<string, unknown>);
 
 describe("contribution inbox", () => {
   it("keeps valid boards only, deduplicated, with no user data", async () => {
@@ -102,7 +101,12 @@ describe("contribution inbox", () => {
   it("skips boards already received this week", async () => {
     const env = fakeEnv();
     await post(env, "/v1/contributions", { boards: [{ ats: "lever", slug: "acme" }] });
-    const again = await post(env, "/v1/contributions", { boards: [{ ats: "lever", slug: "Acme" }, { ats: "ashby", slug: "new" }] });
+    const again = await post(env, "/v1/contributions", {
+      boards: [
+        { ats: "lever", slug: "Acme" },
+        { ats: "ashby", slug: "new" },
+      ],
+    });
     expect(await again.json()).toEqual({ received: 1, duplicates: 1 });
     const only = await post(env, "/v1/contributions", { boards: [{ ats: "lever", slug: "acme" }] });
     expect(only.status).toBe(202);
@@ -112,8 +116,26 @@ describe("contribution inbox", () => {
 
   it("stops accepting at the daily cap, all or nothing", async () => {
     const env = fakeEnv(true, { DAILY_CAP: "3" });
-    expect((await post(env, "/v1/contributions", { boards: [{ ats: "lever", slug: "a" }, { ats: "lever", slug: "b" }] })).status).toBe(202);
-    expect((await post(env, "/v1/contributions", { boards: [{ ats: "lever", slug: "c" }, { ats: "lever", slug: "d" }] })).status).toBe(429);
+    expect(
+      (
+        await post(env, "/v1/contributions", {
+          boards: [
+            { ats: "lever", slug: "a" },
+            { ats: "lever", slug: "b" },
+          ],
+        })
+      ).status,
+    ).toBe(202);
+    expect(
+      (
+        await post(env, "/v1/contributions", {
+          boards: [
+            { ats: "lever", slug: "c" },
+            { ats: "lever", slug: "d" },
+          ],
+        })
+      ).status,
+    ).toBe(429);
     expect((await post(env, "/v1/contributions", { boards: [{ ats: "lever", slug: "c" }] })).status).toBe(202);
     expect((await post(env, "/v1/contributions", { boards: [{ ats: "lever", slug: "e" }] })).status).toBe(429);
     expect(contributions(env)).toHaveLength(2);

@@ -7,7 +7,11 @@ import { writeFileAtomic } from "./lib/fs";
 import { nextInTime } from "./lib/time-box";
 
 const dir = () => mkdtempSync(join(tmpdir(), "compact-"));
-const rows = (path: string) => readFileSync(path, "utf8").split("\n").filter(Boolean).map((l) => JSON.parse(l));
+const rows = (path: string) =>
+  readFileSync(path, "utf8")
+    .split("\n")
+    .filter(Boolean)
+    .map((l) => JSON.parse(l));
 
 describe("compact", () => {
   it("skips a line cut off by a kill instead of failing the state save", () => {

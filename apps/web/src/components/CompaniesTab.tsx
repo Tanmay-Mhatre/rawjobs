@@ -105,7 +105,12 @@ function SaveStatus({ state, retry, onScan, scanning }: { state: SaveState; retr
         <Check className="size-3.5 text-success-text" /> {state.kind === "saved" ? "Saved. Used in your next scan." : "Changes save automatically."}
       </span>
       {state.kind === "saved" && (
-        <button type="button" className="inline-flex min-h-6 items-center gap-1 font-medium text-ink underline underline-offset-2 hover:text-muted disabled:opacity-50" onClick={onScan} disabled={scanning}>
+        <button
+          type="button"
+          className="inline-flex min-h-6 items-center gap-1 font-medium text-ink underline underline-offset-2 hover:text-muted disabled:opacity-50"
+          onClick={onScan}
+          disabled={scanning}
+        >
           <RefreshCw className="size-3" /> Scan now
         </button>
       )}

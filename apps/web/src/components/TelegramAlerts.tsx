@@ -70,7 +70,12 @@ export function TelegramAlerts({
     }
   };
 
-  if (!status) return <p className="flex items-center gap-2 type-small text-muted"><LoaderCircle className="size-4 animate-spin" /> Checking…</p>;
+  if (!status)
+    return (
+      <p className="flex items-center gap-2 type-small text-muted">
+        <LoaderCircle className="size-4 animate-spin" /> Checking…
+      </p>
+    );
   if (status.error)
     return (
       <div className="type-small" role="alert">
@@ -149,7 +154,12 @@ export function TelegramAlerts({
                   )}{" "}
                   in Telegram and press <b>Start</b> (or send it any message). That tells RawJobs where to send your alerts.
                 </p>
-                <Button className="mt-2" variant="primary" onClick={() => void act("connect", undefined, (r) => `Connected. Check Telegram, ${r.name}: a welcome message is waiting.`)} disabled={!!busy}>
+                <Button
+                  className="mt-2"
+                  variant="primary"
+                  onClick={() => void act("connect", undefined, (r) => `Connected. Check Telegram, ${r.name}: a welcome message is waiting.`)}
+                  disabled={!!busy}
+                >
                   {spin("connect")} I've messaged the bot
                 </Button>
               </>
@@ -194,7 +204,8 @@ export function TelegramAlerts({
         </div>
       )}
       <p className="type-small text-muted">
-        {footnote ?? "One message per scheduled scan, only when there are new jobs for you (best first, up to 10). Scans you start yourself don't send one."} Your bot token is kept on this computer only.
+        {footnote ?? "One message per scheduled scan, only when there are new jobs for you (best first, up to 10). Scans you start yourself don't send one."} Your bot token is kept on this computer
+        only.
       </p>
 
       <Dialog open={confirmForget} onClose={() => setConfirmForget(false)} labelledBy="tg-forget-title" initialFocus="[data-autofocus]">

@@ -51,12 +51,7 @@ export function SortOptions({ sort, onChange }: { sort: Sort; onChange: (s: Sort
         const on = s.value === sort;
         return (
           <li key={s.value}>
-            <button
-              type="button"
-              aria-pressed={on}
-              onClick={() => onChange(s.value)}
-              className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left type-small hover:bg-inset"
-            >
+            <button type="button" aria-pressed={on} onClick={() => onChange(s.value)} className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left type-small hover:bg-inset">
               <span className={cx("flex size-4 shrink-0 items-center justify-center rounded-dot border", on ? "border-ink bg-ink text-raised" : "border-control")}>
                 {on && <Check className="size-3" />}
               </span>

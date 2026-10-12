@@ -86,7 +86,12 @@ export function ScheduledScans() {
     }
   };
 
-  if (!status) return <p className="flex items-center gap-2 type-small text-muted"><LoaderCircle className="size-4 animate-spin" /> Checking…</p>;
+  if (!status)
+    return (
+      <p className="flex items-center gap-2 type-small text-muted">
+        <LoaderCircle className="size-4 animate-spin" /> Checking…
+      </p>
+    );
   if (!status.supported) return <p className="type-small text-muted">Scheduled scans aren't supported on this system yet.</p>;
 
   const saved = status.settings;
@@ -100,8 +105,7 @@ export function ScheduledScans() {
         <div className="flex flex-wrap items-center gap-x-3 gap-y-1 rounded-md border border-line bg-inset p-3 type-small">
           <Clock className="size-4 text-muted" aria-hidden="true" />
           <span>
-            On: <b>{scopeLabel(saved.scope, hasIndustries)}</b>, daily at <b>{saved.times.join(" and ")}</b>.
-            {status.nextRun && <> Next scan {formatDateTime(status.nextRun)}.</>}
+            On: <b>{scopeLabel(saved.scope, hasIndustries)}</b>, daily at <b>{saved.times.join(" and ")}</b>.{status.nextRun && <> Next scan {formatDateTime(status.nextRun)}.</>}
           </span>
         </div>
       ) : (
@@ -198,8 +202,8 @@ export function ScheduledScans() {
       </div>
 
       <p className="type-small text-muted">
-        Scans run on this computer, even with this page closed, but only while it's on or asleep (it wakes up for them). A scan missed while it was off runs as
-        soon as it's back on. {scope === "all" && "All companies usually takes minutes with the daily job feed, up to 2 hours without it: keep the computer on until it's done."}
+        Scans run on this computer, even with this page closed, but only while it's on or asleep (it wakes up for them). A scan missed while it was off runs as soon as it's back on.{" "}
+        {scope === "all" && "All companies usually takes minutes with the daily job feed, up to 2 hours without it: keep the computer on until it's done."}
       </p>
 
       {status.runs.length > 0 && (

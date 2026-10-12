@@ -83,14 +83,7 @@ export function ForYou({ state, watched, muted, pastEmployers, onPastEmployers, 
     setHidden({ key: s.key, name: s.name });
   };
   const card = (s: CompanySuggestion) => (
-    <SuggestionCard
-      key={s.key}
-      s={s}
-      added={watched.has(s.key) || watched.has(keyOf(s))}
-      onAdd={() => void onAddMany([refOf(s)])}
-      onRemove={() => onRemoveMany([s.key])}
-      onHide={() => hide(s)}
-    />
+    <SuggestionCard key={s.key} s={s} added={watched.has(s.key) || watched.has(keyOf(s))} onAdd={() => void onAddMany([refOf(s)])} onRemove={() => onRemoveMany([s.key])} onHide={() => hide(s)} />
   );
   const grid = (items: CompanySuggestion[], limit = shown, more = () => setShown((n) => n + PAGE)) => (
     <>
@@ -107,13 +100,15 @@ export function ForYou({ state, watched, muted, pastEmployers, onPastEmployers, 
 
   type Tab = { id: Lens; label: string; count: number };
   const tabs: Tab[] = lists
-    ? ([
-        { id: "packs", label: "Starter packs", count: lists.packs.length },
-        { id: "hiring", label: "Hiring for you now", count: lists.hiring.length },
-        { id: "like", label: "Like your past employers", count: lists.like.reduce((n, r) => n + r.items.length, 0) },
-        { id: "watching", label: "Not hiring yet", count: lists.watching.length },
-        { id: "soon", label: "Not supported yet", count: lists.soon.length },
-      ] satisfies Tab[]).filter((t) => t.count || t.id === "hiring" || t.id === "like" || t.id === current)
+    ? (
+        [
+          { id: "packs", label: "Starter packs", count: lists.packs.length },
+          { id: "hiring", label: "Hiring for you now", count: lists.hiring.length },
+          { id: "like", label: "Like your past employers", count: lists.like.reduce((n, r) => n + r.items.length, 0) },
+          { id: "watching", label: "Not hiring yet", count: lists.watching.length },
+          { id: "soon", label: "Not supported yet", count: lists.soon.length },
+        ] satisfies Tab[]
+      ).filter((t) => t.count || t.id === "hiring" || t.id === "like" || t.id === current)
     : [];
 
   const goBack = (data?.pastEmployers ?? []).filter((p) => p.company && !dismissed.includes(p.company.key) && !muted.has(p.company.key) && !isPlaceholderBoard(p.company.name));
@@ -139,14 +134,20 @@ export function ForYou({ state, watched, muted, pastEmployers, onPastEmployers, 
       <PastEmployers names={pastEmployers} suggested={data?.pastEmployers.map((p) => p.name)} onChange={onPastEmployers} />
       {compact && top5.length > 0 && (
         <div className="mt-4 flex flex-wrap items-center gap-2 rounded-md bg-inset p-3 type-small">
-          <span className="mr-auto">Quick start: add the {top5.length} best fits ({top5.map((s) => s.name).join(", ")}).</span>
+          <span className="mr-auto">
+            Quick start: add the {top5.length} best fits ({top5.map((s) => s.name).join(", ")}).
+          </span>
           <AddAll items={top5.map(refOf)} watched={watched} onAddMany={onAddMany} onRemoveMany={onRemoveMany} />
         </div>
       )}
 
       {state.kind === "off" && offSettled ? (
         <p className="mt-4 rounded-md border border-dashed border-line p-4 type-small text-muted">
-          {!canRunLocally && offHint ? offHint : canRunLocally ? "Pick the roles you want first to see companies hiring for them." : "Suggestions aren't available in this version of the app. Search the directory or add a company by link instead."}
+          {!canRunLocally && offHint
+            ? offHint
+            : canRunLocally
+              ? "Pick the roles you want first to see companies hiring for them."
+              : "Suggestions aren't available in this version of the app. Search the directory or add a company by link instead."}
         </p>
       ) : state.kind === "error" ? (
         <div role="alert" className="mt-4 space-y-2 rounded-md bg-warning-subtle/50 p-4 type-small">
@@ -188,41 +189,45 @@ export function ForYou({ state, watched, muted, pastEmployers, onPastEmployers, 
           />
 
           <TabPanel id={current} ids={ids} className="space-y-4">
-          <LensHeader lens={current} lists={lists} watched={watched} onAddMany={onAddMany} onRemoveMany={onRemoveMany} />
+            <LensHeader lens={current} lists={lists} watched={watched} onAddMany={onAddMany} onRemoveMany={onRemoveMany} />
 
-          {hidden && muted.has(hidden.key) && (
-            <p className="flex items-center gap-2 rounded-md bg-inset px-3 py-2 type-small">
-              <span className="mr-auto">
-                Hid <b>{hidden.name}</b>. Its jobs won't show either.
-              </span>
-              <button type="button" className="inline-flex items-center gap-1 type-label text-ink underline underline-offset-2 hover:text-muted" onClick={() => (onUnmute(hidden.key), setHidden(null))}>
-                <Undo2 className="size-3.5" /> Undo
-              </button>
-            </p>
-          )}
+            {hidden && muted.has(hidden.key) && (
+              <p className="flex items-center gap-2 rounded-md bg-inset px-3 py-2 type-small">
+                <span className="mr-auto">
+                  Hid <b>{hidden.name}</b>. Its jobs won't show either.
+                </span>
+                <button
+                  type="button"
+                  className="inline-flex items-center gap-1 type-label text-ink underline underline-offset-2 hover:text-muted"
+                  onClick={() => (onUnmute(hidden.key), setHidden(null))}
+                >
+                  <Undo2 className="size-3.5" /> Undo
+                </button>
+              </p>
+            )}
 
-          {current === "hiring" &&
-            (lists.hiring.length ? grid(lists.hiring) : <Empty>No company has an opening that passes your filters today. Try the Not hiring yet list, or widen your places.</Empty>)}
-          {current === "watching" && grid(lists.watching)}
-          {current === "soon" && grid(lists.soon)}
-          {current === "like" && (
-            <LikeLens
-              rows={lists.like}
-              goBack={goBack}
-              hasEmployers={pastEmployers.length > 0 || !!data?.pastEmployers.length}
-              grid={grid}
-              compact={compact}
-              watched={watched}
-              onAddMany={onAddMany}
-              onRemoveMany={onRemoveMany}
-              onDismiss={(key) => {
-                const next = [...dismissed, key];
-                setDismissed(next);
-                save(DISMISSED_KEY, next);
-              }}
-            />
-          )}
-          {current === "packs" && <Packs packs={lists.packs} watched={watched} onAddMany={onAddMany} onRemoveMany={onRemoveMany} />}
+            {current === "hiring" &&
+              (lists.hiring.length ? grid(lists.hiring) : <Empty>No company has an opening that passes your filters today. Try the Not hiring yet list, or widen your places.</Empty>)}
+            {current === "watching" && grid(lists.watching)}
+            {current === "soon" && grid(lists.soon)}
+            {current === "like" && (
+              <LikeLens
+                rows={lists.like}
+                goBack={goBack}
+                hasEmployers={pastEmployers.length > 0 || !!data?.pastEmployers.length}
+                grid={grid}
+                compact={compact}
+                watched={watched}
+                onAddMany={onAddMany}
+                onRemoveMany={onRemoveMany}
+                onDismiss={(key) => {
+                  const next = [...dismissed, key];
+                  setDismissed(next);
+                  save(DISMISSED_KEY, next);
+                }}
+              />
+            )}
+            {current === "packs" && <Packs packs={lists.packs} watched={watched} onAddMany={onAddMany} onRemoveMany={onRemoveMany} />}
           </TabPanel>
         </div>
       )}

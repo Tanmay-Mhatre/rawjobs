@@ -120,11 +120,7 @@ export async function scan(config: Config, opts: ScanOptions): Promise<ScanResul
   let ledger = readLedger(opts.dataDir);
 
   const wanted = new Set(opts.checkKeys?.map((k) => k.toLowerCase()));
-  const inScope = checkOnly
-    ? directory.filter((c) => wanted.has(c.key) && !tracked.has(c.key)).map(refOfEntry)
-    : fullScan
-      ? scopeCompanies(config, directory, scope)
-      : [];
+  const inScope = checkOnly ? directory.filter((c) => wanted.has(c.key) && !tracked.has(c.key)).map(refOfEntry) : fullScan ? scopeCompanies(config, directory, scope) : [];
   // Yesterday's shared feed says which directory companies have jobs that could be yours: only those
   // (and ones it doesn't cover) are fetched live, so what's shown is still checked live.
   const feed = fullScan && opts.feed !== false ? feedMatches(opts.dataDir, config.profile, now.getTime()) : undefined;
@@ -187,9 +183,7 @@ export async function scan(config: Config, opts: ScanOptions): Promise<ScanResul
     },
   });
   const stopped = !!opts.stopped?.();
-  const result: RunResult = resumed
-    ? { ...run, startedAt: resumed.startedAt, jobs: [...resumed.jobs, ...run.jobs], health: [...resumed.health, ...run.health] }
-    : run;
+  const result: RunResult = resumed ? { ...run, startedAt: resumed.startedAt, jobs: [...resumed.jobs, ...run.jobs], health: [...resumed.health, ...run.health] } : run;
   if (checkOnly) result.partial = true;
 
   // Your companies whose board is gone, but which the directory lists on another board: fetch that.

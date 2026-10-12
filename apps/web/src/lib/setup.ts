@@ -97,7 +97,7 @@ export type ScanScope = "mine" | "all";
 export type RunEvent =
   /** Syncing with the shared company directory (the first step of every scan). */
   | { type: "sync" }
-  | { type: "synced"; updated: boolean; offline?: boolean; message: string; /** What the shared job feed sync said. */ feed?: string }
+  | { type: "synced"; updated: boolean; offline?: boolean; message: string /** What the shared job feed sync said. */; feed?: string }
   | {
       type: "start";
       /** Your companies, in fetch order. */
@@ -376,8 +376,7 @@ export function draftFromConfig(input: unknown): Draft {
     directory: { auto_update: directory.auto_update !== false, share_additions: directory.share_additions !== false },
     muted: strings(c.companies_muted).map((k) => k.toLowerCase()),
     discovery: {
-      check_per_scan:
-        typeof discovery.check_per_scan === "number" ? Math.min(100, Math.max(0, Math.round(discovery.check_per_scan))) : d.discovery.check_per_scan,
+      check_per_scan: typeof discovery.check_per_scan === "number" ? Math.min(100, Math.max(0, Math.round(discovery.check_per_scan))) : d.discovery.check_per_scan,
     },
     furthestStep: STEPS.length,
     family: inferFamily(strings(t.include)),

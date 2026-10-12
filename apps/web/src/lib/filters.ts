@@ -246,13 +246,35 @@ export function facetCounts(jobs: Job[], f: Filters, ctx: Ctx): Record<FacetKey,
     posted: POSTED_OPTIONS.map((o) => ({ value: String(o.value), label: o.label, count: roleCount(postedPool.filter((j) => ageDays(postedOrSeen(j), ctx.now) <= o.value)) })),
     countries: sorted(tally("countries", countriesOf), (v) => (v === REMOTE ? "Remote & your regions" : v), f.countries, ctx.mine?.countries),
     // "Dubai, United Arab Emirates" reads as "Dubai · United Arab Emirates" in the menu.
-    locations: sorted(tally("locations", (j) => j.cities), (v) => v.replace(/, ([^,]+)$/, " · $1"), f.locations, ctx.mine?.locations),
+    locations: sorted(
+      tally("locations", (j) => j.cities),
+      (v) => v.replace(/, ([^,]+)$/, " · $1"),
+      f.locations,
+      ctx.mine?.locations,
+    ),
     workplace: (["remote", "hybrid", "onsite", "unknown"] as Workplace[]).map((w) => ({ value: w, label: WORKPLACE_LABEL[w], count: tally("workplace", (j) => [j.workplace]).get(w) ?? 0 })),
     seniority: SENIORITY_LEVELS.map((s) => ({ value: s.id, label: s.label, count: tally("seniority", (j) => [j.seniority]).get(s.id) ?? 0 })),
-    industries: sorted(tally("industries", (j) => ctx.industriesOf(j.company)), (id) => INDUSTRY_BY_ID.get(id)?.label ?? id, f.industries, ctx.mine?.industries),
-    companies: sorted(tally("companies", (j) => [j.company]), undefined, f.companies),
-    topics: sorted(tally("topics", (j) => j.why.keywords), undefined, f.topics),
-    ats: sorted(tally("ats", (j) => [j.ats]), atsLabel, f.ats),
+    industries: sorted(
+      tally("industries", (j) => ctx.industriesOf(j.company)),
+      (id) => INDUSTRY_BY_ID.get(id)?.label ?? id,
+      f.industries,
+      ctx.mine?.industries,
+    ),
+    companies: sorted(
+      tally("companies", (j) => [j.company]),
+      undefined,
+      f.companies,
+    ),
+    topics: sorted(
+      tally("topics", (j) => j.why.keywords),
+      undefined,
+      f.topics,
+    ),
+    ats: sorted(
+      tally("ats", (j) => [j.ats]),
+      atsLabel,
+      f.ats,
+    ),
     match: [
       { value: "strong", label: `Strong (${ctx.min}+)`, count: roleCount(matchPool.filter((j) => j.score >= ctx.min)) },
       { value: "good", label: `Good (${Math.max(0, ctx.min - 20)}+)`, count: roleCount(matchPool.filter((j) => j.score >= Math.max(0, ctx.min - 20))) },
@@ -270,10 +292,7 @@ const salaryOf = (j: Job) => j.salary?.max ?? j.salary?.min ?? -1;
  * `isYours` gives them a nudge (rankScore), and freshness counts, worked out at `now`.
  */
 export function sortJobs(jobs: Job[], sort: Sort, isYours?: (j: Job) => boolean, now = Date.now()): Job[] {
-  const rank =
-    sort === "best"
-      ? new Map(jobs.map((j) => [j, rankScore(j.score, postedOrSeen(j), now, !!isYours?.(j)) - evergreenCost(j)]))
-      : undefined;
+  const rank = sort === "best" ? new Map(jobs.map((j) => [j, rankScore(j.score, postedOrSeen(j), now, !!isYours?.(j)) - evergreenCost(j)])) : undefined;
   const by: Record<Sort, (a: Job, b: Job) => number> = {
     // Equal ranks go to the one mentioning more of your topics, then the newer.
     best: (a, b) => rank!.get(b)! - rank!.get(a)! || b.why.keywords.length - a.why.keywords.length || postedOrSeen(b).localeCompare(postedOrSeen(a)),

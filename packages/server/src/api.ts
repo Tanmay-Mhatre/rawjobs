@@ -73,8 +73,12 @@ export function createApi(opts: ApiOptions) {
       let stderr = "";
       const timer = setTimeout(() => {
         child.kill();
-        done({ code: 1, stdout, stderr: `${stderr}
-Stopped after ${Math.round(timeoutMs / 1000)} s without finishing.`.trim() });
+        done({
+          code: 1,
+          stdout,
+          stderr: `${stderr}
+Stopped after ${Math.round(timeoutMs / 1000)} s without finishing.`.trim(),
+        });
       }, timeoutMs);
       const finish = (r: { code: number; stdout: string; stderr: string }) => {
         clearTimeout(timer);
@@ -113,7 +117,9 @@ Stopped after ${Math.round(timeoutMs / 1000)} s without finishing.`.trim() });
         return 0;
       }
     };
-    const stamp = [resolve(dataDir, "catalog/index.json"), resolve(dataDir, "catalog/directory.json"), resolve(dataDir, "catalog/additions.json"), resolve(home, "profile/resume.md")].map(mtime).join(":");
+    const stamp = [resolve(dataDir, "catalog/index.json"), resolve(dataDir, "catalog/directory.json"), resolve(dataDir, "catalog/additions.json"), resolve(home, "profile/resume.md")]
+      .map(mtime)
+      .join(":");
     const key = `${stamp}|${body}`;
     let hit = suggestCache.get(key);
     if (!hit) {
@@ -210,7 +216,8 @@ Stopped after ${Math.round(timeoutMs / 1000)} s without finishing.`.trim() });
     if (url === "/api/health" && req.method === "GET") return json(res, { ok: true, version, scanning: busy() });
     if (url === "/api/update" || url.startsWith("/api/update/")) {
       if (opts.updater && (await opts.updater.route(url, req, res, () => readBody(req)))) return;
-      if (url === "/api/update" && req.method === "GET") return json(res, { installed: false, current: version, lastUpdate: null, available: null, tooOld: false, state: "idle", settings: { mode: "off", channel: "stable" } });
+      if (url === "/api/update" && req.method === "GET")
+        return json(res, { installed: false, current: version, lastUpdate: null, available: null, tooOld: false, state: "idle", settings: { mode: "off", channel: "stable" } });
       return json(res, { ok: false, errors: "This copy updates with git (git pull), not by itself." }, 400);
     }
     if (url === "/api/tracking" && req.method === "GET") return json(res, { tracking: readTracking(home) });

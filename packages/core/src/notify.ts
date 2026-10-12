@@ -12,7 +12,7 @@ import { writeFileAtomic } from "./atomic";
  */
 export const SECRETS_PATH = "profile/secrets.json";
 
-export type TelegramSecrets = { token?: string; chatId?: string; /** The bot's @name (not secret; shown in Settings). */ bot?: string };
+export type TelegramSecrets = { token?: string; chatId?: string /** The bot's @name (not secret; shown in Settings). */; bot?: string };
 type Secrets = { telegram?: TelegramSecrets };
 
 function readSecrets(cwd = rawjobsHome()): Secrets {
@@ -99,7 +99,7 @@ const MAX_LINES = 10;
  */
 export function digest(
   jobs: readonly Job[],
-  opts: { minScore: number; scopeLabel?: string; dashboardHint?: boolean; now?: number; /** Companies in the user's config, as lowercase "ats:slug". */ yours?: ReadonlySet<string> },
+  opts: { minScore: number; scopeLabel?: string; dashboardHint?: boolean; now?: number /** Companies in the user's config, as lowercase "ats:slug". */; yours?: ReadonlySet<string> },
 ): string | undefined {
   if (!jobs.length) return undefined;
   const strong = jobs.filter((j) => j.score >= opts.minScore).length;

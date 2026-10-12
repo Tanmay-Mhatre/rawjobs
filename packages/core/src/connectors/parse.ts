@@ -130,7 +130,9 @@ function xmlText(s: string): string {
 
 /** Plain text of an HTML fragment on one line (titles, locations). */
 export function inlineText(html: string | undefined): string {
-  return htmlToText(html ?? "").replace(/\s+/g, " ").trim();
+  return htmlToText(html ?? "")
+    .replace(/\s+/g, " ")
+    .trim();
 }
 
 /** "Posted 3 Days Ago", "Posted Today", "Posted 30+ Days Ago" -> ISO date (lower bound for "30+"). */

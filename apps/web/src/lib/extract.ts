@@ -50,9 +50,7 @@ async function extractPdf(file: File): Promise<Extracted> {
 
   const text = tidy(pages.join("\n\n"));
   if (text.replace(/\s/g, "").length < 80) {
-    throw new ExtractError(
-      "This PDF has no selectable text. It's probably a scan or an image. Use “I have several resumes”: Claude and ChatGPT can read scanned PDFs.",
-    );
+    throw new ExtractError("This PDF has no selectable text. It's probably a scan or an image. Use “I have several resumes”: Claude and ChatGPT can read scanned PDFs.");
   }
   return {
     text,

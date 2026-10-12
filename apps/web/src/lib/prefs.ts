@@ -45,20 +45,15 @@ export function usePrefs() {
   const deleteView = useCallback((id: string) => setPrefs((p) => ({ ...p, views: p.views.filter((v) => v.id !== id) })), []);
   /** Undo a delete: put the view back where it was. */
   const restoreView = useCallback(
-    (view: SavedView, index: number) =>
-      setPrefs((p) => (p.views.some((v) => v.id === view.id) ? p : { ...p, views: [...p.views.slice(0, index), view, ...p.views.slice(index)] })),
+    (view: SavedView, index: number) => setPrefs((p) => (p.views.some((v) => v.id === view.id) ? p : { ...p, views: [...p.views.slice(0, index), view, ...p.views.slice(index)] })),
     [],
   );
   const setCompanyHidden = useCallback(
-    (company: string, hidden: boolean) =>
-      setPrefs((p) => ({ ...p, hiddenCompanies: hidden ? [...new Set([...p.hiddenCompanies, company])] : p.hiddenCompanies.filter((c) => c !== company) })),
+    (company: string, hidden: boolean) => setPrefs((p) => ({ ...p, hiddenCompanies: hidden ? [...new Set([...p.hiddenCompanies, company])] : p.hiddenCompanies.filter((c) => c !== company) })),
     [],
   );
   /** Turn a rule on or off (Undo, and the list under More). */
-  const setRule = useCallback(
-    (rule: HideRule, on: boolean) => setPrefs((p) => ({ ...p, hideRules: on ? addRule(p.hideRules, rule) : removeRule(p.hideRules, rule) })),
-    [],
-  );
+  const setRule = useCallback((rule: HideRule, on: boolean) => setPrefs((p) => ({ ...p, hideRules: on ? addRule(p.hideRules, rule) : removeRule(p.hideRules, rule) })), []);
   const replacePrefs = useCallback((next: Partial<Prefs>) => setPrefs(withDefaults(next)), []);
 
   return { prefs, saveView, renameView, deleteView, restoreView, setCompanyHidden, setRule, replacePrefs };

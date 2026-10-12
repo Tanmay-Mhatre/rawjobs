@@ -71,7 +71,14 @@ export function roughCount(n: number): string {
 /** One format for several places everywhere: "Berlin", or "Berlin +3" (L5). Cities lose their ", Country" suffix. */
 export function placeSummary(places: string[], fallback = "Location not listed"): string {
   // ATS strings often pack several places: "Germany (remote); Portugal (remote); Berlin Office".
-  const parts = places.flatMap((p) => p.split(/\s*[;|]\s*/)).map((p) => p.replace(/\s*\([^)]*\)$/, "").replace(/, [^,]+$/, "").trim());
+  const parts = places
+    .flatMap((p) => p.split(/\s*[;|]\s*/))
+    .map((p) =>
+      p
+        .replace(/\s*\([^)]*\)$/, "")
+        .replace(/, [^,]+$/, "")
+        .trim(),
+    );
   const names = [...new Set(parts.filter(Boolean).map(displayPlace))];
   if (!names.length) return fallback;
   return names.length > 1 ? `${names[0]} +${names.length - 1}` : names[0]!;

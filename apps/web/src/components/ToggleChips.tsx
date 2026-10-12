@@ -75,10 +75,7 @@ export function ToggleChips({ options, selected, onChange, label, tone = "accent
           onBlur={() => text.trim() && add()}
           placeholder={addPlaceholder}
           aria-label={`Add to ${label}`}
-          className={cx(
-            "min-w-36 flex-1 rounded-md border border-transparent bg-transparent px-2 type-small placeholder:text-muted",
-            size === "sm" ? "h-7" : "h-8",
-          )}
+          className={cx("min-w-36 flex-1 rounded-md border border-transparent bg-transparent px-2 type-small placeholder:text-muted", size === "sm" ? "h-7" : "h-8")}
         />
       )}
     </div>

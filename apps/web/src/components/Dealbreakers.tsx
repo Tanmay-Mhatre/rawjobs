@@ -6,7 +6,14 @@ import { Segmented } from "./ui";
 type Props = { draft: Draft; update: (patch: Partial<Draft>) => void };
 
 /** "frontend, credit risk" -> ["frontend", "credit risk"]. */
-export const parseList = (text: string) => [...new Set(text.split(/[,;\n]/).map((s) => s.trim().toLowerCase()).filter(Boolean))];
+export const parseList = (text: string) => [
+  ...new Set(
+    text
+      .split(/[,;\n]/)
+      .map((s) => s.trim().toLowerCase())
+      .filter(Boolean),
+  ),
+];
 
 /**
  * A comma-separated list in one text field. It keeps what you type (a trailing comma, a half-typed

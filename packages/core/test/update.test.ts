@@ -7,18 +7,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import type { ReleaseManifest } from "../src/release";
-import {
-  backupData,
-  fetchManifest,
-  finishUpdate,
-  installedVersions,
-  judge,
-  platformKey,
-  prepareVersion,
-  readLastUpdate,
-  readUpdateFile,
-  switchTo,
-} from "../src/update";
+import { backupData, fetchManifest, finishUpdate, installedVersions, judge, platformKey, prepareVersion, readLastUpdate, readUpdateFile, switchTo } from "../src/update";
 
 const tar = process.platform === "win32" ? join(process.env.SystemRoot ?? "C:\\Windows", "System32", "tar.exe") : "tar";
 const servers: Server[] = [];
@@ -57,7 +46,9 @@ async function release(version: string, nodeVersion = "v24.0.0", tamper = false)
     version,
     date: "2026-10-11",
     bundleFile: file,
-    bundleSha256: createHash("sha256").update(readFileSync(join(dir, file))).digest("hex"),
+    bundleSha256: createHash("sha256")
+      .update(readFileSync(join(dir, file)))
+      .digest("hex"),
     nodeVersion,
     nodeSha256: { [platformKey()]: "0".repeat(64) },
     minVersion: "0.0.0",

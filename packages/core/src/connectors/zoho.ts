@@ -31,7 +31,11 @@ export function parseZohoPage(html: string): ZohoJob[] | undefined {
   }
 }
 
-const titleSlug = (t: string) => t.trim().replace(/[^A-Za-z0-9]+/g, "-").replace(/^-|-$/g, "");
+const titleSlug = (t: string) =>
+  t
+    .trim()
+    .replace(/[^A-Za-z0-9]+/g, "-")
+    .replace(/^-|-$/g, "");
 
 export const zoho: Connector<ZohoJob> = {
   ats: "zoho",

@@ -18,11 +18,7 @@ const noLedger = { version: 1 as const, companies: {} };
 describe("findCandidates", () => {
   it("keeps rows that pass your gates, best estimate first, ages counted from the index build", () => {
     const built = new Date(now.getTime() - 5 * DAY);
-    const c = findCandidates(
-      profile(),
-      index([co("lever:a", [pm("Dubai", 30), ["Software Engineer", "Dubai", "onsite", 1, 1]]), co("ashby:b", [pm("Dubai", 1), pm("Berlin")])], built),
-      now,
-    );
+    const c = findCandidates(profile(), index([co("lever:a", [pm("Dubai", 30), ["Software Engineer", "Dubai", "onsite", 1, 1]]), co("ashby:b", [pm("Dubai", 1), pm("Berlin")])], built), now);
     expect(c.map((x) => [x.company.key, x.location])).toEqual([
       ["ashby:b", "Dubai"],
       ["lever:a", "Dubai"],

@@ -68,7 +68,12 @@ describe("syncJobFeed", () => {
     server.calls.length = 0;
     expect(await syncJobFeed(dir, { fetchImpl: server.fetchImpl, now: NOW })).toMatchObject({ updated: false });
     // No second-format feed here (404), so the first format is read: just its manifest.
-    expect(server.calls.sort()).toEqual(["https://feed.example/jobs/jobs-manifest.json", "https://feed.example/jobs/jobs-manifest.json.sig", "https://feed.example/jobs/jobs-v2-manifest.json", "https://feed.example/jobs/jobs-v2-manifest.json.sig"]);
+    expect(server.calls.sort()).toEqual([
+      "https://feed.example/jobs/jobs-manifest.json",
+      "https://feed.example/jobs/jobs-manifest.json.sig",
+      "https://feed.example/jobs/jobs-v2-manifest.json",
+      "https://feed.example/jobs/jobs-v2-manifest.json.sig",
+    ]);
   });
 
   it("ignores a feed in a format it doesn't know, and never throws offline", async () => {

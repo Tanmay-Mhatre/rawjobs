@@ -1,6 +1,6 @@
 import { companyKey, detectCompany, type DetectResult } from "../connectors";
 
-export type FoundBoard = DetectResult & { key: string; /** The URL on the page that revealed it. */ evidence: string };
+export type FoundBoard = DetectResult & { key: string /** The URL on the page that revealed it. */; evidence: string };
 
 const CAREERS_WORDS = /career|jobs?\b|join[- ]?us|join[- ]?the[- ]?team|vacanc|work[- ]?with[- ]?us|openings|hiring|we.?re[- ]?hiring/i;
 

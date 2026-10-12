@@ -21,9 +21,37 @@ const AVOID_OPENING = 600;
 
 /** EU and EEA countries (and Switzerland): where "eu" in your work authorisation lets you work. */
 const EU = [
-  "austria", "belgium", "bulgaria", "croatia", "cyprus", "czech republic", "denmark", "estonia", "finland", "france", "germany", "greece",
-  "hungary", "ireland", "italy", "latvia", "lithuania", "luxembourg", "malta", "netherlands", "poland", "portugal", "romania", "slovakia",
-  "slovenia", "spain", "sweden", "iceland", "liechtenstein", "norway", "switzerland",
+  "austria",
+  "belgium",
+  "bulgaria",
+  "croatia",
+  "cyprus",
+  "czech republic",
+  "denmark",
+  "estonia",
+  "finland",
+  "france",
+  "germany",
+  "greece",
+  "hungary",
+  "ireland",
+  "italy",
+  "latvia",
+  "lithuania",
+  "luxembourg",
+  "malta",
+  "netherlands",
+  "poland",
+  "portugal",
+  "romania",
+  "slovakia",
+  "slovenia",
+  "spain",
+  "sweden",
+  "iceland",
+  "liechtenstein",
+  "norway",
+  "switzerland",
 ];
 const EU_TERMS = new Set(["eu", "european union", "eea"]);
 
@@ -45,8 +73,7 @@ export function countriesOfTerms(terms: readonly string[], o: { eu?: boolean } =
 const PER_YEAR: Record<Period, number> = { year: 1, month: 12, week: 52, day: 260, hour: 2080 };
 /** "netherlands" -> "the Netherlands", "germany" -> "Germany". */
 const title = (country: string) =>
-  (/^(?:united |netherlands$|philippines$|czech republic$|bahamas$|gambia$|maldives$)/.test(country) ? "the " : "") +
-  country.replace(/(^|\s)\p{L}/gu, (ch) => ch.toUpperCase());
+  (/^(?:united |netherlands$|philippines$|czech republic$|bahamas$|gambia$|maldives$)/.test(country) ? "the " : "") + country.replace(/(^|\s)\p{L}/gu, (ch) => ch.toUpperCase());
 /** 18000 -> "18k", 6500 -> "6.5k", 950 -> "950". */
 const short = (n: number) => (n >= 1000 ? `${Math.round(n / 100) / 10}k` : `${Math.round(n)}`);
 

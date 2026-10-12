@@ -25,8 +25,7 @@ export function fakeHttp(route: Route) {
   return { http, calls };
 }
 
-export const json = (body: unknown, status = 200) =>
-  new Response(JSON.stringify(body), { status, headers: { "content-type": "application/json" } });
+export const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: { "content-type": "application/json" } });
 
 export const company = (ats: CompanyRef["ats"], extra: Partial<CompanyRef> = {}): CompanyRef => ({
   name: "Acme",

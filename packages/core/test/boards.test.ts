@@ -44,8 +44,18 @@ describe("job boards", () => {
   it("Hacker News: finds the current thread, one job per top-level post, linked to the post", async () => {
     const { http, calls } = fakeHttp((url) =>
       url.includes("search_by_date")
-        ? json({ hits: [{ objectID: "1", title: "Ask HN: Who wants to be hired? (October 2026)" }, { objectID: "2", title: "Ask HN: Who is hiring? (October 2026)" }] })
-        : json({ children: [{ id: 77, text: "<p>Acme | Product Manager | Dubai, UAE | Onsite</p><p>Details</p>", created_at: "2026-10-01T15:00:00Z" }, { id: 78, text: null }] }),
+        ? json({
+            hits: [
+              { objectID: "1", title: "Ask HN: Who wants to be hired? (October 2026)" },
+              { objectID: "2", title: "Ask HN: Who is hiring? (October 2026)" },
+            ],
+          })
+        : json({
+            children: [
+              { id: 77, text: "<p>Acme | Product Manager | Dubai, UAE | Onsite</p><p>Details</p>", created_at: "2026-10-01T15:00:00Z" },
+              { id: 78, text: null },
+            ],
+          }),
     );
     const raws = await hackernews.fetch(company("hackernews", { slug: "whoishiring" }), { http, now });
     expect(calls[1]).toBe("https://hn.algolia.com/api/v1/items/2");
@@ -60,14 +70,30 @@ describe("job boards", () => {
   });
 
   it("Remotive, Arbeitnow and Remote OK credit the real employer and link to the board's page", async () => {
-    const r = remotive.normalize({ id: 5, url: "https://remotive.com/remote-jobs/x-5", title: "PM", company_name: "Acme", candidate_required_location: "Europe" }, company("remotive", { slug: "all" }));
+    const r = remotive.normalize(
+      { id: 5, url: "https://remotive.com/remote-jobs/x-5", title: "PM", company_name: "Acme", candidate_required_location: "Europe" },
+      company("remotive", { slug: "all" }),
+    );
     expect(r).toMatchObject({ id: "remotive:all:5", company: "Acme", location: "Remote (Europe)", workplace: "remote", url: "https://remotive.com/remote-jobs/x-5" });
 
-    const { http } = fakeHttp(() => json({ data: [{ slug: "pm-acme", company_name: "Acme", title: "PM", url: "https://www.arbeitnow.com/jobs/pm-acme", location: "Berlin", remote: false, created_at: 1_790_000_000 }], links: { next: null } }));
+    const { http } = fakeHttp(() =>
+      json({
+        data: [{ slug: "pm-acme", company_name: "Acme", title: "PM", url: "https://www.arbeitnow.com/jobs/pm-acme", location: "Berlin", remote: false, created_at: 1_790_000_000 }],
+        links: { next: null },
+      }),
+    );
     const a = await arbeitnow.fetch(company("arbeitnow", { slug: "all" }), { http, now });
-    expect(arbeitnow.normalize(a[0]!, company("arbeitnow", { slug: "all" }))).toMatchObject({ id: "arbeitnow:all:pm-acme", company: "Acme", location: "Berlin", url: "https://www.arbeitnow.com/jobs/pm-acme" });
+    expect(arbeitnow.normalize(a[0]!, company("arbeitnow", { slug: "all" }))).toMatchObject({
+      id: "arbeitnow:all:pm-acme",
+      company: "Acme",
+      location: "Berlin",
+      url: "https://www.arbeitnow.com/jobs/pm-acme",
+    });
 
-    const ok = await remoteok.fetch(company("remoteok", { slug: "all" }), { http: fakeHttp(() => json([{ legal: "terms" }, { id: "9", position: "PM", company: "Acme", url: "https://remoteok.com/remote-jobs/9" }])).http, now });
+    const ok = await remoteok.fetch(company("remoteok", { slug: "all" }), {
+      http: fakeHttp(() => json([{ legal: "terms" }, { id: "9", position: "PM", company: "Acme", url: "https://remoteok.com/remote-jobs/9" }])).http,
+      now,
+    });
     expect(ok).toHaveLength(1);
     expect(remoteok.normalize(ok[0]!, company("remoteok", { slug: "all" }))).toMatchObject({ id: "remoteok:all:9", company: "Acme", workplace: "remote" });
   });

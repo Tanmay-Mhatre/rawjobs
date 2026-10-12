@@ -107,13 +107,7 @@ export function searchDirectory(
     .filter((c) => !o.onlyForYou || jobsFor(c) > 0)
     .filter((c) => !o.industry || !!c.tags?.includes(o.industry) || !!c.title_tags?.includes(o.industry))
     .filter((c) => !matches || matches.has(c))
-    .sort(
-      (a, b) =>
-        rank(a) - rank(b) ||
-        jobsFor(b) - jobsFor(a) ||
-        (o.fit?.get(b.key) ?? 0) - (o.fit?.get(a.key) ?? 0) ||
-        (b.open_jobs ?? 0) - (a.open_jobs ?? 0),
-    );
+    .sort((a, b) => rank(a) - rank(b) || jobsFor(b) - jobsFor(a) || (o.fit?.get(b.key) ?? 0) - (o.fit?.get(a.key) ?? 0) || (b.open_jobs ?? 0) - (a.open_jobs ?? 0));
   return groupBoards(sorted, new Set(o.watched));
 }
 
@@ -262,16 +256,7 @@ function Browse({
       </p>
       <ul className="divide-y divide-line rounded-md border border-line">
         {pageItems.map((g) => (
-          <BrowseRow
-            key={g.lead.key}
-            lead={g.lead}
-            others={g.others}
-            jobsFor={jobsFor}
-            fitFor={(c) => fit?.get(c.key)}
-            watched={watched}
-            onAdd={onAdd}
-            onRemove={onRemove}
-          />
+          <BrowseRow key={g.lead.key} lead={g.lead} others={g.others} jobsFor={jobsFor} fitFor={(c) => fit?.get(c.key)} watched={watched} onAdd={onAdd} onRemove={onRemove} />
         ))}
         {results.length === 0 && (
           <li className="space-y-3 px-3 py-6 text-center type-small text-muted">

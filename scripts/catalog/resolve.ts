@@ -110,7 +110,16 @@ async function resolveSeed(seed: Seed): Promise<Resolved> {
   if (seed.careers_url) push(seed.careers_url);
   push(home);
   const bare = domain.replace(/^www\./, "");
-  const fallbacks = [`https://${bare}/careers`, `https://www.${bare}/careers`, `https://careers.${bare}/`, `https://${bare}/en/careers`, `https://${bare}/jobs`, `https://jobs.${bare}/`, `https://${bare}/company/careers`, `https://${bare}/about/careers`];
+  const fallbacks = [
+    `https://${bare}/careers`,
+    `https://www.${bare}/careers`,
+    `https://careers.${bare}/`,
+    `https://${bare}/en/careers`,
+    `https://${bare}/jobs`,
+    `https://jobs.${bare}/`,
+    `https://${bare}/company/careers`,
+    `https://${bare}/about/careers`,
+  ];
 
   let pages = 0;
   /** Pages that answered: a site that loaded but had no careers page is "none", not "error". */
@@ -197,7 +206,9 @@ async function main() {
   await Promise.all(
     Array.from({ length: WORKERS }, async () => {
       for (let s = nextInTime(queue, started, MAX_MS); s; s = nextInTime(queue, started, MAX_MS)) {
-        const r = await resolveSeed(s).catch((err): Resolved => ({ name: s!.name, website: s!.website, industries: s!.industries, status: "error", error: String(err).slice(0, 160), pages: 0, resolved_at: new Date().toISOString() }));
+        const r = await resolveSeed(s).catch(
+          (err): Resolved => ({ name: s!.name, website: s!.website, industries: s!.industries, status: "error", error: String(err).slice(0, 160), pages: 0, resolved_at: new Date().toISOString() }),
+        );
         byName.set(s.name.toLowerCase(), r);
         if (++done % 100 === 0) save();
         console.error(`  [${done}/${todo.length}] ${s.name}: ${r.status}${r.board ? ` ${r.board.key}${r.board.supported ? "" : " (not scannable yet)"}` : r.careers_url ? ` ${r.careers_url}` : ""}`);

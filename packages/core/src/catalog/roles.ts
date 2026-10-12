@@ -13,21 +13,7 @@ export type RoleFamily = {
   topics: string[];
 };
 
-export const SENIORITY = [
-  "senior",
-  "sr",
-  "lead",
-  "principal",
-  "staff",
-  "head",
-  "director",
-  "senior director",
-  "vp",
-  "vice president",
-  "svp",
-  "chief",
-  "associate director",
-];
+export const SENIORITY = ["senior", "sr", "lead", "principal", "staff", "head", "director", "senior director", "vp", "vice president", "svp", "chief", "associate director"];
 
 /** Exclusions useful for almost any senior search. */
 export const COMMON_EXCLUDES = ["intern", "internship", "junior", "graduate", "trainee", "apprentice", "entry level"];
@@ -615,7 +601,19 @@ export const ROLE_FAMILIES: RoleFamily[] = [
     id: "executive",
     label: "Executive & Leadership",
     topics: ["leadership", "strategy", "p&l", "transformation", "board", "scaling", "fundraising", "general management"],
-    titles: ["ceo", "chief executive officer", "managing director", "general manager", "country manager", "founder", "co founder", "president", "chief of staff", "board member", "non executive director"],
+    titles: [
+      "ceo",
+      "chief executive officer",
+      "managing director",
+      "general manager",
+      "country manager",
+      "founder",
+      "co founder",
+      "president",
+      "chief of staff",
+      "board member",
+      "non executive director",
+    ],
     exclude: [],
   },
   {

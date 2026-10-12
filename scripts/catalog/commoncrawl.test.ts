@@ -49,7 +49,11 @@ describe("readCrawls", () => {
     const out = outFile();
     expect(await readCrawls({ http, out, index: INDEX })).toBe("done");
     expect(saved(out).crawls).toEqual(["CC-MAIN-2026-30"]);
-    expect(saved(out).boards.map((b) => `${b.ats}:${b.slug}`).sort()).toEqual(["greenhouse:beta", "lever:acme"]);
+    expect(
+      saved(out)
+        .boards.map((b) => `${b.ats}:${b.slug}`)
+        .sort(),
+    ).toEqual(["greenhouse:beta", "lever:acme"]);
   });
 
   it("treats a failing crawl list as an unavailable index, without touching saved boards", async () => {
@@ -60,8 +64,11 @@ describe("readCrawls", () => {
   });
 
   it("records each finished query, so the next run continues where this one stopped", async () => {
-    const healthy = (url: string) => (url.includes("showNumPages") ? json({ pages: 1 }) : new Response(`{"url": "https://jobs.lever.co/acme/1"}
-`));
+    const healthy = (url: string) =>
+      url.includes("showNumPages")
+        ? json({ pages: 1 })
+        : new Response(`{"url": "https://jobs.lever.co/acme/1"}
+`);
     // Run 1: the first two queries answer, then the index goes down.
     let answered = 0;
     const first = fakeIndex((url) => (url.includes("showNumPages") && ++answered > 2 ? new Response("busy", { status: 503 }) : healthy(url)));

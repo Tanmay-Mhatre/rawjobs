@@ -26,7 +26,12 @@ export function readDirectory(dataDir: string): DirectoryEntry[] {
   };
   const dir = read("directory.json");
   const known = new Set(dir.map((c) => c.key));
-  return [...dir, ...read("additions.json").filter((c) => !known.has(c.key)).map((c) => ({ ...c, origin: "user" as const }))];
+  return [
+    ...dir,
+    ...read("additions.json")
+      .filter((c) => !known.has(c.key))
+      .map((c) => ({ ...c, origin: "user" as const })),
+  ];
 }
 
 const nameKey = (name: string) => companyWords(name).join(" ");
@@ -130,9 +135,7 @@ export function findMoves(config: Config, directory: readonly DirectoryEntry[], 
   for (const c of config.companies) {
     if (!gone.has(`${c.ats}:${c.slug}`.toLowerCase())) continue;
     const name = nameKey(c.name);
-    const to = directory
-      .filter((d) => nameKey(d.name) === name && d.status === "live" && readable(d) && !yours.has(d.key))
-      .sort((a, b) => (b.open_jobs ?? 0) - (a.open_jobs ?? 0))[0];
+    const to = directory.filter((d) => nameKey(d.name) === name && d.status === "live" && readable(d) && !yours.has(d.key)).sort((a, b) => (b.open_jobs ?? 0) - (a.open_jobs ?? 0))[0];
     if (to) moves.push({ name: c.name, from: c, to: { ...refOfEntry(to), name: c.name } });
   }
   return moves;

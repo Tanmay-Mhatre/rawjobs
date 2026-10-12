@@ -30,7 +30,14 @@ const PAGE_LIMIT = arg("--pages", Infinity);
 const REPASS_DAYS = 30;
 const CDX = "https://web.archive.org/cdx/search/cdx";
 // The archive asks for gentle use: one request at a time, a few seconds apart.
-const http = new HttpClient({ retries: 4, hostDelayMs: 3_000, timeoutMs: 180_000, backoffMs: 30_000, breakAfter: 3, userAgent: "RawJobs-catalog/0.1 (open-source job radar; reads the CDX index only)" });
+const http = new HttpClient({
+  retries: 4,
+  hostDelayMs: 3_000,
+  timeoutMs: 180_000,
+  backoffMs: 30_000,
+  breakAfter: 3,
+  userAgent: "RawJobs-catalog/0.1 (open-source job radar; reads the CDX index only)",
+});
 const archiveDown = () => http.stats.brokenHosts.includes(new URL(CDX).host);
 
 /** Same hosts as commoncrawl.ts. Paged queries can't take a date filter, so dates are checked per line. */
@@ -151,7 +158,10 @@ async function main() {
   });
   if (finished && PAGE_LIMIT === Infinity) state.completed_at = new Date().toISOString();
   save();
-  console.error(`${finished ? "Pass complete" : outOfTime ? "Out of time; continues next run" : archiveDown() ? "Wayback index unavailable; continues next run" : "Stopped early; continues next run"}: ${boards.size} boards`, boards.byAts());
+  console.error(
+    `${finished ? "Pass complete" : outOfTime ? "Out of time; continues next run" : archiveDown() ? "Wayback index unavailable; continues next run" : "Stopped early; continues next run"}: ${boards.size} boards`,
+    boards.byAts(),
+  );
 }
 
 main().catch((err) => {

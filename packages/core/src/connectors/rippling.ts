@@ -40,7 +40,7 @@ export const rippling: Connector<RipplingJob> = {
     const places = raw.locations ?? [];
     const kinds = new Set(places.map((l) => WORKPLACE[l.workplaceType ?? ""]).filter(Boolean));
     const workplace: Workplace = kinds.size === 1 ? [...kinds][0]! : kinds.has("remote") ? "remote" : "unknown";
-    const location = [...new Set(places.map((l) => (l.workplaceType === "REMOTE" ? joinParts(l.name, "Remote") : l.name ?? joinParts(l.city, l.state, l.country))))].join("; ");
+    const location = [...new Set(places.map((l) => (l.workplaceType === "REMOTE" ? joinParts(l.name, "Remote") : (l.name ?? joinParts(l.city, l.state, l.country)))))].join("; ");
     return {
       id: jobId("rippling", ref.slug, raw.id),
       ats: "rippling",

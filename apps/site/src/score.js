@@ -7,8 +7,7 @@ export const DEMO_JOB = {
   title: "Head of Product, Exchange",
   location: "Dubai, Abu Dhabi",
   workplace: "hybrid",
-  description:
-    "Own the roadmap for our regulated crypto exchange: spot trading, custody and tokenization of real-world assets. You'll work with compliance on KYC and launch new markets.",
+  description: "Own the roadmap for our regulated crypto exchange: spot trading, custody and tokenization of real-world assets. You'll work with compliance on KYC and launch new markets.",
 };
 
 /** The title's level (Head) against your seniority word: same level +10, one level away (Lead) +5. */
@@ -26,8 +25,15 @@ export function demoScore(state, job) {
   var word = function (hay, term) {
     return new RegExp("(^|[^\\p{L}\\p{N}])" + term.replace(/[.*+?^${}()|[\]\\]/g, "\\$&") + "($|[^\\p{L}\\p{N}])", "iu").test(hay);
   };
-  if (!state.titles.some(function (t) { return word(job.title, t); })) return { gated: "title" };
-  var placeHit = state.places.some(function (p) { return p !== "remote" && word(job.location, p); });
+  if (
+    !state.titles.some(function (t) {
+      return word(job.title, t);
+    })
+  )
+    return { gated: "title" };
+  var placeHit = state.places.some(function (p) {
+    return p !== "remote" && word(job.location, p);
+  });
   var remoteHit = job.workplace === "remote" && state.places.indexOf("remote") > -1;
   if (!placeHit && !remoteHit) return { gated: "place" };
   var t = 20 + SENIORITY_POINTS[state.seniority];
@@ -39,8 +45,14 @@ export function demoScore(state, job) {
   }
   var W = 4;
   /* equal weights, so core lists them alphabetically */
-  var matched = state.kw.filter(function (k) { return word(job.title, k) || word(job.description, k); }).sort();
-  var inTitle = matched.filter(function (k) { return word(job.title, k); });
+  var matched = state.kw
+    .filter(function (k) {
+      return word(job.title, k) || word(job.description, k);
+    })
+    .sort();
+  var inTitle = matched.filter(function (k) {
+    return word(job.title, k);
+  });
   var k = Math.max(
     Math.round(40 * Math.min(1, (matched.length * W) / Math.min(state.kw.length * W, 12))),
     /* a keyword in the title is worth up to 20 on its own: 20 x its weight / your largest weight */

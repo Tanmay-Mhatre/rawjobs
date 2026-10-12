@@ -222,7 +222,13 @@ export function RadarPage(p: Props) {
   const fold = sort !== "newest" && !filters.mine && !filters.companies.length;
   // Best match: your companies' freshest roles in a strip above the list, and not again in it.
   const strip = useMemo(
-    () => (sort === "best" && !filters.mine ? groups.filter((g) => p.isYours(g.lead)).sort((a, b) => postedOrSeen(b.lead).localeCompare(postedOrSeen(a.lead))).slice(0, STRIP) : []),
+    () =>
+      sort === "best" && !filters.mine
+        ? groups
+            .filter((g) => p.isYours(g.lead))
+            .sort((a, b) => postedOrSeen(b.lead).localeCompare(postedOrSeen(a.lead)))
+            .slice(0, STRIP)
+        : [],
     [sort, filters.mine, groups, p.isYours],
   );
   const rows: FeedRow[] = useMemo(() => {
@@ -234,10 +240,7 @@ export function RadarPage(p: Props) {
   const counts = useMemo(() => facetCounts(pool, listFilters, ctx), [pool, listFilters, ctx]);
   const chips = useMemo(() => activeChips(filters, ctx, base), [filters, ctx, base]);
   // Postings past your age limit that the other filters would show: "Show older jobs (N)".
-  const olderCount = useMemo(
-    () => (listFilters.showOld ? 0 : roleCount(applyFilters(pool, { ...listFilters, showOld: true }, ctx)) - groups.length),
-    [pool, listFilters, ctx, groups.length],
-  );
+  const olderCount = useMemo(() => (listFilters.showOld ? 0 : roleCount(applyFilters(pool, { ...listFilters, showOld: true }, ctx)) - groups.length), [pool, listFilters, ctx, groups.length]);
 
   // Summary numbers over all matches (not the current filters).
   // View counts are within your profile, like the views themselves.
@@ -333,8 +336,8 @@ export function RadarPage(p: Props) {
       const view = /^[1-6]$/.test(e.key) ? builtInViews(firstScan)[Number(e.key) - 1] : undefined;
       if (view) return replace({ ...base, ...view.filters }, sort);
       if (e.key === "Enter" && t?.closest?.("button, a, [role=button]")) return;
-      if (e.key === "j" || e.key === "ArrowDown") (e.preventDefault(), move(1));
-      else if (e.key === "k" || e.key === "ArrowUp") (e.preventDefault(), move(-1));
+      if (e.key === "j" || e.key === "ArrowDown") e.preventDefault(), move(1);
+      else if (e.key === "k" || e.key === "ArrowUp") e.preventDefault(), move(-1);
       else if (!selected) return;
       else if (e.key === "Enter" || e.key === "o") {
         // Desktop: the details are already showing, so Enter opens the job page (and asks "Did you apply?" later).
@@ -342,8 +345,7 @@ export function RadarPage(p: Props) {
           window.open(selected.url, "_blank", "noopener");
           p.onApply(selected);
         } else p.onOpenOverlay(selected);
-      }
-      else if (e.key === "s") p.onStatus(selected, "saved");
+      } else if (e.key === "s") p.onStatus(selected, "saved");
       else if (e.key === "a") p.onStatus(selected, "applied");
       else if (e.key === "x") p.onStatus(selected, "dismissed");
     };
@@ -357,7 +359,14 @@ export function RadarPage(p: Props) {
     if (!closed.length) return;
     const view = closed.some((j) => p.user[j.id]?.status === "saved") ? "saved" : "applied";
     toast({
-      message: closed.length === 1 ? <><b>{closed[0]!.title}</b> at {closed[0]!.company} closed since your last visit.</> : <>{closed.length} jobs you saved or applied to closed since your last visit.</>,
+      message:
+        closed.length === 1 ? (
+          <>
+            <b>{closed[0]!.title}</b> at {closed[0]!.company} closed since your last visit.
+          </>
+        ) : (
+          <>{closed.length} jobs you saved or applied to closed since your last visit.</>
+        ),
       actionLabel: "See",
       onAction: () => replace({ ...base, status: view }, sort),
     });
@@ -384,7 +393,15 @@ export function RadarPage(p: Props) {
   const deleteView = (view: SavedView) => {
     const index = p.prefs.views.findIndex((v) => v.id === view.id);
     p.onDeleteView(view.id);
-    toast({ message: <>Deleted the view <b>{view.name}</b>.</>, actionLabel: "Undo", onAction: () => p.onRestoreView(view, index) });
+    toast({
+      message: (
+        <>
+          Deleted the view <b>{view.name}</b>.
+        </>
+      ),
+      actionLabel: "Undo",
+      onAction: () => p.onRestoreView(view, index),
+    });
   };
 
   const [sheet, setSheet] = useState(false);
@@ -526,17 +543,47 @@ export function RadarPage(p: Props) {
           <div id="radar-filters" className="mt-3 space-y-2 border-t border-hairline pt-3">
             {!profileOutside && profileBar}
             <div className="flex flex-wrap items-center gap-1.5">
-              <FacetMenu label="Date posted" single options={facet("posted")} selected={filters.posted ? [String(filters.posted)] : []} onChange={(v) => setFilters({ posted: (Number(v[0]) || 0) as Filters["posted"] })} />
+              <FacetMenu
+                label="Date posted"
+                single
+                options={facet("posted")}
+                selected={filters.posted ? [String(filters.posted)] : []}
+                onChange={(v) => setFilters({ posted: (Number(v[0]) || 0) as Filters["posted"] })}
+              />
               <FacetMenu label="Country" searchable options={facet("countries")} selected={filters.countries} onChange={(v) => setFilters({ countries: v })} />
               <FacetMenu label="Location" searchable options={facet("locations")} selected={filters.locations} onChange={(v) => setFilters({ locations: v })} />
               <FacetMenu label="Workplace" options={facet("workplace")} selected={filters.workplace} onChange={(v) => setFilters({ workplace: v as Filters["workplace"] })} />
-              <FacetMenu label="Match" single options={facet("match")} selected={filters.match === "all" ? [] : [filters.match]} onChange={(v) => setFilters({ match: (v[0] as Filters["match"]) ?? "all" })} />
+              <FacetMenu
+                label="Match"
+                single
+                options={facet("match")}
+                selected={filters.match === "all" ? [] : [filters.match]}
+                onChange={(v) => setFilters({ match: (v[0] as Filters["match"]) ?? "all" })}
+              />
               {/* The rest on request; one that's filtering something always shows. */}
-              {(moreFacets || filters.seniority.length > 0) && <FacetMenu label="Seniority" options={facet("seniority")} selected={filters.seniority} onChange={(v) => setFilters({ seniority: v as Filters["seniority"] })} />}
-              {(moreFacets || filters.industries.length > 0) && facet("industries").length > 0 && <FacetMenu label="Industry" options={facet("industries")} selected={filters.industries} onChange={(v) => setFilters({ industries: v })} />}
-              {(moreFacets || filters.companies.length > 0) && <FacetMenu label="Company" searchable options={facet("companies")} selected={filters.companies} onChange={(v) => setFilters({ companies: v })} />}
-              {(moreFacets || filters.topics.length > 0) && facet("topics").length > 0 && <FacetMenu label="Keywords" searchable options={facet("topics")} selected={filters.topics} onChange={(v) => setFilters({ topics: v })} />}
-              <MoreMenu filters={filters} setFilters={setFilters} ats={facet("ats")} olderCount={olderCount} maxAgeDays={maxAgeDays} hiddenCompanies={p.prefs.hiddenCompanies} onUnhide={(c) => p.onHideCompany(c, false)} hideRules={p.prefs.hideRules} onRemoveRule={removeRule} />
+              {(moreFacets || filters.seniority.length > 0) && (
+                <FacetMenu label="Seniority" options={facet("seniority")} selected={filters.seniority} onChange={(v) => setFilters({ seniority: v as Filters["seniority"] })} />
+              )}
+              {(moreFacets || filters.industries.length > 0) && facet("industries").length > 0 && (
+                <FacetMenu label="Industry" options={facet("industries")} selected={filters.industries} onChange={(v) => setFilters({ industries: v })} />
+              )}
+              {(moreFacets || filters.companies.length > 0) && (
+                <FacetMenu label="Company" searchable options={facet("companies")} selected={filters.companies} onChange={(v) => setFilters({ companies: v })} />
+              )}
+              {(moreFacets || filters.topics.length > 0) && facet("topics").length > 0 && (
+                <FacetMenu label="Keywords" searchable options={facet("topics")} selected={filters.topics} onChange={(v) => setFilters({ topics: v })} />
+              )}
+              <MoreMenu
+                filters={filters}
+                setFilters={setFilters}
+                ats={facet("ats")}
+                olderCount={olderCount}
+                maxAgeDays={maxAgeDays}
+                hiddenCompanies={p.prefs.hiddenCompanies}
+                onUnhide={(c) => p.onHideCompany(c, false)}
+                hideRules={p.prefs.hideRules}
+                onRemoveRule={removeRule}
+              />
               <Button variant="ghost" size="sm" aria-expanded={moreFacets} onClick={() => setMoreFacets((o) => !o)}>
                 {moreFacets ? "Fewer filters" : "More filters"}
               </Button>
@@ -558,7 +605,12 @@ export function RadarPage(p: Props) {
               </Button>
             )}
             {olderCount > 0 && (
-              <Button variant="ghost" size="sm" onClick={() => setFilters({ showOld: true })} title={`Postings older than ${ageLimit(maxAgeDays)} are hidden: they're usually filled. Change this in Settings › Job list.`}>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => setFilters({ showOld: true })}
+                title={`Postings older than ${ageLimit(maxAgeDays)} are hidden: they're usually filled. Change this in Settings › Job list.`}
+              >
                 Show older jobs ({olderCount})
               </Button>
             )}
@@ -644,7 +696,12 @@ export function RadarPage(p: Props) {
                 </button>
               )}
               {!wide && (
-                <button type="button" className="inline-flex items-center gap-1 underline-offset-2 hover:underline" onClick={() => setSheet(true)} aria-label={`Sorted by ${SORTS.find((x) => x.value === sort)?.label}. Change sort`}>
+                <button
+                  type="button"
+                  className="inline-flex items-center gap-1 underline-offset-2 hover:underline"
+                  onClick={() => setSheet(true)}
+                  aria-label={`Sorted by ${SORTS.find((x) => x.value === sort)?.label}. Change sort`}
+                >
                   <ArrowUpDown className="size-3" aria-hidden />
                   {SORTS.find((x) => x.value === sort)?.label}
                 </button>
@@ -706,7 +763,13 @@ export function RadarPage(p: Props) {
             <SortOptions sort={sort} onChange={setSort} />
           </SheetSection>
           <SheetSection label="Date posted">
-            <OptionList label="Date posted" single options={facet("posted")} selected={filters.posted ? [String(filters.posted)] : []} onChange={(v) => setFilters({ posted: (Number(v[0]) || 0) as Filters["posted"] })} />
+            <OptionList
+              label="Date posted"
+              single
+              options={facet("posted")}
+              selected={filters.posted ? [String(filters.posted)] : []}
+              onChange={(v) => setFilters({ posted: (Number(v[0]) || 0) as Filters["posted"] })}
+            />
           </SheetSection>
           <SheetSection label="Country">
             <OptionList label="Country" searchable options={facet("countries")} selected={filters.countries} onChange={(v) => setFilters({ countries: v })} />
@@ -726,7 +789,13 @@ export function RadarPage(p: Props) {
             </SheetSection>
           )}
           <SheetSection label="Match">
-            <OptionList label="Match" single options={facet("match")} selected={filters.match === "all" ? [] : [filters.match]} onChange={(v) => setFilters({ match: (v[0] as Filters["match"]) ?? "all" })} />
+            <OptionList
+              label="Match"
+              single
+              options={facet("match")}
+              selected={filters.match === "all" ? [] : [filters.match]}
+              onChange={(v) => setFilters({ match: (v[0] as Filters["match"]) ?? "all" })}
+            />
           </SheetSection>
           <SheetSection label="Company">
             <OptionList label="Company" searchable options={facet("companies")} selected={filters.companies} onChange={(v) => setFilters({ companies: v })} />
@@ -746,7 +815,6 @@ export function RadarPage(p: Props) {
           )}
         </FilterSheet>
       )}
-
     </div>
   );
 }

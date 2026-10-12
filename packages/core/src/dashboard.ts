@@ -27,7 +27,10 @@ const groupCache = new Map<string, string>();
 /** A piece that only names where the job is ("Manchester, United Kingdom", "Remote", "Dubai"). */
 function placeOnly(piece: string): boolean {
   if (REMOTE_PIECE.test(piece)) return true;
-  const words = piece.toLowerCase().split(/[^\p{L}]+/u).filter(Boolean);
+  const words = piece
+    .toLowerCase()
+    .split(/[^\p{L}]+/u)
+    .filter(Boolean);
   if (!words.length || words.length > 5 || words.some((w) => TITLE_HEADS.has(w))) return false;
   return countriesIn(piece).length > 0 || citiesIn(piece).length > 0;
 }
@@ -39,7 +42,10 @@ function placeOnly(piece: string): boolean {
 export function groupKey(company: string, title: string): string {
   let key = groupCache.get(title);
   if (key === undefined) {
-    const pieces = title.split(PIECES).map((s) => s.trim()).filter(Boolean);
+    const pieces = title
+      .split(PIECES)
+      .map((s) => s.trim())
+      .filter(Boolean);
     const kept = pieces.length > 1 ? pieces.filter((p) => !placeOnly(p)) : pieces;
     key = (kept.length ? kept : pieces).join(" ").toLowerCase().replace(/\s+/g, " ").trim();
     if (groupCache.size > 20_000) groupCache.clear();

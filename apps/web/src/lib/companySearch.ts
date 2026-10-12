@@ -36,11 +36,15 @@ export function companyMatches<T extends Named>(index: CompanyIndex<T>, q: strin
   const compact = squash(s);
   index.lower.forEach((c, i) => {
     const rank =
-      c.name === s ? 0
-      : c.name.startsWith(s) || c.slug.startsWith(s) ? 1
-      : c.words.some((w) => w.startsWith(s)) ? 2
-      : c.name.includes(s) || c.slug.includes(s) || (!!compact && c.squashed.includes(compact)) ? 3
-      : -1;
+      c.name === s
+        ? 0
+        : c.name.startsWith(s) || c.slug.startsWith(s)
+          ? 1
+          : c.words.some((w) => w.startsWith(s))
+            ? 2
+            : c.name.includes(s) || c.slug.includes(s) || (!!compact && c.squashed.includes(compact))
+              ? 3
+              : -1;
     if (rank >= 0) out.set(index.items[i]!, rank);
   });
   for (const hit of index.search.search(s)) {

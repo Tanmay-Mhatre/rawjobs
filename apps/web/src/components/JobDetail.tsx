@@ -138,8 +138,20 @@ export function JobDetail(p: JobDetailProps) {
       `First seen ${formatDate(job.firstSeen)}`
     ),
     ...(salary ? [salary] : []),
-    ...(evergreen === "pool" ? [<span className="text-warning-text" title="A talent pool or open application: it collects applications rather than filling one role">Talent pool</span>] : []),
-    ...(evergreen === "reposted" ? [<span className="text-warning-text" title={`Taken down and posted again on ${formatDate(job.repostedAt)}: dated from the first posting`}>Reposted</span>] : []),
+    ...(evergreen === "pool"
+      ? [
+          <span className="text-warning-text" title="A talent pool or open application: it collects applications rather than filling one role">
+            Talent pool
+          </span>,
+        ]
+      : []),
+    ...(evergreen === "reposted"
+      ? [
+          <span className="text-warning-text" title={`Taken down and posted again on ${formatDate(job.repostedAt)}: dated from the first posting`}>
+            Reposted
+          </span>,
+        ]
+      : []),
     // We read it off the company's own board: say when, so "is this still open?" has an answer.
     ...(job.status === "closed" ? ["Closed"] : job.estimated ? [] : [`Still listed · checked ${timeAgo(job.lastSeen)}`]),
   ];
@@ -156,7 +168,8 @@ export function JobDetail(p: JobDetailProps) {
         <Highlighted text={description} terms={job.why.keywords} wide={p.expanded} />
       ) : (
         <p className="type-small text-muted">
-          {job.estimated ? "Not scanned yet, so no description." : job.why.gate ? "Not stored for jobs that fail your filters." : "The hiring system didn't include a description."} Open the job page to read it.
+          {job.estimated ? "Not scanned yet, so no description." : job.why.gate ? "Not stored for jobs that fail your filters." : "The hiring system didn't include a description."} Open the job page
+          to read it.
         </p>
       )}
     </section>
@@ -252,7 +265,6 @@ export function JobDetail(p: JobDetailProps) {
               </ul>
             </section>
           )}
-
 
           {!p.expanded && descriptionSection}
 
@@ -409,9 +421,9 @@ function NotCheckedYet({ indexGeneratedAt, onCheck }: { indexGeneratedAt?: strin
         <span className="min-w-0">
           <b>Not scanned yet.</b>{" "}
           <span className="text-muted">
-            This job comes from the company directory{indexGeneratedAt ? ` (updated ${timeAgo(indexGeneratedAt)})` : ""}. The score is an estimate from the title, place and
-            date only: topics need the description. The link opens the company's careers page. Scans cover the best of these companies a few at a time; unscanned jobs older
-            than {INDEX_MAX_AGE_DAYS} days are hidden unless you ask for them.
+            This job comes from the company directory{indexGeneratedAt ? ` (updated ${timeAgo(indexGeneratedAt)})` : ""}. The score is an estimate from the title, place and date only: topics need the
+            description. The link opens the company's careers page. Scans cover the best of these companies a few at a time; unscanned jobs older than {INDEX_MAX_AGE_DAYS} days are hidden unless you
+            ask for them.
           </span>
         </span>
       </p>
@@ -457,10 +469,36 @@ function WhyItMatches({ job, profile, yours }: { job: Job; profile: Profile; you
     : [];
   const level = w.title === 30 ? ", at your level" : w.title === 25 ? ", one level from yours" : profile.seniority_boost.length ? ", not near your level" : "";
   const items: { ok: boolean; text: ReactNode }[] = [
-    { ok: w.title > 0, text: w.title > 0 ? <>Title matches <b>{titleTerm ?? "your roles"}</b>{level}</> : "Title isn't one of your roles" },
+    {
+      ok: w.title > 0,
+      text:
+        w.title > 0 ? (
+          <>
+            Title matches <b>{titleTerm ?? "your roles"}</b>
+            {level}
+          </>
+        ) : (
+          "Title isn't one of your roles"
+        ),
+    },
     {
       ok: w.location > 0,
-      text: w.location === 20 ? <>In one of your places{job.countries.length ? <> (<b>{job.countries.join(", ")}</b>)</> : null}</> : w.location === 15 ? "Remote, open to your regions" : (w.locationNote ?? "Not in one of your places"),
+      text:
+        w.location === 20 ? (
+          <>
+            In one of your places
+            {job.countries.length ? (
+              <>
+                {" "}
+                (<b>{job.countries.join(", ")}</b>)
+              </>
+            ) : null}
+          </>
+        ) : w.location === 15 ? (
+          "Remote, open to your regions"
+        ) : (
+          (w.locationNote ?? "Not in one of your places")
+        ),
     },
     ...(w.scale
       ? []
@@ -468,9 +506,14 @@ function WhyItMatches({ job, profile, yours }: { job: Job; profile: Profile; you
           {
             ok: own.length > 0 || added.length > 0,
             text: own.length ? (
-              <>Mentions your topics: <b>{own.join(", ")}</b>{added.length ? <>; also {added.join(", ")} from your industries</> : null}</>
+              <>
+                Mentions your topics: <b>{own.join(", ")}</b>
+                {added.length ? <>; also {added.join(", ")} from your industries</> : null}
+              </>
             ) : added.length ? (
-              <>Mentions topics from your industries: <b>{added.join(", ")}</b></>
+              <>
+                Mentions topics from your industries: <b>{added.join(", ")}</b>
+              </>
             ) : checked ? (
               "Doesn't mention your topics"
             ) : (
@@ -504,7 +547,10 @@ function WhyItMatches({ job, profile, yours }: { job: Job; profile: Profile; you
       {w.gate && <p className="type-small text-warning-text">Failed your {w.gate} filter, so the score is 0.</p>}
       {!!w.dealbreakers?.length && (
         <div className="type-small text-warning-text" data-dealbreakers>
-          <p>Breaks {w.dealbreakers.length === 1 ? "one of your dealbreakers" : `${w.dealbreakers.length} of your dealbreakers`}, so the score is at most half what its parts add up to, and under your threshold:</p>
+          <p>
+            Breaks {w.dealbreakers.length === 1 ? "one of your dealbreakers" : `${w.dealbreakers.length} of your dealbreakers`}, so the score is at most half what its parts add up to, and under your
+            threshold:
+          </p>
           <ul className="mt-1 list-disc space-y-0.5 pl-5">
             {w.dealbreakers.map((d) => (
               <li key={d}>{d}</li>
@@ -514,19 +560,19 @@ function WhyItMatches({ job, profile, yours }: { job: Job; profile: Profile; you
       )}
       {open && (
         <div id={`why-${job.id}`} className="grid gap-4">
-      <ScoreBreakdown score={job.score} parts={scoreParts(w)} missing={missing} />
-      <ul className="space-y-1.5 type-small">
-        {items.map((it, i) => (
-          <li key={i} className="flex items-start gap-2">
-            {it.ok ? <CircleCheck className="mt-0.5 size-4 shrink-0 text-success-text" /> : <X className="mt-0.5 size-4 shrink-0 text-muted" />}
-            <span className={cx(!it.ok && "text-muted")}>{it.text}</span>
-          </li>
-        ))}
-      </ul>
-      {w.scale && <p className="type-small text-muted">No topics set: title, place and industry make up the whole score.</p>}
-      <p className="type-small text-muted">
-        The score is how well the job fits. In Best match, newer jobs rank higher (the boost halves every 3 days){yours ? ", and your companies get +10" : ""}.
-      </p>
+          <ScoreBreakdown score={job.score} parts={scoreParts(w)} missing={missing} />
+          <ul className="space-y-1.5 type-small">
+            {items.map((it, i) => (
+              <li key={i} className="flex items-start gap-2">
+                {it.ok ? <CircleCheck className="mt-0.5 size-4 shrink-0 text-success-text" /> : <X className="mt-0.5 size-4 shrink-0 text-muted" />}
+                <span className={cx(!it.ok && "text-muted")}>{it.text}</span>
+              </li>
+            ))}
+          </ul>
+          {w.scale && <p className="type-small text-muted">No topics set: title, place and industry make up the whole score.</p>}
+          <p className="type-small text-muted">
+            The score is how well the job fits. In Best match, newer jobs rank higher (the boost halves every 3 days){yours ? ", and your companies get +10" : ""}.
+          </p>
         </div>
       )}
     </section>
@@ -538,7 +584,12 @@ function industryText(points: number, job: Job, profile: Profile, yours: boolean
   if (points === 5) return "Company's industry not known";
   if (points === 0) return "Not one of your industries";
   const shared = (job.industries ?? []).filter((i) => profile.industries.includes(i)).map((i) => INDUSTRY_BY_ID.get(i)?.label ?? i);
-  if (shared.length) return <>In one of your industries: <b>{shared.join(", ")}</b></>;
+  if (shared.length)
+    return (
+      <>
+        In one of your industries: <b>{shared.join(", ")}</b>
+      </>
+    );
   if (yours) return "One of your companies, so its industry counts";
   if (!profile.industries.length) return "No industries picked, so every company counts";
   return "In one of your industries";

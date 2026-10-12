@@ -91,7 +91,9 @@ let dataGeneration = 0;
 export function loadOtherJobs(): Promise<Job[]> {
   otherJobs ??= legacy
     ? Promise.resolve(legacy.other)
-    : getJson<DashboardJobsFile>("./jobs-other.json").then((f) => (f?.jobs ?? []).map(upgrade)).catch(() => []);
+    : getJson<DashboardJobsFile>("./jobs-other.json")
+        .then((f) => (f?.jobs ?? []).map(upgrade))
+        .catch(() => []);
   return otherJobs;
 }
 
@@ -118,7 +120,9 @@ let descriptions: Promise<Record<string, string>> | undefined;
 function loadDescriptions(): Promise<Record<string, string>> {
   descriptions ??= legacy
     ? Promise.resolve(legacy.descriptions)
-    : getJson<Record<string, string>>("./descriptions.json").then((d) => d ?? {}).catch(() => ({}));
+    : getJson<Record<string, string>>("./descriptions.json")
+        .then((d) => d ?? {})
+        .catch(() => ({}));
   return descriptions;
 }
 
