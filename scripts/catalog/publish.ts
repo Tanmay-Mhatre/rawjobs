@@ -83,7 +83,7 @@ const tag = (key: string, ids: readonly string[], source: string) => {
   }
 };
 // 1. Source lists' own labels.
-const cryptoJobs = readJson<{ companies: { jobs_url: string; category?: string }[] }>(join(here, "..", "curate", "sources", "crypto-jobs-fyi.companies.json"), { companies: [] });
+const cryptoJobs = readJson<{ companies: { jobs_url: string; category?: string }[] }>(join(here, "seeds", "crypto-jobs-fyi.companies.json"), { companies: [] });
 for (const c of cryptoJobs.companies) {
   const found = detectCompany(c.jobs_url);
   if (found) tag(companyKey(found), industriesForLabel(c.category), "crypto-jobs list");

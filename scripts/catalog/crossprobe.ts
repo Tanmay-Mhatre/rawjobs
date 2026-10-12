@@ -16,18 +16,20 @@
  *
  *   pnpm catalog:crossprobe [--max-minutes 60]
  */
-import { appendFileSync, existsSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
+import { appendFileSync, existsSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { companyKey, guessName, HttpClient } from "../../packages/core/src/index";
+import { readChecks } from "./lib/checks";
 import { checkBoard, type Board } from "./lib/live-check";
 import { normalizeName, slugCandidates } from "./lib/slugs";
+import { maxMsFromArgs } from "./lib/time-box";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const LOG = join(here, "out", "probe.jsonl");
 const FOUND = join(here, "out", "probe-found.json");
-const maxArg = process.argv.indexOf("--max-minutes");
-const MAX_MS = (maxArg > 0 ? Number(process.argv[maxArg + 1]) : 60) * 60_000;
+/** `--max-minutes`, 60 when not given. */
+const MAX_MS = process.argv.includes("--max-minutes") ? maxMsFromArgs() : 60 * 60_000;
 const RETRY_DAYS = 90;
 const WORKERS = 8;
 /** Name forms tried per company and system (the known slug comes first). */
@@ -102,14 +104,7 @@ function plan() {
   const merged = (JSON.parse(readFileSync(join(here, "out", "merged.json"), "utf8")) as { boards: Merged[] }).boards;
   const known = new Set(merged.map((b) => b.key));
   // Latest definite result per board (same files check.ts writes).
-  const status = new Map<string, { status: string; name?: string }>();
-  for (const f of readdirSync(join(here, "out")).filter((n) => /^checks(-.+)?\.jsonl$/.test(n))) {
-    for (const line of readFileSync(join(here, "out", f), "utf8").split("\n")) {
-      if (!line) continue;
-      const c = JSON.parse(line) as { key: string; status: string; name?: string };
-      if (c.status !== "error" || !status.has(c.key)) status.set(c.key, c);
-    }
-  }
+  const status = readChecks(join(here, "out")) as Map<string, { status: string; name?: string }>;
   const tried = new Map<string, Attempt>();
   const cutoff = Date.now() - RETRY_DAYS * 86_400_000;
   if (existsSync(LOG)) {
