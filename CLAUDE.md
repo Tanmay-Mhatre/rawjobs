@@ -30,3 +30,11 @@ no GitHub auto-merge (`mcp__ccd_pr__set_auto_merge`). Those skip the queue.
 4. After it merges: `git checkout main && git pull`.
 
 Don't change `main`'s branch protection or `.mergify.yml` to get your PR in faster.
+
+### Pull requests that change `.mergify.yml`
+
+Mergify always uses the config on `main`, so these go through the queue like any other PR. The
+queue doesn't test the new config, though, and a broken one on `main` stops the queue for everyone.
+So add the `queue` label only after Mergify's "Configuration changed" check on the PR says the new
+config is valid. If Mergify refuses the PR or the queue breaks after a config change, ask the user
+to merge the fix by hand.
