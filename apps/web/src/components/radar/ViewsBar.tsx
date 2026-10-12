@@ -107,6 +107,7 @@ function NameInput({ value, onChange, onSubmit, onCancel }: { value: string; onC
   return (
     <span className="inline-flex shrink-0 items-center gap-1">
       <input
+        // biome-ignore lint/a11y/noAutofocus: focus moves into what was just opened (a menu, a dialog field), as the pattern expects
         autoFocus
         value={value}
         onChange={(e) => onChange(e.target.value)}

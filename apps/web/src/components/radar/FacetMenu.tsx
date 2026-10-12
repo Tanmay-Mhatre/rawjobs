@@ -55,6 +55,7 @@ export function FacetMenu({ label, options, selected, onChange, single, searchab
     : label;
 
   return (
+    // biome-ignore lint/a11y/noStaticElementInteractions: hover, focus or drop handling around real controls; nothing here is only reachable by mouse
     <div
       ref={ref}
       className="relative"
@@ -78,6 +79,7 @@ export function FacetMenu({ label, options, selected, onChange, single, searchab
         <ChevronDown className={cx("size-3.5 shrink-0 transition-transform", open && "rotate-180")} />
       </button>
       {open && (
+        // biome-ignore lint/a11y/useSemanticElements: an ARIA role on purpose: the native element (fieldset, output, input, hr, ul) would change layout or behaviour here
         <div id={panelId} role="group" aria-label={label} className="absolute left-0 top-full z-30 mt-1 w-72 rounded-md border border-line bg-raised p-1.5 shadow-l3">
           {optionsLabel && options.length > 0 && <p className="px-2 pb-0.5 pt-1 type-label">{optionsLabel}</p>}
           <OptionList label={label} options={options} selected={selected} onChange={onChange} single={single} searchable={searchable} autoFocus />
@@ -114,6 +116,7 @@ export function OptionList({
         <div className="relative mb-1">
           <Search className="pointer-events-none absolute left-2.5 top-2.5 size-3.5 text-muted" />
           <input
+            // biome-ignore lint/a11y/noAutofocus: focus moves into what was just opened (a menu, a dialog field), as the pattern expects
             autoFocus={autoFocus}
             value={q}
             onChange={(e) => setQ(e.target.value)}

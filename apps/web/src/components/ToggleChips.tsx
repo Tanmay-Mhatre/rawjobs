@@ -41,6 +41,7 @@ export function ToggleChips({ options, selected, onChange, label, tone = "accent
   }[tone];
 
   return (
+    // biome-ignore lint/a11y/useSemanticElements: an ARIA role on purpose: the native element (fieldset, output, input, hr, ul) would change layout or behaviour here
     <div role="group" aria-label={label} className="flex flex-wrap items-center gap-1.5">
       {all.map((v) => {
         const active = selected.includes(v);

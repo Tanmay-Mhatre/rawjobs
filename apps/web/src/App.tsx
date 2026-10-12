@@ -219,6 +219,7 @@ export function App() {
   return (
     <NotForMeProvider value={notForMe}>
       <div className="min-h-dvh">
+        {/* biome-ignore lint/a11y/useValidAnchor: a real link (its href works without script); onClick only adds in-page focus or routing */}
         <a
           href="#main"
           onClick={(e) => {
@@ -231,6 +232,7 @@ export function App() {
         </a>
         <header className="sticky top-0 z-30 border-b border-line bg-raised/85 backdrop-blur">
           <div className="mx-auto flex h-14 max-w-6xl items-center gap-3 px-4">
+            {/* biome-ignore lint/a11y/useValidAnchor: a real link (its href works without script); onClick only adds in-page focus or routing */}
             <a href="#radar" onClick={() => go({ tab: "radar" })} className="flex shrink-0 items-center rounded-sm" aria-label="RawJobs, go to Radar">
               {/* The wordmark at every width, 100px (the minimum is 96px): ink on light themes, paper on dark.
                 The app mark is for the favicon and app icon only (design/logos). The link names it. */}
@@ -311,7 +313,7 @@ export function App() {
             <FeedSkeleton />
           ) : inSetup ? (
             <Wizard
-              step={(route as { setup: number }).setup}
+              step={wizardStep}
               goStep={goStep}
               draft={draft}
               update={update}

@@ -174,6 +174,7 @@ export function ForYou({ state, watched, muted, pastEmployers, onPastEmployers, 
           </p>
           <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
             {Array.from({ length: compact ? 2 : 3 }, (_, i) => (
+              // biome-ignore lint/suspicious/noArrayIndexKey: a fixed list rebuilt from the same input, never reordered: the index is a stable key
               <CardSkeleton key={i} />
             ))}
           </div>

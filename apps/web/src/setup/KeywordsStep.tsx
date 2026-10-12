@@ -169,6 +169,7 @@ function WeightControl({ keyword, weight, onChange }: { keyword: string; weight:
   return (
     <div ref={ref} role="radiogroup" aria-label={`Weight for ${keyword}`} onKeyDown={onKey} className="flex items-center gap-0.5">
       {[1, 2, 3, 4, 5].map((i) => (
+        // biome-ignore lint/a11y/useSemanticElements: an ARIA role on purpose: the native element (fieldset, output, input, hr, ul) would change layout or behaviour here
         <button
           key={i}
           type="button"

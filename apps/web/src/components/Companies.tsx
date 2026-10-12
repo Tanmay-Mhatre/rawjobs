@@ -76,6 +76,7 @@ function ScanHistory({ history }: { history: Row["history"] }) {
       <span className="sr-only">{historySummary(history)}</span>
       {history.map((h, i) => (
         <span
+          // biome-ignore lint/suspicious/noArrayIndexKey: a fixed list rebuilt from the same input, never reordered: the index is a stable key
           key={i}
           aria-hidden
           title={!h ? "Not in this scan" : h.ok ? `${h.jobsFound} jobs, ${h.matches} for you` : h.unsupported ? "Not supported yet" : "Scan failed"}

@@ -69,6 +69,7 @@ function GroupedPlaces({ terms, onChange, label, remote }: { terms: string[]; on
   const openGroup = groups.find((g) => g.key === open);
   return (
     <div className="space-y-2">
+      {/* biome-ignore lint/a11y/useSemanticElements: an ARIA role on purpose: the native element (fieldset, output, input, hr, ul) would change layout or behaviour here */}
       <div role="list" aria-label={label} className="flex flex-wrap gap-1.5">
         {groups.map((g) => {
           // Only cities picked (not the country itself): name the cities, e.g. "Riyadh · Saudi Arabia".
@@ -87,6 +88,7 @@ function GroupedPlaces({ terms, onChange, label, remote }: { terms: string[]; on
                     : titleCase(g.name);
           const expandable = g.options.length > 1;
           return (
+            // biome-ignore lint/a11y/useSemanticElements: an ARIA role on purpose: the native element (fieldset, output, input, hr, ul) would change layout or behaviour here
             <span
               key={g.key}
               role="listitem"

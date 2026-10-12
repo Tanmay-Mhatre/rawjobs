@@ -42,6 +42,7 @@ export function TabList<T extends string>({
 
 export function TabPanel({ id, ids, children, className }: { id: string; ids: ReturnType<typeof useTabIds>; children: ReactNode; className?: string }) {
   return (
+    // biome-ignore lint/a11y/noNoninteractiveTabindex: ARIA tabs: the panel takes focus when it has no focusable content of its own
     <div role="tabpanel" id={ids.panel(id)} aria-labelledby={ids.tab(id)} tabIndex={0} className={cx("outline-none focus-visible:ring-2 focus-visible:ring-focus/40 rounded-md", className)}>
       {children}
     </div>

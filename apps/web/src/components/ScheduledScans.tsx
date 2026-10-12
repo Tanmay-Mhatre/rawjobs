@@ -121,6 +121,7 @@ export function ScheduledScans() {
           <legend className="type-label">When</legend>
           <div className="mt-1.5 flex flex-wrap items-center gap-2">
             {times.map((t, i) => (
+              // biome-ignore lint/suspicious/noArrayIndexKey: a fixed list rebuilt from the same input, never reordered: the index is a stable key
               <span key={i} className="inline-flex items-center gap-1">
                 <input
                   type="time"

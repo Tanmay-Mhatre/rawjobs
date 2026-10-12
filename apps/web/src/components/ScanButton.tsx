@@ -112,6 +112,7 @@ export function ScanStatus({ scan, onStop, notify, notifyLine }: { scan: ScanSta
   const label = scan.stopping ? "Stopping…" : scan.syncing ? "Updating…" : "Scanning";
 
   return (
+    // biome-ignore lint/a11y/noStaticElementInteractions: hover, focus or drop handling around real controls; nothing here is only reachable by mouse
     <div
       ref={root}
       className="relative flex items-center gap-1"
@@ -144,6 +145,7 @@ export function ScanStatus({ scan, onStop, notify, notifyLine }: { scan: ScanSta
         <div id="scan-details" className="absolute right-0 top-full z-40 mt-2 w-[24rem] max-w-[calc(100vw-2rem)] rounded-md border border-line bg-raised p-4 shadow-l3">
           <p className="type-small font-medium">{scanLine(scan)}</p>
           {bars.length > 0 && (
+            // biome-ignore lint/a11y/useSemanticElements: an ARIA role on purpose: the native element (fieldset, output, input, hr, ul) would change layout or behaviour here
             <div className="rj-progress mt-3" role="group" aria-label="Scan progress">
               {bars.map((b) => (
                 <div key={b.ats || "all"} className="rj-progress__row">
