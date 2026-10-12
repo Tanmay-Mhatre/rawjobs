@@ -8,12 +8,11 @@
  * (share-alike / non-commercial) only add agreement votes to boards that are already in it.
  */
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
-import { dirname, join } from "node:path";
-import { fileURLToPath } from "node:url";
+import { join } from "node:path";
 import { ATS_TYPES, companyKey, detectCompany, type AtsType } from "@rawjobs/core";
+import { catalogDir, dataDir } from "./lib/paths";
 
-const here = dirname(fileURLToPath(import.meta.url));
-const raw = (...p: string[]) => join(here, "raw", ...p);
+const raw = (...p: string[]) => join(catalogDir, "raw", ...p);
 
 type Ats = AtsType;
 const TRACKED = new Set<string>(ATS_TYPES);
@@ -116,7 +115,7 @@ const count = (src: string, n: number) => (counts[src] = (counts[src] ?? 0) + n)
 /** Run `use` on a source file if it was downloaded (pnpm catalog:sources); skip it with a note if not. */
 function withFile(path: string, use: (path: string) => void) {
   if (existsSync(path)) use(path);
-  else console.error(`! ${path.slice(here.length + 1)} missing, skipped (run: pnpm catalog:sources)`);
+  else console.error(`! ${path.slice(catalogDir.length + 1)} missing, skipped (run: pnpm catalog:sources)`);
 }
 
 // --- publishable sources ---
@@ -132,7 +131,7 @@ if (existsSync(raw("wayback", "boards.json"))) {
 } else console.error("! wayback/boards.json missing (run wayback.ts first)");
 {
   // crossprobe.ts keeps every attempt; only live boards whose name matched are listed in found.
-  const file = join(here, "out", "probe-found.json");
+  const file = join(catalogDir, "out", "probe-found.json");
   const found = existsSync(file) ? (JSON.parse(readFileSync(file, "utf8")) as { boards: { ats: string; slug: string; region?: string; shard?: string; site?: string; name?: string }[] }).boards : [];
   for (const b of found) add("probe", b);
   count("probe", found.length);
@@ -173,17 +172,17 @@ withFile(raw("conorscode", "companies.json"), (p) => {
   count("conors", rows.length);
 });
 {
-  const rows = (JSON.parse(readFileSync(join(here, "seeds", "crypto-jobs-fyi.companies.json"), "utf8")) as { companies: { name: string; jobs_url: string }[] }).companies;
+  const rows = (JSON.parse(readFileSync(join(catalogDir, "seeds", "crypto-jobs-fyi.companies.json"), "utf8")) as { companies: { name: string; jobs_url: string }[] }).companies;
   for (const r of rows) fromUrl("cryptojobs", r.jobs_url, r.name);
   count("cryptojobs", rows.length);
 }
 
 {
-  const seeds = (JSON.parse(readFileSync(join(here, "seeds", "industries.json"), "utf8")) as { companies: { name: string; careers_url?: string }[] }).companies;
+  const seeds = (JSON.parse(readFileSync(join(catalogDir, "seeds", "industries.json"), "utf8")) as { companies: { name: string; careers_url?: string }[] }).companies;
   for (const s of seeds) if (s.careers_url) fromUrl("seeds", s.careers_url, s.name);
   // resolved.json: the industry seeds; resolved-bulk.json: the Wikidata companies (resolve.ts --bulk).
   for (const file of ["resolved.json", "resolved-bulk.json"]) {
-    const path = join(here, "out", file);
+    const path = join(catalogDir, "out", file);
     if (!existsSync(path)) continue;
     const resolved = (JSON.parse(readFileSync(path, "utf8")) as { companies: { name: string; board?: { ats: string; slug: string; region?: string; shard?: string; site?: string } }[] }).companies;
     for (const r of resolved) if (r.board) add("seeds", { ...r.board, name: r.name });
@@ -194,7 +193,7 @@ withFile(raw("conorscode", "companies.json"), (p) => {
 {
   // Shared contributions (CONTRIBUTIONS_FILE, set by the directory workflow) and this install's own additions.
   type Contribution = { name?: string; ats: string; slug: string; region?: string; shard?: string; site?: string };
-  const files = [process.env.CONTRIBUTIONS_FILE, join(here, "..", "..", "data", "catalog", "additions.json")].filter((f): f is string => !!f && existsSync(f));
+  const files = [process.env.CONTRIBUTIONS_FILE, join(dataDir, "catalog", "additions.json")].filter((f): f is string => !!f && existsSync(f));
   let n = 0;
   for (const f of files) {
     const list = (JSON.parse(readFileSync(f, "utf8")) as { companies: Contribution[] }).companies;
@@ -277,9 +276,9 @@ for (const b of out) {
   s.total = (s.total ?? 0) + 1;
   s[b.confidence] = (s[b.confidence] ?? 0) + 1;
 }
-mkdirSync(join(here, "out"), { recursive: true });
+mkdirSync(join(catalogDir, "out"), { recursive: true });
 writeFileSync(
-  join(here, "out", "merged.json"),
+  join(catalogDir, "out", "merged.json"),
   JSON.stringify({ generated_at: new Date().toISOString(), input_rows: counts, stats, restricted_only: Object.fromEntries([...restrictedOnly].map(([ats, keys]) => [ats, keys.size])), boards: out }),
 );
 console.log("input rows:", counts);
