@@ -449,6 +449,8 @@ export function App() {
                   update={update}
                   revert={() => setDraft(saved)}
                   dirty={dirty}
+                  saved={saved}
+                  setupSaved={canSave}
                   onSaved={async () => {
                     await setup.refresh();
                     save(DRAFT_KEY, null);

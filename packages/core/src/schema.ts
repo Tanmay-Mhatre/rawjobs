@@ -267,13 +267,6 @@ export const ConfigSchema = z
     companies: z.array(CompanySchema).default([]),
     /** Companies you never want to see, as "ats:slug" keys (Workday: "workday:tenant|shard|site"). */
     companies_muted: z.array(z.string().trim().toLowerCase().min(1)).default([]),
-    /** Jobs beyond your companies: from the shared index, and a few more companies checked live each scan. */
-    discovery: z
-      .object({
-        /** Companies you haven't added that each scan also checks live (0 = off). */
-        check_per_scan: z.number().int().min(0).max(100).default(30),
-      })
-      .prefault({}),
     alerts: z
       .object({
         telegram: z.boolean().default(false),
