@@ -3,11 +3,12 @@ import { existsSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync, w
 import { join } from "node:path";
 import { brotliCompressSync, brotliDecompressSync, constants, gunzipSync } from "node:zlib";
 import { applyFeedDiff, feedStateHash, JOB_FEED_SCHEMA_V2, type FeedDiff, type FeedManifestV2, type FeedSnapshot, type FeedState } from "./job-feed-diff";
-import { fetchSignedJson } from "./data-signing";
+import { fetchSignedJson, FILE_TIMEOUT_MS } from "./data-signing";
 import { envSetting } from "./env";
 import { isSafeName, safeJoin } from "./safe-name";
 import { passesLocationGate, passesTitleGate } from "./score";
 import type { Profile, Workplace } from "./schema";
+import { writeFileAtomic } from "./atomic";
 
 /**
  * The shared job feed: every live directory board's open jobs, fetched once a day for everyone
@@ -88,7 +89,7 @@ export async function syncJobFeed(dataDir: string, opts: { fetchImpl?: typeof fe
     if (unsafe) return { updated: false, ageDays: stale(), message: "The job feed's manifest names an unsafe file; scanning every company live." };
     for (const [ats, shard] of Object.entries(manifest.shards)) {
       if (local?.shards[ats]?.sha256 === shard.sha256 && existsSync(join(dir, `${ats}.json`))) continue;
-      const r = await get(`${jobFeedUrl()}/${shard.file}`, { redirect: "follow" });
+      const r = await get(`${jobFeedUrl()}/${shard.file}`, { redirect: "follow", signal: AbortSignal.timeout(FILE_TIMEOUT_MS) });
       if (!r.ok) return { updated: fetched > 0, ageDays: stale(), message: `Job feed download of ${shard.file} failed (HTTP ${r.status}).` };
       const gz = Buffer.from(await r.arrayBuffer());
       if (createHash("sha256").update(gz).digest("hex") !== shard.sha256) return { updated: fetched > 0, ageDays: stale(), message: `${shard.file} didn't match its checksum; kept the old copy.` };
@@ -96,7 +97,7 @@ export async function syncJobFeed(dataDir: string, opts: { fetchImpl?: typeof fe
       renameSync(safeJoin(dir, `${ats}.json.tmp`), safeJoin(dir, `${ats}.json`));
       fetched++;
     }
-    writeFileSync(join(dir, "manifest.json"), JSON.stringify(manifest, null, 2));
+    writeFileAtomic(join(dir, "manifest.json"), JSON.stringify(manifest, null, 2));
     const age = stale();
     const when = age < 1 ? "today" : `${Math.round(age)} day(s) old`;
     return { updated: fetched > 0, ageDays: age, message: fetched ? `Job feed updated (${when}).` : `Job feed is up to date (${when}).` };
@@ -137,7 +138,7 @@ const readState = (dir: string): FeedState | undefined => {
 
 async function download(get: typeof fetch, file: string, sha256: string): Promise<Buffer> {
   if (!isSafeName(file)) throw new Error(`the manifest names an unsafe file (${JSON.stringify(file)})`);
-  const r = await get(`${jobFeedUrl()}/${file}`, { redirect: "follow" });
+  const r = await get(`${jobFeedUrl()}/${file}`, { redirect: "follow", signal: AbortSignal.timeout(FILE_TIMEOUT_MS) });
   if (!r.ok) throw new Error(`download of ${file} failed (HTTP ${r.status})`);
   const buf = Buffer.from(await r.arrayBuffer());
   if (createHash("sha256").update(buf).digest("hex") !== sha256) throw new Error(`${file} didn't match its checksum`);
@@ -189,7 +190,7 @@ async function syncV2(dir: string, m: FeedManifestV2, get: typeof fetch): Promis
   writeFileSync(join(dir, `${V2_STATE}.tmp`), body);
   renameSync(join(dir, `${V2_STATE}.tmp`), join(dir, V2_STATE));
   const next: V2Index = { seq: m.seq, generated_at: m.generated_at, state_sha256: m.state_sha256, verified: state.verified, touched, full_at: fullAt };
-  writeFileSync(join(dir, V2_INDEX), JSON.stringify(next));
+  writeFileAtomic(join(dir, V2_INDEX), JSON.stringify(next));
   // The first format's files aren't needed any more.
   for (const f of readdirSync(dir)) if (f === "manifest.json" || f === "matches.json" || /^[a-z]+\.json$/.test(f)) rmSync(join(dir, f), { force: true });
   const size = `${(bytes / 1e6).toFixed(1)} MB`;

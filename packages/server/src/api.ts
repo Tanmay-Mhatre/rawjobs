@@ -62,15 +62,28 @@ export function createApi(opts: ApiOptions) {
     return child;
   }
 
-  function collect(args: string[], stdin?: string): Promise<{ code: number; stdout: string; stderr: string }> {
+  /**
+   * Run the CLI and collect its output. A run that hangs (a stalled download, say) is stopped after
+   * `timeoutMs`, so a request (and the "checking" flag it holds) can't wait forever.
+   */
+  function collect(args: string[], stdin?: string, timeoutMs = 600_000): Promise<{ code: number; stdout: string; stderr: string }> {
     return new Promise((done) => {
       const child = cli(args, stdin);
       let stdout = "";
       let stderr = "";
+      const timer = setTimeout(() => {
+        child.kill();
+        done({ code: 1, stdout, stderr: `${stderr}
+Stopped after ${Math.round(timeoutMs / 1000)} s without finishing.`.trim() });
+      }, timeoutMs);
+      const finish = (r: { code: number; stdout: string; stderr: string }) => {
+        clearTimeout(timer);
+        done(r);
+      };
       child.stdout!.on("data", (d) => (stdout += d));
       child.stderr!.on("data", (d) => (stderr += d));
-      child.on("error", (err) => done({ code: 1, stdout, stderr: String(err) }));
-      child.on("close", (code) => done({ code: code ?? 1, stdout, stderr }));
+      child.on("error", (err) => finish({ code: 1, stdout, stderr: String(err) }));
+      child.on("close", (code) => finish({ code: code ?? 1, stdout, stderr }));
     });
   }
 
@@ -119,7 +132,7 @@ export function createApi(opts: ApiOptions) {
 
   // ---------- the running scan ----------
   /** The scan the server is running: its scope, every progress line so far, and the tabs following it. */
-  let scan: { scope: string; lines: Line[]; partial: string; followers: Set<ServerResponse> } | null = null;
+  let scan: { scope: string; lines: Line[]; partial: string; followers: Set<ServerResponse>; child: ChildProcess } | null = null;
   /** "Check now" runs: they share the one-at-a-time rule with scans. */
   let checking = false;
   const busy = () => scan !== null || checking;
@@ -144,7 +157,7 @@ export function createApi(opts: ApiOptions) {
 
   function startScan(scope: "mine" | "all", fresh: boolean) {
     const child = cli(["scan", "--progress", "ndjson", "--scope", scope, ...(fresh ? ["--fresh"] : []), "--data", dataDir]);
-    scan = { scope, lines: [], partial: "", followers: new Set() };
+    scan = { scope, lines: [], partial: "", followers: new Set(), child };
     const current = scan;
     let stderr = "";
     // Always read the scan's output, whether or not a tab is listening: an unread pipe fills up
@@ -184,6 +197,8 @@ export function createApi(opts: ApiOptions) {
       try {
         await route(url, req, res);
       } catch (err) {
+        // Into logs/server.log, so a failure the dashboard only shows as "500" can be looked into.
+        console.error(`${req.method} ${url} failed:`, err);
         if (!res.headersSent) json(res, { ok: false, errors: String(err) }, 500);
         else res.end();
       }
@@ -238,7 +253,7 @@ export function createApi(opts: ApiOptions) {
       if (busy()) return json(res, { type: "error", message: "A scan is running; try again when it's done." });
       checking = true;
       try {
-        const r = await collect(["run", "--progress", "ndjson", "--data", dataDir, ...valid.flatMap((k) => ["--check", k])]);
+        const r = await collect(["run", "--progress", "ndjson", "--data", dataDir, ...valid.flatMap((k) => ["--check", k])], undefined, 180_000);
         const last = r.stdout.trim().split("\n").pop() ?? "";
         res.setHeader("content-type", "application/json");
         res.end(last.startsWith("{") ? last : JSON.stringify({ type: "error", message: (r.stderr || "check failed").trim().slice(-500) }));
@@ -292,7 +307,25 @@ export function createApi(opts: ApiOptions) {
     cli(["directory", "update", "--auto", "--if-older", "7", "--data", dataDir]).on("error", () => {});
   }
 
-  return { handle, startBackground, version, scanning: busy };
+  /**
+   * Before the server exits (Ctrl+C, an update): ask a running scan to stop (it saves what it has,
+   * and the next scan resumes), and end it if it hasn't after `graceMs`. Tabs following it are closed.
+   */
+  async function stop(graceMs = 10_000): Promise<void> {
+    const current = scan;
+    if (!current) return;
+    const closed = new Promise<void>((done) => {
+      if (current.child.exitCode !== null) done();
+      else current.child.once("close", () => done());
+    });
+    writeFileSync(resolve(dataDir, "scan-stop"), "");
+    const timer = setTimeout(() => current.child.kill(), graceMs);
+    await closed;
+    clearTimeout(timer);
+    for (const res of current.followers) res.end();
+  }
+
+  return { handle, startBackground, version, scanning: busy, stop };
 }
 
 function readBody(req: IncomingMessage, maxBytes = 5_000_000): Promise<string> {

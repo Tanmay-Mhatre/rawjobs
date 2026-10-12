@@ -41,6 +41,11 @@ describe("HttpClient", () => {
     expect(seen[0]!.ua).toBe("test-agent");
   });
 
+  it("names the page when it answers with something that isn't JSON", async () => {
+    const { http } = client([new Response("<html><body>Maintenance</body></html>", { headers: { "content-type": "text/html" } })]);
+    await expect(http.getJson("https://a.example/board")).rejects.toThrow("not JSON (text/html): <html><body>Maintenance</body></html> (https://a.example/board)");
+  });
+
   it("retries 429 and 5xx with backoff, honouring Retry-After", async () => {
     const sleeps: number[] = [];
     const { http, seen } = client(

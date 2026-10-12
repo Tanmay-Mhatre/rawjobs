@@ -54,6 +54,13 @@ describe("runRadar", () => {
     expect(result.jobs.at(-1)!.score).toBe(0);
   });
 
+  it("skips a posting it can't read and keeps the company's other jobs", async () => {
+    const gh = fixture("greenhouse.json") as { jobs: unknown[] };
+    const { http } = fakeHttp((url) => (url.includes("greenhouse") ? json({ ...gh, jobs: [...gh.jobs, { id: 999, location: { name: "Dubai" } }] }) : routes(url)));
+    const result = await runRadar(config, { http, now, only: ["GH Co"] });
+    expect(result.health[0]).toMatchObject({ company: "GH Co", ok: true, jobsFound: 3, matches: 1, skipped: 1 });
+  });
+
   it("can run a single company by name or slug", async () => {
     const { http, calls } = fakeHttp(routes);
     const result = await runRadar(config, { http, now, only: ["LEVERCO"] });

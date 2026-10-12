@@ -231,5 +231,13 @@ describe("scan lock", () => {
     // A live process (the test runner's parent) holds it.
     writeFileSync(join(dataDir, "scan.lock"), String(process.ppid));
     expect(acquireScanLock(dataDir)).toBe(false);
+    expect(readFileSync(join(dataDir, "scan.lock"), "utf8")).toBe(String(process.ppid));
+  });
+
+  it("takes over an empty or unreadable lock file", () => {
+    const dataDir = mkdtempSync(join(tmpdir(), "jh-lock-"));
+    writeFileSync(join(dataDir, "scan.lock"), "");
+    expect(acquireScanLock(dataDir)).toBe(true);
+    expect(readFileSync(join(dataDir, "scan.lock"), "utf8")).toBe(String(process.pid));
   });
 });

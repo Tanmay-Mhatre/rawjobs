@@ -1,6 +1,6 @@
 import { companyOfJobId, getConnector, jobCompanyKey } from "./connectors";
 import { HttpClient, HttpError } from "./http";
-import type { CompanyHealth, CompanyRef, Config, Job } from "./schema";
+import type { CompanyHealth, CompanyRef, Config, Job, NormalizedJob } from "./schema";
 import { scoreJob } from "./score";
 import { safeUrl } from "./text";
 
@@ -107,7 +107,14 @@ export async function runRadar(config: Config, opts: RunOptions = {}): Promise<R
       const raws = recent ? [] : await connector.fetch(company, { http, now });
       let described = 0;
       for (const raw of raws) {
-        const base = connector.normalize(raw, company);
+        let base: NormalizedJob;
+        try {
+          base = connector.normalize(raw, company);
+        } catch {
+          // One malformed posting (a missing title, say) shouldn't lose the company's other jobs.
+          h.skipped = (h.skipped ?? 0) + 1;
+          continue;
+        }
         base.url = safeUrl(base.url) ?? "";
         const prev = previous.get(base.id);
         const firstSeen = prev?.firstSeen ?? nowIso;
@@ -119,7 +126,10 @@ export async function runRadar(config: Config, opts: RunOptions = {}): Promise<R
           if (prev?.description) Object.assign(base, { description: prev.description }, vague ? { location: prev.location, country: prev.country, workplace: prev.workplace } : {});
           else if (described < MAX_DESCRIBE_PER_COMPANY) {
             described++;
-            const d = await connector.describe(raw, company, { http, now }).catch(() => "");
+            const d = await connector.describe(raw, company, { http, now }).catch(() => {
+              h.describeFailed = (h.describeFailed ?? 0) + 1;
+              return "";
+            });
             if (typeof d === "string") base.description = d;
             else for (const [k, v] of Object.entries(d)) if (v) Object.assign(base, { [k]: v });
           }
@@ -129,7 +139,7 @@ export async function runRadar(config: Config, opts: RunOptions = {}): Promise<R
         if (!extra || !why.gate) kept.push({ ...base, postedAt: earliestPosted(base.postedAt, prev), firstSeen, lastSeen: nowIso, status: "open", score, why });
         if (!why.gate) h.matches++;
       }
-      h.jobsFound = recent?.length ?? raws.length;
+      h.jobsFound = recent?.length ?? raws.length - (h.skipped ?? 0);
       h.ok = true;
     } catch (err) {
       h.error =

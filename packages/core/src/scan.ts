@@ -226,23 +226,44 @@ export async function scan(config: Config, opts: ScanOptions): Promise<ScanResul
 
 /**
  * One scan at a time per data folder (a scheduled scan and a dashboard scan could otherwise both
- * write history). The lock holds the scan's process id; a lock left by a process that's gone is taken over.
+ * write history). The lock holds the scan's process id and is created with "wx", so of two scans
+ * starting at the same moment only one gets it. A lock left by a process that's gone is taken over.
  */
 export function acquireScanLock(dataDir: string): boolean {
   const path = join(dataDir, "scan.lock");
-  if (existsSync(path)) {
-    const pid = Number(readFileSync(path, "utf8"));
+  for (let attempt = 0; attempt < 2; attempt++) {
     try {
-      if (pid && pid !== process.pid) {
-        process.kill(pid, 0);
-        return false;
-      }
-    } catch {
-      // that process is gone: take the lock over
+      writeFileSync(path, String(process.pid), { flag: "wx" });
+      return true;
+    } catch (err) {
+      if ((err as NodeJS.ErrnoException).code !== "EEXIST") throw err;
     }
+    const holder = lockHolder(path);
+    if (holder === process.pid) return true;
+    if (holder !== undefined && isRunning(holder)) return false;
+    // Left by a process that's gone: remove it (unless another scan just took it over) and try again.
+    if (lockHolder(path) === holder) rmSync(path, { force: true });
   }
-  writeFileSync(path, String(process.pid));
-  return true;
+  return false;
+}
+
+/** The process id in a lock file; undefined when it's gone or unreadable. */
+function lockHolder(path: string): number | undefined {
+  try {
+    return Number(readFileSync(path, "utf8")) || undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+function isRunning(pid: number): boolean {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch (err) {
+    // EPERM: it exists, it's just someone else's.
+    return (err as NodeJS.ErrnoException).code === "EPERM";
+  }
 }
 
 export function releaseScanLock(dataDir: string): void {

@@ -1,4 +1,4 @@
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { mkdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { companyIndustries } from "./catalog/industries";
 import { companyKey, companyOfJobId, jobCompanyKey } from "./connectors";
@@ -6,13 +6,14 @@ import { toDashboardJob } from "./dashboard";
 import type { MergeResult } from "./diff";
 import type { RunResult } from "./run";
 import type { Config, DashboardJob, DashboardJobsFile, DataMeta, Job, JobsFile, RunSummary } from "./schema";
+import { readJsonOrSetAside, writeFileAtomic } from "./atomic";
 
 /** How many run summaries meta.json keeps (the dashboard's health history). */
 export const KEEP_RUNS = 30;
 
+/** Run files: a damaged one is set aside (and said so) instead of failing every scan after it. */
 function readJson<T>(path: string): T | undefined {
-  if (!existsSync(path)) return undefined;
-  return JSON.parse(readFileSync(path, "utf8")) as T;
+  return readJsonOrSetAside<T>(path, (bad) => console.warn(`${path} couldn't be read; moved it to ${bad} and started fresh.`));
 }
 
 /** Every job seen so far, with descriptions (history.json; before it existed, jobs.json held the same). */
@@ -45,7 +46,13 @@ export function summarize(run: RunResult, merged: MergeResult): RunSummary {
 type DirectoryRow = { key: string; ats: string; slug: string; site?: string; tags?: string[]; title_tags?: string[] };
 
 /** The published directory's companies (data/catalog/directory.json), if built. */
-const directoryCompanies = (dir: string): DirectoryRow[] => readJson<{ companies: DirectoryRow[] }>(join(dir, "catalog", "directory.json"))?.companies ?? [];
+const directoryCompanies = (dir: string): DirectoryRow[] => {
+  try {
+    return (JSON.parse(readFileSync(join(dir, "catalog", "directory.json"), "utf8")) as { companies: DirectoryRow[] }).companies;
+  } catch {
+    return [];
+  }
+};
 
 /** Industry ids per company directory key. */
 function directoryIndustries(companies: readonly DirectoryRow[]): Map<string, string[]> {
@@ -67,7 +74,7 @@ export function saveRun(dir: string, config: Config, run: RunResult, merged: Mer
 
   const jobs = merged.jobs.map((j) => (j.why.gate ? { ...j, description: undefined } : j));
   const history: JobsFile = { version: 1, generatedAt, jobs };
-  writeFileSync(join(dir, "history.json"), JSON.stringify(history));
+  writeFileAtomic(join(dir, "history.json"), JSON.stringify(history));
 
   const directory = directoryCompanies(dir);
   const industries = directoryIndustries(directory);
@@ -80,9 +87,9 @@ export function saveRun(dir: string, config: Config, run: RunResult, merged: Mer
     return { ...toDashboardJob(j), companyKey: key, ...(tags ? { industries: tags } : {}) };
   });
   const file = (list: DashboardJob[]): DashboardJobsFile => ({ version: 2, generatedAt, jobs: list });
-  writeFileSync(join(dir, "jobs.json"), JSON.stringify(file(dashboard.filter((j) => !j.why.gate))));
-  writeFileSync(join(dir, "jobs-other.json"), JSON.stringify(file(dashboard.filter((j) => j.why.gate))));
-  writeFileSync(join(dir, "descriptions.json"), JSON.stringify(Object.fromEntries(jobs.filter((j) => j.description).map((j) => [j.id, j.description]))));
+  writeFileAtomic(join(dir, "jobs.json"), JSON.stringify(file(dashboard.filter((j) => !j.why.gate))));
+  writeFileAtomic(join(dir, "jobs-other.json"), JSON.stringify(file(dashboard.filter((j) => j.why.gate))));
+  writeFileAtomic(join(dir, "descriptions.json"), JSON.stringify(Object.fromEntries(jobs.filter((j) => j.description).map((j) => [j.id, j.description]))));
 
   const prevRuns = readMeta(dir)?.runs ?? [];
   const meta: DataMeta = {
@@ -95,10 +102,10 @@ export function saveRun(dir: string, config: Config, run: RunResult, merged: Mer
     }),
     runs: opts.record === false ? prevRuns : [summary, ...prevRuns].slice(0, KEEP_RUNS),
   };
-  writeFileSync(join(dir, "meta.json"), JSON.stringify(meta, null, 2));
+  writeFileAtomic(join(dir, "meta.json"), JSON.stringify(meta, null, 2));
 
   if (opts.record === false) return summary;
   const stamp = run.startedAt.replace(/:/g, "-").replace(/\.\d+Z$/, "Z");
-  writeFileSync(join(dir, "runs", `${stamp}.json`), JSON.stringify(summary, null, 2));
+  writeFileAtomic(join(dir, "runs", `${stamp}.json`), JSON.stringify(summary, null, 2));
   return summary;
 }

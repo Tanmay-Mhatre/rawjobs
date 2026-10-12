@@ -227,7 +227,7 @@ export async function updateCommand(args: string[]): Promise<number> {
   let serverPid: number | undefined;
   if (state && (await healthy(`http://127.0.0.1:${state.port}`))) {
     try {
-      const h = (await (await fetch(`http://127.0.0.1:${state.port}/api/health`)).json()) as { scanning?: boolean };
+      const h = (await (await fetch(`http://127.0.0.1:${state.port}/api/health`, { signal: AbortSignal.timeout(1500) })).json()) as { scanning?: boolean };
       if (h.scanning) {
         console.error("A scan is running. Update when it's done (it can also be stopped, and resumed later).");
         return 1;

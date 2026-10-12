@@ -10,6 +10,7 @@ import { ConfigSchema, type AtsType, type Config, type Profile } from "./schema"
 import { passesGates } from "./score";
 import { configToYaml } from "./yaml-writer";
 import { defaultDataDir, rawjobsHome } from "./paths";
+import { writeFileAtomic } from "./atomic";
 
 /** The user's own config. The shipped rawjobs.config.example.yaml is only an example. */
 export const PERSONAL_CONFIG = CONFIG_CANDIDATES[0]!;
@@ -68,7 +69,7 @@ export function saveConfig(input: unknown, cwd = rawjobsHome()): SaveResult {
     };
   }
   const path = personalConfigPath(cwd);
-  writeFileSync(path, configToYaml(parsed.data));
+  writeFileAtomic(path, configToYaml(parsed.data));
   return { ok: true, path };
 }
 

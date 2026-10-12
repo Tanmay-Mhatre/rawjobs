@@ -14,12 +14,20 @@ import { verifyRelease } from "./release";
 export const DATA_PUBLIC_KEY = "MCowBQYDK2VwAyEAKxV+DJuMoOIVywf5oOXgJrO8zCsaR8XfDbpUPxb/iEM=";
 export const dataPublicKey = () => envSetting("DATA_PUBLIC_KEY") ?? DATA_PUBLIC_KEY;
 
+/**
+ * How long a manifest, and a data file, may take: past that a stalled connection gives up (and the
+ * local copy is used) instead of holding the scan that's waiting for it.
+ */
+export const MANIFEST_TIMEOUT_MS = 30_000;
+export const FILE_TIMEOUT_MS = 300_000;
+
 /** A manifest that arrived with a valid signature, or why not (`status` null: a bad signature). */
 export type SignedJson<T> = { ok: true; value: T } | { ok: false; status: number | null };
 
 /** Download a JSON manifest and its `.sig`; accept it only when the data key signed its exact bytes. */
 export async function fetchSignedJson<T>(get: typeof fetch, url: string): Promise<SignedJson<T>> {
-  const [res, sig] = await Promise.all([get(url, { headers: { accept: "application/json" }, redirect: "follow" }), get(`${url}.sig`, { redirect: "follow" })]);
+  const signal = AbortSignal.timeout(MANIFEST_TIMEOUT_MS);
+  const [res, sig] = await Promise.all([get(url, { headers: { accept: "application/json" }, redirect: "follow", signal }), get(`${url}.sig`, { redirect: "follow", signal })]);
   if (!res.ok) return { ok: false, status: res.status };
   const body = await res.text();
   if (!sig.ok || !verifyRelease(body, await sig.text(), dataPublicKey())) return { ok: false, status: null };

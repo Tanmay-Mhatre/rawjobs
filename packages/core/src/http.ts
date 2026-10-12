@@ -112,8 +112,9 @@ export class HttpClient {
     }
     const body = await res.text();
     const etag = res.headers.get("etag");
+    const value = parseJson<T>(body, url, res.headers.get("content-type"));
     if (etag && this.opts.cache) this.opts.cache.set(url, etag, body);
-    return JSON.parse(body) as T;
+    return value;
   }
 
   async postJson<T = unknown>(url: string, body: unknown): Promise<T> {
@@ -122,7 +123,7 @@ export class HttpClient {
       headers: { accept: "application/json", "content-type": "application/json" },
       body: JSON.stringify(body),
     });
-    return (await res.json()) as T;
+    return parseJson<T>(await res.text(), url, res.headers.get("content-type"));
   }
 
   async getText(url: string): Promise<string> {
@@ -175,7 +176,11 @@ export class HttpClient {
       }
       if (res.ok || res.status === 304) return res;
       lastError = new HttpError(`HTTP ${res.status} (${url})`, url, res.status);
-      if (res.status !== 429 && res.status < 500) throw lastError; // 4xx won't fix itself
+      if (res.status !== 429 && res.status < 500) {
+        // 4xx won't fix itself; free the connection now rather than when it's collected.
+        await res.body?.cancel().catch(() => {});
+        throw lastError;
+      }
       if (res.status === 429) {
         this.slowDown(host, parseRetryAfter(res.headers.get("retry-after")) ?? backoffMs * 2 ** attempt);
         hostPaused = true;
@@ -208,4 +213,13 @@ function parseRetryAfter(value: string | null): number | undefined {
   if (Number.isFinite(secs)) return Math.min(secs * 1000, MAX_RETRY_AFTER_MS);
   const at = Date.parse(value);
   return Number.isNaN(at) ? undefined : Math.min(Math.max(0, at - Date.now()), MAX_RETRY_AFTER_MS);
+}
+
+/** JSON, or an HttpError naming the page: an HTML error page otherwise shows up as just "Unexpected token '<'". */
+function parseJson<T>(body: string, url: string, contentType: string | null): T {
+  try {
+    return JSON.parse(body) as T;
+  } catch {
+    throw new HttpError(`not JSON (${contentType ?? "no content type"}): ${body.slice(0, 60).replace(/\s+/g, " ")} (${url})`, url);
+  }
 }
