@@ -1,4 +1,4 @@
-import { Check, CircleAlert, Copy, LoaderCircle, Wrench } from "lucide-react";
+import { Check, CircleAlert, Copy, LoaderCircle, Plus } from "lucide-react";
 import { useState, type ReactNode } from "react";
 import mark from "../design/logos/rawjobs-mark.svg";
 import { addDesktopShortcut, announceUpdateStatus, markShortcutNoticeSeen, type UpdateStatus } from "../lib/update";
@@ -95,7 +95,7 @@ function State({ ok, children }: { ok: boolean; children: string }) {
   );
 }
 
-/** Settings → About → Desktop shortcut: where the shortcuts are, the address, and adding or repairing them. */
+/** Settings → About → Desktop shortcut: where the shortcuts are, the address, and adding them (again). */
 export function DesktopShortcutSettings({ status, setStatus }: { status: UpdateStatus; setStatus: (s: UpdateStatus) => void }) {
   const [busy, setBusy] = useState(false);
   const s: Shortcuts | null | undefined = status.about?.shortcuts;
@@ -112,7 +112,7 @@ export function DesktopShortcutSettings({ status, setStatus }: { status: UpdateS
     announceUpdateStatus();
     const now = next.about?.shortcuts;
     if (now?.desktop && !s.desktop) toast({ message: "Added RawJobs to your Desktop" });
-    else if (now?.desktop || (!now?.desktopFolder && now?.menu)) toast({ message: "Shortcut repaired" });
+    else if (now?.desktop || (!now?.desktopFolder && now?.menu)) toast({ message: "Shortcut added" });
   };
   const copy = () => void navigator.clipboard?.writeText(location.origin).then(() => toast({ message: "Copied the address" }));
 
@@ -151,10 +151,10 @@ export function DesktopShortcutSettings({ status, setStatus }: { status: UpdateS
           </Button>
         ) : (
           <Button onClick={() => void make()} disabled={busy}>
-            {busy ? <LoaderCircle className="size-3.5 animate-spin" /> : <Wrench className="size-3.5" />} Repair shortcuts
+            {busy ? <LoaderCircle className="size-3.5 animate-spin" /> : <Plus className="size-3.5" />} Add shortcut
           </Button>
         )}
-        {!missing && <span className="type-small text-muted">If the icon looks wrong or the shortcut doesn't open RawJobs.</span>}
+        {!missing && <span className="type-small text-muted">Adds it again if the icon looks wrong or the shortcut doesn't open RawJobs.</span>}
       </div>
     </div>
   );
