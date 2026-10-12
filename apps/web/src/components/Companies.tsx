@@ -1,3 +1,4 @@
+import { safeUrl } from "@rawjobs/core/text";
 import { Clock, ExternalLink, RefreshCw, X } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { ATS_LABEL, keyOf } from "../lib/companies";
@@ -259,7 +260,7 @@ function NameCell({ x }: { x: Row }) {
       <div className="flex items-center gap-1.5 font-medium">
         {x.r.name || x.r.slug}
         {/^https?:/.test(x.r.input) && (
-          <a href={x.r.input} target="_blank" rel="noreferrer" className="inline-flex size-6 items-center justify-center rounded-md text-muted hover:text-ink" aria-label={`${x.r.name || x.r.slug} careers page`}>
+          <a href={safeUrl(x.r.input)} target="_blank" rel="noreferrer" className="inline-flex size-6 items-center justify-center rounded-md text-muted hover:text-ink" aria-label={`${x.r.name || x.r.slug} careers page`}>
             <ExternalLink className="size-3.5" />
           </a>
         )}

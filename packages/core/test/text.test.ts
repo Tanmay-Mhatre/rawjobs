@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { htmlToText, inferWorkplace, isPlaceholderBoard, matchesAny, matchesTerm } from "../src/text";
+import { htmlToText, inferWorkplace, isPlaceholderBoard, matchesAny, matchesTerm, safeUrl } from "../src/text";
 
 describe("isPlaceholderBoard", () => {
   it("catches vendor sandboxes, training and test tenants", () => {
@@ -79,5 +79,14 @@ describe("matchesAny", () => {
     const texts = ["AI-native", "maintain", "Senior Product-Manager", "C++ engineer", "Dubai, UAE", "Abu  Dhabi", "nothing here"];
     for (const t of texts) expect(matchesAny(t, terms)).toBe(terms.some((x) => matchesTerm(t, x)));
     expect(matchesAny("anything", [])).toBe(false);
+  });
+});
+
+describe("safeUrl", () => {
+  it("keeps http(s) links and drops everything else", () => {
+    expect(safeUrl("https://boards.greenhouse.io/acme/jobs/1")).toBe("https://boards.greenhouse.io/acme/jobs/1");
+    expect(safeUrl("http://example.com")).toBe("http://example.com");
+    for (const bad of ["javascript:alert(1)", " JavaScript:alert(1)", "data:text/html,<script>", "vbscript:x", "/relative", "", null, undefined])
+      expect(safeUrl(bad)).toBeUndefined();
   });
 });

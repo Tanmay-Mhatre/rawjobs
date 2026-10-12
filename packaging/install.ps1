@@ -72,6 +72,9 @@
     if ($M.app -ne 'rawjobs') { Fail "$Release/latest.json isn't a RawJobs release." }
     $Version = [string]$M.version
     $NodeVersion = [string]$M.nodeVersion
+    # Checked before they name any path: the signature is checked only once Node is here (step 3).
+    if ($NodeVersion -notmatch '^v\d+\.\d+\.\d+$') { Fail "$Release/latest.json names an unexpected Node version." }
+    if ([string]$M.bundleFile -notmatch '^[A-Za-z0-9][A-Za-z0-9._-]*$') { Fail "$Release/latest.json names an unexpected file." }
     $NodeName = "node-$NodeVersion-$Platform"
     Say "Version $Version, for $Platform"
 

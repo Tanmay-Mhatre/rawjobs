@@ -3,6 +3,7 @@ import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from "
 import { join } from "node:path";
 import { gunzipSync } from "node:zlib";
 import { envSetting } from "./env";
+import { isSafeName, safeJoin } from "./safe-name";
 
 /**
  * The shared company directory lives online (built weekly from public lists plus what users add)
@@ -77,6 +78,9 @@ export async function updateDirectory(dataDir: string, opts: { force?: boolean; 
   const current = directoryStatus(dataDir).local;
   if (!opts.force && current?.version === manifest.version) return { updated: false, version: manifest.version, companies: manifest.companies, message: "Already up to date." };
 
+  const unsafe = Object.keys(manifest.files ?? {}).find((f) => !isSafeName(f));
+  if (unsafe !== undefined) return { updated: false, message: `The shared directory's manifest names an unsafe file (${JSON.stringify(unsafe)}); kept your current directory.` };
+
   const dir = catalogDir(dataDir);
   mkdirSync(dir, { recursive: true });
   const staged: [string, Buffer][] = [];
@@ -88,8 +92,8 @@ export async function updateDirectory(dataDir: string, opts: { force?: boolean; 
     staged.push([file.replace(/\.gz$/, ""), gunzipSync(gz)]);
   }
   for (const [name, body] of staged) {
-    writeFileSync(join(dir, `${name}.tmp`), body);
-    renameSync(join(dir, `${name}.tmp`), join(dir, name));
+    writeFileSync(safeJoin(dir, `${name}.tmp`), body);
+    renameSync(safeJoin(dir, `${name}.tmp`), safeJoin(dir, name));
   }
   writeFileSync(join(dir, "manifest.json"), JSON.stringify({ ...manifest, updated_at: new Date().toISOString() }, null, 2));
   return { updated: true, version: manifest.version, companies: manifest.companies, message: `Updated to ${manifest.companies.toLocaleString()} companies.` };
