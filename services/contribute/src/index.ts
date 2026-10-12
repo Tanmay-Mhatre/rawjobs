@@ -7,7 +7,7 @@
  * is a hiring system, a slug and a name.
  *
  *   POST /v1/contributions   { client?, boards: [{ ats, slug, region?, shard?, site?, name? }] }  (public)
- *   GET  /v1/pending         list waiting contributions                                     (Bearer INBOX_TOKEN)
+ *   GET  /v1/pending         list waiting contributions, 500 a page; ?cursor= for the next  (Bearer INBOX_TOKEN)
  *   POST /v1/ack             { ids: [...] } remove processed contributions                   (Bearer INBOX_TOKEN)
  *
  * Abuse limits: 20 requests a minute per IP (Cloudflare rate limiter; the IP is not stored), at
@@ -180,8 +180,11 @@ function dailyCap(env: Env): number {
   return Number.isFinite(n) && n > 0 ? Math.floor(n) : DEFAULT_DAILY_CAP;
 }
 
-async function pending(env: Env): Promise<Response> {
-  const list = await env.INBOX.list({ prefix: "c:", limit: 500 });
+async function pending(req: Request, env: Env): Promise<Response> {
+  // A cursor, not "list again after acknowledging": KV lists are eventually consistent, so a fresh
+  // list could hand back keys that were just removed.
+  const cursor = new URL(req.url).searchParams.get("cursor") || undefined;
+  const list = await env.INBOX.list({ prefix: "c:", limit: 500, cursor });
   const items = await Promise.all(
     list.keys.map(async (k) => {
       const value = await env.INBOX.get(k.name);
@@ -194,7 +197,7 @@ async function pending(env: Env): Promise<Response> {
       }
     }),
   );
-  return json({ items: items.filter(Boolean), more: !list.list_complete });
+  return json({ items: items.filter(Boolean), more: !list.list_complete, ...(list.list_complete ? {} : { cursor: list.cursor }) });
 }
 
 async function ack(req: Request, env: Env): Promise<Response> {
@@ -209,7 +212,7 @@ export default {
     const { pathname } = new URL(req.url);
     try {
       if (req.method === "POST" && pathname === "/v1/contributions") return await contribute(req, env);
-      if (req.method === "GET" && pathname === "/v1/pending") return authorized(req, env) ? await pending(env) : json({ error: "Unauthorized" }, 401);
+      if (req.method === "GET" && pathname === "/v1/pending") return authorized(req, env) ? await pending(req, env) : json({ error: "Unauthorized" }, 401);
       if (req.method === "POST" && pathname === "/v1/ack") return authorized(req, env) ? await ack(req, env) : json({ error: "Unauthorized" }, 401);
       if (req.method === "GET" && pathname === "/") return new Response("RawJobs contribution inbox. POST /v1/contributions\n", { headers: { "content-type": "text/plain" } });
       return json({ error: "Not found" }, 404);
