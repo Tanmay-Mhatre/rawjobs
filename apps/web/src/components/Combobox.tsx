@@ -70,6 +70,7 @@ export function Combobox({ label, placeholder, search, onPick, onFreeText }: Pro
         className="h-11 w-full rounded-md border border-line bg-raised pl-9 pr-3 type-small placeholder:text-muted"
       />
       {open && q.trim() && (
+        // biome-ignore lint/a11y/noNoninteractiveElementToInteractiveRole: ARIA combobox: focus stays in the input and options are reached with aria-activedescendant
         <ul id={listId} role="listbox" className="absolute inset-x-0 top-12 z-20 max-h-72 overflow-y-auto rounded-md border border-line bg-raised p-1 shadow-l3">
           {items.length === 0 ? (
             <li className="px-3 py-2 type-small text-muted">
@@ -83,9 +84,11 @@ export function Combobox({ label, placeholder, search, onPick, onFreeText }: Pro
             </li>
           ) : (
             items.map((item, i) => (
+              // biome-ignore lint/a11y/useFocusableInteractive: ARIA combobox option: reached with aria-activedescendant, so not focusable itself
               <li
                 key={item.key}
                 id={`${listId}-${i}`}
+                // biome-ignore lint/a11y/noNoninteractiveElementToInteractiveRole: ARIA combobox: focus stays in the input and options are reached with aria-activedescendant
                 role="option"
                 aria-selected={i === active}
                 onMouseDown={(e) => {

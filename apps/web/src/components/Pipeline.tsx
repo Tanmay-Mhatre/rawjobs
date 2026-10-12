@@ -103,6 +103,7 @@ export function Pipeline({ user, jobsById, min, onOpen, onMove, onSetup, goRadar
       <div className="grid gap-3 md:min-w-[900px] md:grid-cols-5">
         {columns.map(({ col, items }) => {
           return (
+            // biome-ignore lint/a11y/noStaticElementInteractions: hover, focus or drop handling around real controls; nothing here is only reachable by mouse
             <section
               key={col}
               onDragOver={(e) => {
@@ -131,6 +132,7 @@ export function Pipeline({ user, jobsById, min, onOpen, onMove, onSetup, goRadar
                   const job = jobsById.get(id);
                   const s = e.snapshot;
                   return (
+                    // biome-ignore lint/a11y/useKeyWithClickEvents: mouse shortcut: the card's title button is the keyboard and screen-reader way in
                     <li
                       key={id}
                       data-card-id={id}

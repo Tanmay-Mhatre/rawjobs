@@ -116,23 +116,28 @@ export function Settings({
   // "#settings?section=schedule" (from the Radar's checklist): open and scroll to that section.
   // biome-ignore lint/correctness/useExhaustiveDependencies: registers the hashchange listener once; the section ids it checks never change
   useEffect(() => {
+    let timer: ReturnType<typeof setTimeout> | undefined;
     const go = () => {
       const id = sectionFromHash();
       if (!id) return;
       if (id in summaries) setOpen((o) => new Set(o).add(id));
       // After the tab has rendered (and anything that scrolls to the top on a tab change). Some
       // sections appear once their data loads (Desktop shortcut): keep looking for a moment.
+      clearTimeout(timer);
       let tries = 0;
       const scroll = () => {
         const el = document.getElementById(`settings-${id}`);
         if (el) el.scrollIntoView({ block: "start" });
-        else if (++tries < 20) setTimeout(scroll, 100);
+        else if (++tries < 20) timer = setTimeout(scroll, 100);
       };
-      setTimeout(scroll, 60);
+      timer = setTimeout(scroll, 60);
     };
     go();
     window.addEventListener("hashchange", go);
-    return () => window.removeEventListener("hashchange", go);
+    return () => {
+      window.removeEventListener("hashchange", go);
+      clearTimeout(timer);
+    };
   }, []);
 
   useEffect(() => {
@@ -455,6 +460,7 @@ function AppearanceSection() {
 
 function Group({ id, label, children }: { id: GroupId; label: string; children: ReactNode }) {
   return (
+    // biome-ignore lint/a11y/useSemanticElements: an ARIA role on purpose: the native element (fieldset, output, input, hr, ul) would change layout or behaviour here
     <div id={`settings-${id}`} tabIndex={-1} role="group" aria-labelledby={`g-${id}`} className="scroll-mt-32 space-y-4 outline-none md:scroll-mt-20">
       <h2 id={`g-${id}`} className="type-subheading text-ink">
         {label}
@@ -526,7 +532,8 @@ function TrackingData({ user, prefs, onImport, onRemoveRule }: { user: UserState
 
   const apply = (next: Awaited<ReturnType<typeof readStateFile>>) => {
     onImport(next.state, next.prefs);
-    setMsg({ tone: "ok", text: `Imported ${Object.keys(next.state).length} tracked jobs.` });
+    const skipped = next.skipped ? ` Left out ${next.skipped} that couldn't be read.` : "";
+    setMsg({ tone: "ok", text: `Imported ${Object.keys(next.state).length} tracked jobs.${skipped}` });
   };
 
   const onFile = async (f: File | undefined) => {

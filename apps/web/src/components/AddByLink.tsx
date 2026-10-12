@@ -84,6 +84,7 @@ export function AddByLink({ watched, onAddMany, onRemove, autoFocus }: { watched
           onChange={(e) => setText(e.target.value)}
           onKeyDown={(e) => (e.metaKey || e.ctrlKey) && e.key === "Enter" && void check()}
           rows={3}
+          // biome-ignore lint/a11y/noAutofocus: focus moves into what was just opened (a menu, a dialog field), as the pattern expects
           autoFocus={autoFocus}
           aria-describedby={`${helpId}-hint`}
           placeholder={"https://jobs.lever.co/company\nhttps://job-boards.greenhouse.io/another"}

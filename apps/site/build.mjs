@@ -185,11 +185,16 @@ tokens += `
 
 const bundle = read(join(ROOT, "design/components/bundle.css"));
 // The letters follow the text color; the cursor is brand-signal, the same orange in every theme.
-const wordmark = read(join(DS, "logos/rawjobs-wordmark-ink.svg"))
-  .trim()
-  .replace('fill="#151412"', 'fill="currentColor"')
-  .replace('fill="#ff5a1f"', 'style="fill: var(--brand-signal)"')
-  .replace('role="img" aria-label="rawjobs"', 'aria-hidden="true" focusable="false"');
+/** `s` with `from` replaced once; a missing `from` stops the build (the logo file changed) instead of passing silently. */
+const replaceOnce = (s, from, to) => {
+  if (!s.includes(from)) throw new Error(`The wordmark SVG no longer contains ${from}: update apps/site/build.mjs.`);
+  return s.replace(from, to);
+};
+const wordmark = [
+  ['fill="#151412"', 'fill="currentColor"'],
+  ['fill="#ff5a1f"', 'style="fill: var(--brand-signal)"'],
+  ['role="img" aria-label="rawjobs"', 'aria-hidden="true" focusable="false"'],
+].reduce((svg, [from, to]) => replaceOnce(svg, from, to), read(join(DS, "logos/rawjobs-wordmark-ink.svg")).trim());
 // The wall's addresses, with the hero's example stamps forced in so each stamp sits on a real address.
 // Pass --wall-fallback to also save this build's wall as src/wall-fallback.json (the offline list).
 const stampHosts = [...read(join(SITE, "src/index.html")).matchAll(/"host":\s*"([^"]+)"/g)].map((m) => m[1]);
