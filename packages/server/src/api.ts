@@ -18,6 +18,8 @@ export type ApiOptions = {
   version?: string;
   /** Answers /api/update (an installed copy's updates); without it, it says this copy doesn't update itself. */
   updater?: Pick<Updater, "route" | "updating" | "updateHint">;
+  /** Whether rawjobs://open starts RawJobs on this computer (/api/health's startLink). Default: no. */
+  startLink?: () => boolean;
 };
 
 /** One line of the scan's NDJSON progress. */
@@ -25,7 +27,8 @@ type Line = string;
 
 /**
  * The dashboard's API: everything it needs to set up and run RawJobs on this computer.
- *   GET  /api/health          { ok, version, scanning, update }: is the server up, which version, and one waiting to install
+ *   GET  /api/health          { ok, version, scanning, update, startLink, platform }: is the server up, which version, one waiting
+ *                             to install, and (for the page to remember while it's down) how to start it again
  *   GET/PUT /api/tracking     your statuses, notes and Radar preferences (profile/tracking.json)
  *   GET  /api/update          an installed copy's updates (POST …/check, …/apply, …/seen; PUT …/settings)
  *   GET  /api/setup           setup status (+ current config)
@@ -213,7 +216,8 @@ Stopped after ${Math.round(timeoutMs / 1000)} s without finishing.`.trim(),
   }
 
   async function route(url: string, req: IncomingMessage, res: ServerResponse): Promise<void> {
-    if (url === "/api/health" && req.method === "GET") return json(res, { ok: true, version, scanning: busy(), update: opts.updater?.updateHint() ?? null });
+    if (url === "/api/health" && req.method === "GET")
+      return json(res, { ok: true, version, scanning: busy(), update: opts.updater?.updateHint() ?? null, startLink: opts.startLink?.() ?? false, platform: process.platform });
     if (url === "/api/update" || url.startsWith("/api/update/")) {
       if (opts.updater && (await opts.updater.route(url, req, res, () => readBody(req)))) return;
       if (url === "/api/update" && req.method === "GET")

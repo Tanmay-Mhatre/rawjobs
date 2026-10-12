@@ -104,8 +104,11 @@ const POLL_MS = 5000;
  * server finds a new version (its `update` changes), every useUpdateStatus reads the status again,
  * so the Update pill shows within seconds.
  */
-export function useServerHealth(): { down: boolean } {
+export function useServerHealth(): ServerHealth {
   const [down, setDown] = useState(false);
+  const [since, setSince] = useState<number | null>(null);
+  const [start, setStart] = useState<StartInfo>({ startLink: false, platform: null });
+  const [fast, setFast] = useState(false);
   const first = useRef<string | null>(null);
   const hint = useRef<string | null | undefined>(undefined);
   useEffect(() => {
@@ -114,12 +117,14 @@ export function useServerHealth(): { down: boolean } {
     const poll = async () => {
       try {
         const res = await fetch("/api/health", { cache: "no-store", signal: AbortSignal.timeout(3000) });
-        const h = (await res.json()) as { ok?: boolean; version?: string; update?: { version: string } | null };
+        const h = (await res.json()) as Health;
         if (!live) return;
         if (h.ok && h.version) {
           first.current ??= h.version;
           if (h.version !== first.current) location.reload();
         }
+        // Kept for while it's down: how the "isn't running" window can start it again.
+        if (h.ok) setStart((s) => (s.startLink === !!h.startLink && s.platform === (h.platform ?? null) ? s : { startLink: !!h.startLink, platform: h.platform ?? null }));
         const waiting = h.update?.version ?? null;
         if (hint.current !== undefined && waiting !== hint.current) announceUpdateStatus();
         hint.current = waiting;
@@ -129,11 +134,40 @@ export function useServerHealth(): { down: boolean } {
       }
     };
     void poll();
-    const t = setInterval(() => void poll(), POLL_MS);
+    const t = setInterval(() => void poll(), fast ? FAST_POLL_MS : POLL_MS);
     return () => {
       live = false;
       clearInterval(t);
     };
-  }, []);
-  return { down };
+  }, [fast]);
+  useEffect(() => setSince(down ? Date.now() : null), [down]);
+  return { down, since, ...start, setFast };
 }
+
+const FAST_POLL_MS = 1000;
+
+/**
+ * Start RawJobs from the page: rawjobs://open runs what the Desktop shortcut runs, without opening
+ * another tab. The browser asks first ("Open RawJobs?"); the page stays where it is.
+ */
+export function openStartLink(): void {
+  location.href = "rawjobs://open";
+}
+
+type Health = { ok?: boolean; version?: string; update?: { version: string } | null; startLink?: boolean; platform?: string };
+
+/** How RawJobs can be started again on this computer, as the server said while it was up. */
+type StartInfo = {
+  /** rawjobs://open starts it (the installer registered the link): the window offers a Start button. */
+  startLink: boolean;
+  /** "win32", "darwin", "linux": for the words ("Start menu", "Applications") and the Desktop picture. */
+  platform: string | null;
+};
+
+export type ServerHealth = StartInfo & {
+  down: boolean;
+  /** When it stopped answering (Date.now()), while it's down. */
+  since: number | null;
+  /** Check every second instead of every 5 (while RawJobs is starting, so the page comes back at once). */
+  setFast: (fast: boolean) => void;
+};

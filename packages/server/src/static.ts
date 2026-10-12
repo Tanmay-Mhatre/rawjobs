@@ -1,6 +1,7 @@
 import { createReadStream, statSync } from "node:fs";
 import type { IncomingMessage, ServerResponse } from "node:http";
 import { extname, resolve, sep } from "node:path";
+import { notFoundPage, offlinePage, SERVICE_WORKER, sectionRedirect } from "./pages";
 
 const TYPES: Record<string, string> = {
   ".html": "text/html; charset=utf-8",
@@ -68,4 +69,46 @@ export function serveStatic(roots: string[], req: IncomingMessage, res: ServerRe
     })
     .pipe(res);
   return true;
+}
+
+/** What the server knows for the pages below: is the Start link (rawjobs://open) installed, and on which system. */
+export type PageContext = { startLink: () => boolean; platform: string };
+
+/**
+ * Everything the dashboard, the API and the data folder didn't answer (pages.ts):
+ *   /sw.js, /offline.html   the service worker and the "RawJobs isn't running" page it keeps
+ *   /radar, /settings…      a section named as a path (an old link, a typed address): its #hash
+ *   any other page          "No match for this address" (404), with a way back to the Radar
+ *   anything else           a plain 404, as before (scripts, data files, other methods)
+ */
+export function servePages(req: IncomingMessage, res: ServerResponse, ctx: PageContext): void {
+  const path = (req.url ?? "/").split("?")[0]!;
+  const send = (status: number, type: string, body: string) => {
+    res.statusCode = status;
+    res.setHeader("content-type", type);
+    res.setHeader("cache-control", "no-store");
+    res.setHeader("x-content-type-options", "nosniff");
+    if (type.startsWith("text/html")) res.setHeader("x-frame-options", "DENY");
+    res.end(req.method === "HEAD" ? undefined : body);
+  };
+  const page = req.method === "GET" || req.method === "HEAD";
+  const section = page ? sectionRedirect(path) : null;
+  if (!page) send(404, TYPES[".txt"]!, "Not found");
+  else if (path === "/sw.js") send(200, TYPES[".js"]!, SERVICE_WORKER);
+  else if (path === "/offline.html") send(200, TYPES[".html"]!, offlinePage({ startLink: ctx.startLink(), platform: ctx.platform }));
+  else if (section) {
+    res.statusCode = 302;
+    res.setHeader("location", section);
+    res.end();
+  } else if (/text\/html/.test(String(req.headers.accept ?? ""))) send(404, TYPES[".html"]!, notFoundPage(decodePath(path)));
+  else send(404, TYPES[".txt"]!, "Not found");
+}
+
+/** The path as you typed it ("/jobs saved" rather than "/jobs%20saved"), for the 404 page. */
+function decodePath(path: string): string {
+  try {
+    return decodeURIComponent(path);
+  } catch {
+    return path;
+  }
 }
