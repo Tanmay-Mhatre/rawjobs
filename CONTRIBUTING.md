@@ -30,6 +30,10 @@ The contribution inbox (`services/contribute`) is a Cloudflare Worker in the sam
 - Branch from `main` and open a pull request. `main` is protected: CI's `check` and the install
   test (install, update, go back, uninstall on Windows, macOS and Linux) must pass before it can
   merge.
+- Pull requests merge through a merge queue (Mergify), one at a time, in the order they joined.
+  The maintainer adds the `queue` label when yours is ready; Mergify brings it up to date with
+  `main`, waits for CI and merges it. If it conflicts with `main` or CI fails, Mergify says so on
+  the pull request and takes it out of the queue until it's fixed.
 - Releases are made by the maintainer with a version tag (see [README → Development](README.md#development)).
 - Add or update tests. Connector tests use saved responses in `packages/core/test/fixtures`, so
   tests never hit live sites.
