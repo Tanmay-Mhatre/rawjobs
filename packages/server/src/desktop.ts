@@ -82,7 +82,8 @@ const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
  *   --no-browser   only make sure the server is running, and print its address
  */
 export async function openDashboard(args: string[]): Promise<number> {
-  const { values } = parseArgs({ args, options: { "no-browser": { type: "boolean", default: false } } });
+  // A rawjobs://open link passes its URL along (Linux's %u): it's ignored.
+  const { values } = parseArgs({ args, options: { "no-browser": { type: "boolean", default: false } }, allowPositionals: true });
   const home = rawjobsHome();
   const known = () => `http://127.0.0.1:${readServerState(home)?.port ?? DEFAULT_PORT}`;
   let url = known();

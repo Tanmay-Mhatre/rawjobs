@@ -6,8 +6,8 @@ import { APP_VERSION, BUNDLED, migrateData, scanLockHeld, WEB_DIR } from "@rawjo
 import { createApi } from "./api";
 import { createUpdater } from "./updater";
 import { DEFAULT_PORT, healthy, logTo, openBrowser, readServerState, writeServerState } from "./desktop";
-import { ensureShortcuts } from "./shortcuts";
-import { serveStatic } from "./static";
+import { ensureShortcuts, startLinkInstalled } from "./shortcuts";
+import { servePages, serveStatic } from "./static";
 
 const TRIES = 10;
 
@@ -53,12 +53,14 @@ export async function serve(args: string[]): Promise<number> {
   let shutdown: () => void = () => process.exit(0);
   // Busy: a scan the dashboard started, or one the computer's schedule started (it holds data/scan.lock).
   const updater = createUpdater({ home, isBusy: () => api.scanning() || scanLockHeld(dataDir), exit: () => shutdown() });
-  const api = createApi({ home, dataDir, updater });
+  // The "RawJobs isn't running" window and page offer a Start button only when rawjobs://open works here.
+  const startLink = () => BUNDLED && startLinkInstalled(home);
+  const api = createApi({ home, dataDir, updater, startLink });
+  const pages = { startLink, platform: process.platform };
   const server = createServer((req, res) => {
     void api.handle(req, res).then((handled) => {
       if (handled || serveStatic([WEB_DIR, dataDir], req, res)) return;
-      res.statusCode = 404;
-      res.end("Not found");
+      servePages(req, res, pages);
     });
   });
 

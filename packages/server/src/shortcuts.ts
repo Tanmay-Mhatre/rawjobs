@@ -27,6 +27,8 @@ type ShortcutFile = {
   desktopError?: string | null;
   /** You've seen the dashboard's "RawJobs is on your Desktop" popup (closed it, or followed its link). */
   noticeSeen?: boolean;
+  /** rawjobs://open starts RawJobs here (registerStartLink): the "isn't running" Start button works. */
+  startLink?: boolean;
 };
 const filePath = (home: string) => join(home, "shortcuts.json");
 
@@ -39,7 +41,7 @@ function readFile(home: string): ShortcutFile {
 }
 const writeFile = (home: string, f: ShortcutFile) => writeFileSync(filePath(home), `${JSON.stringify(f, null, 1)}\n`);
 
-export type ShortcutResult = { ok: boolean; menu: string | null; desktop: string | null; error?: string };
+export type ShortcutResult = { ok: boolean; menu: string | null; desktop: string | null; error?: string; startLink?: boolean };
 
 /** The icon file for this computer's shortcuts, written into RAWJOBS_HOME/icons. */
 function writeIcon(home: string): string {
@@ -79,7 +81,14 @@ function mac(launcher: string, icon: string, desktop: boolean): ShortcutResult {
   mkdirSync(apps, { recursive: true });
   rmSync(app, { recursive: true, force: true });
   const quoted = launcher.replace(/\\/g, "\\\\").replace(/"/g, '\\"');
-  const r = run("osacompile", ["-o", app, "-e", `do shell script quoted form of "${quoted}" & " open >/dev/null 2>&1 &"`]);
+  // Opened from Finder: open the dashboard. Opened by a rawjobs://open link (the dashboard's Start
+  // button, already open in the browser): only start RawJobs; that page reloads by itself.
+  const r = run("osacompile", [
+    "-o",
+    app,
+    ...["on run", `do shell script quoted form of "${quoted}" & " open >/dev/null 2>&1 &"`, "end run"].flatMap((l) => ["-e", l]),
+    ...["on open location this_url", `do shell script quoted form of "${quoted}" & " open --no-browser >/dev/null 2>&1 &"`, "end open location"].flatMap((l) => ["-e", l]),
+  ]);
   if (r.status !== 0) return { ok: false, menu: null, desktop: null, error: (r.stderr || String(r.error ?? "")).trim() };
   try {
     writeFileSync(join(app, "Contents/Resources/applet.icns"), readFileSync(icon));
@@ -87,6 +96,14 @@ function mac(launcher: string, icon: string, desktop: boolean): ShortcutResult {
   } catch {
     // the default applet icon is fine too
   }
+  // The rawjobs: links it answers. Changing Info.plist breaks the applet's ad-hoc signature, so it's
+  // signed again (ad hoc, as osacompile does), then Launch Services learns about the link.
+  const plist = join(app, "Contents/Info.plist");
+  const linked =
+    run("plutil", ["-insert", "CFBundleURLTypes", "-json", '[{"CFBundleURLName":"RawJobs","CFBundleURLSchemes":["rawjobs"]}]', plist]).status === 0 &&
+    run("plutil", ["-replace", "CFBundleIdentifier", "-string", "app.rawjobs.launcher", plist]).status === 0;
+  run("codesign", ["--force", "--sign", "-", app]);
+  if (linked) run("/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister", ["-f", app]);
   let onDesktop: string | null = null;
   if (desktop) {
     const link = join(homedir(), "Desktop", "RawJobs.app");
@@ -100,7 +117,51 @@ function mac(launcher: string, icon: string, desktop: boolean): ShortcutResult {
       // no Desktop we may write to
     }
   }
-  return { ok: true, menu: app, desktop: onDesktop };
+  return { ok: true, menu: app, desktop: onDesktop, startLink: linked };
+}
+
+/**
+ * The Start link on Windows: rawjobs://open runs `rawjobs open --no-browser` (start RawJobs, don't
+ * open another tab: the page that asked is already open and reloads by itself). Per user, in
+ * HKCU\Software\Classes, so it needs no admin rights. Paths go in through the environment.
+ */
+function windowsLink(launcher: string, icon: string): boolean {
+  const ps = [
+    "$ErrorActionPreference = 'Stop'",
+    "$k = 'HKCU:\\Software\\Classes\\rawjobs'",
+    "New-Item -Path $k -Force | Out-Null",
+    "Set-ItemProperty -Path $k -Name '(Default)' -Value 'URL:RawJobs'",
+    "New-ItemProperty -Path $k -Name 'URL Protocol' -Value '' -PropertyType String -Force | Out-Null",
+    'New-Item -Path "$k\\DefaultIcon" -Force | Out-Null',
+    "Set-ItemProperty -Path \"$k\\DefaultIcon\" -Name '(Default)' -Value ($env:RJ_ICON + ',0')",
+    'New-Item -Path "$k\\shell\\open\\command" -Force | Out-Null',
+    "$cmd = '\"' + (Join-Path $env:SystemRoot 'System32\\conhost.exe') + '\" --headless \"' + $env:RJ_LAUNCHER + '\" open --no-browser'",
+    "Set-ItemProperty -Path \"$k\\shell\\open\\command\" -Name '(Default)' -Value $cmd",
+  ].join("\n");
+  return run("powershell.exe", ["-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-Command", ps], { RJ_LAUNCHER: launcher, RJ_ICON: icon }).status === 0;
+}
+
+const LINUX_LINK = "rawjobs-open.desktop";
+
+/** The Start link on Linux: a hidden app-menu entry that handles rawjobs: links (xdg-mime). */
+function linuxLink(launcher: string, icon: string): boolean {
+  const apps = linuxAppsDir();
+  mkdirSync(apps, { recursive: true });
+  const entry = [
+    "[Desktop Entry]",
+    "Type=Application",
+    "Name=RawJobs",
+    "Comment=Start RawJobs",
+    `Exec="${launcher}" open --no-browser %u`,
+    `Icon=${icon}`,
+    "Terminal=false",
+    "NoDisplay=true",
+    "MimeType=x-scheme-handler/rawjobs;",
+    "",
+  ].join("\n");
+  writeFileSync(join(apps, LINUX_LINK), entry);
+  run("update-desktop-database", [apps]);
+  return run("xdg-mime", ["default", LINUX_LINK, "x-scheme-handler/rawjobs"]).status === 0;
 }
 
 /** Where Linux keeps app-menu entries (install.sh uses the same). */
@@ -148,6 +209,9 @@ export function makeShortcuts(home: string, launcher: string, opts: { desktop: b
   try {
     const icon = writeIcon(home);
     r = process.platform === "win32" ? windows(home, launcher, icon, opts.desktop) : process.platform === "darwin" ? mac(launcher, icon, opts.desktop) : linux(launcher, icon, opts.desktop);
+    // The Start link (rawjobs://open) for the "RawJobs isn't running" window. On macOS the app above answers it.
+    if (process.platform === "win32") r.startLink = windowsLink(launcher, icon);
+    else if (process.platform !== "darwin") r.startLink = linuxLink(launcher, icon);
   } catch (err) {
     r = { ok: false, menu: null, desktop: null, error: (err as Error).message };
   }
@@ -161,6 +225,7 @@ export function makeShortcuts(home: string, launcher: string, opts: { desktop: b
     desktop: r.desktop ?? before.desktop ?? null,
     desktopOffered: before.desktopOffered || opts.desktop,
     desktopError: opts.desktop ? (r.desktop ? null : (r.error ?? "it couldn't be made")) : (before.desktopError ?? null),
+    startLink: !!r.startLink,
   });
   return r;
 }
@@ -180,6 +245,11 @@ let desktopFolder: boolean | undefined;
 function hasDesktopFolder(): boolean {
   desktopFolder ??= process.platform === "win32" ? true : process.platform === "darwin" ? existsSync(join(homedir(), "Desktop")) : linuxDesktopDir() !== null;
   return desktopFolder;
+}
+
+/** rawjobs://open starts RawJobs on this computer: the "isn't running" window can offer a Start button. */
+export function startLinkInstalled(home: string): boolean {
+  return readFile(home).startLink === true;
 }
 
 /** What the dashboard shows: which shortcuts really exist now, and whether to tell you about them. */
@@ -223,7 +293,10 @@ export function removeShortcuts(home: string): void {
   const f = readFile(home);
   const rm = (p: string | null | undefined) => p && rmSync(p, { recursive: true, force: true });
   if (process.platform === "win32") {
-    const ps = ["foreach ($f in 'Programs', 'Startup', 'Desktop') { Remove-Item -Force -ErrorAction SilentlyContinue (Join-Path ([Environment]::GetFolderPath($f)) 'RawJobs.lnk') }"].join("; ");
+    const ps = [
+      "foreach ($f in 'Programs', 'Startup', 'Desktop') { Remove-Item -Force -ErrorAction SilentlyContinue (Join-Path ([Environment]::GetFolderPath($f)) 'RawJobs.lnk') }",
+      "Remove-Item -Recurse -Force -ErrorAction SilentlyContinue 'HKCU:\\Software\\Classes\\rawjobs'",
+    ].join("; ");
     run("powershell.exe", ["-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-Command", ps]);
   } else if (process.platform === "darwin") {
     rm(join(homedir(), "Applications/RawJobs.app"));
@@ -235,6 +308,7 @@ export function removeShortcuts(home: string): void {
     }
   } else {
     rm(join(linuxAppsDir(), "rawjobs.desktop"));
+    rm(join(linuxAppsDir(), LINUX_LINK));
     rm(join(homedir(), ".local/share/applications/rawjobs.desktop"));
     const d = linuxDesktopDir();
     if (d) rm(join(d, "rawjobs.desktop"));

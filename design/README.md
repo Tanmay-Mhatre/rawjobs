@@ -136,6 +136,7 @@ Light-mode shadows stay under 8% opacity. A list is never bare text on the canva
 - Exits: set `data-state="closing"` on the drawer, scrim, menu or toast and remove it on `animationend`.
 - The 1.4s skeleton shimmer is the one exception to the four durations, and the only loop.
 - Under `prefers-reduced-motion`, slides become fades and the loading shimmer stops.
+- **The not-running exception.** The "RawJobs isn't running" window, the offline page and the 404 page (`packages/server/src/pages.ts`) tell a short story with pictures: RawJobs asleep and waking up (the cursor in its icon fills like a battery, the one place the cursor moves inside the product), the Desktop shortcut being double-clicked, a scan line finding no match. Each step keeps to the durations above; the story chains them over about 2 s, plays once, and shows its last frame under `prefers-reduced-motion`. The Start button fills like a progress bar while RawJobs starts (up to 20 s). Nothing else in the product does this.
 - **Marketing pages** follow the same rules, with one documented exception: `duration-story` (380ms) for a step of a story the eye has to follow, used only by the hero's load and the "where your resume goes" route animation. Everything else on the site (row arrivals, reveals, bars, feedback) uses the four durations above, and nothing loops: example feeds tick a fixed number of times and stop.
 
 ## Interaction

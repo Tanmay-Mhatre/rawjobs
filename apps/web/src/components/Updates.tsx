@@ -18,6 +18,7 @@ import {
 } from "../lib/update";
 import { DesktopShortcutNotice, Row } from "./DesktopShortcut";
 import { RequiredUpdate } from "./RequiredUpdate";
+import { ServerDownWindow } from "./ServerDown";
 import { toast } from "./Toast";
 import { Button, Card, Toggle } from "./ui";
 import { Anchor, ChangeRows, Head, Points, sortedItems, VersionLine } from "./UpdateParts";
@@ -48,9 +49,16 @@ function UpdateButton({ status, onClick, busy, label }: { status: UpdateStatus; 
   );
 }
 
+/** No answer for this long and it isn't restarting: it was stopped ("RawJobs isn't running"). */
+const STOPPED_AFTER_MS = 15_000;
+/** An update's restart can take longer (it moves files, converts data): wait this long before saying it stopped. */
+const STOPPED_WHILE_UPDATING_MS = 60_000;
+
 /**
- * Above the page, on an installed copy: "RawJobs is restarting" while the server is away (the page
- * reloads by itself when it's back as a new version), then, once after an update, "What's new"
+ * Above the page, on an installed copy: "Reconnecting to RawJobs" while the server is away (the page
+ * reloads by itself when it's back as a new version). Away for longer than a restart takes, it was
+ * stopped: the "RawJobs isn't running" window (ServerDownWindow) says how to start it again, and
+ * stays until it's back. Then, once after an update, "What's new"
  * (WhatsNewDialog), or a note when an update didn't work. A new version waiting shows as the Update
  * pill in the header (UpdatePill), not here. A required update, or a version too old to update by
  * itself, comes up in a window instead (RequiredUpdate). The first time you land on the Radar,
@@ -58,8 +66,19 @@ function UpdateButton({ status, onClick, busy, label }: { status: UpdateStatus; 
  * top of another window or after an update that didn't work.
  */
 export function ServerNotices({ onRadar = false }: { onRadar?: boolean }) {
-  const { down } = useServerHealth();
+  const health = useServerHealth();
+  const { down, since } = health;
+  // Away for longer than an update's restart: it was stopped. From then on the "isn't running"
+  // window stays until the page reloads (it shows "RawJobs is back" first).
   const { status, setStatus, refresh } = useUpdateStatus();
+  const updating = status?.state === "updating" || updatingTo() !== null;
+  const [stopped, setStopped] = useState(false);
+  useEffect(() => {
+    if (!down || since === null || stopped) return;
+    const after = updating ? STOPPED_WHILE_UPDATING_MS : STOPPED_AFTER_MS;
+    const t = setTimeout(() => setStopped(true), Math.max(0, since + after - Date.now()));
+    return () => clearTimeout(t);
+  }, [down, since, stopped, updating]);
   const [busy, setBusy] = useState(false);
   // Back after a restart as the same version (an update that went back): read how it went.
   const wasDown = useRef(false);
@@ -79,6 +98,8 @@ export function ServerNotices({ onRadar = false }: { onRadar?: boolean }) {
     return () => clearInterval(t);
   }, [status?.state, refresh]);
 
+  // Away for much longer than a restart (even an update's): it was stopped, so say how to start it.
+  if (stopped) return <ServerDownWindow health={health} />;
   // An update this page started: "Updating to 0.6.1" from the click until the page reloads as it.
   const started = updatingTo();
   // (A required update shows its own Updating state until the server goes away.)
@@ -88,7 +109,7 @@ export function ServerNotices({ onRadar = false }: { onRadar?: boolean }) {
       <div role="status" className="mb-3 flex items-center gap-2 rounded-md bg-inset/60 px-3 py-2 type-small">
         <LoaderCircle className="size-4 shrink-0 animate-spin text-muted" aria-hidden />
         <span>
-          <b>Reconnecting to RawJobs…</b> <span className="text-muted">It's restarting (after an update, this takes a few seconds). The page reloads by itself.</span>
+          <b>Reconnecting to RawJobs…</b> <span className="text-muted">This takes a few seconds after an update. The page reloads by itself.</span>
         </span>
       </div>
     );
