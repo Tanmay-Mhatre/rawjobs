@@ -1,6 +1,6 @@
 #!/bin/sh
 # Before a push: refuse pushing to main directly (open a pull request instead), then run the
-# full check (design tokens, design lint, typecheck, tests) so broken code never leaves this machine.
+# full check (lint, design tokens, design lint, typecheck, tests) so broken code never leaves this machine.
 # Turn on once per clone with: pnpm hooks:install   (skip once with: git push --no-verify)
 
 zero=0000000000000000000000000000000000000000
@@ -20,7 +20,7 @@ done
 
 [ "$check" = 1 ] || exit 0
 
-echo "pre-push: running pnpm check (design tokens, design lint, typecheck, tests)..." >&2
+echo "pre-push: running pnpm check (lint, design tokens, design lint, typecheck, tests)..." >&2
 log="$(mktemp)"
 if ! pnpm check >"$log" 2>&1; then
   tail -n 40 "$log" >&2
