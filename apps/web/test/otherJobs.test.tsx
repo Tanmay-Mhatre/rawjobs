@@ -2,8 +2,9 @@
 import { act, cleanup, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { useData, useOtherJobs, type Job } from "../src/lib/data";
+import { makeJob } from "./helpers";
 
-const job = (id: string, title: string) => ({ id, title, company: "Acme", location: "Dubai", cities: ["Dubai"], why: { gate: "title" } }) as unknown as Job;
+const job = (id: string, title: string) => makeJob({ id, title, why: { title: 0, location: 20, keywords: [], keywordPoints: 0, gate: "title" } });
 const file = (jobs: Job[]) => ({ version: 2, generatedAt: "2026-10-12T00:00:00Z", jobs });
 
 /** The run's files, as the local server serves them; `other` is what jobs-other.json holds now. */
