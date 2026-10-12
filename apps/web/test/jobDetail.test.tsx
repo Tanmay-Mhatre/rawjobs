@@ -3,6 +3,7 @@ import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { JobDetail } from "../src/components/JobDetail";
 import type { Job, Profile } from "../src/lib/data";
+import { makeJob } from "./helpers";
 
 afterEach(cleanup);
 
@@ -17,27 +18,16 @@ const profile = {
   min_score: 65,
 } as Profile;
 
-const job = (over: Partial<Job> = {}): Job => ({
-  id: "greenhouse:acme:1",
-  ats: "greenhouse",
-  company: "Acme",
-  title: "Senior Product Manager",
-  location: "Dubai",
-  workplace: "hybrid",
-  url: "https://acme.example/jobs/1",
-  postedAt: new Date(Date.now() - 2 * 86_400_000).toISOString(),
-  firstSeen: new Date(Date.now() - 86_400_000).toISOString(),
-  lastSeen: new Date().toISOString(),
-  status: "open",
-  score: 74,
-  why: { title: 30, location: 20, keywords: ["payments"], keywordPoints: 14, freshness: 10 },
-  countries: ["United Arab Emirates"],
-  cities: ["Dubai, United Arab Emirates"],
-  seniority: "senior",
-  group: "Acme|senior product manager",
-  hasDescription: false,
-  ...over,
-});
+const job = (over: Partial<Job> = {}): Job =>
+  makeJob({
+    id: "greenhouse:acme:1",
+    workplace: "hybrid",
+    postedAt: new Date(Date.now() - 2 * 86_400_000).toISOString(),
+    score: 74,
+    why: { title: 30, location: 20, keywords: ["payments"], keywordPoints: 14, freshness: 10 },
+    group: "Acme|senior product manager",
+    ...over,
+  });
 
 const renderDetail = (j: Job) => render(<JobDetail job={j} profile={profile} onUpdate={() => {}} isNew />);
 

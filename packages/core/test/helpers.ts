@@ -2,7 +2,7 @@ import { generateKeyPairSync, sign as cryptoSign } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { HttpClient } from "../src/http";
-import { ProfileSchema, type CompanyRef, type Profile } from "../src/schema";
+import { ProfileSchema, type CompanyRef, type Job, type Profile } from "../src/schema";
 
 export function fixture(name: string): unknown {
   return JSON.parse(readFileSync(fileURLToPath(new URL(`./fixtures/${name}`, import.meta.url)), "utf8"));
@@ -63,5 +63,30 @@ export function testDataKey() {
       if (before === undefined) delete process.env.RAWJOBS_DATA_PUBLIC_KEY;
       else process.env.RAWJOBS_DATA_PUBLIC_KEY = before;
     },
+  };
+}
+
+let jobN = 0;
+
+/**
+ * A stored job (history.json's shape) with every field set: a senior product manager role at Acme
+ * in Dubai, first seen 1 Oct 2026. Override only what a test is about. Ids are unique per call.
+ */
+export function makeJob(o: Partial<Job> = {}): Job {
+  const n = ++jobN;
+  return {
+    id: `greenhouse:acme:${n}`,
+    ats: "greenhouse",
+    company: "Acme",
+    title: "Senior Product Manager",
+    location: "Dubai",
+    workplace: "onsite",
+    url: `https://acme.example/jobs/${n}`,
+    firstSeen: "2026-10-01T00:00:00Z",
+    lastSeen: "2026-10-01T00:00:00Z",
+    status: "open",
+    score: 50,
+    why: { title: 20, location: 20, keywords: [], keywordPoints: 0, freshness: 10 },
+    ...o,
   };
 }

@@ -9,31 +9,12 @@ import type { DataMeta, Job, Profile } from "../src/lib/data";
 import { DEFAULT_FILTERS } from "../src/lib/filters";
 import { GO_TO_MS, ignoreShortcut, useGoToKeys, type GoToSection } from "../src/lib/keys";
 import type { UserState } from "../src/lib/userState";
+import { makeJob } from "./helpers";
 
 afterEach(cleanup);
 beforeEach(() => localStorage.clear());
 
-const job = (o: Partial<Job> = {}): Job => ({
-  id: "a",
-  ats: "greenhouse",
-  company: "Acme",
-  title: "Senior Product Manager",
-  location: "Dubai",
-  workplace: "onsite",
-  url: "https://acme.example/jobs/1",
-  firstSeen: new Date(Date.now() - 86_400_000).toISOString(),
-  lastSeen: new Date().toISOString(),
-  postedAt: new Date(Date.now() - 86_400_000).toISOString(),
-  status: "open",
-  score: 75,
-  why: { title: 30, location: 20, keywords: [], keywordPoints: 0, freshness: 10 },
-  countries: ["United Arab Emirates"],
-  cities: ["Dubai, United Arab Emirates"],
-  seniority: "senior",
-  group: `Acme|${o.id ?? "a"}`,
-  hasDescription: false,
-  ...o,
-});
+const job = (o: Partial<Job> = {}): Job => makeJob({ id: "a", group: `Acme|${o.id ?? "a"}`, ...o });
 
 describe("ignoreShortcut", () => {
   const key = (target: EventTarget | null, mods: Partial<Record<"metaKey" | "ctrlKey" | "altKey", boolean>> = {}) => ({ metaKey: false, ctrlKey: false, altKey: false, target, ...mods });
