@@ -68,6 +68,21 @@ describe("updateDirectory", () => {
   });
 });
 
+describe("updateDirectory with a tampered manifest", () => {
+  it("refuses file names that would leave the catalog folder, before downloading anything", async () => {
+    const calls: string[] = [];
+    const evil = { ...manifest("v3"), files: { "../../bin/rawjobs.gz": { sha256: sha(directory), bytes: directory.length } } };
+    const fetchImpl = (async (url: string) => {
+      calls.push(url);
+      return url.endsWith("manifest.json") ? new Response(JSON.stringify(evil)) : new Response(directory);
+    }) as unknown as typeof fetch;
+    const r = await updateDirectory(dir, { fetchImpl });
+    expect(r).toMatchObject({ updated: false, message: expect.stringMatching(/unsafe file/) });
+    expect(calls).toEqual(["https://example.test/latest/manifest.json"]);
+    expect(existsSync(join(dir, "bin"))).toBe(false);
+  });
+});
+
 describe("sharing additions", () => {
   it("queues boards once, sends them, and keeps them when the inbox is down", async () => {
     expect(

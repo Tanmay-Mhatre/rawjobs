@@ -311,3 +311,17 @@ const SANDBOX_BOARD = [
 export function isPlaceholderBoard(name: string | undefined | null): boolean {
   return !!name && (PLACEHOLDER_BOARD.test(name) || SANDBOX_BOARD.some((re) => re.test(name)));
 }
+
+/**
+ * A link that is safe to open: http(s) only, else undefined. Job and careers links come from hiring
+ * systems and the shared directory; a "javascript:" one would run on the dashboard's own origin.
+ */
+export function safeUrl(url: string | undefined | null): string | undefined {
+  if (!url) return undefined;
+  try {
+    const { protocol } = new URL(url);
+    return protocol === "https:" || protocol === "http:" ? url : undefined;
+  } catch {
+    return undefined;
+  }
+}

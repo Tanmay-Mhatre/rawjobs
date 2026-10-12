@@ -1,5 +1,5 @@
 import { INDUSTRIES, INDUSTRY_GROUPS } from "@rawjobs/core/catalog/industries";
-import { isPlaceholderBoard } from "@rawjobs/core/text";
+import { isPlaceholderBoard, safeUrl } from "@rawjobs/core/text";
 import { ChevronDown, CloudDownload, ExternalLink, Link2, LoaderCircle, RefreshCw } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { ATS_LABEL, groupBoards, SUPPORTED, type CompanyRef } from "../lib/companies";
@@ -318,7 +318,7 @@ function BoardLine({ c, watched, jobsFor, fitFor, onAdd, onRemove, sub }: LinePr
         <p className={cx("flex items-center gap-1.5 type-small", sub ? "text-muted" : "font-semibold")}>
           <span className="truncate">{sub ? `${c.name} on ${ATS_LABEL[c.ats] ?? c.ats}` : c.name}</span>
           {score !== undefined && score >= 45 && <FitLabel score={score} className="font-normal" />}
-          <a href={c.careers_url} target="_blank" rel="noreferrer" className="shrink-0 text-muted hover:text-ink" aria-label={`${c.name} careers page`}>
+          <a href={safeUrl(c.careers_url)} target="_blank" rel="noreferrer" className="shrink-0 text-muted hover:text-ink" aria-label={`${c.name} careers page`}>
             <ExternalLink className="size-3.5" />
           </a>
         </p>

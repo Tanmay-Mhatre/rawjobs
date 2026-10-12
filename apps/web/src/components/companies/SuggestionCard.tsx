@@ -1,3 +1,4 @@
+import { safeUrl } from "@rawjobs/core/text";
 import { ChevronDown, ExternalLink, EyeOff } from "lucide-react";
 import { useState } from "react";
 import { ATS_LABEL, SUPPORTED } from "../../lib/companies";
@@ -95,7 +96,7 @@ export function SuggestionCard({ s, added, onAdd, onRemove, onHide }: Props) {
         <div className="min-w-0 flex-1">
           <p className="flex items-center gap-1.5 font-semibold leading-5">
             <span className="truncate">{s.name}</span>
-            <a href={s.careers_url} target="_blank" rel="noreferrer" className="shrink-0 text-muted hover:text-ink" aria-label={`${s.name} careers page`}>
+            <a href={safeUrl(s.careers_url)} target="_blank" rel="noreferrer" className="shrink-0 text-muted hover:text-ink" aria-label={`${s.name} careers page`}>
               <ExternalLink className="size-3.5" />
             </a>
           </p>

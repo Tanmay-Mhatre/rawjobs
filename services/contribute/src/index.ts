@@ -201,7 +201,9 @@ export default {
       if (req.method === "GET" && pathname === "/") return new Response("RawJobs contribution inbox. POST /v1/contributions\n", { headers: { "content-type": "text/plain" } });
       return json({ error: "Not found" }, 404);
     } catch (err) {
-      return json({ error: (err as Error).message }, 500);
+      // The details go to the Worker's logs, not to the caller.
+      console.error(err);
+      return json({ error: "Something went wrong; please try again later." }, 500);
     }
   },
 };

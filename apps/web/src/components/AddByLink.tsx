@@ -1,3 +1,4 @@
+import { safeUrl } from "@rawjobs/core/text";
 import { CircleAlert, ExternalLink, HelpCircle, Link2, LoaderCircle, MapPin, X } from "lucide-react";
 import { useId, useState } from "react";
 import { ATS_LABEL, keyOf, SUPPORTED, type CompanyRef } from "../lib/companies";
@@ -255,7 +256,7 @@ function ResultCard({
               {ok && r.careers_url && (
                 <>
                   <span>·</span>
-                  <a href={r.careers_url} target="_blank" rel="noreferrer" className="inline-flex min-w-0 items-center gap-1 hover:text-ink">
+                  <a href={safeUrl(r.careers_url)} target="_blank" rel="noreferrer" className="inline-flex min-w-0 items-center gap-1 hover:text-ink">
                     <span className="truncate">{r.careers_url.replace(/^https:\/\//, "")}</span>
                     <ExternalLink className="size-3 shrink-0" />
                   </a>

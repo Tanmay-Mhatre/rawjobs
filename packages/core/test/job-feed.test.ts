@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { gzipSync } from "node:zlib";
@@ -74,6 +74,19 @@ describe("syncJobFeed", () => {
       throw new Error("ENOTFOUND");
     }) as unknown as typeof fetch;
     expect((await syncJobFeed(dir, { fetchImpl: offline })).message).toMatch(/Couldn't reach/);
+  });
+});
+
+describe("syncJobFeed with a tampered manifest", () => {
+  it("refuses a shard name that would write outside the feed folder", async () => {
+    process.env.RAWJOBS_JOBS_URL = "https://feed.example/jobs";
+    const dir = tmp();
+    const s = shard({ "lever:acme": { fetched_at: at(0), jobs: [] } });
+    const server = feedServer({ "../../../updates": s });
+    const r = await syncJobFeed(dir, { fetchImpl: server.fetchImpl, now: NOW });
+    expect(r).toMatchObject({ updated: false, message: expect.stringMatching(/unsafe/) });
+    expect(existsSync(join(dir, "updates.json"))).toBe(false);
+    expect(server.calls.some((u) => u.includes(".."))).toBe(false);
   });
 });
 

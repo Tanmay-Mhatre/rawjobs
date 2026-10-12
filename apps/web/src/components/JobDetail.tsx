@@ -1,6 +1,6 @@
 import { INDUSTRY_BY_ID } from "@rawjobs/core/catalog/industries";
 import { SENIORITY_LEVELS } from "@rawjobs/core/catalog/seniority";
-import { matchesTitle } from "@rawjobs/core/text";
+import { matchesTitle, safeUrl } from "@rawjobs/core/text";
 import { ArrowLeft, Bookmark, Check, ChevronDown, ChevronUp, CircleCheck, Copy, ExternalLink, Info, LoaderCircle, Maximize2, Plus, RefreshCw, Star, StickyNote, X } from "lucide-react";
 import { Fragment, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { copyText } from "../lib/clipboard";
@@ -244,7 +244,7 @@ export function JobDetail(p: JobDetailProps) {
                       {j.location || "Location not listed"}
                     </button>
                     <span className="tabular text-muted">{j.score}</span>
-                    <a href={j.url} target="_blank" rel="noreferrer" onClick={() => p.onApply?.(j)} className="text-muted hover:text-ink" aria-label={`Open the ${j.location} posting`}>
+                    <a href={safeUrl(j.url)} target="_blank" rel="noreferrer" onClick={() => p.onApply?.(j)} className="text-muted hover:text-ink" aria-label={`Open the ${j.location} posting`}>
                       <ExternalLink className="rj-icon" />
                     </a>
                   </li>
@@ -321,7 +321,7 @@ export function JobDetail(p: JobDetailProps) {
       </div>
 
       <footer className="rj-drawer__foot">
-        <a href={job.url} target="_blank" rel="noreferrer" onClick={() => p.onApply?.(job)} className={buttonClass("primary")}>
+        <a href={safeUrl(job.url)} target="_blank" rel="noreferrer" onClick={() => p.onApply?.(job)} className={buttonClass("primary")}>
           <ExternalLink className="rj-icon" />
           {job.estimated ? "Open careers page" : `Apply on ${source}`}
         </a>

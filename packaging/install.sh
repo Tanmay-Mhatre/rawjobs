@@ -93,6 +93,10 @@ NODE_SHA="$(field "$PLATFORM")"
 BUNDLE_FILE="$(field bundleFile)"
 BUNDLE_SHA="$(field bundleSha256)"
 [ -n "$VERSION" ] && [ -n "$NODE_VERSION" ] && [ -n "$NODE_SHA" ] && [ -n "$BUNDLE_FILE" ] || fail "$RELEASE/latest.json is incomplete."
+# Checked before they name any path: the signature is checked only once Node is here (step 3).
+printf '%s' "$NODE_VERSION" | grep -Eq '^v[0-9]+\.[0-9]+\.[0-9]+$' || fail "$RELEASE/latest.json names an unexpected Node version."
+printf '%s' "$BUNDLE_FILE" | grep -Eq '^[A-Za-z0-9][A-Za-z0-9._-]*$' || fail "$RELEASE/latest.json names an unexpected file."
+printf '%s' "$NODE_SHA$BUNDLE_SHA" | grep -Eq '^[0-9a-f]{128}$' || fail "$RELEASE/latest.json has malformed checksums."
 NODE_NAME="node-$NODE_VERSION-$PLATFORM"
 say "Version $VERSION, for $PLATFORM"
 
