@@ -1,3 +1,4 @@
+import { displayName } from "@rawjobs/core/display-name";
 import { Bookmark, Star, X } from "lucide-react";
 import { forwardRef, type ReactNode } from "react";
 import type { JobGroup } from "../../lib/filters";
@@ -59,7 +60,7 @@ export const JobCard = forwardRef<HTMLLIElement, Props>(function JobCard({ group
   const status = entry?.status;
   const muted = job.status === "closed" || status === "dismissed" || !!job.why.gate;
 
-  const meta: ReactNode[] = [job.company, placeLine(group)];
+  const meta: ReactNode[] = [displayName(job.company), placeLine(group)];
   if (WORKPLACE[job.workplace]) meta.push(WORKPLACE[job.workplace]);
   if (salary) meta.push(salary);
   if (status && status !== "dismissed") meta.push(<span className="text-ink">{STATUS_LABEL[status]}</span>);

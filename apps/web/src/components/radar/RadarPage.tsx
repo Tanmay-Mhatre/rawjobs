@@ -1,3 +1,4 @@
+import { displayName } from "@rawjobs/core/display-name";
 import { ArrowRight, ArrowUpDown, SlidersHorizontal, UserRound, X } from "lucide-react";
 import { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from "react";
 import { useOtherJobs, type DataMeta, type Job, type Profile } from "../../lib/data";
@@ -648,7 +649,7 @@ export function RadarPage(p: Props) {
                   ) : (
                     <li key={`more:${r.company}`} className="px-4 py-2">
                       <Button variant="ghost" size="sm" onClick={() => setOpenCompanies((s) => new Set([...s, r.company]))}>
-                        +{r.groups.length} more at {r.company}
+                        +{r.groups.length} more at {displayName(r.company)}
                       </Button>
                     </li>
                   ),
