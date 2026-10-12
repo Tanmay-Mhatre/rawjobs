@@ -168,6 +168,9 @@ filtering is instant. The first format is still published next to it while insta
    - `RAWJOBS_DATA_SIGNING_KEY`: the private data signing key (PEM). Apps accept `manifest.json`,
      `jobs-manifest.json` and `jobs-v2-manifest.json` only with a valid `.sig` made with it
      (`packages/core/src/data-signing.ts`; making the key: [self-hosting.md](self-hosting.md#run-your-own-directory))
+     The publishing workflows sign what they publish. To sign what's already out there (the first
+     time, after a failed signing step, or after changing the key), run **Data · sign what's
+     published** from the Actions tab: a minute, no rebuild.
 6. **Point apps at the inbox**: set `DEFAULT_CONTRIBUTE_URL` in `packages/core/src/directory.ts` to the Worker URL.
 
 ## Cost
