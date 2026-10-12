@@ -77,6 +77,37 @@ export function saveMoves(config: Config, path: string, moves: BoardMove[]): str
 
 export const duration = (s: number) => (s < 90 ? `${Math.max(1, Math.round(s / 60))} min` : s < 5400 ? `${Math.round(s / 60)} min` : `${(s / 3600).toFixed(1)} h`);
 
+/** The scan options both runners (the report and the dashboard's NDJSON) share. */
+export function sessionOptions(values: RunValues, dataDir: string, scope: ScanScope) {
+  return {
+    dataDir,
+    scope,
+    only: values.only,
+    checkKeys: values.check,
+    dryRun: values["dry-run"],
+    resume: !values.fresh,
+    feed: !values.full,
+    stopped: stopSignal(dataDir),
+  };
+}
+
+/**
+ * Run a scan holding the data folder's scan lock (not for a dry run): the directory and job feed
+ * sync first on a full scan that's online, then `body`. The lock and the stop file are released
+ * however it ends. When another scan holds the lock, `busy()` answers instead.
+ */
+export async function scanSession<T>(values: RunValues, dataDir: string, o: { busy: () => T; sync: () => Promise<void> }, body: () => Promise<T>): Promise<T> {
+  if (!values["dry-run"] && !acquireScanLock(dataDir)) return o.busy();
+  try {
+    const fullScan = !values.only?.length && !values.check?.length;
+    if (fullScan && !values.offline) await o.sync();
+    return await body();
+  } finally {
+    if (!values["dry-run"]) releaseScanLock(dataDir);
+    rmSync(stopFile(dataDir), { force: true });
+  }
+}
+
 export async function cmdRun(args: string[]): Promise<number> {
   const { values } = parseArgs({
     args,
@@ -113,81 +144,71 @@ export async function cmdRun(args: string[]): Promise<number> {
   const dataDir = resolve(values.data);
   console.error(`Config: ${path}`);
 
-  const fullScan = !values.only?.length && !values.check?.length;
   const startedAt = new Date().toISOString();
   const log = (run: Omit<ScheduledRun, "startedAt" | "scope">) => values.scheduled && recordScheduledRun(dataDir, { startedAt, scope, finishedAt: new Date().toISOString(), ...run });
-  if (!values["dry-run"] && !acquireScanLock(dataDir)) {
+  const busy = () => {
     console.error("Another scan is running in this data folder; not starting a second one.");
     log({ ok: false, error: "Another scan was already running." });
     return 0;
-  }
+  };
+  const sync = async () => {
+    console.error("Syncing the company directory…");
+    console.error(`  ${(await syncDirectory(dataDir)).message}`);
+    if (!values.full) console.error(`  ${(await syncJobFeed(dataDir)).message}`);
+  };
   try {
-    if (fullScan && !values.offline) {
-      console.error("Syncing the company directory…");
-      console.error(`  ${(await syncDirectory(dataDir)).message}`);
-      if (!values.full) console.error(`  ${(await syncJobFeed(dataDir)).message}`);
-    }
+    return await scanSession(values, dataDir, { busy, sync }, async () => {
+      const { result, merged, summary, checks, moves, stopped } = await scan(config, {
+        ...sessionOptions(values, dataDir, scope),
+        onStart: (s) =>
+          console.error(
+            `Checking ${values.only?.length ? values.only.join(", ") : `${s.yours.length} of your companies`}${s.extra ? ` and ${s.extra.toLocaleString()} ${s.scope === "all" ? "more from the directory" : "in your industries"}` : ""}${s.resumed ? ` (resuming: ${s.resumed.toLocaleString()} done already)` : ""}${s.skippedByFeed ? ` (${s.skippedByFeed.toLocaleString()} skipped: nothing for you in the shared job feed)` : ""}, about ${duration(s.seconds)}...\n`,
+          ),
+        onCompanyDone: (h) => {
+          // A whole-directory scan prints your companies, matches and failures, not 17,000 lines.
+          if (checks_quiet(h)) return;
+          console.error(`  ${h.ok ? "ok " : "ERR"} ${h.company.padEnd(24)} ${healthLine(h)}`);
+        },
+      });
 
-    const { result, merged, summary, checks, moves, stopped } = await scan(config, {
-      dataDir,
-      scope,
-      only: values.only,
-      checkKeys: values.check,
-      dryRun: values["dry-run"],
-      resume: !values.fresh,
-      feed: !values.full,
-      stopped: stopSignal(dataDir),
-      onStart: (s) =>
-        console.error(
-          `Checking ${values.only?.length ? values.only.join(", ") : `${s.yours.length} of your companies`}${s.extra ? ` and ${s.extra.toLocaleString()} ${s.scope === "all" ? "more from the directory" : "in your industries"}` : ""}${s.resumed ? ` (resuming: ${s.resumed.toLocaleString()} done already)` : ""}${s.skippedByFeed ? ` (${s.skippedByFeed.toLocaleString()} skipped: nothing for you in the shared job feed)` : ""}, about ${duration(s.seconds)}...\n`,
-        ),
-      onCompanyDone: (h) => {
-        // A whole-directory scan prints your companies, matches and failures, not 17,000 lines.
-        if (checks_quiet(h)) return;
-        console.error(`  ${h.ok ? "ok " : "ERR"} ${h.company.padEnd(24)} ${healthLine(h)}`);
-      },
+      const min = config.profile.min_score;
+      const shown = result.jobs.filter((j) => values.all || !j.why.gate).slice(0, Number.isFinite(Number(values.limit)) ? Number(values.limit) : 50);
+      const matches = result.jobs.filter((j) => !j.why.gate);
+      const fresh = matches.filter((j) => merged.newIds.has(j.id)).length;
+      console.log(`\n${matches.length} jobs passed your title and location gates (${fresh} new); ${matches.filter((j) => j.score >= min).length} scored ${min}+ (alert threshold).`);
+      if (checks.length) console.log(`Checked ${checks.length.toLocaleString()} directory companies besides yours.`);
+      if (stopped) console.log("Stopped before the end. Run the same scan again to carry on where it stopped.");
+      for (const m of moves) console.log(`${m.name} moved from ${m.from.ats}:${m.from.slug} to ${m.to.ats}:${m.to.slug}; your config is updated.`);
+      const moveError = values["dry-run"] ? undefined : saveMoves(config, path, moves);
+      if (moveError) console.error(moveError);
+      console.log("");
+      if (shown.length) printJobs(shown, min);
+
+      const failed = result.health.filter((h) => !h.ok && !h.unsupported);
+      if (failed.length) {
+        console.log(`\n${failed.length} compan${failed.length === 1 ? "y" : "ies"} failed:`);
+        for (const h of failed.slice(0, 50)) console.log(`  ${h.company} (${h.ats}:${h.slug}): ${h.error}`);
+        if (failed.length > 50) console.log(`  …and ${failed.length - 50} more`);
+      }
+
+      if (summary) console.error(`\nSaved to ${dataDir} (${merged.jobs.length} jobs tracked, ${summary.closed} closed this run). Open the dashboard with: pnpm start`);
+
+      if (values.json) {
+        const out = resolve(values.json);
+        mkdirSync(dirname(out), { recursive: true });
+        writeFileSync(out, JSON.stringify(result, null, 2));
+        console.error(`\nWrote ${out}`);
+      }
+
+      const notified = values.notify && !values["dry-run"] ? await notifyScan(config, result, merged, scope) : undefined;
+      if (notified)
+        console.error(`Telegram: ${notified === "sent" ? "sent the new jobs" : notified === "nothing-new" ? "nothing new to send" : notified === "off" ? "not set up (Settings → Alerts)" : notified}`);
+      log({ ok: true, matches: matches.length, newMatches: fresh, notified, stopped });
+      return 0;
     });
-
-    const min = config.profile.min_score;
-    const shown = result.jobs.filter((j) => values.all || !j.why.gate).slice(0, Number.isFinite(Number(values.limit)) ? Number(values.limit) : 50);
-    const matches = result.jobs.filter((j) => !j.why.gate);
-    const fresh = matches.filter((j) => merged.newIds.has(j.id)).length;
-    console.log(`\n${matches.length} jobs passed your title and location gates (${fresh} new); ${matches.filter((j) => j.score >= min).length} scored ${min}+ (alert threshold).`);
-    if (checks.length) console.log(`Checked ${checks.length.toLocaleString()} directory companies besides yours.`);
-    if (stopped) console.log("Stopped before the end. Run the same scan again to carry on where it stopped.");
-    for (const m of moves) console.log(`${m.name} moved from ${m.from.ats}:${m.from.slug} to ${m.to.ats}:${m.to.slug}; your config is updated.`);
-    const moveError = values["dry-run"] ? undefined : saveMoves(config, path, moves);
-    if (moveError) console.error(moveError);
-    console.log("");
-    if (shown.length) printJobs(shown, min);
-
-    const failed = result.health.filter((h) => !h.ok && !h.unsupported);
-    if (failed.length) {
-      console.log(`\n${failed.length} compan${failed.length === 1 ? "y" : "ies"} failed:`);
-      for (const h of failed.slice(0, 50)) console.log(`  ${h.company} (${h.ats}:${h.slug}): ${h.error}`);
-      if (failed.length > 50) console.log(`  …and ${failed.length - 50} more`);
-    }
-
-    if (summary) console.error(`\nSaved to ${dataDir} (${merged.jobs.length} jobs tracked, ${summary.closed} closed this run). Open the dashboard with: pnpm start`);
-
-    if (values.json) {
-      const out = resolve(values.json);
-      mkdirSync(dirname(out), { recursive: true });
-      writeFileSync(out, JSON.stringify(result, null, 2));
-      console.error(`\nWrote ${out}`);
-    }
-
-    const notified = values.notify && !values["dry-run"] ? await notifyScan(config, result, merged, scope) : undefined;
-    if (notified)
-      console.error(`Telegram: ${notified === "sent" ? "sent the new jobs" : notified === "nothing-new" ? "nothing new to send" : notified === "off" ? "not set up (Settings → Alerts)" : notified}`);
-    log({ ok: true, matches: matches.length, newMatches: fresh, notified, stopped });
-    return 0;
   } catch (err) {
     log({ ok: false, error: (err as Error).message });
     throw err;
-  } finally {
-    if (!values["dry-run"]) releaseScanLock(dataDir);
-    rmSync(stopFile(dataDir), { force: true });
   }
 
   function checks_quiet(h: CompanyHealth): boolean {
@@ -218,29 +239,21 @@ export async function runNdjson(values: RunValues): Promise<number> {
     const scope = parseScope(values.scope);
     const { config, path } = loadConfig(values.config);
     const dataDir = resolve(values.data);
-    const fullScan = !values.only?.length && !values.check?.length;
-    if (!values["dry-run"] && !acquireScanLock(dataDir)) {
+    const busy = () => {
       emit({ type: "error", message: "A scheduled scan is running right now. Its results show up here when it's done." });
       return 0;
-    }
-    try {
-      if (fullScan && !values.offline) {
-        emit({ type: "sync" });
-        emit({ type: "synced", ...(await syncDirectory(dataDir)), ...(values.full ? {} : { feed: (await syncJobFeed(dataDir)).message }) });
-      }
+    };
+    const sync = async () => {
+      emit({ type: "sync" });
+      emit({ type: "synced", ...(await syncDirectory(dataDir)), ...(values.full ? {} : { feed: (await syncJobFeed(dataDir)).message }) });
+    };
+    return await scanSession(values, dataDir, { busy, sync }, async () => {
       const yours = new Set(config.companies.map((c) => `${c.ats}:${c.slug}`));
       let done = 0;
       /** Companies done per hiring system, including ones a resumed scan already did. */
       let doneByAts: Record<string, number> = {};
       const { result, merged, summary, checks, moves, stopped } = await scan(config, {
-        dataDir,
-        scope,
-        only: values.only,
-        checkKeys: values.check,
-        dryRun: values["dry-run"],
-        resume: !values.fresh,
-        feed: !values.full,
-        stopped: stopSignal(dataDir),
+        ...sessionOptions(values, dataDir, scope),
         onStart: (s) => {
           done = s.resumed;
           doneByAts = { ...s.resumedByAts };
@@ -293,10 +306,7 @@ export async function runNdjson(values: RunValues): Promise<number> {
         });
       }
       return 0;
-    } finally {
-      if (!values["dry-run"]) releaseScanLock(dataDir);
-      rmSync(stopFile(dataDir), { force: true });
-    }
+    });
   } catch (err) {
     emit({ type: "error", message: (err as Error).message });
     return 1;
