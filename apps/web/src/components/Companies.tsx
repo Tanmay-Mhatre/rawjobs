@@ -1,38 +1,56 @@
-import { companyLabel } from "@rawjobs/core/display-name";
+import { companyLabel, displayName } from "@rawjobs/core/display-name";
 import { safeUrl } from "@rawjobs/core/text";
-import { Clock, ExternalLink, RefreshCw, X } from "lucide-react";
-import { useEffect, useMemo, useState, type ReactNode } from "react";
-import { ATS_LABEL, keyOf } from "../lib/companies";
-import type { CompanyHealth, DataMeta } from "../lib/data";
+import { Clock, ExternalLink, EyeOff, RefreshCw, Undo2, X } from "lucide-react";
+import { useEffect, useId, useMemo, useState, type ReactNode } from "react";
+import { keyOf } from "../lib/companies";
+import type { DataMeta } from "../lib/data";
 import { radarCompanyHash } from "../lib/filters";
-import { formatDate, formatDateTime, timeAgo } from "../lib/format";
+import { formatDateTime, timeAgo } from "../lib/format";
+import {
+  barsOf,
+  barsSummary,
+  filterCounts,
+  isQuiet,
+  matchesFilter,
+  MY_PAGE,
+  needsAttention,
+  pageOf,
+  problemOf,
+  QUIET_SCANS,
+  quietOf,
+  type Bar,
+  type Filter,
+  type Problem,
+  type Quiet,
+  type Seen,
+} from "../lib/myCompanies";
 import type { CompanyRow } from "../lib/setup";
-import { Status as BoardStatus } from "./primitives";
-import { Button, Card, cx, IconButton, Segmented } from "./ui";
-
-/** A company with no jobs for you in at least this many scans in a row, over at least QUIET_DAYS, gets a "remove?" flag. */
-export const QUIET_SCANS = 10;
-/** ...so ten quick scans in one afternoon don't count. */
-export const QUIET_DAYS = 7;
-
-const isQuiet = (q: Row["quiet"], now = Date.now()) => q.scans >= QUIET_SCANS && !!q.since && now - Date.parse(q.since) >= QUIET_DAYS * 86_400_000;
+import { Chip, ChipGroup } from "./primitives";
+import { Button, Card, cx, IconButton, Pagination, Select } from "./ui";
 
 type Row = {
   r: CompanyRow;
   key: string;
+  /** Position in your list: later is more recently added. */
+  index: number;
   /** Not saved yet. */
   isNew: boolean;
   /** Opens the Radar on this company's jobs. */
   radar: string;
-  last?: { h: CompanyHealth; at: string };
-  history: (CompanyHealth | undefined)[];
-  /** Scans in a row (newest first) that found nothing for you, and since when. */
-  quiet: { scans: number; since?: string };
+  bars: Bar[];
+  problem: Problem;
+  quiet: Quiet;
+  isQuiet: boolean;
 };
 
+/** A company hidden from the Radar and suggestions: muted in your config (by key) or on the Radar (by name). */
+export type HiddenCompany = { key?: string; name?: string };
+
+type Sort = "attention" | "name" | "recent";
+
 /** Newest first: the company's health in each scan that included it. */
-function healthOf(meta: DataMeta | undefined, key: string): { h: CompanyHealth; at: string }[] {
-  const out: { h: CompanyHealth; at: string }[] = [];
+function healthOf(meta: DataMeta | undefined, key: string): Seen[] {
+  const out: Seen[] = [];
   for (const run of meta?.runs ?? []) {
     const h = run.health.find((x) => keyOf(x) === key);
     if (h) out.push({ h, at: run.startedAt });
@@ -40,70 +58,63 @@ function healthOf(meta: DataMeta | undefined, key: string): { h: CompanyHealth; 
   return out;
 }
 
-function quietOf(seen: { h: CompanyHealth; at: string }[]): Row["quiet"] {
-  let scans = 0;
-  let since: string | undefined;
-  for (const { h, at } of seen) {
-    if (!h.ok || h.matches > 0) break;
-    scans++;
-    since = at;
-  }
-  return { scans, since };
-}
+/** "Oct 9" (the year only when it isn't this one). */
+const shortDate = (iso: string) => {
+  const d = new Date(iso);
+  return d.toLocaleDateString(undefined, { day: "numeric", month: "short", ...(d.getFullYear() !== new Date().getFullYear() && { year: "numeric" }) });
+};
 
-const failing = (row: Row) => !!row.last && !row.last.h.ok && !row.last.h.unsupported;
+const BAR_CLASS: Record<Bar["state"], string> = { worked: "h-4 bg-ink", failed: "h-4 bg-danger", none: "h-1 bg-line" };
+const BAR_WORD: Record<Bar["state"], string> = { worked: "worked", failed: "failed", none: "not checked" };
 
-const atsName = (ats: string) => ATS_LABEL[ats] ?? ats;
-
-/** "Last 14 scans: 12 OK, 2 failed" for screen readers (the bars are visual only). */
-function historySummary(history: Row["history"]): string {
-  const seen = history.filter(Boolean) as CompanyHealth[];
-  if (!seen.length) return "Not scanned yet";
-  const failed = seen.filter((h) => !h.ok && !h.unsupported).length;
-  const unsupported = seen.filter((h) => h.unsupported).length;
-  const found = seen.filter((h) => h.ok && h.matches > 0).length;
-  return [
-    `Last ${seen.length} scan${seen.length === 1 ? "" : "s"}: ${seen.length - failed - unsupported} OK`,
-    failed && `${failed} failed`,
-    unsupported && `${unsupported} not supported`,
-    found && `${found} with jobs for you`,
-  ]
-    .filter(Boolean)
-    .join(", ");
-}
-
-/** Coloured bars, one per recent scan, plus the same as text for screen readers. */
-function ScanHistory({ history }: { history: Row["history"] }) {
+/** One bar per recent scan (health only: worked, failed, not checked), plus the same as text for screen readers. */
+function ScanBars({ bars }: { bars: Bar[] }) {
   return (
-    <div className="flex h-5 items-end gap-0.5">
-      <span className="sr-only">{historySummary(history)}</span>
-      {history.map((h, i) => (
-        <span
-          // biome-ignore lint/suspicious/noArrayIndexKey: a fixed list rebuilt from the same input, never reordered: the index is a stable key
-          key={i}
-          aria-hidden
-          title={!h ? "Not in this scan" : h.ok ? `${h.jobsFound} jobs, ${h.matches} for you` : h.unsupported ? "Not supported yet" : "Scan failed"}
-          className={cx("w-1.5 rounded-md", !h ? "h-1 bg-line" : h.unsupported ? "h-1.5 bg-warning/50" : !h.ok ? "h-5 bg-danger" : h.matches > 0 ? "h-5 bg-ink" : "h-2.5 bg-line")}
-        />
+    <div className="flex h-4 items-end gap-0.5">
+      <span className="sr-only">{barsSummary(bars)}</span>
+      {bars.map((b) => (
+        <span key={b.at} aria-hidden title={`${formatDateTime(b.at)}: ${BAR_WORD[b.state]}`} className={cx("w-1.5 rounded-sm", BAR_CLASS[b.state])} />
       ))}
     </div>
   );
 }
 
+function Legend() {
+  const item = (state: Bar["state"], label: string) => (
+    <span className="inline-flex items-center gap-1.5">
+      <span aria-hidden className={cx("inline-block w-1.5 rounded-sm", BAR_CLASS[state])} />
+      {label}
+    </span>
+  );
+  return (
+    <p className="flex flex-wrap items-end gap-x-4 gap-y-1 type-meta text-muted">
+      <span className="sr-only">Scan bars:</span>
+      {item("worked", "Worked")}
+      {item("failed", "Failed")}
+      {item("none", "Not checked")}
+    </p>
+  );
+}
+
 /**
- * My companies: what each has for you right now, whether its careers page still works, and which
- * ones haven't had anything for you in a while (remove them, so scans stay quick and polite).
- * A table from md up; stacked cards on phones so every action stays on screen.
+ * My companies: whether each careers page still works and which need you, with filters, 25 per page.
+ * The last scan and hidden companies open in place at the top. Healthy rows carry no status: the
+ * bars show their last five scans. A table from md up; stacked rows on phones.
  */
 export function MyCompanies({
   rows: list,
   savedKeys,
   meta,
   jobNames,
+  query = "",
   onRemove,
   onRemoveMany,
+  onRestore,
   onScan,
   scanning,
+  onPasteLink,
+  hidden = [],
+  onShowAgain,
   attention = 0,
   empty,
 }: {
@@ -112,141 +123,266 @@ export function MyCompanies({
   meta?: DataMeta;
   /** The names the Radar's jobs use for each company key (a scan and the directory can differ), for the Radar link. */
   jobNames?: ReadonlyMap<string, readonly string[]>;
+  /** Shows only your companies whose name contains this (the page's search). */
+  query?: string;
   onRemove: (key: string) => void;
+  /** Removes several at once (the quiet banner); the banner offers Undo, via onRestore. */
   onRemoveMany: (keys: string[]) => void;
-  /** Scan now (offered when a company's last scan failed). */
+  /** Puts removed companies back (the quiet banner's Undo). */
+  onRestore?: (rows: CompanyRow[]) => void;
+  /** Scan now: "Check again" on a company that didn't answer. */
   onScan?: () => void;
   scanning?: boolean;
-  /** Above 0 when a "failing" link was followed; each new value sorts by Needs attention. */
+  /** Opens Add by link: "Paste new link" on a company whose careers page wasn't found. */
+  onPasteLink?: () => void;
+  hidden?: HiddenCompany[];
+  onShowAgain?: (h: HiddenCompany) => void;
+  /** Above 0 when a "failing" link was followed; each new value shows Needs attention. */
   attention?: number;
   /** Shown instead of the list when there are no companies (what your scan covers without them). */
   empty?: ReactNode;
 }) {
-  const [sort, setSort] = useState<"name" | "attention">(attention ? "attention" : "name");
+  const [filter, setFilter] = useState<Filter>(attention ? "attention" : "all");
+  const [sort, setSort] = useState<Sort>("attention");
+  const [page, setPage] = useState(1);
+  const [panel, setPanel] = useState<"runs" | "hidden" | null>(null);
+  /** The quiet companies the banner just removed, until Undo or the next change of list. */
+  const [removed, setRemoved] = useState<CompanyRow[] | null>(null);
+  const ids = useId();
   useEffect(() => {
-    if (attention) setSort("attention");
+    if (attention) setFilter("attention");
   }, [attention]);
+  // A new filter, sort or search starts at page 1.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: these are the triggers
+  useEffect(() => setPage(1), [filter, sort, query]);
+
+  const runs = meta?.runs ?? [];
   const rows = useMemo<Row[]>(
     () =>
-      list.map((r) => {
+      list.map((r, index) => {
         const key = keyOf(r);
         const seen = healthOf(meta, key);
-        const history = (meta?.runs ?? [])
-          .slice(0, 14)
-          .map((run) => run.health.find((x) => keyOf(x) === key))
-          .reverse();
+        const quiet = quietOf(seen);
         const radar = radarCompanyHash(jobNames?.get(key) ?? [r.name || r.slug || companyLabel(r)]);
-        return { r, key, isNew: !savedKeys.has(key), radar, last: seen[0], history, quiet: quietOf(seen) };
+        return {
+          r,
+          key,
+          index,
+          isNew: !savedKeys.has(key),
+          radar,
+          bars: barsOf(meta?.runs ?? [], (health) => health.find((x) => keyOf(x) === key)),
+          problem: problemOf(seen, { unreadable: r.state === "soon", anyScans: !!meta?.runs.length }),
+          quiet,
+          isQuiet: isQuiet(quiet),
+        };
       }),
     [list, savedKeys, meta, jobNames],
   );
-  const quiet = rows.filter((x) => isQuiet(x.quiet));
-  const broken = rows.filter(failing).length;
+  const facts = rows.map((x) => ({ problem: x.problem, quiet: x.isQuiet }));
+  const counts = filterCounts(facts);
+  const quiet = rows.filter((x) => x.isQuiet);
+  const failedLast = rows.filter((x) => needsAttention(x.problem)).length;
+  // The Quiet filter goes once nothing is quiet (after Remove, say).
+  const active: Filter = filter === "quiet" && !counts.quiet ? "all" : filter;
+  const q = query.trim().toLowerCase();
+
   const byName = (a: Row, b: Row) => companyLabel(a.r).localeCompare(companyLabel(b.r));
-  const sorted = [...rows].sort((a, b) => (sort === "attention" ? Number(failing(b)) - Number(failing(a)) || b.quiet.scans - a.quiet.scans || byName(a, b) : byName(a, b)));
-  const oldestQuiet = quiet
-    .map((x) => x.quiet.since)
-    .filter(Boolean)
-    .sort()[0];
+  const rank = (x: Row) => (needsAttention(x.problem) ? 2 : x.problem?.kind === "notChecked" ? 1 : 0);
+  const shown = rows
+    .filter((x) => matchesFilter(active, { problem: x.problem, quiet: x.isQuiet }) && (!q || companyLabel(x.r).toLowerCase().includes(q)))
+    .sort((a, b) => (sort === "recent" ? b.index - a.index : sort === "attention" ? rank(b) - rank(a) || b.quiet.scans - a.quiet.scans || byName(a, b) : byName(a, b)));
+  const { items, page: at } = pageOf(shown, page);
+
+  const removeQuiet = () => {
+    setRemoved(quiet.map((x) => x.r));
+    onRemoveMany(quiet.map((x) => x.key));
+  };
+  const undo = () => {
+    if (removed) onRestore?.(removed);
+    setRemoved(null);
+  };
+  const toggle = (p: "runs" | "hidden") => setPanel((v) => (v === p ? null : p));
+  const runsId = `${ids}-runs`;
+  const hiddenId = `${ids}-hidden`;
+  const status = (x: Row) => <Status problem={x.problem} quiet={x.isQuiet ? x.quiet : undefined} onScan={onScan} scanning={scanning} onPasteLink={onPasteLink} />;
+  const remove = (x: Row, className?: string) => (
+    <IconButton label={`Remove ${companyLabel(x.r)}`} onClick={() => onRemove(x.key)} className={cx("hover:text-danger-text", className)}>
+      <X className="size-4" />
+    </IconButton>
+  );
 
   return (
-    <Card className="overflow-hidden">
+    <div className="space-y-3">
       {/* The tab above already says "My companies": the heading is for screen readers, the line says the count. */}
       <h2 className="sr-only">My companies</h2>
-      {rows.length > 0 && (
-        <header className="flex flex-wrap items-center justify-between gap-3 border-b border-line px-4 py-3">
-          <p className="type-small text-ink">
-            <span className="tabular">{rows.length.toLocaleString()}</span> compan{rows.length === 1 ? "y" : "ies"}, checked on every scan.
-            {broken > 0 && <span className="text-danger-text"> Last scan failed for {broken}.</span>}
-          </p>
-          {rows.length > 1 && (
-            <Segmented
-              label="Sort My companies"
-              value={sort}
-              onChange={setSort}
-              options={[
-                { value: "name", label: "A–Z" },
-                { value: "attention", label: "Needs attention" },
-              ]}
-            />
+      {(rows.length > 0 || hidden.length > 0 || runs.length > 0) && (
+        <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-1">
+          {rows.length > 0 && (
+            <p className="type-small text-ink">
+              <span className="tabular">{rows.length.toLocaleString()}</span> compan{rows.length === 1 ? "y" : "ies"}, checked on every scan.
+            </p>
           )}
-        </header>
-      )}
-
-      {quiet.length > 0 && (
-        <div className="flex flex-wrap items-center gap-3 border-b border-line bg-warning-subtle/30 px-4 py-2.5 type-small">
-          <Clock className="size-4 shrink-0 text-warning-text" />
-          <p className="min-w-0 flex-1">
-            <b>
-              {quiet.length} compan{quiet.length === 1 ? "y has" : "ies have"} had no jobs for you
-            </b>{" "}
-            <span className="text-muted">
-              in {QUIET_SCANS}+ scans in a row over {QUIET_DAYS}+ days{oldestQuiet ? ` (some since ${formatDate(oldestQuiet)})` : ""}. Removing them keeps scans quick; jobs there still reach your
-              Radar from the directory.
-            </span>
-          </p>
-          <Button size="sm" onClick={() => onRemoveMany(quiet.map((x) => x.key))} aria-label={`Remove ${quiet.length} quiet compan${quiet.length === 1 ? "y" : "ies"}`}>
-            Remove {quiet.length}
-          </Button>
+          <span className="ml-auto flex flex-wrap items-center gap-x-4">
+            {runs[0] && (
+              <TopLink icon={<Clock className="size-3.5" />} expanded={panel === "runs"} controls={runsId} onClick={() => toggle("runs")}>
+                Last scan {timeAgo(runs[0].startedAt)}
+                {failedLast > 0 && <span className="text-danger-text"> · {failedLast} failed</span>}
+              </TopLink>
+            )}
+            {hidden.length > 0 && (
+              <TopLink icon={<EyeOff className="size-3.5" />} expanded={panel === "hidden"} controls={hiddenId} onClick={() => toggle("hidden")}>
+                {hidden.length} hidden
+              </TopLink>
+            )}
+          </span>
         </div>
       )}
 
-      {rows.length === 0 ? (
-        <p className="px-4 py-6 type-small text-muted">{empty ?? "You haven't added any companies yet."}</p>
-      ) : (
-        <>
-          {/* Phones: one card per company. */}
-          <ul className="divide-y divide-line md:hidden">
-            {sorted.map((x) => (
-              <li key={x.r.id} className={cx("flex items-start gap-3 px-4 py-3 type-small", x.isNew && "bg-inset")}>
-                <div className="min-w-0 flex-1 space-y-1.5">
-                  <NameCell x={x} />
-                  <ScanHistory history={x.history} />
-                  <Status row={x} onScan={onScan} scanning={scanning} />
-                </div>
-                <IconButton label={`Remove ${companyLabel(x.r)}`} onClick={() => onRemove(x.key)} className="-mr-1 shrink-0 hover:text-danger-text">
-                  <X className="size-4" />
-                </IconButton>
-              </li>
-            ))}
-          </ul>
-          <div className="hidden md:block">
-            <table className="w-full type-small">
-              <thead className="border-b border-line text-left type-label text-muted">
-                <tr>
-                  <th className="px-4 py-2.5 font-medium">Company</th>
-                  <th className="px-3 py-2.5 font-medium">Recent scans</th>
-                  <th className="px-3 py-2.5 font-medium">Status</th>
-                  <th className="w-10 px-2 py-2.5">
-                    <span className="sr-only">Remove</span>
-                  </th>
-                </tr>
-              </thead>
-              <tbody>
-                {sorted.map((x) => (
-                  <tr key={x.r.id} className={cx("border-b border-line last:border-b-0", x.isNew && "bg-inset")}>
-                    <td className="px-4 py-2.5">
-                      <NameCell x={x} />
-                    </td>
-                    <td className="px-3 py-2.5">
-                      <ScanHistory history={x.history} />
-                    </td>
-                    <td className="px-3 py-2.5">
-                      <Status row={x} onScan={onScan} scanning={scanning} />
-                    </td>
-                    <td className="px-2 py-2.5 text-right">
-                      <IconButton label={`Remove ${companyLabel(x.r)}`} onClick={() => onRemove(x.key)} className="hover:text-danger-text">
-                        <X className="size-4" />
-                      </IconButton>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </>
+      {panel === "runs" && meta && <RecentRuns meta={meta} id={runsId} />}
+      {panel === "hidden" && hidden.length > 0 && <HiddenPanel hidden={hidden} onShowAgain={onShowAgain} id={hiddenId} />}
+
+      {rows.length > 0 && (
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <ChipGroup label="Show">
+            <Chip pressed={active === "all"} count={counts.all} onClick={() => setFilter("all")}>
+              All
+            </Chip>
+            <Chip pressed={active === "attention"} count={counts.attention} onClick={() => setFilter("attention")}>
+              Needs attention
+            </Chip>
+            {counts.quiet > 0 && (
+              <Chip pressed={active === "quiet"} count={counts.quiet} onClick={() => setFilter("quiet")}>
+                Quiet
+              </Chip>
+            )}
+            <Chip pressed={active === "new"} count={counts.new} onClick={() => setFilter("new")}>
+              Not checked yet
+            </Chip>
+          </ChipGroup>
+          <span className="ml-auto inline-flex shrink-0 items-center gap-2 type-small text-muted">
+            <label htmlFor={`${ids}-sort`}>Sort</label>
+            <Select id={`${ids}-sort`} value={sort} onChange={(e) => setSort(e.target.value as Sort)}>
+              <option value="attention">Needs attention first</option>
+              <option value="name">A to Z</option>
+              <option value="recent">Recently added</option>
+            </Select>
+          </span>
+        </div>
       )}
-    </Card>
+
+      {removed ? (
+        <div role="status" className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2 rounded-md border border-line bg-raised px-4 py-3 type-small">
+          <p>
+            Removed {removed.length} quiet compan{removed.length === 1 ? "y" : "ies"}. You can add {removed.length === 1 ? "it" : "them"} back any time.
+          </p>
+          {onRestore && (
+            <Button size="sm" onClick={undo}>
+              <Undo2 className="size-3.5" /> Undo
+            </Button>
+          )}
+        </div>
+      ) : (
+        quiet.length > 0 && (
+          <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2 rounded-md border border-line bg-raised px-4 py-3 type-small">
+            <p className="max-w-[80ch]">
+              {quiet.length} compan{quiet.length === 1 ? "y has" : "ies have"} had nothing for you in {quiet.length === 1 ? "its" : "their"} last {QUIET_SCANS} scans. Removing{" "}
+              {quiet.length === 1 ? "it" : "them"} keeps scans quick.
+            </p>
+            <span className="flex gap-2">
+              <Button size="sm" onClick={() => setFilter("quiet")} aria-pressed={active === "quiet"}>
+                Review {quiet.length}
+              </Button>
+              <Button size="sm" onClick={removeQuiet} aria-label={`Remove ${quiet.length} quiet compan${quiet.length === 1 ? "y" : "ies"}`}>
+                Remove {quiet.length}
+              </Button>
+            </span>
+          </div>
+        )
+      )}
+
+      <Card className="overflow-hidden">
+        {rows.length === 0 ? (
+          <p className="px-4 py-6 type-small text-muted">{empty ?? "You haven't added any companies yet."}</p>
+        ) : items.length === 0 ? (
+          <p className="flex flex-wrap items-center gap-x-2 px-4 py-6 type-small text-muted">
+            {q ? `None of your companies match “${query.trim()}”.` : active === "attention" ? "Every company answered on the last scan." : "Nothing here."}
+            {active !== "all" && (
+              <button type="button" className="min-h-6 type-label text-ink underline underline-offset-2 hover:text-muted" onClick={() => setFilter("all")}>
+                Show all
+              </button>
+            )}
+          </p>
+        ) : (
+          <>
+            {/* Phones: one row per company, the bars beside the name. */}
+            <ul className="divide-y divide-line md:hidden">
+              {items.map((x) => (
+                <li key={x.r.id} className={cx("flex items-start gap-3 py-2 pl-4 pr-2 type-small", x.isNew && "bg-inset")}>
+                  <div className="min-w-0 flex-1 space-y-1 py-1">
+                    <div className="flex items-center justify-between gap-3">
+                      <NameCell x={x} />
+                      <ScanBars bars={x.bars} />
+                    </div>
+                    {status(x)}
+                  </div>
+                  {remove(x, "shrink-0")}
+                </li>
+              ))}
+            </ul>
+            <div className="hidden md:block">
+              <table className="w-full type-small">
+                <thead className="border-b border-line text-left type-label text-muted">
+                  <tr>
+                    <th className="px-4 py-2.5 font-medium">Company</th>
+                    <th className="w-32 px-3 py-2.5 font-medium">Last {Math.min(5, Math.max(1, runs.length))} scans</th>
+                    <th className="px-3 py-2.5 font-medium">Status</th>
+                    <th className="w-10 px-2 py-2.5">
+                      <span className="sr-only">Remove</span>
+                    </th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {items.map((x) => (
+                    <tr key={x.r.id} className={cx("border-b border-line last:border-b-0", x.isNew && "bg-inset")}>
+                      <td className="px-4 py-2.5">
+                        <NameCell x={x} />
+                      </td>
+                      <td className="px-3 py-2.5">
+                        <ScanBars bars={x.bars} />
+                      </td>
+                      <td className="px-3 py-2.5">{status(x)}</td>
+                      <td className="px-2 py-2.5 text-right">{remove(x)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </>
+        )}
+        {rows.length > 0 && (
+          <div className="space-y-2 border-t border-line px-4 py-2.5">
+            {shown.length > MY_PAGE ? <Pagination page={at} pageSize={MY_PAGE} total={shown.length} onPage={setPage} /> : null}
+            {runs.length > 0 && <Legend />}
+          </div>
+        )}
+      </Card>
+    </div>
+  );
+}
+
+/** A quiet link at the top right that opens its panel in place. */
+function TopLink({ icon, expanded, controls, onClick, children }: { icon: ReactNode; expanded: boolean; controls: string; onClick: () => void; children: ReactNode }) {
+  return (
+    <button
+      type="button"
+      aria-expanded={expanded}
+      aria-controls={controls}
+      onClick={onClick}
+      className="inline-flex min-h-8 items-center gap-1.5 type-small text-muted underline-offset-2 hover:text-ink hover:underline"
+    >
+      {icon}
+      <span>{children}</span>
+    </button>
   );
 }
 
@@ -254,7 +390,7 @@ export function MyCompanies({
 function NameCell({ x }: { x: Row }) {
   const name = companyLabel(x.r);
   return (
-    <div className="flex items-center gap-1.5 font-medium">
+    <div className="flex min-w-0 items-center gap-1.5 font-medium">
       <a
         href={x.radar}
         onClick={() => window.scrollTo({ top: 0 })}
@@ -269,84 +405,105 @@ function NameCell({ x }: { x: Row }) {
           href={safeUrl(x.r.input)}
           target="_blank"
           rel="noreferrer"
-          className="inline-flex size-6 items-center justify-center rounded-md text-muted hover:text-ink"
+          className="inline-flex size-6 shrink-0 items-center justify-center rounded-md text-muted hover:text-ink"
           aria-label={`${name} careers page`}
         >
           <ExternalLink className="size-3.5" />
         </a>
       )}
-      {x.isNew && <span className="type-small font-normal text-muted">new</span>}
     </div>
   );
 }
 
-function Status({ row, onScan, scanning }: { row: Row; onScan?: () => void; scanning?: boolean }) {
-  const { last, r, isNew, quiet } = row;
-  const note = (text: string) => <span className="type-small text-muted">{text}</span>;
-  if (isNew) return note(r.state === "soon" ? "Not supported yet" : "Not saved yet");
-  if (!last) return note(r.state === "soon" ? "Not supported yet" : "Not scanned yet");
-  if (last.h.unsupported) return note(`Not supported yet (${atsName(last.h.ats)})`);
-  if (!last.h.ok)
-    return (
-      <div className="space-y-1">
-        <div className="flex flex-wrap items-center gap-2">
-          <BoardStatus state="broken" />
-          {onScan && (
-            <button
-              type="button"
-              className="inline-flex min-h-6 items-center gap-1 type-label text-ink underline underline-offset-2 hover:text-muted disabled:opacity-50"
-              onClick={onScan}
-              disabled={scanning}
-            >
-              <RefreshCw className="size-3" /> Retry
-            </button>
-          )}
-        </div>
-        {last.h.error && (
-          <details className="max-w-80 type-meta text-muted">
-            <summary className="cursor-pointer">Technical details</summary>
-            {last.h.error}
-          </details>
-        )}
-      </div>
-    );
-  // Board status (Healthy or Dormant) as shape + color + word, then the facts in plain text.
-  return (
-    <span className="flex flex-wrap items-center gap-x-2 gap-y-1">
-      <BoardStatus state={last.h.jobsFound > 0 ? "healthy" : "dormant"} />
-      <span className="type-small text-muted">{isQuiet(quiet) ? `Nothing for you since ${formatDate(quiet.since)}` : `Scanned ${timeAgo(last.at)}`}</span>
+const linkClass = "inline-flex min-h-6 items-center gap-1 type-label text-ink underline underline-offset-2 hover:text-muted disabled:opacity-50";
+
+/** Words only when something is wrong, each with what to do; a quiet company says so quietly. Healthy rows: nothing. */
+function Status({ problem, quiet, onScan, scanning, onPasteLink }: { problem: Problem; quiet?: Quiet; onScan?: () => void; scanning?: boolean; onPasteLink?: () => void }) {
+  const line = (word: string, detail?: string, action?: ReactNode, tone: "danger" | "muted" = "muted") => (
+    <span className="flex flex-wrap items-center gap-x-2 gap-y-0.5">
+      <span className={cx("font-medium", tone === "danger" ? "text-danger-text" : "text-ink")}>{word}</span>
+      {detail && <span className="text-muted">{detail}</span>}
+      {action}
     </span>
   );
+  if (!problem) return quiet ? <span className="text-muted">Nothing for you in the last {quiet.scans} scans</span> : null;
+  switch (problem.kind) {
+    case "notFound":
+      return line(
+        "Careers page not found",
+        `since ${shortDate(problem.since)}`,
+        onPasteLink && (
+          <button type="button" className={linkClass} onClick={onPasteLink}>
+            Paste new link
+          </button>
+        ),
+        "danger",
+      );
+    case "notAnswering":
+      return line(
+        "Not answering",
+        problem.scans > 1 ? `since ${shortDate(problem.since)}` : "on the last scan",
+        onScan && (
+          <button type="button" className={linkClass} onClick={onScan} disabled={scanning}>
+            <RefreshCw className="size-3" /> Check again
+          </button>
+        ),
+        "danger",
+      );
+    case "cantRead":
+      return line("Can't read this hiring system yet");
+    case "notChecked":
+      return line("Not checked yet", problem.afterLastScan ? "Added after the last scan" : "Checked on your next scan");
+  }
 }
 
-/** The latest scans: how many jobs, matches, and companies scanned beyond yours. Collapsed by default. */
-export function RecentRuns({ meta }: { meta: DataMeta }) {
+/** The latest scans: when, how many companies, how many failed, how long. Opened from "Last scan" at the top. */
+export function RecentRuns({ meta, id }: { meta: DataMeta; id?: string }) {
   if (!meta.runs.length) return null;
   return (
-    <details className="group overflow-hidden rounded-md border border-line bg-raised">
-      <summary className="flex min-h-11 cursor-pointer items-center gap-2 px-4 py-2.5 type-small font-semibold">
-        Recent scans <span className="tabular font-normal text-muted">({Math.min(10, meta.runs.length)})</span>
-        {meta.runs[0] && <span className="ml-auto type-meta text-muted">Last scan {timeAgo(meta.runs[0].startedAt)}</span>}
-      </summary>
+    <Card className="overflow-hidden" id={id}>
+      <h3 className="px-4 pt-3 pb-2 type-small font-semibold">Recent scans</h3>
       <ul className="divide-y divide-line border-t border-line type-small">
         {meta.runs.slice(0, 10).map((r) => {
           const failed = r.health.filter((h) => !h.ok && !h.unsupported).length;
           const secs = (Date.parse(r.finishedAt) - Date.parse(r.startedAt)) / 1000;
           return (
             <li key={r.startedAt} className="flex flex-wrap items-center gap-x-4 gap-y-1 px-4 py-2">
-              <span className="w-36 text-muted">{formatDateTime(r.startedAt)}</span>
-              <span className="tabular text-muted">{r.jobsFound} jobs</span>
-              <span className="tabular text-muted">{r.matches} matches</span>
-              <span className={cx("tabular", r.newMatches > 0 ? "font-semibold text-ink" : "text-muted")}>{r.newMatches} new</span>
-              <span className="tabular text-muted">{r.closed} closed</span>
-              {!!r.checked && <span className="tabular text-muted">+{r.checked.toLocaleString()} more companies scanned</span>}
-              <span className="tabular text-muted">{secs.toFixed(0)}s</span>
-              {failed > 0 && <span className="tabular text-danger-text">{failed} failed</span>}
-              {r.partial && <span className="text-muted">Stopped before the end</span>}
+              <span className="w-32 text-muted">{formatDateTime(r.startedAt)}</span>
+              <span className="tabular min-w-0 flex-1">
+                {r.health.length.toLocaleString()} compan{r.health.length === 1 ? "y" : "ies"} checked
+                {failed > 0 && <span className="text-danger-text">, {failed} failed</span>}.{r.partial && <span className="text-muted"> Stopped before the end.</span>}
+              </span>
+              <span className="tabular text-muted">{secs.toFixed(0)} s</span>
             </li>
           );
         })}
       </ul>
-    </details>
+    </Card>
+  );
+}
+
+/** Hidden companies, opened from "N hidden" at the top, each with Show again. */
+function HiddenPanel({ hidden, onShowAgain, id }: { hidden: HiddenCompany[]; onShowAgain?: (h: HiddenCompany) => void; id: string }) {
+  return (
+    <Card className="p-4" id={id}>
+      <h3 className="type-small font-semibold">Hidden companies</h3>
+      <p className="mt-0.5 type-small text-muted">Their jobs don't show on your Radar, and scans skip them.</p>
+      <ul className="mt-3 flex flex-wrap gap-1.5">
+        {hidden.map((h) => {
+          const name = h.name ? displayName(h.name) : h.key;
+          return (
+            <li key={h.key ?? h.name} className="inline-flex h-8 items-center gap-2 rounded-md border border-line pl-2.5 pr-1.5 type-small">
+              <span className="font-medium">{name}</span>
+              {onShowAgain && (
+                <button type="button" className="min-h-6 type-label text-ink underline underline-offset-2 hover:text-muted" aria-label={`Show ${name} again`} onClick={() => onShowAgain(h)}>
+                  Show again
+                </button>
+              )}
+            </li>
+          );
+        })}
+      </ul>
+    </Card>
   );
 }
