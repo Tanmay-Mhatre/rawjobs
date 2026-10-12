@@ -1,5 +1,5 @@
 // @vitest-environment happy-dom
-import { cleanup, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { ServerNotices } from "../src/components/Updates";
 import { UpdatePill } from "../src/components/WhatsNew";
@@ -25,11 +25,12 @@ const CHANGELOG = {
   ],
 };
 
-/** The local API: /api/health answers (or not), /api/update says `status`, the changelog CHANGELOG. */
-function api(status: UpdateStatus, healthy = true) {
+/** The local API: /api/health answers (or not), /api/update says `status` (and Update now `applied`), the changelog CHANGELOG. */
+function api(status: UpdateStatus, healthy = true, applied: UpdateStatus = status) {
   vi.stubGlobal(
     "fetch",
     vi.fn(async (url: string) => {
+      if (url.startsWith("/api/update/apply")) return new Response(JSON.stringify(applied));
       if (url.startsWith("/api/health")) {
         if (!healthy) throw new TypeError("Failed to fetch");
         return new Response(JSON.stringify({ ok: true, version: status.current }));
@@ -43,25 +44,39 @@ function api(status: UpdateStatus, healthy = true) {
 afterEach(() => {
   cleanup();
   vi.unstubAllGlobals();
+  sessionStorage.clear();
 });
 
 describe("ServerNotices", () => {
-  it("shows what's new once after an update: every version since the one you had, tagged", async () => {
+  it("shows what's new once after an update: every version since the one you had, grouped, tagged", async () => {
     api({ ...base, lastUpdate: { from: "0.2.0", to: "0.3.0", ok: true, at: "", notes: "" } });
     render(<ServerNotices />);
-    expect(await screen.findByText("What's new in RawJobs")).toBeTruthy();
-    expect(await screen.findByText("Deadlines on saved jobs")).toBeTruthy();
+    expect(await screen.findByRole("heading", { name: "What's new since 0.2.0" })).toBeTruthy();
+    expect(screen.getByText("2 versions")).toBeTruthy();
+    expect((await screen.findAllByText("Deadlines on saved jobs")).length).toBeGreaterThan(0);
     // The version in between that was skipped, but not the one you already had.
-    expect(screen.getByText("Alerts after a restart")).toBeTruthy();
+    expect(screen.getAllByText("Alerts after a restart").length).toBeGreaterThan(0);
     expect(screen.queryByText("Older, already seen")).toBeNull();
     expect(screen.getAllByText("New").length).toBeGreaterThan(0);
-    expect(screen.getByText("Fixed")).toBeTruthy();
+    expect(screen.getAllByText("Fixed").length).toBeGreaterThan(0);
+    expect(screen.getByRole("button", { name: "Got it" })).toBeTruthy();
   });
 
   it("says when an update went back, and that nothing of yours changed", async () => {
     api({ ...base, current: "0.2.0", lastUpdate: { from: "0.2.0", to: "0.3.0", ok: false, at: "" } });
     render(<ServerNotices />);
-    expect((await screen.findByRole("alert")).textContent).toMatch(/update to 0\.3\.0 didn't work, so you're still on 0\.2\.0\..*Nothing of yours changed/);
+    expect(await screen.findByRole("heading", { name: "The update to 0.3.0 didn't start" })).toBeTruthy();
+    expect(screen.getByText(/Went back to 0\.2\.0/)).toBeTruthy();
+    expect(screen.getByText("Nothing changed. Your data is as it was.")).toBeTruthy();
+    expect(screen.getByText(/won't offer 0\.3\.0 again/)).toBeTruthy();
+  });
+
+  it("says Updating to the new version while RawJobs restarts after you clicked Update", async () => {
+    sessionStorage.setItem("rawjobs.updatingTo", JSON.stringify({ from: "0.3.0", to: "0.3.1", at: Date.now() }));
+    api(base, false);
+    render(<ServerNotices />);
+    expect(await screen.findByRole("heading", { name: "Updating to 0.3.1" })).toBeTruthy();
+    expect(screen.getByText("Back in a few seconds. The page reloads by itself.")).toBeTruthy();
   });
 
   it("shows a new version as the Update pill, and asks for the install line when this one is too old", async () => {
@@ -124,6 +139,25 @@ describe("ServerNotices", () => {
     );
     expect((await screen.findByRole("button", { name: /Update after scan/ })).hasAttribute("disabled")).toBe(true);
     expect(screen.queryByRole("heading", { name: /Update to RawJobs/ })).toBeNull();
+  });
+
+  it("answers a click that couldn't get the update right under the pill, with Try again", async () => {
+    const ready = { ...base, available: { version: "0.3.1", notes: "", changes: [{ type: "fixed" as const, text: "Alerts" }], critical: false, date: "", major: false, ready: true } };
+    api(ready, true, { ...ready, error: "Couldn't reach GitHub to get the update. Check your internet connection, then try again." });
+    render(<UpdatePill />);
+    fireEvent.click(await screen.findByRole("button", { name: /Update to 0\.3\.1/ }));
+    expect(await screen.findByText("Couldn't update to 0.3.1")).toBeTruthy();
+    expect(screen.getByText("Nothing changed. You're still on 0.3.0.")).toBeTruthy();
+    expect(screen.getByRole("button", { name: /Try again/ })).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Dismiss" }));
+    expect(screen.queryByText("Couldn't update to 0.3.1")).toBeNull();
+  });
+
+  it("previews what's in the update on focus, without needing a click", async () => {
+    api({ ...base, available: { version: "0.3.1", notes: "", changes: [{ type: "new" as const, text: "Deadlines" }], critical: false, date: "", major: false, ready: true } });
+    render(<UpdatePill />);
+    fireEvent.focus(await screen.findByRole("button", { name: /Update to 0\.3\.1/ }));
+    expect((await screen.findByRole("tooltip")).textContent).toMatch(/RawJobs 0\.3\.1 is ready.*Deadlines.*Click to update/);
   });
 
   it("says it's reconnecting while the server is away", async () => {

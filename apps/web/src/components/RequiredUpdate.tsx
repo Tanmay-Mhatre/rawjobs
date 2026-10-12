@@ -1,12 +1,11 @@
-import { type ReleaseChange, releaseItems } from "@rawjobs/core/release-notes";
-import { ArrowRight, Check, ChevronDown, CirclePause, Clock, Copy, Download, Info, LoaderCircle, RefreshCw, ShieldCheck, Terminal, TriangleAlert } from "lucide-react";
+import type { ReleaseChange } from "@rawjobs/core/release-notes";
+import { Check, CirclePause, Clock, Copy, Download, Info, LoaderCircle, RefreshCw, ShieldCheck } from "lucide-react";
 import { type ReactNode, useEffect, useRef, useState } from "react";
-import mark from "../design/logos/rawjobs-mark.svg";
 import { INSTALL_LINE, type UpdateStatus } from "../lib/update";
 import { Dialog } from "./Dialog";
 import { toast } from "./Toast";
-import { Button, Card, cx } from "./ui";
-import { ChangeTag } from "./WhatsNew";
+import { Button, Card } from "./ui";
+import { Anchor, ChangeRows, Head, Points, SeeAll, sortedItems } from "./UpdateParts";
 
 /**
  * A required update (a release tagged "Update: mandatory"): a window that closes only by updating,
@@ -44,7 +43,7 @@ export function RequiredUpdate({ status, update, busy }: { status: UpdateStatus;
   else if (failed)
     body = (
       <>
-        <Head anchor={<Anchor kind="alert" />} title="The update didn't finish" from={from} to={to} label="Not installed" />
+        <Head id="required-update-title" anchor={<Anchor kind="alert" />} title="The update didn't finish" from={from} to={to} label="Not installed" />
         <p id="required-update-desc" role="alert" className="mt-4 type-body">
           {status.error}
         </p>
@@ -76,7 +75,7 @@ export function RequiredUpdate({ status, update, busy }: { status: UpdateStatus;
   else if (updating)
     body = (
       <>
-        <Head anchor={<Anchor kind="mark" busy />} title={`Updating to ${to}`} from={from} to={to} label="Required" />
+        <Head id="required-update-title" anchor={<Anchor kind="mark" busy />} title={`Updating to ${to}`} from={from} to={to} label="Required" />
         <p id="required-update-desc" role="status" className="mt-4 type-body">
           Restarting RawJobs… The page reloads by itself.
         </p>
@@ -96,7 +95,7 @@ export function RequiredUpdate({ status, update, busy }: { status: UpdateStatus;
   else
     body = (
       <>
-        <Head anchor={<Anchor kind="mark" />} title={`Update to RawJobs ${to}`} from={from} to={to} label="Required" />
+        <Head id="required-update-title" anchor={<Anchor kind="mark" />} title={`Update to RawJobs ${to}`} from={from} to={to} label="Required" />
         <p id="required-update-desc" className="mt-4 type-body">
           This update is required to keep using RawJobs.
         </p>
@@ -123,110 +122,20 @@ export function RequiredUpdate({ status, update, busy }: { status: UpdateStatus;
   );
 }
 
-/** The icon slot: the app icon (with a spinner while updating), an alert, or a terminal. */
-function Anchor({ kind, busy = false }: { kind: "mark" | "alert" | "terminal"; busy?: boolean }) {
-  if (kind === "mark")
-    return (
-      <span className="relative size-10 shrink-0 sm:size-12">
-        {/* The border keeps the icon's dark square visible on a dark card. */}
-        <img src={mark} alt="" className="size-full rounded-md border border-control" />
-        {busy && (
-          <span className="absolute -right-1.5 -bottom-1.5 grid size-6 place-items-center rounded-md border border-control bg-raised text-ink">
-            <LoaderCircle className="size-3.5 animate-spin motion-reduce:animate-none" aria-hidden />
-          </span>
-        )}
-      </span>
-    );
-  return (
-    <span
-      className={cx(
-        "grid size-10 shrink-0 place-items-center rounded-md border sm:size-12",
-        kind === "alert" ? "border-danger-text bg-danger-subtle text-danger-text" : "border-control bg-inset text-ink",
-      )}
-    >
-      {kind === "alert" ? <TriangleAlert className="size-6" aria-hidden /> : <Terminal className="size-6" aria-hidden />}
-    </span>
-  );
-}
-
-/** The icon, the title, and "0.5.3 → 0.6.0 · Required". */
-function Head({ anchor, title, from, to, label }: { anchor: ReactNode; title: string; from: string; to: string; label: string }) {
-  return (
-    <div className="flex items-center gap-4">
-      <span aria-hidden>{anchor}</span>
-      <div className="min-w-0">
-        <h2 id="required-update-title" className="type-heading text-balance">
-          {title}
-        </h2>
-        <p className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 type-small text-muted tabular-nums">
-          <span>{from}</span>
-          {to && (
-            <>
-              <ArrowRight className="size-3.5" aria-label="to" />
-              <span className="font-medium text-ink">{to}</span>
-            </>
-          )}
-          <span aria-hidden>·</span>
-          <span>{label}</span>
-        </p>
-      </div>
-    </div>
-  );
-}
-
-type Icon = typeof Clock;
-function Points({ items }: { items: [Icon, string][] }) {
-  return (
-    <ul className="mt-4 grid gap-2">
-      {items.map(([I, text]) => (
-        <li key={text} className="flex items-start gap-2 type-small text-ink">
-          <I className="mt-0.5 size-4 shrink-0 text-muted" aria-hidden />
-          <span>{text}</span>
-        </li>
-      ))}
-    </ul>
-  );
-}
-
-const ORDER: Record<ReleaseChange["type"], number> = { new: 0, improved: 1, fixed: 2 };
-
 /** "What's new in 0.6.0": the top three changes, New first, and "See all n changes". */
 function Changes({ to, notes, changes }: { to: string; notes: string; changes?: ReleaseChange[] }) {
-  const items = releaseItems(notes, changes)
-    .map((c, i) => ({ ...c, i }))
-    .sort((x, y) => (x.type && y.type ? ORDER[x.type] - ORDER[y.type] : 0) || x.i - y.i);
+  const items = sortedItems(notes, changes);
   if (!items.length) return null;
-  const list = (xs: typeof items) => (
-    <ul className="grid gap-2">
-      {xs.map((c) => (
-        <li key={c.i} className={cx("grid items-start gap-2 type-small text-ink", c.type ? "grid-cols-[4.75rem_minmax(0,1fr)]" : "grid-cols-[0.75rem_minmax(0,1fr)]")}>
-          {c.type ? (
-            <ChangeTag type={c.type} />
-          ) : (
-            <span aria-hidden className="text-muted">
-              •
-            </span>
-          )}
-          <span className="pt-px">{c.text}</span>
-        </li>
-      ))}
-    </ul>
-  );
   return (
     <section aria-labelledby="required-update-new" className="mt-6 border-t border-hairline pt-4">
       <h3 id="required-update-new" className="mb-3 type-label text-muted">
         What's new in {to}
       </h3>
-      {list(items.slice(0, 3))}
+      <ChangeRows items={items.slice(0, 3)} />
       {items.length > 3 && (
-        <details className="group mt-2">
-          <summary className="-ml-2 inline-flex h-7 cursor-pointer list-none items-center gap-1 rounded-md px-2 type-label text-muted hover:bg-hover hover:text-ink [&::-webkit-details-marker]:hidden">
-            <span className="group-open:hidden">See all {items.length} changes</span>
-            <span className="hidden group-open:inline">Show fewer</span>
-            <ChevronDown className="size-4 transition-transform duration-150 group-open:rotate-180 motion-reduce:transition-none" aria-hidden />
-          </summary>
-          <div className="mt-2">{list(items.slice(3))}</div>
-        </details>
+        <SeeAll count={items.length}>
+          <ChangeRows items={items.slice(3)} />
+        </SeeAll>
       )}
     </section>
   );
@@ -255,7 +164,7 @@ function TooOld({ from }: { from: string }) {
     });
   return (
     <>
-      <Head anchor={<Anchor kind="terminal" />} title="Reinstall RawJobs to keep using it" from={from} to="" label="Reinstall needed" />
+      <Head id="required-update-title" anchor={<Anchor kind="terminal" />} title="Reinstall RawJobs to keep using it" from={from} to="" label="Reinstall needed" />
       <p id="required-update-desc" className="mt-4 type-body">
         {from} is too old to update by itself. Reinstalling gets the newest version and keeps your data.
       </p>
