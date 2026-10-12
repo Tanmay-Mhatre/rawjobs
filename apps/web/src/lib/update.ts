@@ -46,7 +46,40 @@ async function call(path: string, init?: RequestInit): Promise<UpdateStatus | nu
 
 export const updateStatus = () => call("/api/update");
 export const checkForUpdate = () => call("/api/update/check", { method: "POST" });
-export const updateNow = () => call("/api/update/apply", { method: "POST" });
+/**
+ * Install the waiting version (or, during a scan, once it's done). When it starts right away, the
+ * page remembers which version it's restarting into (updatingTo), so it can say "Updating to 0.6.1"
+ * while the server is away, instead of a bare "reconnecting".
+ */
+export async function updateNow(): Promise<UpdateStatus | null> {
+  const s = await call("/api/update/apply", { method: "POST" });
+  if (s?.state === "updating" && s.available) {
+    try {
+      sessionStorage.setItem(UPDATING_KEY, JSON.stringify({ from: s.current, to: s.available.version, at: Date.now() }));
+    } catch {
+      // no storage: the plain reconnecting note shows instead
+    }
+  }
+  return s;
+}
+
+const UPDATING_KEY = "rawjobs.updatingTo";
+/** The update this page started and is waiting to come back from, if any (forgotten after 5 minutes). */
+export function updatingTo(): { from: string; to: string; at: number } | null {
+  try {
+    const u = JSON.parse(sessionStorage.getItem(UPDATING_KEY) ?? "null") as { from: string; to: string; at: number } | null;
+    return u && Date.now() - u.at < 5 * 60_000 ? u : null;
+  } catch {
+    return null;
+  }
+}
+export function clearUpdatingTo(): void {
+  try {
+    sessionStorage.removeItem(UPDATING_KEY);
+  } catch {
+    // nothing to clear
+  }
+}
 export const markUpdateSeen = () => call("/api/update/seen", { method: "POST" });
 /** Add the Desktop shortcut, or repair both. */
 export const addDesktopShortcut = () => call("/api/update/shortcut", { method: "POST" });
