@@ -15,7 +15,7 @@ import {
   type UpdateRecord,
   type UpdateSettings,
 } from "@rawjobs/core/update";
-import { hasDesktopShortcut, makeShortcuts } from "./shortcuts";
+import { makeShortcuts, markShortcutNoticeSeen, shortcutState, type ShortcutState } from "./shortcuts";
 
 export type UpdateStatus = {
   /** An installed copy (from the install line), which can update itself. A checkout updates with git. */
@@ -50,7 +50,8 @@ export type UpdateStatus = {
     home: string;
     node: string;
     platform: string;
-    desktopShortcut: boolean;
+    /** The RawJobs shortcuts on this computer (null: not an installed copy). */
+    shortcuts: ShortcutState | null;
   };
 };
 
@@ -102,7 +103,7 @@ export function createUpdater(o: { home: string; isBusy: () => boolean; exit: ()
         home,
         node: process.version,
         platform: `${process.platform}-${process.arch}`,
-        desktopShortcut: installed && hasDesktopShortcut(home),
+        shortcuts: installed ? shortcutState(home) : null,
       },
     };
   }
@@ -226,9 +227,11 @@ export function createUpdater(o: { home: string; isBusy: () => boolean; exit: ()
     } else if (url === "/api/update/apply" && req.method === "POST") await apply();
     else if (url === "/api/update/seen" && req.method === "POST") markLastUpdateSeen(home);
     else if (url === "/api/update/shortcut" && req.method === "POST") {
-      const r = makeShortcuts(home, process.env.RAWJOBS_LAUNCHER!, { desktop: true, version: APP_VERSION });
-      error = r.ok && r.desktop ? undefined : `Couldn't add the Desktop shortcut${r.error ? `: ${r.error}` : "."}`;
-    } else if (url === "/api/update/settings" && req.method === "PUT") {
+      // Add to Desktop / Repair shortcuts (Settings): what came of it is in about.shortcuts.
+      makeShortcuts(home, process.env.RAWJOBS_LAUNCHER!, { desktop: true, version: APP_VERSION });
+      markShortcutNoticeSeen(home);
+    } else if (url === "/api/update/shortcut-seen" && req.method === "POST") markShortcutNoticeSeen(home);
+    else if (url === "/api/update/settings" && req.method === "PUT") {
       const b = JSON.parse((await body()) || "{}") as { mode?: unknown; channel?: unknown };
       const patch: Partial<UpdateSettings> = {};
       if (b.mode === "ask" || b.mode === "off") patch.mode = b.mode;

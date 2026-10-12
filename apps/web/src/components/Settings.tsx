@@ -18,6 +18,8 @@ import { ScanPrefsPicker } from "./ScanButton";
 import { ScheduledScans } from "./ScheduledScans";
 import { TelegramAlerts } from "./TelegramAlerts";
 import { Button, Card, cx, IconButton, Segmented, Toggle } from "./ui";
+import { useUpdateStatus } from "../lib/update";
+import { DesktopShortcutSettings } from "./DesktopShortcut";
 import { AboutRawJobs, UpdatesSettings } from "./Updates";
 
 type Props = {
@@ -85,6 +87,7 @@ export function Settings({
   const lastSave = useRef(false);
   const blockers = saveBlockers(draft).map((b) => b.message);
   const directorySize = useDirectorySize();
+  const updates = useUpdateStatus();
 
   // One-line summaries for the Profile sections; an empty one starts open so there's something to fill in.
   const summaries: Record<string, string> = {
@@ -118,9 +121,16 @@ export function Settings({
       const id = sectionFromHash();
       if (!id) return;
       if (id in summaries) setOpen((o) => new Set(o).add(id));
-      // After the tab has rendered (and anything that scrolls to the top on a tab change).
+      // After the tab has rendered (and anything that scrolls to the top on a tab change). Some
+      // sections appear once their data loads (Desktop shortcut): keep looking for a moment.
       clearTimeout(timer);
-      timer = setTimeout(() => document.getElementById(`settings-${id}`)?.scrollIntoView({ block: "start" }), 60);
+      let tries = 0;
+      const scroll = () => {
+        const el = document.getElementById(`settings-${id}`);
+        if (el) el.scrollIntoView({ block: "start" });
+        else if (++tries < 20) timer = setTimeout(scroll, 100);
+      };
+      timer = setTimeout(scroll, 60);
     };
     go();
     window.addEventListener("hashchange", go);
@@ -274,6 +284,11 @@ export function Settings({
             <Section id="version" title="RawJobs" hint="Which version you have, and what's newer.">
               <AboutRawJobs />
             </Section>
+            {updates.status?.installed && updates.status.about?.shortcuts && (
+              <Section id="shortcut" title="Desktop shortcut" hint="Opens RawJobs at the right address, even after a restart. No address to remember.">
+                <DesktopShortcutSettings status={updates.status} setStatus={updates.setStatus} />
+              </Section>
+            )}
             <Section id="update" title="Updates" hint="New versions come from RawJobs' releases on GitHub, and install only when you say.">
               <UpdatesSettings />
             </Section>

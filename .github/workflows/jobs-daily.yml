@@ -124,19 +124,31 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          published=$(gh release list -R "$DATA_REPO" --limit 100 --json tagName,publishedAt -q '[.[] | select((.tagName | startswith("directory-")) and (.tagName | endswith("-shared") | not))] | max_by(.publishedAt) | .publishedAt')
-          age_days=$(( ( $(date -u +%s) - $(date -u -d "$published" +%s) ) / 86400 ))
-          echo "Latest directory release: $published ($age_days days old)"
-          [ "$age_days" -gt 8 ] || exit 0
+          published=$(bash scripts/catalog/watchdog.sh latest)
+          # None found counts as stale (an empty date would read as today and never alert).
+          if [ -n "$published" ]; then
+            age_days=$(( ( $(date -u +%s) - $(date -u -d "$published" +%s) ) / 86400 ))
+            echo "Latest directory release: $published ($age_days days old)"
+            [ "$age_days" -gt 8 ] || exit 0
+            what="The latest directory release is $age_days days old (published $published)"
+          else
+            echo "No weekly directory release found."
+            what="No weekly directory release (directory-YYYY-MM-DD) was found"
+          fi
           title="Directory is stale"
           if [ -z "$(gh issue list -R "${{ github.repository }}" --state open --search "\"$title\" in:title" --json number -q '.[].number')" ]; then
-            gh issue create -R "${{ github.repository }}" --title "$title" --body "The latest directory release is $age_days days old (published $published); the weekly rebuild should publish one every Monday. Check the Directory · weekly rebuild runs: ${{ github.server_url }}/${{ github.repository }}/actions/workflows/directory-rebuild.yml"
+            gh issue create -R "${{ github.repository }}" --title "$title" --body "$what; the weekly rebuild should publish one every Monday. Check the Directory · weekly rebuild runs: ${{ github.server_url }}/${{ github.repository }}/actions/workflows/directory-rebuild.yml"
           fi
 
-      - name: Keep the schedule alive
-        # GitHub turns off scheduled workflows after 60 days without repository activity;
-        # re-enabling through the API resets that, with no commit.
+      - name: Start the weekly rebuild if it's overdue
         if: always()
         env:
           GH_TOKEN: ${{ github.token }}
-        run: gh api -X PUT "repos/${{ github.repository }}/actions/workflows/jobs-daily.yml/enable"
+        run: bash scripts/catalog/watchdog.sh rebuild
+
+      - name: Keep the schedules alive
+        # GitHub turns off scheduled workflows after 60 days without repository activity.
+        if: always()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: bash scripts/catalog/watchdog.sh keepalive
