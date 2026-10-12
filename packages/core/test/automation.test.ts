@@ -6,22 +6,19 @@ import { digest, findTelegramChat, finishedMessage, looksLikeToken, maskToken, s
 import { acquireScanLock, releaseScanLock } from "../src/scan";
 import { installSchedule, nextRunAt, readScheduledRuns, recordScheduledRun, removeSchedule, runScheduleNow, scheduleStatus, validateSchedule } from "../src/schedule";
 import type { Job } from "../src/schema";
+import { makeJob } from "./helpers";
 
 const job = (title: string, score: number, extra: Partial<Job> = {}): Job =>
-  ({
+  makeJob({
     id: `greenhouse:co:${title}`,
-    ats: "greenhouse",
     company: "Co <&>",
     title,
     location: "Dubai, UAE; Remote",
     url: `https://example.com/${encodeURIComponent(title)}`,
-    firstSeen: "2026-10-01T00:00:00Z",
-    lastSeen: "2026-10-01T00:00:00Z",
-    status: "open",
     score,
     why: { title: 30, location: 20, keywords: [], keywordPoints: 0, freshness: 10 },
     ...extra,
-  }) as Job;
+  });
 
 describe("digest", () => {
   it("says nothing when there's nothing new", () => {

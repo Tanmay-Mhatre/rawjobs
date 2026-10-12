@@ -55,10 +55,10 @@ jobs:
       - name: Deploy to Cloudflare
         # Skipped (not failed) until the two Cloudflare secrets are added.
         if: github.event_name != 'pull_request' && env.HAS_CF_TOKEN == 'true'
-        uses: cloudflare/wrangler-action@953926a2e2182532811c01a25e53647d93bf07c0 # v4.1.3
-        with:
-          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-          workingDirectory: apps/site
-          wranglerVersion: "4.147.0"
-          command: deploy
+        # npx, not cloudflare/wrangler-action: the action installs wrangler with `npm i`, which fails
+        # on the root package.json's workspace:* dependencies (EUNSUPPORTEDPROTOCOL).
+        working-directory: apps/site
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: npx --yes wrangler@4.147.0 deploy
