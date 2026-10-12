@@ -6,7 +6,7 @@ import { parseConfig } from "../src/config";
 import { mergeHistory } from "../src/diff";
 import type { RunResult } from "../src/run";
 import type { CompanyHealth, Job } from "../src/schema";
-import { readJobs, readMeta, saveRun } from "../src/store";
+import { KEEP_RUNS, readJobs, readMeta, saveRun } from "../src/store";
 
 const T0 = "2026-10-01T03:00:00.000Z";
 const T1 = "2026-10-02T03:00:00.000Z";
@@ -225,5 +225,36 @@ describe("mergeHistory: reposts", () => {
     const old = job("1", { title: "Product Manager", lastSeen: "2026-07-01T00:00:00.000Z", status: "closed" });
     const again = job("2", { title: "Product Manager", firstSeen: T1, lastSeen: T1 });
     expect(mergeHistory([old], run(T1, [again]), companies).newIds.has(again.id)).toBe(true);
+  });
+});
+
+describe("the run history in meta.json", () => {
+  let dir: string;
+  afterEach(() => rmSync(dir, { recursive: true, force: true }));
+
+  it("keeps the newest KEEP_RUNS runs, and a one-company check adds none", () => {
+    dir = mkdtempSync(join(tmpdir(), "rawjobs-"));
+    const config = parseConfig(`
+profile:
+  titles: { include: ["product manager"] }
+  locations: { include: ["dubai"] }
+companies:
+  - { name: "Acme", ats: greenhouse, slug: "acme" }
+`);
+    const at = (i: number) => new Date(Date.parse(T0) + i * 3_600_000).toISOString();
+    let stored: Job[] = [];
+    for (let i = 0; i < KEEP_RUNS + 2; i++) {
+      const r = run(at(i), [job("1", { firstSeen: T0, lastSeen: at(i) })]);
+      saveRun(dir, config, r, mergeHistory(stored, r, config.companies));
+      stored = readJobs(dir);
+    }
+    const runs = readMeta(dir)!.runs;
+    expect(runs).toHaveLength(KEEP_RUNS);
+    expect(runs[0]!.startedAt).toBe(at(KEEP_RUNS + 1));
+    expect(runs.at(-1)!.startedAt).toBe(at(2));
+
+    const check = run(at(99), [job("1", { firstSeen: T0, lastSeen: at(99) })]);
+    saveRun(dir, config, check, mergeHistory(stored, check, config.companies), { record: false });
+    expect(readMeta(dir)!.runs[0]!.startedAt).toBe(at(KEEP_RUNS + 1));
   });
 });
