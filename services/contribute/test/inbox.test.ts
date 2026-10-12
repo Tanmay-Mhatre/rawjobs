@@ -9,10 +9,12 @@ function fakeEnv(limitOk = true, extra: Partial<Env> = {}): Env & { store: Map<s
     put: async (k: string, v: string) => void store.set(k, v),
     get: async (k: string) => store.get(k) ?? null,
     delete: async (k: string) => void store.delete(k),
-    list: async ({ prefix }: { prefix: string }) => ({
-      keys: [...store.keys()].filter((k) => k.startsWith(prefix)).map((name) => ({ name })),
-      list_complete: true,
-    }),
+    list: async ({ prefix, limit = 1000, cursor }: { prefix: string; limit?: number; cursor?: string }) => {
+      const all = [...store.keys()].filter((k) => k.startsWith(prefix));
+      const start = cursor ? Number(cursor) : 0;
+      const end = start + limit;
+      return { keys: all.slice(start, end).map((name) => ({ name })), list_complete: end >= all.length, cursor: String(end) };
+    },
   };
   return { store, INBOX_TOKEN: "secret-token", LIMITER: { limit: async () => ({ success: limitOk }) }, INBOX: kv as unknown as Env["INBOX"], ...extra };
 }
@@ -158,6 +160,16 @@ describe("contribution inbox", () => {
     expect(pending.items).toHaveLength(1);
     expect(await (await post(env, "/v1/ack", { ids: [pending.items[0]!.id] }, auth)).json()).toEqual({ removed: 1 });
     expect(contributions(env)).toHaveLength(0);
+  });
+
+  it("pages past 500 with a cursor", async () => {
+    const env = fakeEnv();
+    for (let i = 0; i < 501; i++) env.store.set(`c:${String(i).padStart(4, "0")}`, JSON.stringify({ boards: [], received_at: "" }));
+    const auth = { authorization: "Bearer secret-token" };
+    const first = (await (await call(env, "/v1/pending", { headers: auth })).json()) as { items: unknown[]; more: boolean; cursor?: string };
+    expect([first.items.length, first.more, typeof first.cursor]).toEqual([500, true, "string"]);
+    const second = (await (await call(env, `/v1/pending?cursor=${first.cursor}`, { headers: auth })).json()) as { items: { id: string }[]; more: boolean; cursor?: string };
+    expect([second.items.map((i) => i.id), second.more, second.cursor]).toEqual([["c:0500"], false, undefined]);
   });
 
   it("hands a damaged record over empty instead of failing the whole list", async () => {
