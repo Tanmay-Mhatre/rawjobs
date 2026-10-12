@@ -1,5 +1,8 @@
 import { createHash } from "node:crypto";
-import type { FeedRow } from "./job-feed";
+import type { Workplace } from "./schema";
+
+/** [ats job id, title, location, workplace, posted date (YYYY-MM-DD) or null] */
+export type FeedRow = [string, string, string, Workplace, string | null];
 
 /**
  * The job feed's second format (schema 2): one full copy for new installs plus a small change file per

@@ -7,7 +7,7 @@
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { careersUrl, guessName, isPlaceholderBoard, type DetectedCompany } from "../../packages/core/src/index";
+import { careersUrl, guessName, isPlaceholderBoard, type DetectedCompany } from "@rawjobs/core";
 import { readChecks, type CheckRow } from "./lib/checks";
 import { readDenylist } from "./lib/denylist";
 

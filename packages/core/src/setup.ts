@@ -6,11 +6,14 @@ import { CONFIG_CANDIDATES, LEGACY_CONFIG_CANDIDATES } from "./config";
 import { careersUrl, companyKey, detectCompany, getConnector } from "./connectors";
 import { HttpClient, HttpError } from "./http";
 import { RESUME_PATH } from "./resume";
-import { ConfigSchema, type AtsType, type Config, type Profile } from "./schema";
+import { ConfigSchema, type Profile } from "./schema";
 import { passesGates } from "./score";
 import { configToYaml } from "./yaml-writer";
 import { defaultDataDir, rawjobsHome } from "./paths";
 import { writeFileAtomic } from "./atomic";
+import type { CompanyCheck, SaveResult, SetupStatus } from "./protocol";
+
+export type { CompanyCheck, SaveResult, SetupStatus } from "./protocol";
 
 /** The user's own config. The shipped rawjobs.config.example.yaml is only an example. */
 export const PERSONAL_CONFIG = CONFIG_CANDIDATES[0]!;
@@ -21,22 +24,6 @@ export function personalConfigPath(cwd = rawjobsHome()): string {
   const legacy = resolve(cwd, LEGACY_CONFIG_CANDIDATES[0]!);
   return !existsSync(path) && existsSync(legacy) ? legacy : path;
 }
-
-export type SetupStatus = {
-  configPath: string;
-  /** A personal config file exists. */
-  isPersonal: boolean;
-  valid: boolean;
-  /** Human-readable validation problems when the personal config is broken. */
-  errors?: string;
-  config?: Config;
-  /** Whatever could be parsed from a broken config, for the wizard to prefill from. */
-  raw?: unknown;
-  /** A run has written data. */
-  hasData: boolean;
-  /** A master resume is saved (profile/resume.md). */
-  hasResume: boolean;
-};
 
 export function setupStatus(cwd = rawjobsHome(), dataDir = defaultDataDir(cwd)): SetupStatus {
   const configPath = personalConfigPath(cwd);
@@ -55,8 +42,6 @@ export function setupStatus(cwd = rawjobsHome(), dataDir = defaultDataDir(cwd)):
     ? { configPath, isPersonal: true, valid: true, config: parsed.data, hasData, hasResume }
     : { configPath, isPersonal: true, valid: false, errors: z.prettifyError(parsed.error), raw, hasData, hasResume };
 }
-
-export type SaveResult = { ok: true; path: string } | { ok: false; errors: string; issues: { path: string; message: string }[] };
 
 /** Validate a config object (from the wizard) and write it as commented YAML. */
 export function saveConfig(input: unknown, cwd = rawjobsHome()): SaveResult {
@@ -84,37 +69,6 @@ export function resetConfig(cwd = rawjobsHome()): { ok: true; backup: string | n
   renameSync(path, backup);
   return { ok: true, backup };
 }
-
-export type CompanyCheck = {
-  input: string;
-  /**
-   * live: board has open jobs · dormant: board exists, no openings right now · soon: recognised
-   * ATS, connector not built yet · error: recognised but the feed failed (usually a wrong link) ·
-   * unknown: not a careers site we recognise.
-   */
-  status: "live" | "dormant" | "soon" | "error" | "unknown";
-  /** Directory key ("ats:slug"). */
-  key?: string;
-  name?: string;
-  /** Where the name came from: the hiring system itself, our company directory, or the link. */
-  name_source?: "ats" | "directory" | "slug";
-  ats?: AtsType;
-  slug?: string;
-  region?: "global" | "eu";
-  shard?: string;
-  site?: string;
-  careers_url?: string;
-  open_jobs?: number;
-  /** Most common job locations, most frequent first. */
-  top_locations?: string[];
-  sample_titles?: string[];
-  /** Open jobs that pass the user's title and location filters (when a profile is given). */
-  matches?: number;
-  match_examples?: string[];
-  /** Already in the company directory. */
-  in_directory?: boolean;
-  error?: string;
-};
 
 export type CheckOptions = {
   http?: HttpClient;

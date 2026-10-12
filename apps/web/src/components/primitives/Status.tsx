@@ -1,4 +1,4 @@
-import { cx } from "../ui";
+import { cx } from "../../lib/cx";
 
 /** The square glyphs shared by Status and ScoreBadge: full, half, empty, slashed. Never a dot. */
 export type GlyphShape = "full" | "half" | "empty" | "slash";

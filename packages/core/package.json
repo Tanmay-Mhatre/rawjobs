@@ -18,7 +18,10 @@
     "./catalog/industries": "./src/catalog/industries.ts",
     "./catalog/seniority": "./src/catalog/seniority.ts",
     "./dashboard": "./src/dashboard.ts",
-    "./score": "./src/score.ts"
+    "./score": "./src/score.ts",
+    "./protocol": "./src/protocol.ts",
+    "./release": "./src/release.ts",
+    "./update": "./src/update.ts"
   },
   "dependencies": {
     "yaml": "^2.8.0",

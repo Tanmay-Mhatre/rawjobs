@@ -35,3 +35,4 @@ export * from "./employers";
 export * from "./scope";
 export * from "./notify";
 export * from "./schedule";
+export * from "./companies-page";

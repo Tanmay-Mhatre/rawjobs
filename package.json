@@ -52,6 +52,7 @@
   },
   "devDependencies": {
     "@biomejs/biome": "2.5.14",
+    "@rawjobs/core": "workspace:*",
     "@types/node": "^24.0.0",
     "axe-core": "^4.14.0",
     "esbuild": "0.28.2",

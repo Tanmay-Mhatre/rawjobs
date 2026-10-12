@@ -1,5 +1,5 @@
 import type { ButtonHTMLAttributes, ReactNode } from "react";
-import { cx } from "../ui";
+import { cx } from "../../lib/cx";
 
 /** design/components/Chip: a filter you turn on and off. Never for static metadata (that's plain text). */
 export function Chip({

@@ -7,8 +7,8 @@
 import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { INDUSTRIES, INDUSTRY_BY_ID, industriesFromTitles } from "../../packages/core/src/index";
-import { matchesAny } from "../../packages/core/src/text";
+import { INDUSTRIES, INDUSTRY_BY_ID, industriesFromTitles } from "@rawjobs/core";
+import { matchesAny } from "@rawjobs/core/text";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const arg = (name: string, fallback: string) => {
