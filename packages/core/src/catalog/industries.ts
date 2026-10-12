@@ -1,4 +1,4 @@
-import { matchesAny } from "../text";
+import { matchesAny, termRegex } from "../text";
 
 /**
  * Industries a person can work in and a company can be in. No AI: companies are tagged from
@@ -319,7 +319,7 @@ export const INDUSTRIES: Industry[] = [
     id: "healthtech",
     label: "Healthcare & healthtech",
     group: "health",
-    terms: ["healthtech", "healthcare", "health care", "telehealth", "telemedicine", "digital health", "patient care"],
+    terms: ["healthtech", "healthcare", "health care", "telehealth", "telemedicine", "digital health", "patient care", "hospital", "hospitals", "clinic", "registered nurse", "nursing"],
     titleTerms: ["nurse", "nursing", "physician", "clinician", "patient", "pharmacist", "pharmacy", "medical assistant", "therapist", "dental", "caregiver", "care coordinator", "behavioral health"],
     topics: ["healthcare", "healthtech", "patient", "clinical"],
     aliases: ["healthtech", "health", "healthcare"],
@@ -410,8 +410,9 @@ export const INDUSTRIES: Industry[] = [
     id: "mobility",
     label: "Mobility & transportation",
     group: "industry",
-    terms: ["mobility", "ride hailing", "ride-hailing", "rideshare", "micromobility", "public transport", "public transit", "car sharing"],
-    titleTerms: ["transit", "rail", "railway", "airline", "aviation", "pilot", "flight attendant", "bus operator", "bus driver", "rideshare"],
+    // Not bare "mobility" in a resume: headings and visa sections use it ("work authorization & mobility", "global mobility").
+    terms: ["ride hailing", "ride-hailing", "rideshare", "micromobility", "public transport", "public transit", "car sharing", "mobility as a service", "maas", "shared mobility", "urban mobility", "mobility platform"],
+    titleTerms: ["mobility", "transit", "rail", "railway", "airline", "aviation", "pilot", "flight attendant", "bus operator", "bus driver", "rideshare"],
     topics: ["mobility", "transportation"],
     aliases: ["mobility", "transportation"],
     fromTitles: true,
@@ -607,19 +608,34 @@ export function industriesFromTitles(titles: readonly string[], known: readonly 
   });
 }
 
-/** Industries a resume mentions at least twice (whole words, `terms` only), most mentioned first. */
-export function industriesFromText(text: string, minMentions = 2): string[] {
-  const lower = text.toLowerCase();
-  const counts = INDUSTRIES.map((ind) => {
-    let n = 0;
-    for (const term of ind.terms) {
-      const re = new RegExp(`(?<![\\p{L}\\p{N}])${term.replace(/[.*+?^${}()|[\]\\]/g, "\\$&").replace(/[\s-]+/g, "[\\s-]+")}(?![\\p{L}\\p{N}])`, "giu");
-      n += lower.match(re)?.length ?? 0;
-    }
-    return [ind.id, n] as const;
-  });
-  return counts
-    .filter(([, n]) => n >= minMentions)
-    .sort((a, b) => b[1] - a[1])
-    .map(([id]) => id);
+export type IndustryEvidence = { id: string; count: number; /** Its most mentioned terms, with counts. */ terms: [string, number][] };
+
+const evidenceCache = new Map<string, { re: RegExp; terms: string[] }>();
+/** One pattern per industry, longest term first, so "cross-border payments" counts once, not also as "payments". */
+function evidencePattern(ind: Industry) {
+  let p = evidenceCache.get(ind.id);
+  if (!p) {
+    const terms = [...ind.terms].sort((a, b) => b.length - a.length);
+    evidenceCache.set(ind.id, (p = { re: new RegExp(terms.map((t) => `(?:${termRegex(t).source})`).join("|"), "giu"), terms }));
+  }
+  return p;
 }
+
+/** Industries a text mentions at least `minMentions` times (whole words, `terms` only), most mentioned first; ties keep catalog order. */
+export function industryEvidence(text: string, minMentions = 2): IndustryEvidence[] {
+  const out: IndustryEvidence[] = [];
+  for (const ind of INDUSTRIES) {
+    const { re, terms } = evidencePattern(ind);
+    const byTerm = new Map<string, number>();
+    for (const m of text.matchAll(re)) {
+      const term = terms.find((t) => termRegex(t).test(m[0])) ?? m[0].toLowerCase();
+      byTerm.set(term, (byTerm.get(term) ?? 0) + 1);
+    }
+    const count = [...byTerm.values()].reduce((sum, n) => sum + n, 0);
+    if (count >= minMentions) out.push({ id: ind.id, count, terms: [...byTerm].sort((a, b) => b[1] - a[1]).slice(0, 3) });
+  }
+  return out.sort((a, b) => b.count - a.count);
+}
+
+/** Industries a resume mentions at least twice, most mentioned first. */
+export const industriesFromText = (text: string, minMentions = 2): string[] => industryEvidence(text, minMentions).map((e) => e.id);

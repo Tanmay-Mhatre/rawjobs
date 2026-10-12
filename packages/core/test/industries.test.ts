@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { companyIndustries, INDUSTRIES, INDUSTRY_GROUPS, industriesForLabel, industriesFromText, industriesFromTitles, industryCounts } from "../src/catalog/industries";
+import { companyIndustries, INDUSTRIES, INDUSTRY_GROUPS, industriesForLabel, industriesFromText, industriesFromTitles, industryCounts, industryEvidence } from "../src/catalog/industries";
 
 describe("industry taxonomy", () => {
   it("has unique ids and resolvable `requires`", () => {
@@ -49,6 +49,25 @@ describe("industriesFromText", () => {
     expect(found[0]).toBe("brokerage");
     expect(found).toContain("crypto");
     expect(found).not.toContain("payments");
+  });
+});
+
+describe("industryEvidence", () => {
+  it("counts a phrase once, under its longest term", () => {
+    const e = industryEvidence("Cross-border payments lead. Core banking migration. Cross-border payments again.", 1);
+    expect(e.find((x) => x.id === "payments")).toEqual({ id: "payments", count: 2, terms: [["cross-border payments", 2]] });
+    expect(e.find((x) => x.id === "banking")?.count).toBe(1);
+  });
+
+  it("reads mobility as an industry only from phrases that mean one", () => {
+    expect(industriesFromText("Open to global mobility. Work authorization & mobility.")).not.toContain("mobility");
+    expect(industriesFromText("PM for a shared mobility app; grew our urban mobility platform.")).toContain("mobility");
+    // Job titles still count it: "Mobility Product Manager" tags a company as before.
+    expect(industriesFromTitles(["Mobility Product Manager", "Mobility Ops Lead", "Engineer"])).toContain("mobility");
+  });
+
+  it("finds healthcare in a nurse's resume", () => {
+    expect(industriesFromText("Registered Nurse, St. Mary's Hospital. Patient care on a 30-bed ward; nursing mentor.")[0]).toBe("healthtech");
   });
 });
 

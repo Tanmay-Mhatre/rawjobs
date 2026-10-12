@@ -66,6 +66,6 @@ export const CV_DICTIONARY: Record<string, number> = {
   experimentation: 2,
   pricing: 2,
   b2c: 3,
-  mobility: 3,
+  micromobility: 3,
   "super app": 3,
 };
