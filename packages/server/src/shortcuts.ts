@@ -12,10 +12,22 @@ import { iconIcns, iconIco, iconPng } from "./icon";
  * The installers make them (`rawjobs shortcuts --desktop`), and so does the first start of a version
  * that knows about them (ensureShortcuts), so copies installed before them get them too. A Desktop
  * shortcut you delete stays deleted: only Settings → About (or `rawjobs shortcuts --desktop`) adds it again.
+ *
+ * The dashboard tells you about them once (a popup the first time you land on the Radar), and only
+ * about the ones that really exist (shortcutState).
  */
 
-/** RAWJOBS_HOME/shortcuts.json: what was made, where. */
-type ShortcutFile = { version?: string; menu?: string | null; desktop?: string | null; desktopOffered?: boolean };
+/** RAWJOBS_HOME/shortcuts.json: what was made, where, and whether you've been told. */
+type ShortcutFile = {
+  version?: string;
+  menu?: string | null;
+  desktop?: string | null;
+  desktopOffered?: boolean;
+  /** Why the last try at a Desktop shortcut didn't make one (null: it did, or it wasn't asked for). */
+  desktopError?: string | null;
+  /** You've seen the dashboard's "RawJobs is on your Desktop" popup (closed it, or followed its link). */
+  noticeSeen?: boolean;
+};
 const filePath = (home: string) => join(home, "shortcuts.json");
 
 function readFile(home: string): ShortcutFile {
@@ -139,27 +151,59 @@ export function makeShortcuts(home: string, launcher: string, opts: { desktop: b
   } catch (err) {
     r = { ok: false, menu: null, desktop: null, error: (err as Error).message };
   }
+  if (r.ok && opts.desktop && !r.desktop) r = { ...r, error: r.error ?? "there's no Desktop folder to put it in" };
   const before = readFile(home);
   writeFile(home, {
+    ...before,
     version: opts.version ?? before.version,
     menu: r.menu ?? before.menu ?? null,
     // Keep track of a Desktop shortcut made before when this run didn't make one.
     desktop: r.desktop ?? before.desktop ?? null,
     desktopOffered: before.desktopOffered || opts.desktop,
+    desktopError: opts.desktop ? (r.desktop ? null : (r.error ?? "it couldn't be made")) : (before.desktopError ?? null),
   });
   return r;
 }
 
-/** Whether the Desktop shortcut RawJobs made is still there. */
-export function hasDesktopShortcut(home: string): boolean {
-  const d = readFile(home).desktop;
-  if (!d) return false;
+const exists = (p: string | null | undefined) => {
+  if (!p) return false;
   try {
-    lstatSync(d);
+    lstatSync(p);
     return true;
   } catch {
     return false;
   }
+};
+
+let desktopFolder: boolean | undefined;
+/** Whether this computer has a Desktop folder at all (a Linux without one keeps RawJobs in the app menu). */
+function hasDesktopFolder(): boolean {
+  desktopFolder ??= process.platform === "win32" ? true : process.platform === "darwin" ? existsSync(join(homedir(), "Desktop")) : linuxDesktopDir() !== null;
+  return desktopFolder;
+}
+
+/** What the dashboard shows: which shortcuts really exist now, and whether to tell you about them. */
+export type ShortcutState = {
+  desktop: boolean;
+  menu: boolean;
+  /** False on a Linux with no Desktop folder: the Desktop row is left out. */
+  desktopFolder: boolean;
+  /** Why the Desktop shortcut couldn't be made, while it's missing. */
+  desktopError: string | null;
+  /** Show the one-time popup: a shortcut exists and you haven't been told yet. */
+  notice: boolean;
+};
+
+export function shortcutState(home: string): ShortcutState {
+  const f = readFile(home);
+  const desktop = exists(f.desktop);
+  const menu = exists(f.menu);
+  return { desktop, menu, desktopFolder: hasDesktopFolder(), desktopError: desktop ? null : (f.desktopError ?? null), notice: !f.noticeSeen && (desktop || menu) };
+}
+
+/** You've seen the popup (or added a shortcut yourself): it never shows again on this computer. */
+export function markShortcutNoticeSeen(home: string): void {
+  writeFile(home, { ...readFile(home), noticeSeen: true });
 }
 
 /**

@@ -1,9 +1,10 @@
-import { mkdtempSync, readFileSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { AUTOSTART, readServerState, writeServerState } from "../src/desktop";
 import { iconIcns, iconIco, iconPng, markPixels } from "../src/icon";
+import { markShortcutNoticeSeen, shortcutState } from "../src/shortcuts";
 
 const root = join(import.meta.dirname, "../../..");
 
@@ -44,5 +45,30 @@ describe("the shortcut icon", () => {
     const icns = iconIcns();
     expect(icns.subarray(0, 4).toString("ascii")).toBe("icns");
     expect(icns.readUInt32BE(4)).toBe(icns.length);
+  });
+});
+
+describe("what the dashboard says about the shortcuts", () => {
+  it("only tells you about shortcuts that really exist, once", () => {
+    const home = mkdtempSync(join(tmpdir(), "rj-sc-"));
+    // Nothing made yet: nothing to tell.
+    expect(shortcutState(home)).toMatchObject({ desktop: false, menu: false, notice: false });
+    const lnk = join(home, "RawJobs.lnk");
+    writeFileSync(lnk, "");
+    writeFileSync(join(home, "shortcuts.json"), JSON.stringify({ desktop: lnk, menu: lnk }));
+    expect(shortcutState(home)).toMatchObject({ desktop: true, menu: true, notice: true, desktopError: null });
+    markShortcutNoticeSeen(home);
+    expect(shortcutState(home).notice).toBe(false);
+    // Deleted from the Desktop: says so, and never brings the popup back.
+    rmSync(lnk);
+    expect(shortcutState(home)).toMatchObject({ desktop: false, notice: false });
+  });
+
+  it("says why a Desktop shortcut couldn't be made, until there is one", () => {
+    const home = mkdtempSync(join(tmpdir(), "rj-sc-"));
+    const menu = join(home, "menu.lnk");
+    writeFileSync(menu, "");
+    writeFileSync(join(home, "shortcuts.json"), JSON.stringify({ menu, desktop: null, desktopError: "access denied" }));
+    expect(shortcutState(home)).toMatchObject({ desktop: false, menu: true, desktopError: "access denied", notice: true });
   });
 });
