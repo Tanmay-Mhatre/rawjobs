@@ -96,7 +96,7 @@ export function SuggestionCard({ s, added, onAdd, onRemove, onHide }: Props) {
   const chips = s.reasons.filter((r) => !HEADLINE.test(r) && !r.startsWith("Like "));
   const like = s.reasons.find((r) => r.startsWith("Like "));
   return (
-    <article className={cx("flex flex-col gap-3 rounded-md border bg-raised p-4 transition-colors", added ? "border-ink/40" : "border-line hover:border-muted/40")}>
+    <article className={cx("flex min-w-0 flex-col gap-3 rounded-md border bg-raised p-4 transition-colors", added ? "border-ink/40" : "border-line hover:border-muted/40")}>
       <header className="flex items-start gap-3">
         <Monogram name={s.name} />
         <div className="min-w-0 flex-1">

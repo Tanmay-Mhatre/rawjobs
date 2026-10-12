@@ -1,6 +1,6 @@
 import { safeUrl } from "@rawjobs/core/text";
 import { Clock, ExternalLink, RefreshCw, X } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { ATS_LABEL, keyOf } from "../lib/companies";
 import type { CompanyHealth, DataMeta } from "../lib/data";
 import { formatDate, formatDateTime, timeAgo } from "../lib/format";
@@ -102,6 +102,7 @@ export function MyCompanies({
   onScan,
   scanning,
   attention = 0,
+  empty,
 }: {
   rows: CompanyRow[];
   savedKeys: Set<string>;
@@ -114,6 +115,8 @@ export function MyCompanies({
   scanning?: boolean;
   /** Above 0 when a "failing" link was followed; each new value sorts by Needs attention. */
   attention?: number;
+  /** Shown instead of the list when there are no companies (what your scan covers without them). */
+  empty?: ReactNode;
 }) {
   const [sort, setSort] = useState<"jobs" | "name" | "attention">(attention ? "attention" : "jobs");
   useEffect(() => {
@@ -146,29 +149,28 @@ export function MyCompanies({
 
   return (
     <Card className="overflow-hidden">
-      <header className="flex flex-wrap items-center justify-between gap-3 border-b border-line px-4 py-3">
-        <div>
-          <h2 className="type-body font-semibold">
-            My companies <span className="tabular font-normal text-muted">({rows.length})</span>
-          </h2>
-          <p className="type-small text-muted">
-            {rows.filter((x) => x.forYou > 0).length} with jobs for you now
-            {broken > 0 && <span className="text-danger-text"> · last scan failed for {broken}</span>}
+      {/* The tab above already says "My companies": the heading is for screen readers, the line says the count. */}
+      <h2 className="sr-only">My companies</h2>
+      {rows.length > 0 && (
+        <header className="flex flex-wrap items-center justify-between gap-3 border-b border-line px-4 py-3">
+          <p className="type-small text-ink">
+            <span className="tabular">{rows.length.toLocaleString()}</span> compan{rows.length === 1 ? "y" : "ies"}, checked on every scan.
+            {broken > 0 && <span className="text-danger-text"> Last scan failed for {broken}.</span>}
           </p>
-        </div>
-        {rows.length > 1 && (
-          <Segmented
-            label="Sort My companies"
-            value={sort}
-            onChange={setSort}
-            options={[
-              { value: "jobs", label: "Most jobs for you" },
-              { value: "attention", label: "Needs attention" },
-              { value: "name", label: "A–Z" },
-            ]}
-          />
-        )}
-      </header>
+          {rows.length > 1 && (
+            <Segmented
+              label="Sort My companies"
+              value={sort}
+              onChange={setSort}
+              options={[
+                { value: "jobs", label: "Most jobs for you" },
+                { value: "attention", label: "Needs attention" },
+                { value: "name", label: "A–Z" },
+              ]}
+            />
+          )}
+        </header>
+      )}
 
       {quiet.length > 0 && (
         <div className="flex flex-wrap items-center gap-3 border-b border-line bg-warning-subtle/30 px-4 py-2.5 type-small">
@@ -189,9 +191,7 @@ export function MyCompanies({
       )}
 
       {rows.length === 0 ? (
-        <p className="px-4 py-6 type-small text-muted">
-          None yet, and that's fine: your Radar already finds jobs across the directory. Add companies you'd love to work at and their newest jobs will show on top.
-        </p>
+        <p className="px-4 py-6 type-small text-muted">{empty ?? "You haven't added any companies yet."}</p>
       ) : (
         <>
           {/* Phones: one card per company. */}

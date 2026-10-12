@@ -22,6 +22,7 @@ export function TabList<T extends string>({
   ids,
   className,
   after,
+  wrap,
 }: {
   tabs: TabItem<T>[];
   value: T;
@@ -31,10 +32,12 @@ export function TabList<T extends string>({
   className?: string;
   /** Extra content after the tabs (outside the tablist), e.g. a spinner. */
   after?: ReactNode;
+  /** Wrap onto a second line on narrow screens instead of scrolling sideways, so no tab is hidden. */
+  wrap?: boolean;
 }) {
   return (
     <div className={cx("flex items-center gap-2", className)}>
-      <Tabs label={label} items={tabs} value={value} onChange={onChange} idPrefix={`${ids.base}-tab`} panelId={ids.panel(value)} className="min-w-0 flex-1" />
+      <Tabs label={label} items={tabs} value={value} onChange={onChange} idPrefix={`${ids.base}-tab`} panelId={ids.panel(value)} wrap={wrap} className="min-w-0 flex-1" />
       {after}
     </div>
   );

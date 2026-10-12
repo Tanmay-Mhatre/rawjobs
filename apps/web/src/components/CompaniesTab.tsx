@@ -1,10 +1,12 @@
-import { ArrowRight, Check, CircleAlert, EyeOff, LoaderCircle, RefreshCw, X } from "lucide-react";
+import { ArrowRight, Check, CircleAlert, EyeOff, LoaderCircle, Radar, RefreshCw, X } from "lucide-react";
 import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
 import { addCompanies, countCompanies, jobCompanyKey, keyOf, wantsAttention, type CompanyRef } from "../lib/companies";
 import { useCompanySuggestions, type SuggestState } from "../lib/companySuggest";
+import { coverageLine, initialCompaniesTab, type CompaniesTabId } from "../lib/companiesPage";
 import type { DataMeta, Job } from "../lib/data";
 import { canRunLocally, useDirectorySize } from "../lib/data";
-import { draftToConfig, saveConfig, type Draft } from "../lib/setup";
+import { useScanPrefs } from "../lib/scan";
+import { draftToConfig, saveConfig, scanPlan, type Draft, type ScanPlan } from "../lib/setup";
 import { load, save } from "../lib/storage";
 import { AddByLink } from "./AddByLink";
 import { MyCompanies, RecentRuns } from "./Companies";
@@ -23,6 +25,8 @@ type Props = {
   /** The Radar's jobs (yours, checked and from the directory): "jobs for you" per company. */
   jobs: Job[];
   draft: Draft;
+  /** The saved setup is in the draft (until then it's a blank one, with 0 companies). */
+  loaded: boolean;
   saved: Draft;
   update: (patch: Partial<Draft>) => void;
   onSaved: () => Promise<void>;
@@ -119,22 +123,43 @@ function SaveStatus({ state, retry, onScan, scanning }: { state: SaveState; retr
   );
 }
 
-type Tab = "mine" | "suggestions" | "browse";
+type Tab = CompaniesTabId;
 const TAB_KEY = "rawjobs.companiesTab";
-const TABS: Tab[] = ["mine", "suggestions", "browse"];
+
+/** What each scan type covers (GET /api/scan/plan), asked again whenever the saved companies or industries change. */
+function useScanPlan(saved: Draft, enabled: boolean): ScanPlan | null {
+  const [plan, setPlan] = useState<ScanPlan | null>(null);
+  const key = JSON.stringify([draftToConfig(saved).companies, saved.muted, saved.industries]);
+  // biome-ignore lint/correctness/useExhaustiveDependencies: `key` (what the plan depends on) is the trigger
+  useEffect(() => {
+    if (!enabled) return;
+    let live = true;
+    void scanPlan().then((p) => {
+      if (live) setPlan(p);
+    });
+    return () => {
+      live = false;
+    };
+  }, [key, enabled]);
+  return enabled ? plan : null;
+}
 
 /**
  * Companies tab: one search and "Add by link" on top, then My companies (scanned every time, listed first
  * on the Radar), Suggestions (picked for your profile) and Browse all (the whole directory).
  */
-export function CompaniesTab({ configured, meta, jobs, draft, saved, update, onSaved, onScan, scanning, toSetup, hiddenNames, onUnhideName }: Props) {
+export function CompaniesTab({ configured, meta, jobs, draft, loaded, saved, update, onSaved, onScan, scanning, toSetup, hiddenNames, onUnhideName }: Props) {
   const ids = useTabIds("companies");
   const linkPanelId = useId();
-  const [tab, setTabState] = useState<Tab>(() => {
-    if (wantsAttention()) return "mine";
-    const last = load<string | null>(TAB_KEY, null);
-    return TABS.includes(last as Tab) ? (last as Tab) : draft.companies.length ? "mine" : "suggestions";
-  });
+  // Chosen once the saved setup is in (a blank draft would always look like 0 companies). Opening on
+  // Suggestions at 0 companies doesn't overwrite the remembered tab: only a click does.
+  const initialTab = () => initialCompaniesTab({ attention: wantsAttention(), stored: load<string | null>(TAB_KEY, null), companies: draft.companies.length });
+  const [chosen, setTabState] = useState<Tab | null>(() => (wantsAttention() ? "mine" : loaded ? initialTab() : null));
+  // biome-ignore lint/correctness/useExhaustiveDependencies: runs once, when the saved setup arrives
+  useEffect(() => {
+    if (loaded) setTabState((t) => t ?? initialTab());
+  }, [loaded]);
+  const tab = chosen;
   const setTab = (t: Tab) => {
     setTabState(t);
     save(TAB_KEY, t);
@@ -164,6 +189,10 @@ export function CompaniesTab({ configured, meta, jobs, draft, saved, update, onS
   const directorySize = useDirectorySize(rev);
   const companyCount = useMemo(() => directorySize ?? (directory ? countCompanies(directory) : undefined), [directorySize, directory]);
   const autosave = useAutoSave(draft, saved, onSaved, configured && canRunLocally);
+  const plan = useScanPlan(saved, configured && canRunLocally);
+  const { scope } = useScanPrefs();
+  /** "Right now: your 12 companies plus 175 in your 3 industries.": what your usual scan covers. */
+  const coverage = plan && coverageLine({ plan, scope, industries: saved.industries.length, hasJobs: jobs.length > 0 });
   const savedKeys = useMemo(() => new Set(saved.companies.map(keyOf)), [saved.companies]);
   const watched = useMemo(() => new Set(draft.companies.map(keyOf)), [draft.companies]);
   const muted = useMemo(() => new Set(draft.muted), [draft.muted]);
@@ -283,17 +312,20 @@ export function CompaniesTab({ configured, meta, jobs, draft, saved, update, onS
         </Card>
       )}
 
-      <TabList
-        tabs={[
-          { id: "mine", label: "My companies", count: draft.companies.length },
-          { id: "suggestions", label: "Suggestions" },
-          { id: "browse", label: "Browse all" },
-        ]}
-        value={tab}
-        onChange={setTab}
-        label="Companies"
-        ids={ids}
-      />
+      {tab && (
+        <TabList
+          wrap
+          tabs={[
+            { id: "mine", label: "My companies", count: draft.companies.length },
+            { id: "suggestions", label: "Suggestions" },
+            { id: "browse", label: "Browse all" },
+          ]}
+          value={tab}
+          onChange={setTab}
+          label="Companies"
+          ids={ids}
+        />
+      )}
 
       {tab === "mine" && (
         <TabPanel id="mine" ids={ids} className="space-y-4">
@@ -307,6 +339,7 @@ export function CompaniesTab({ configured, meta, jobs, draft, saved, update, onS
             onScan={onScan}
             scanning={scanning}
             attention={attention}
+            empty={coverage ?? "You haven't added any companies yet."}
           />
           {draft.companies.length === 0 && (
             <div className="flex flex-wrap gap-2">
@@ -349,7 +382,8 @@ export function CompaniesTab({ configured, meta, jobs, draft, saved, update, onS
       )}
 
       {tab === "suggestions" && (
-        <TabPanel id="suggestions" ids={ids}>
+        <TabPanel id="suggestions" ids={ids} className="space-y-4">
+          {coverage && <CoverageLine text={coverage} />}
           <ForYou
             state={suggestions}
             watched={watched}
@@ -361,6 +395,7 @@ export function CompaniesTab({ configured, meta, jobs, draft, saved, update, onS
             onMute={(key) => update({ muted: [...new Set([...draft.muted, key])], companies: draft.companies.filter((r) => keyOf(r) !== key) })}
             onUnmute={(key) => update({ muted: draft.muted.filter((k) => k !== key) })}
             onRetry={() => setRetrying(true)}
+            industries={saved.industries.length}
             offHint="Suggestions aren't available in this version of the app. Search the directory or add a company by link instead."
           />
         </TabPanel>
@@ -385,5 +420,14 @@ export function CompaniesTab({ configured, meta, jobs, draft, saved, update, onS
         </TabPanel>
       )}
     </div>
+  );
+}
+
+/** One line on what your usual scan covers; read out again when it changes (as companies are added). */
+function CoverageLine({ text }: { text: string }) {
+  return (
+    <p className="flex items-start gap-2 type-small text-ink" aria-live="polite">
+      <Radar className="mt-0.5 size-4 shrink-0 text-muted" aria-hidden /> {text}
+    </p>
   );
 }

@@ -1,13 +1,15 @@
 import { INDUSTRY_BY_ID } from "@rawjobs/core/catalog/industries";
 import { isPlaceholderBoard } from "@rawjobs/core/text";
-import { Briefcase, History, LoaderCircle, Package, Plus, RefreshCw, Sparkles, Undo2, X } from "lucide-react";
+import { Briefcase, History, Info, LoaderCircle, Package, Plus, RefreshCw, Undo2, X } from "lucide-react";
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { keyOf, type CompanyRef } from "../../lib/companies";
 import { refOf, visible, type CompanySuggestion, type CompanySuggestions, type SuggestState } from "../../lib/companySuggest";
 import { canRunLocally } from "../../lib/data";
 import { load, save } from "../../lib/storage";
+import { settingsHash } from "../settings/registry";
 import { AddAll, AddButton } from "../CompanyButtons";
 import { Chip } from "../primitives";
+import { buttonClass } from "../primitives";
 import { Button, Card, cx } from "../ui";
 import { CardSkeleton, Monogram, SuggestionCard } from "./SuggestionCard";
 import { TabList, TabPanel, useTabIds } from "./Tabs";
@@ -32,6 +34,8 @@ type Props = {
   offHint?: ReactNode;
   /** Ask for suggestions again after an error (shows a Retry button). */
   onRetry?: () => void;
+  /** Industries in your profile. With none, the Starter packs lens stays and links to picking them. */
+  industries?: number;
 };
 
 export const DISMISSED_KEY = "rawjobs.goBackDismissed";
@@ -47,7 +51,7 @@ const real = <T extends CompanySuggestion>(list: readonly T[], skip: ReadonlySet
  * watching, one pack per industry, and ones RawJobs can't scan yet. Rule-based and local: nothing
  * about you leaves this computer.
  */
-export function ForYou({ state, watched, muted, pastEmployers, onPastEmployers, onAddMany, onRemoveMany, onMute, onUnmute, compact, offHint, onRetry }: Props) {
+export function ForYou({ state, watched, muted, pastEmployers, onPastEmployers, onAddMany, onRemoveMany, onMute, onUnmute, compact, offHint, onRetry, industries }: Props) {
   const ids = useTabIds("suggest");
   // "Off" only counts once it has lasted a moment: the first render and profile changes pass through it.
   const [offSettled, setOffSettled] = useState(!canRunLocally);
@@ -73,9 +77,10 @@ export function ForYou({ state, watched, muted, pastEmployers, onPastEmployers, 
     };
   }, [data, muted]);
 
-  // Open on the most useful lens once the first answer arrives.
-  // Open on packs (the quickest way to add many), else the most useful list.
-  const current: Lens = lens ?? (lists?.packs.length ? "packs" : lists && lists.hiring.length < 3 ? (lists.like.length ? "like" : "watching") : "hiring");
+  /** No industries, so no packs: the lens stays, saying how to get them. */
+  const needIndustries = industries === 0 && !lists?.packs.length;
+  // Open on packs (the quickest way to add many; at 0 companies also when they need industries), else the most useful list.
+  const current: Lens = lens ?? (lists?.packs.length || (needIndustries && watched.size === 0) ? "packs" : lists && lists.hiring.length < 3 ? (lists.like.length ? "like" : "watching") : "hiring");
   // biome-ignore lint/correctness/useExhaustiveDependencies: switching lists starts the new one at its first page
   useEffect(() => setShown(compact ? 6 : PAGE), [current, compact]);
 
@@ -99,7 +104,7 @@ export function ForYou({ state, watched, muted, pastEmployers, onPastEmployers, 
     </>
   );
 
-  type Tab = { id: Lens; label: string; count: number };
+  type Tab = { id: Lens; label: string; count?: number };
   const tabs: Tab[] = lists
     ? (
         [
@@ -109,7 +114,10 @@ export function ForYou({ state, watched, muted, pastEmployers, onPastEmployers, 
           { id: "watching", label: "Not hiring yet", count: lists.watching.length },
           { id: "soon", label: "Not supported yet", count: lists.soon.length },
         ] satisfies Tab[]
-      ).filter((t) => t.count || t.id === "hiring" || t.id === "like" || t.id === current)
+      )
+        .filter((t) => t.count || t.id === "hiring" || t.id === "like" || t.id === current || (t.id === "packs" && needIndustries))
+        // No "0" on a lens: an empty one says why when opened.
+        .map((t) => ({ ...t, count: t.count || undefined }))
     : [];
 
   const goBack = (data?.pastEmployers ?? []).filter((p) => p.company && !dismissed.includes(p.company.key) && !muted.has(p.company.key) && !isPlaceholderBoard(p.company.name));
@@ -118,20 +126,8 @@ export function ForYou({ state, watched, muted, pastEmployers, onPastEmployers, 
   const top5 = lists ? [...lists.hiring, ...lists.like.flatMap((r) => r.items)].filter((s, i, all) => all.findIndex((x) => x.key === s.key) === i).slice(0, 5) : [];
   return (
     <Wrap className={compact ? "" : "p-5 sm:p-6"}>
-      <div className={cx("flex flex-wrap items-start justify-between gap-3", compact && "hidden")}>
-        <div className="min-w-0">
-          <h2 className="flex items-center gap-2 type-body font-semibold">
-            <Sparkles className="size-4 text-muted" aria-hidden /> Picked for you
-          </h2>
-          <p className="mt-0.5 type-small text-muted">From your roles, places, industries and past employers. Worked out on this computer; nothing about you is sent anywhere.</p>
-        </div>
-        {data && data.coverage.in_industries > 0 && (
-          <p className="type-small text-muted" title="Companies in the directory tagged with your industries, and how many of them are on a hiring system RawJobs can scan">
-            <b className="tabular font-semibold text-ink">{data.coverage.trackable.toLocaleString()}</b> of {data.coverage.in_industries.toLocaleString()} companies in your industries can be scanned
-          </p>
-        )}
-      </div>
-
+      {/* The Suggestions tab names this panel. */}
+      <h2 className="sr-only">Suggestions</h2>
       <PastEmployers names={pastEmployers} suggested={data?.pastEmployers.map((p) => p.name)} onChange={onPastEmployers} />
       {compact && top5.length > 0 && (
         <div className="mt-4 flex flex-wrap items-center gap-2 rounded-md bg-inset p-3 type-small">
@@ -186,12 +182,13 @@ export function ForYou({ state, watched, muted, pastEmployers, onPastEmployers, 
             value={current}
             onChange={setLens}
             label="Kinds of suggestions"
+            wrap
             ids={ids}
             after={state.kind === "loading" && <LoaderCircle className="ml-1 size-4 shrink-0 animate-spin text-muted" aria-label="Updating suggestions" />}
           />
 
           <TabPanel id={current} ids={ids} className="space-y-4">
-            <LensHeader lens={current} lists={lists} watched={watched} onAddMany={onAddMany} onRemoveMany={onRemoveMany} />
+            {current === "packs" && needIndustries ? <NeedIndustries /> : <LensHeader lens={current} lists={lists} watched={watched} onAddMany={onAddMany} onRemoveMany={onRemoveMany} />}
 
             {hidden && muted.has(hidden.key) && (
               <p className="flex items-center gap-2 rounded-md bg-inset px-3 py-2 type-small">
@@ -232,9 +229,14 @@ export function ForYou({ state, watched, muted, pastEmployers, onPastEmployers, 
                 }}
               />
             )}
-            {current === "packs" && <Packs packs={lists.packs} watched={watched} onAddMany={onAddMany} onRemoveMany={onRemoveMany} />}
+            {current === "packs" && !needIndustries && <Packs packs={lists.packs} watched={watched} onAddMany={onAddMany} onRemoveMany={onRemoveMany} />}
           </TabPanel>
         </div>
+      )}
+      {!compact && canRunLocally && (
+        <p className="mt-5 flex items-center gap-1.5 type-meta text-muted">
+          <Info className="size-3.5 shrink-0" aria-hidden /> Suggestions are worked out on this computer. Nothing about you is sent anywhere.
+        </p>
       )}
     </Wrap>
   );
@@ -242,15 +244,20 @@ export function ForYou({ state, watched, muted, pastEmployers, onPastEmployers, 
 
 const unique = (items: CompanySuggestion[]) => items.filter((s, i) => items.findIndex((x) => x.key === s.key) === i);
 
-const LENS_INTRO: Record<Lens, string> = {
-  packs: "The best-fitting companies in each of your industries. Add a whole pack in one go.",
-  hiring: "Companies with open roles that pass your title and place filters today.",
-  like: "Companies like the ones on your resume that also fit what you want now.",
-  watching: "A good fit, but nothing open for you today. Add them to My companies to hear first when something opens.",
-  soon: "In your industries, but on hiring systems RawJobs can't scan yet. Add them now and they're scanned once support ships.",
-};
+/** No industries in your profile, so no starter packs: say so and link to picking them. */
+function NeedIndustries() {
+  return (
+    <div className="grid justify-items-start gap-2 rounded-md border border-dashed border-line p-4 type-small">
+      <p className="font-semibold">Starter packs need industries</p>
+      <p className="text-muted">Pick the industries you'd work in to get a pack of companies for each, ready to add in one click.</p>
+      <a href={`#${settingsHash("industries")}`} className={buttonClass("secondary", "sm")}>
+        Pick industries
+      </a>
+    </div>
+  );
+}
 
-/** What the lens is, and "Add all" for everything in it (not just the cards on screen). */
+/** "Add all" for everything in the lens (not just the cards on screen); on Starter packs, how many packs. */
 function LensHeader({
   lens,
   lists,
@@ -274,11 +281,16 @@ function LensHeader({
           : lens === "watching"
             ? lists.watching
             : lists.soon;
+  if (!items.length) return null;
   return (
     <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
-      <p className="min-w-0 flex-1 type-small text-muted">{LENS_INTRO[lens]}</p>
-      {/* Keyed by lens, so its "Added n · Undo" belongs to this list only. */}
-      <AddAll key={lens} items={items.map(refOf)} watched={watched} onAddMany={onAddMany} onRemoveMany={onRemoveMany} />
+      {lens === "packs" && (
+        <p className="min-w-0 flex-1 type-small text-muted">
+          {lists.packs.length} {lists.packs.length === 1 ? "pack" : "packs"} from your industries
+        </p>
+      )}
+      {/* Keyed by lens, so its "Added n · Undo" belongs to this list only. Orange only as the way to start, at 0 companies. */}
+      <AddAll key={lens} items={items.map(refOf)} watched={watched} onAddMany={onAddMany} onRemoveMany={onRemoveMany} primary={lens === "packs" && watched.size === 0} />
     </div>
   );
 }
@@ -370,7 +382,7 @@ function Packs({
   return (
     <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
       {packs.map((p) => (
-        <section key={p.industry} className="flex flex-col gap-3 rounded-md border border-line p-4">
+        <section key={p.industry} className="flex min-w-0 flex-col gap-3 rounded-md border border-line p-4">
           <header className="flex items-center gap-2">
             <Package className="size-4 text-muted" aria-hidden />
             <h3 className="mr-auto type-small font-semibold">{INDUSTRY_BY_ID.get(p.industry)?.label ?? p.industry}</h3>
@@ -395,7 +407,6 @@ function Packs({
               );
             })}
           </ul>
-          <p className="type-small text-muted">Numbers are roles that match you now. Tap a company to add or remove it.</p>
         </section>
       ))}
     </div>
@@ -407,7 +418,7 @@ export function PastEmployers({ names, suggested = [], onChange }: { names: stri
   const [text, setText] = useState("");
   if (!names.length && suggested.length) {
     return (
-      <div className="mt-4 flex flex-wrap items-center gap-1.5 rounded-md border border-dashed border-line p-2.5">
+      <div className="flex flex-wrap items-center gap-1.5 rounded-md border border-dashed border-line p-2.5">
         <span className="mr-1 inline-flex items-center gap-1.5 type-label text-muted">
           <Briefcase className="size-4" aria-hidden /> From your resume, you've worked at
         </span>
@@ -424,7 +435,7 @@ export function PastEmployers({ names, suggested = [], onChange }: { names: stri
     setText("");
   };
   return (
-    <div className="mt-4 flex flex-wrap items-center gap-1.5">
+    <div className="flex flex-wrap items-center gap-1.5">
       <span className="mr-1 inline-flex items-center gap-1.5 type-label text-muted">
         <Briefcase className="size-4" aria-hidden /> You've worked at
       </span>
