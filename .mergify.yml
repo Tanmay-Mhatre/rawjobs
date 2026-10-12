@@ -2,19 +2,25 @@
 # merge one at a time, in the order they joined: Mergify merges main into the front one, waits for
 # CI, merges it, and moves on. A pull request that conflicts with main or fails CI leaves the
 # queue, and Mergify says why on the PR. Fix it, push, and add the label again to rejoin.
+#
+# main requires branches to be up to date, which Mergify supports only when it checks PRs in place:
+# one at a time, batches of one, and the same conditions to join the queue as to merge.
+merge_queue:
+  max_parallel_checks: 1
+
 queue_rules:
   - name: default
-    queue_conditions:
+    queue_conditions: &conditions
       - base = main
       - -draft
       - -conflict
-    # The checks main's branch protection requires.
-    merge_conditions:
+      # The checks main's branch protection requires.
       - check-success = check
       - check-success = release-files
       - check-success = install / install (ubuntu-24.04)
       - check-success = install / install (macos-15)
       - check-success = install / install (windows-2025)
+    merge_conditions: *conditions
     merge_method: merge
     update_method: merge
     batch_size: 1
