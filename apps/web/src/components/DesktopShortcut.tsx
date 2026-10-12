@@ -5,6 +5,7 @@ import { addDesktopShortcut, announceUpdateStatus, markShortcutNoticeSeen, type 
 import { Dialog } from "./Dialog";
 import { toast } from "./Toast";
 import { Button, Card } from "./ui";
+import { settingsHash } from "./settings/registry";
 
 /**
  * The RawJobs shortcuts (packages/server/src/shortcuts.ts): one on the Desktop, one in the Start menu
@@ -31,7 +32,7 @@ function place(platform: string | undefined): { name: string; in: string } {
   return { name: "App menu", in: "in your app menu" };
 }
 
-const SETTINGS_LINK = "#settings?section=shortcut";
+const SETTINGS_LINK = `#${settingsHash("shortcut")}`;
 
 /**
  * Once per computer, the first time you land on the Radar after the shortcuts were made: what's on

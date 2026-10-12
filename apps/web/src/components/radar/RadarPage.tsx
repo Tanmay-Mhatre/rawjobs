@@ -43,6 +43,7 @@ import { builtInViews, ViewsBar } from "./ViewsBar";
 import { useHourlyNow, useIsWide, useLatestKeydown } from "./hooks";
 import { useClosedSinceToast } from "./useClosedSinceToast";
 import { useRadarFilters } from "./useRadarFilters";
+import { settingsHash } from "../settings/registry";
 
 type Props = {
   jobs: Job[];
@@ -530,7 +531,7 @@ export function RadarPage(p: Props) {
                 variant="ghost"
                 size="sm"
                 onClick={() => setFilters({ showOld: true })}
-                title={`Postings older than ${ageLimit(maxAgeDays)} are hidden: they're usually filled. Change this in Settings › Job list.`}
+                title={`Postings older than ${ageLimit(maxAgeDays)} are hidden: they're usually filled. Change this in Settings › Matching.`}
               >
                 Show older jobs ({olderCount})
               </Button>
@@ -558,7 +559,7 @@ export function RadarPage(p: Props) {
             {filters.match === "strong" && (
               <p className="rj-empty__body">
                 Strong matches need the right title and place, and a description that mentions your keywords.{" "}
-                <button type="button" className="font-medium text-ink underline underline-offset-2" onClick={() => (location.hash = "settings?section=keywords")}>
+                <button type="button" className="font-medium text-ink underline underline-offset-2" onClick={() => (location.hash = settingsHash("keywords"))}>
                   {Object.keys(p.profile?.keywords ?? {}).length ? "Add more keywords" : "Add keywords"}
                 </button>{" "}
                 to find more.

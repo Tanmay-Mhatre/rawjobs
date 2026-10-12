@@ -10,10 +10,11 @@ import { STEP, STEP_COUNT } from "../lib/setup";
 import { load, save } from "../lib/storage";
 import { ScanProgress } from "./ScanProgress";
 import { Button, Card, cx } from "./ui";
+import { settingsHash } from "./settings/registry";
 
 /** Settings > Scheduled scans (Telegram alerts sit right below it). */
 export const goDailyAlerts = () => {
-  location.hash = "settings?section=schedule";
+  location.hash = settingsHash("schedule");
 };
 
 type Item = { key: string; label: string; detail: string; done: boolean; step?: number /** Nice to have: not counted in progress. */; optional?: boolean };

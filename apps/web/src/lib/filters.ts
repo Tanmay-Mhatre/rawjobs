@@ -47,7 +47,7 @@ export type Filters = {
 /** Directory jobs older than this are hidden unless asked for: the index is a week old at most, and old postings are often filled. */
 export const INDEX_MAX_AGE_DAYS = 30;
 /**
- * Postings older than this are hidden unless asked for (Settings › Job list can change it). Most roles are
+ * Postings older than this are hidden unless asked for (Settings › Matching can change it). Most roles are
  * filled in 45-60 days; senior ones can take three months, so three months keeps those and drops the stale tail.
  */
 export const DEFAULT_MAX_AGE_DAYS = 90;
@@ -184,7 +184,7 @@ function passes(j: Job, f: Filters, ctx: Ctx, terms: string[], skip?: FacetKey):
 }
 
 const maxAge = (ctx: Pick<Ctx, "maxAgeDays">) => ctx.maxAgeDays ?? DEFAULT_MAX_AGE_DAYS;
-/** Past your age limit (Settings › Job list). */
+/** Past your age limit (Settings › Matching). */
 const tooOld = (j: Job, ctx: Pick<Ctx, "now" | "maxAgeDays">) => maxAge(ctx) > 0 && ageDays(postedOrSeen(j), ctx.now) > maxAge(ctx);
 
 const termsOf = (q: string) => q.toLowerCase().split(/\s+/).filter(Boolean);
