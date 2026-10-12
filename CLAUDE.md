@@ -6,25 +6,27 @@ request. These rules keep them from stepping on each other.
 ## Your pull request, and only yours
 
 - The PR you own is the one this session opened, or the one the user asked you to continue. Never
-  merge, update, rebase, comment on or turn on auto-merge for any other PR: not other sessions',
-  not Dependabot's, not people's. If the user asks you to, remind them of this rule and leave it to them.
+  merge, update, rebase, label, comment on or queue any other PR: not other sessions', not
+  Dependabot's, not people's. If the user asks you to, remind them of this rule and leave it to them.
 - Keep your work on your own branch. Don't fold another PR's changes into yours.
+- Work in your own worktree. Other sessions switch branches in the main checkout.
 
-## Merging goes through the merge train
+## Merging goes through the merge queue
 
-PRs merge one at a time, oldest first, through `.github/workflows/merge-train.yml`. Never merge by
-hand (`gh pr merge` without `--auto`, `--admin`, or the GitHub button).
+PRs merge one at a time, in the order they joined, through Mergify (`.mergify.yml`). Never merge
+any other way: no `gh pr merge` (with or without `--auto`), no `--admin`, no GitHub button, and
+no GitHub auto-merge (`mcp__ccd_pr__set_auto_merge`). Those skip the queue.
 
-1. Open your PR, then join the train right away: `gh pr merge <N> --auto --merge`. In the desktop
-   app, also bind the PR to the session (`mcp__ccd_pr__bind_pr`) and turn on its monitor so you hear
-   about CI failures and conflicts.
-2. Wait your turn. The train updates the front PR with `main`, reruns CI, and auto-merge merges it
-   when it's green. The train makes merge commits on your branch, so run `git pull` before you push again.
-3. If CI fails, fix it on your branch and push. The PR keeps its place in the queue.
-4. If your PR gets the `merge-conflict` label, it has stepped out of the queue. Resolve it yourself:
-   merge `origin/main` into your branch (in a desktop-app worktree, use `sync_with_base_branch`),
-   fix the conflicts, run `pnpm check` and push. Ask the user only if the fix would change what
-   another PR did. The train removes the label and the PR rejoins in its old place.
-5. After it merges: `git checkout main && git pull`.
+1. Open your PR, then queue it: `gh pr edit <N> --add-label queue`. In the desktop app, bind the PR
+   to the session (`mcp__ccd_pr__bind_pr`) and turn on Auto-fix (`mcp__ccd_pr__set_monitor` with
+   `auto_fix: true`). The app then wakes the session when CI fails, the PR conflicts with `main`
+   or someone comments.
+2. Wait your turn. When your PR is at the front, Mergify merges `main` into it, waits for CI and
+   merges it. Mergify pushes to your branch, so run `git pull` before you push again.
+3. If your PR leaves the queue (Mergify comments on why: a conflict or failing CI), fix it
+   yourself. For a conflict, merge `origin/main` into your branch (in a desktop-app worktree, use
+   `sync_with_base_branch`) and resolve it. Run `pnpm check`, push, then remove and add the `queue`
+   label to rejoin. Ask the user only if the fix would undo what another PR did.
+4. After it merges: `git checkout main && git pull`.
 
-Don't change `main`'s branch protection or the train to get your PR in faster.
+Don't change `main`'s branch protection or `.mergify.yml` to get your PR in faster.
