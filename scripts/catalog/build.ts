@@ -5,13 +5,12 @@
  *   pnpm exec tsx scripts/catalog/build.ts  -> scripts/catalog/out/{directory.json,summary.md}
  */
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
-import { dirname, join } from "node:path";
-import { fileURLToPath } from "node:url";
+import { join } from "node:path";
 import { careersUrl, guessName, isPlaceholderBoard, type DetectedCompany } from "@rawjobs/core";
 import { readChecks, type CheckRow } from "./lib/checks";
 import { readDenylist } from "./lib/denylist";
+import { catalogDir } from "./lib/paths";
 
-const here = dirname(fileURLToPath(import.meta.url));
 type Merged = { key: string; ats: string; slug: string; region?: string; shard?: string; site?: string; name?: string; families: string[]; confidence: "high" | "single" };
 type Check = { key: string; status: "live" | "dormant" | "dead" | "error" | "unreachable"; jobs: number | null; name?: string; http?: number; checked_at: string };
 
@@ -24,15 +23,15 @@ function settle(c: CheckRow): CheckRow {
   return c;
 }
 
-const merged = (JSON.parse(readFileSync(join(here, "out", "merged.json"), "utf8")) as { boards: Merged[] }).boards;
+const merged = (JSON.parse(readFileSync(join(catalogDir, "out", "merged.json"), "utf8")) as { boards: Merged[] }).boards;
 // Latest result wins, but a definite answer beats a later error (mergeCheck).
-const checks = readChecks(join(here, "out"), settle) as unknown as Map<string, Check>;
+const checks = readChecks(join(catalogDir, "out"), settle) as unknown as Map<string, Check>;
 
 // The hand-reviewed boards (seeds/curated-boards.json) are the curated tier.
 const curated = new Set<string>();
 /** Hand-picked display names from the curated list (e.g. "Crypto.com", "talabat"). */
 const curatedNames = new Map<string, string>();
-const curatedFile = join(here, "seeds", "curated-boards.json");
+const curatedFile = join(catalogDir, "seeds", "curated-boards.json");
 if (existsSync(curatedFile)) {
   for (const c of (JSON.parse(readFileSync(curatedFile, "utf8")) as { companies: { key: string; name: string }[] }).companies) {
     curated.add(c.key);
@@ -67,7 +66,7 @@ const rows = merged.map((b) => {
 // Companies removed on request never reach the directory (docs/shared-directory.md, "Denylist").
 const denied = readDenylist();
 const directory = rows.filter((r) => (r.status === "live" || r.status === "dormant") && !isPlaceholderBoard(r.name) && !denied(r));
-writeFileSync(join(here, "out", "directory.json"), JSON.stringify({ generated_at: new Date().toISOString(), count: directory.length, companies: directory }));
+writeFileSync(join(catalogDir, "out", "directory.json"), JSON.stringify({ generated_at: new Date().toISOString(), count: directory.length, companies: directory }));
 
 // ---- summary ----
 const STATUSES = ["live", "dormant", "dead", "unreachable", "error", "unchecked"] as const;
@@ -104,5 +103,5 @@ const md = [
   table((r) => r.confidence),
   "",
 ].join("\n");
-writeFileSync(join(here, "out", "summary.md"), md);
+writeFileSync(join(catalogDir, "out", "summary.md"), md);
 console.log(md);

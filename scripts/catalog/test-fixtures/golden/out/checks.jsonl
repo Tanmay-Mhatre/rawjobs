@@ -1,0 +1,6 @@
+{"key":"lever:acme","status":"live","jobs":5,"name":"Acme","checked_at":"2026-10-01T00:00:00Z"}
+{"key":"greenhouse:betapay","status":"error","jobs":null,"http":503,"checked_at":"2026-10-01T00:00:00Z"}
+{"key":"ashby:gammapay","status":"dormant","jobs":0,"name":"Gamma Pay","checked_at":"2026-10-01T00:00:00Z"}
+{"key":"lever:deltaco","status":"dead","jobs":null,"http":404,"checked_at":"2026-10-01T00:00:00Z"}
+{"key":"greenhouse:takendown","status":"live","jobs":2,"name":"Taken Down Ltd","checked_at":"2026-10-01T00:00:00Z"}
+{"key":"lever:acmesandbox","status":"live","jobs":1,"name":"Acme Sandbox","checked_at":"2026-10-01T00:00:00Z"}
