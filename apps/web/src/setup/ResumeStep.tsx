@@ -18,6 +18,8 @@ type SaveResult = { ok: true } | { ok: false; error: string };
 
 type Props = {
   draft: Draft;
+  /** The wizard: the saved setup has been loaded into `draft`. The first prefill waits for it. */
+  draftLoaded?: boolean;
   update: (patch: Partial<Draft>) => void;
   resumeText: string;
   saveResume: (text: string) => Promise<SaveResult>;
@@ -54,7 +56,7 @@ function filledText(patch: Partial<Draft>): string {
   return names.length > 1 ? `${names.slice(0, -1).join(", ")} and ${names[names.length - 1]}` : (names[0] ?? "");
 }
 
-export function ResumeStep({ draft, update, resumeText, saveResume, removeResume, onSkip, onNext, hideSkip, footer }: Props) {
+export function ResumeStep({ draft, draftLoaded = true, update, resumeText, saveResume, removeResume, onSkip, onNext, hideSkip, footer }: Props) {
   const wizard = !!footer;
   const [mode, setMode] = useState<Mode>(null);
   const [replacing, setReplacing] = useState(false);
@@ -74,6 +76,14 @@ export function ResumeStep({ draft, update, resumeText, saveResume, removeResume
     update(patch);
     setFilled(filledText(patch));
   };
+
+  // First time through the wizard with a resume saved earlier: prefill once, but only after the
+  // saved setup has loaded. Earlier, loading it would replace the prefilled answers, and the
+  // prefill, worked out against a blank draft, could overwrite what you'd chosen.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: once, as soon as both the setup and the resume are there
+  useEffect(() => {
+    if (wizard && draftLoaded && hasResume && !prefilled.current && (draft.furthestStep ?? 0) <= STEP.resume) prefill(resumeText, draft.aiProfile, draft);
+  }, [wizard, draftLoaded, hasResume]);
 
   const saveSingle = async (): Promise<SaveResult> => {
     const res = await saveResume(text);
@@ -165,10 +175,6 @@ export function ResumeStep({ draft, update, resumeText, saveResume, removeResume
           }
           auto={wizard}
           filled={filled}
-          // First time through the wizard with a resume saved earlier: prefill once on arrival.
-          onArrive={() => {
-            if (wizard && !prefilled.current && (draft.furthestStep ?? 0) <= STEP.resume) prefill(resumeText, draft.aiProfile, draft);
-          }}
         />
       ) : (
         <>
@@ -455,7 +461,6 @@ function SavedResume({
   onRemove,
   auto,
   filled,
-  onArrive,
 }: {
   text: string;
   draft: Draft;
@@ -465,7 +470,6 @@ function SavedResume({
   /** Wizard: suggestions were (or are about to be) applied automatically. */
   auto: boolean;
   filled: string | null;
-  onArrive: () => void;
 }) {
   const [applied, setApplied] = useState(false);
   const suggest = useMemo(() => buildSuggestions(text, draft.aiProfile), [text, draft.aiProfile]);
@@ -478,9 +482,6 @@ function SavedResume({
       .split("\n")
       .find((l) => l.trim())
       ?.replace(/^#+\s*/, "") ?? "Resume";
-
-  // biome-ignore lint/correctness/useExhaustiveDependencies: once, when the step is shown
-  useEffect(() => onArrive(), []);
 
   return (
     <div className="space-y-4">

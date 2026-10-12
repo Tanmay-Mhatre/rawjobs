@@ -62,7 +62,7 @@ export function App() {
   const setupState = status === null ? "configured" : !status ? "loading" : !status.isPersonal ? "none" : !status.valid ? "invalid" : "configured";
   const notSetUp = setupState === "none";
 
-  const { saved, draft, setDraft, update, dirty, forgetBase } = useSetupDraft(status, meta);
+  const { saved, draft, setDraft, update, dirty, forgetBase, loaded: draftLoaded } = useSetupDraft(status, meta);
   const { resume, saveResume, removeResume } = useResume();
   const progress = setupProgress(draft, !!resume.text);
   const suggest = useMemo(() => buildSuggestions(resume.text, draft.aiProfile), [resume.text, draft.aiProfile]);
@@ -316,6 +316,7 @@ export function App() {
               step={wizardStep}
               goStep={goStep}
               draft={draft}
+              draftLoaded={draftLoaded}
               update={update}
               existing={personal}
               configErrors={status?.valid === false ? status.errors : undefined}
