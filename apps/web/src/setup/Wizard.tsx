@@ -13,6 +13,8 @@ type Props = {
   step: number;
   goStep: (n: number) => void;
   draft: Draft;
+  /** The saved setup has been loaded into `draft` (before that it's blank). */
+  draftLoaded: boolean;
   update: (patch: Partial<Draft>) => void;
   /** A personal config already exists (re-running setup). */
   existing: boolean;
@@ -40,7 +42,7 @@ const COPY: Record<number, { title: string; intro: string }> = {
 };
 
 export function Wizard(props: Props) {
-  const { step, goStep, draft, update, existing, configErrors, startScan, onSaved, onFinish, onExit, onStart, onStartOver, progress, resumeText, saveResume, removeResume } = props;
+  const { step, goStep, draft, draftLoaded, update, existing, configErrors, startScan, onSaved, onFinish, onExit, onStart, onStartOver, progress, resumeText, saveResume, removeResume } = props;
   const suggest = useMemo(() => buildSuggestions(resumeText, draft.aiProfile), [resumeText, draft.aiProfile]);
   const heading = useRef<HTMLHeadingElement>(null);
 
@@ -77,6 +79,7 @@ export function Wizard(props: Props) {
             {step === STEP.resume && (
               <ResumeStep
                 draft={draft}
+                draftLoaded={draftLoaded}
                 update={update}
                 resumeText={resumeText}
                 saveResume={saveResume}
