@@ -1,0 +1,28 @@
+# The merge queue (Mergify). A pull request joins it when it gets the `queue` label. Pull requests
+# merge one at a time, in the order they joined: Mergify merges main into the front one, waits for
+# CI, merges it, and moves on. A pull request that conflicts with main or fails CI leaves the
+# queue, and Mergify says why on the PR. Fix it, push, and add the label again to rejoin.
+queue_rules:
+  - name: default
+    queue_conditions:
+      - base = main
+      - -draft
+      - -conflict
+    # The checks main's branch protection requires.
+    merge_conditions:
+      - check-success = check
+      - check-success = release-files
+      - check-success = install / install (ubuntu-24.04)
+      - check-success = install / install (macos-15)
+      - check-success = install / install (windows-2025)
+    merge_method: merge
+    update_method: merge
+    batch_size: 1
+
+pull_request_rules:
+  - name: Queue pull requests labelled `queue`
+    conditions:
+      - label = queue
+    actions:
+      queue:
+        name: default
