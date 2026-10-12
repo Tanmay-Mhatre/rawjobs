@@ -10,32 +10,21 @@ import { applyFilters, DEFAULT_FILTERS, type Ctx } from "../src/lib/filters";
 import { hiddenByRules, offerFor, ruleHides, type HideRule } from "../src/lib/notForMe";
 import { addRule, usePrefs, withDefaults } from "../src/lib/prefs";
 import { useUserState, type UserState } from "../src/lib/userState";
+import { makeJob } from "./helpers";
 
 afterEach(cleanup);
 beforeEach(() => localStorage.clear());
 
 let n = 0;
-const job = (o: Partial<Job> = {}): Job => ({
-  id: `greenhouse:acme:${++n}`,
-  ats: "greenhouse",
-  company: "Acme",
-  title: "Senior Product Manager",
-  location: "Dubai",
-  workplace: "onsite",
-  url: "https://acme.example/jobs/1",
-  firstSeen: new Date(Date.now() - 86_400_000).toISOString(),
-  lastSeen: new Date().toISOString(),
-  postedAt: new Date(Date.now() - 86_400_000).toISOString(),
-  status: "open",
-  score: 75,
-  why: { title: 30, location: 20, keywords: [], keywordPoints: 5, industry: 10 },
-  countries: ["United Arab Emirates"],
-  cities: ["Dubai, United Arab Emirates"],
-  seniority: "senior",
-  group: `Acme|senior product manager|${n}`,
-  hasDescription: false,
-  ...o,
-});
+const job = (o: Partial<Job> = {}): Job => {
+  n++;
+  return makeJob({
+    id: `greenhouse:acme:${n}`,
+    why: { title: 30, location: 20, keywords: [], keywordPoints: 5, industry: 10 },
+    group: `Acme|senior product manager|${n}`,
+    ...o,
+  });
+};
 const usd = (min: number, max?: number, period = "year") => ({ min, max, currency: "USD", period });
 
 describe("reason to rule", () => {

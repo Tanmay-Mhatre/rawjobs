@@ -5,31 +5,24 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { JobCard } from "../src/components/radar/JobCard";
 import type { Job } from "../src/lib/data";
 import { shortAge } from "../src/lib/format";
+import { makeJob } from "./helpers";
 
 afterEach(cleanup);
 
 const DAY = 86_400_000;
-const job = (over: Partial<Job> = {}): Job => ({
-  id: "greenhouse:acme:1",
-  ats: "greenhouse",
-  company: "Acme Exchange",
-  title: "Head of Product, Exchange",
-  location: "Dubai",
-  workplace: "hybrid",
-  url: "https://acme.example/jobs/1",
-  postedAt: new Date(Date.now() - 2 * DAY).toISOString(),
-  firstSeen: new Date(Date.now() - DAY).toISOString(),
-  lastSeen: new Date().toISOString(),
-  status: "open",
-  score: 74,
-  why: { title: 30, location: 20, keywords: ["payments"], keywordPoints: 14, freshness: 10 },
-  countries: ["United Arab Emirates"],
-  cities: ["Dubai, United Arab Emirates"],
-  seniority: "senior",
-  group: "Acme|head of product",
-  hasDescription: true,
-  ...over,
-});
+const job = (over: Partial<Job> = {}): Job =>
+  makeJob({
+    id: "greenhouse:acme:1",
+    company: "Acme Exchange",
+    title: "Head of Product, Exchange",
+    workplace: "hybrid",
+    postedAt: new Date(Date.now() - 2 * DAY).toISOString(),
+    score: 74,
+    why: { title: 30, location: 20, keywords: ["payments"], keywordPoints: 14, freshness: 10 },
+    group: "Acme|head of product",
+    hasDescription: true,
+    ...over,
+  });
 
 function renderRow(over: Partial<Parameters<typeof JobCard>[0]> = {}) {
   const lead = job();

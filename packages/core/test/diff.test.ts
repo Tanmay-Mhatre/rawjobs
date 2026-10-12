@@ -7,27 +7,14 @@ import { mergeHistory } from "../src/diff";
 import type { RunResult } from "../src/run";
 import type { CompanyHealth, Job } from "../src/schema";
 import { KEEP_RUNS, readJobs, readMeta, saveRun } from "../src/store";
+import { makeJob } from "./helpers";
 
 const T0 = "2026-10-01T03:00:00.000Z";
 const T1 = "2026-10-02T03:00:00.000Z";
 const T2 = "2026-10-03T03:00:00.000Z";
 
-const job = (id: string, o: Partial<Job> = {}): Job => ({
-  id: `greenhouse:acme:${id}`,
-  ats: "greenhouse",
-  company: "Acme",
-  title: `Product Manager ${id}`,
-  location: "Dubai",
-  workplace: "onsite",
-  url: `https://acme.example/${id}`,
-  description: "payments",
-  firstSeen: T0,
-  lastSeen: T0,
-  status: "open",
-  score: 50,
-  why: { title: 20, location: 20, keywords: [], keywordPoints: 0, freshness: 10 },
-  ...o,
-});
+const job = (id: string, o: Partial<Job> = {}): Job =>
+  makeJob({ id: `greenhouse:acme:${id}`, title: `Product Manager ${id}`, url: `https://acme.example/${id}`, description: "payments", firstSeen: T0, lastSeen: T0, ...o });
 
 const health = (ok: boolean): CompanyHealth[] => [{ company: "Acme", ats: "greenhouse", slug: "acme", ok, jobsFound: 0, matches: 0, durationMs: 1 }];
 const run = (at: string, jobs: Job[], ok = true): RunResult => ({ startedAt: at, finishedAt: at, jobs, health: health(ok), partial: false, checked: 0 });

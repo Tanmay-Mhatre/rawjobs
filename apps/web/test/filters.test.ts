@@ -19,32 +19,26 @@ import {
   type Ctx,
   type Filters,
 } from "../src/lib/filters";
+import { makeJob } from "./helpers";
 
 const NOW = Date.parse("2026-10-05T12:00:00Z");
 const daysAgo = (d: number) => new Date(NOW - d * 86_400_000).toISOString();
 
 let n = 0;
-const job = (o: Partial<Job> = {}): Job => ({
-  id: `greenhouse:acme:${++n}`,
-  ats: "greenhouse",
-  company: "Acme",
-  title: "Senior Product Manager",
-  location: "Dubai",
-  workplace: "onsite",
-  url: "https://example.com",
-  firstSeen: daysAgo(1),
-  lastSeen: daysAgo(0),
-  postedAt: daysAgo(1),
-  status: "open",
-  score: 75,
-  why: { title: 30, location: 20, keywords: ["crypto"], keywordPoints: 5, industry: 10 },
-  countries: ["United Arab Emirates"],
-  cities: ["Dubai, United Arab Emirates"],
-  seniority: "senior",
-  group: `Acme|senior product manager|${n}`,
-  hasDescription: true,
-  ...o,
-});
+const job = (o: Partial<Job> = {}): Job => {
+  n++;
+  return makeJob({
+    id: `greenhouse:acme:${n}`,
+    url: "https://example.com",
+    firstSeen: daysAgo(1),
+    lastSeen: daysAgo(0),
+    postedAt: daysAgo(1),
+    why: { title: 30, location: 20, keywords: ["crypto"], keywordPoints: 5, industry: 10 },
+    group: `Acme|senior product manager|${n}`,
+    hasDescription: true,
+    ...o,
+  });
+};
 
 const ctx: Ctx = { user: {}, min: 70, industriesOf: (c) => (c === "Kraken" ? ["crypto-exchange"] : []), hiddenCompanies: new Set(), now: NOW };
 const f = (o: Partial<Filters> = {}): Filters => ({ ...DEFAULT_FILTERS, ...o });
