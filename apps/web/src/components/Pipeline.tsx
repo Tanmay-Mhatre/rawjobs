@@ -1,3 +1,4 @@
+import { displayName } from "@rawjobs/core/display-name";
 import { ArrowRight, StickyNote } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import type { Job } from "../lib/data";
@@ -167,7 +168,7 @@ export function Pipeline({ user, jobsById, min, onOpen, onMove, onSetup, goRadar
                         )}
                         <ScoreBadge score={job?.score ?? s.score} threshold={min} estimated={job?.estimated} className="shrink-0" />
                       </div>
-                      <p className="mt-0.5 type-small text-muted">{s.company}</p>
+                      <p className="mt-0.5 type-small text-muted">{displayName(s.company)}</p>
                       {e.note && (
                         <p className="mt-2 line-clamp-2 flex gap-1 type-small text-muted">
                           <StickyNote className="mt-1 size-3.5 shrink-0" aria-hidden />

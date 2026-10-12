@@ -1,3 +1,4 @@
+import { displayName } from "@rawjobs/core/display-name";
 import { INDUSTRY_BY_ID } from "@rawjobs/core/catalog/industries";
 import { SENIORITY_LEVELS } from "@rawjobs/core/catalog/seniority";
 import { matchesTitle, safeUrl } from "@rawjobs/core/text";
@@ -305,7 +306,7 @@ export function JobDetail(p: JobDetailProps) {
           {(p.moreFromCompany?.length || p.onHideCompany) && (
             <section className="rj-drawer__section">
               <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
-                <h3 className="rj-h">More from {job.company}</h3>
+                <h3 className="rj-h">More from {displayName(job.company)}</h3>
                 {p.onHideCompany && (
                   <button type="button" className="type-small text-muted hover:text-danger-text" onClick={() => p.onHideCompany!(!p.companyHidden)}>
                     {p.companyHidden ? "Show this company again" : "Hide this company"}

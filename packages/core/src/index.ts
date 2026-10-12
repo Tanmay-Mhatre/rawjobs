@@ -30,6 +30,7 @@ export * from "./catalog/industries";
 export * from "./catalog/find-boards";
 export * from "./catalog/seniority";
 export { htmlToText, inferWorkplace, isPlaceholderBoard, matchesTerm, termRegex } from "./text";
+export { companyLabel, displayName, NAME_OVERRIDES } from "./display-name";
 export { careersUrl, companyKey, companyOfJobId, connectors, currentJobId, jobCompanyKey, getConnector, detectCompany, guessName, type DetectResult } from "./connectors";
 export type { Connector, Ctx, DetectedCompany } from "./connectors";
 export * from "./employers";

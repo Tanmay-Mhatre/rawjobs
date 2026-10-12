@@ -24,6 +24,16 @@ describe("companyMatches", () => {
     expect(names("xyzzy")).toEqual([]);
   });
 
+  it("finds a company by its raw name and by the clean name we show", () => {
+    const idx = companyIndex([c("Getrecharge.Com", "recharge"), c("Trust-Wallet", "trust-wallet"), c("Crypto.com", "crypto")]);
+    const hits = (q: string) => [...companyMatches(idx, q)].sort((a, b) => a[1] - b[1]).map(([co, rank]) => `${co.name}:${rank}`);
+    expect(hits("recharge")).toEqual(["Getrecharge.Com:0"]);
+    expect(hits("getrecharge")).toEqual(["Getrecharge.Com:1"]);
+    expect(hits("trust wallet")).toEqual(["Trust-Wallet:0"]);
+    expect(hits("wallet")).toEqual(["Trust-Wallet:2"]);
+    expect(hits("crypto.com")).toEqual(["Crypto.com:0"]);
+  });
+
   it("matches nothing for an empty search", () => {
     expect(companyMatches(index, "  ").size).toBe(0);
   });

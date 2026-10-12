@@ -1,3 +1,4 @@
+import { companyLabel, displayName } from "@rawjobs/core/display-name";
 import { ArrowRight, Check, CircleAlert, EyeOff, LoaderCircle, RefreshCw, X } from "lucide-react";
 import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
 import { addCompanies, countCompanies, jobCompanyKey, keyOf, wantsAttention, type CompanyRef } from "../lib/companies";
@@ -230,7 +231,7 @@ export function CompaniesTab({ configured, meta, jobs, draft, saved, update, onS
     const removed = draft.companies.filter((r) => drop.has(keyOf(r)));
     if (!removed.length) return;
     removeMany(keys);
-    const one = removed.length === 1 ? removed[0]!.name || removed[0]!.slug : null;
+    const one = removed.length === 1 ? companyLabel(removed[0]!) : null;
     toast({
       message: one ? `Removed ${one} from My companies.` : `Removed ${removed.length} companies from My companies.`,
       actionLabel: "Undo",
@@ -326,11 +327,11 @@ export function CompaniesTab({ configured, meta, jobs, draft, saved, update, onS
               <ul className="mt-3 flex flex-wrap gap-1.5">
                 {hidden.map((h) => (
                   <li key={h.key ?? h.name} className="inline-flex h-8 items-center gap-2 rounded-md border border-line pl-2.5 pr-1.5 type-small">
-                    <span className="font-medium">{h.name ?? h.key}</span>
+                    <span className="font-medium">{h.name ? displayName(h.name) : h.key}</span>
                     <button
                       type="button"
                       className="min-h-6 type-label text-ink underline underline-offset-2 hover:text-muted"
-                      aria-label={`Show ${h.name ?? h.key} again`}
+                      aria-label={`Show ${h.name ? displayName(h.name) : h.key} again`}
                       onClick={() => {
                         if (h.key) update({ muted: draft.muted.filter((k) => k !== h.key) });
                         if (h.name) onUnhideName(h.name);
