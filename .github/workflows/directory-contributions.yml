@@ -10,13 +10,18 @@ on:
     - cron: "17 */3 * * *"
   workflow_dispatch:
 
+# queue: max — runs wait their turn (up to 100) instead of the default, where a newer waiting run
+# cancels the older one (which could be a queued weekly rebuild).
 concurrency:
   group: directory
   cancel-in-progress: false
+  queue: max
 
 permissions:
   contents: read
   issues: write
+  # To start an overdue weekly rebuild and keep the schedules on (scripts/catalog/watchdog.sh).
+  actions: write
 
 env:
   DATA_REPO: ${{ vars.DATA_REPO || 'Tanmay-Mhatre/rawjobs-directory' }}
@@ -31,11 +36,23 @@ jobs:
         env:
           INBOX_URL: ${{ secrets.INBOX_URL }}
           INBOX_TOKEN: ${{ secrets.INBOX_TOKEN }}
+        # 500 a page; up to 4 pages a run (about the inbox's daily cap), the rest next run.
         run: |
-          curl -fsS -H "Authorization: Bearer $INBOX_TOKEN" "$INBOX_URL/v1/pending" -o "$RUNNER_TEMP/inbox.json"
+          echo '[]' > "$RUNNER_TEMP/items.json"
+          cursor=""
+          for page in 1 2 3 4; do
+            curl -fsS -G -H "Authorization: Bearer $INBOX_TOKEN" ${cursor:+--data-urlencode "cursor=$cursor"} "$INBOX_URL/v1/pending" -o "$RUNNER_TEMP/page.json"
+            jq -s '.[0] + .[1].items' "$RUNNER_TEMP/items.json" "$RUNNER_TEMP/page.json" > "$RUNNER_TEMP/merged.json"
+            mv "$RUNNER_TEMP/merged.json" "$RUNNER_TEMP/items.json"
+            cursor=$(jq -r '.cursor // ""' "$RUNNER_TEMP/page.json")
+            # No cursor (an inbox from before paging) or nothing more: done.
+            [ "$(jq -r '.more' "$RUNNER_TEMP/page.json")" = true ] && [ -n "$cursor" ] || break
+          done
+          jq '{items: unique_by(.id)}' "$RUNNER_TEMP/items.json" > "$RUNNER_TEMP/inbox.json"
           echo "count=$(jq '.items | length' "$RUNNER_TEMP/inbox.json")" >> "$GITHUB_OUTPUT"
 
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - id: checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
 
@@ -160,9 +177,11 @@ jobs:
         env:
           INBOX_URL: ${{ secrets.INBOX_URL }}
           INBOX_TOKEN: ${{ secrets.INBOX_TOKEN }}
+        # The inbox removes at most 1,000 a request.
         run: |
-          jq '{ids: .processed}' "$RUNNER_TEMP/summary.json" > "$RUNNER_TEMP/ack.json"
-          curl -fsS -X POST -H "Authorization: Bearer $INBOX_TOKEN" -H "content-type: application/json" --data @"$RUNNER_TEMP/ack.json" "$INBOX_URL/v1/ack"
+          jq -c '.processed | _nwise(1000) | {ids: .}' "$RUNNER_TEMP/summary.json" | while read -r batch; do
+            curl -fsS -X POST -H "Authorization: Bearer $INBOX_TOKEN" -H "content-type: application/json" --data "$batch" "$INBOX_URL/v1/ack"
+          done
 
       - if: always() && steps.gate.outcome == 'failure'
         name: Report a refused release
@@ -175,3 +194,16 @@ jobs:
           open=$(gh issue list -R "${{ github.repository }}" --state open --search "\"$title\" in:title" --json number -q '.[0].number')
           if [ -n "$open" ]; then gh issue comment "$open" -R "${{ github.repository }}" --body "$body"; else gh issue create -R "${{ github.repository }}" --title "$title" --body "$body"; fi
           exit 1
+
+      # Even when the inbox is down: these only need the checkout.
+      - name: Start the weekly rebuild if it's overdue
+        if: always() && steps.checkout.outcome == 'success'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: bash scripts/catalog/watchdog.sh rebuild
+
+      - name: Keep the schedules alive
+        if: always() && steps.checkout.outcome == 'success'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: bash scripts/catalog/watchdog.sh keepalive

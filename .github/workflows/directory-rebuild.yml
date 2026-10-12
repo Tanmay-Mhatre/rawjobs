@@ -29,6 +29,7 @@ on:
   schedule:
     # GitHub runs schedules "best effort": on 12 Oct 2026 the Monday 03:00 run never fired. So
     # there are backups; each runs only if no weekly rebuild has published in the last 5 days.
+    # The other scheduled directory workflows also start it when it's overdue (scripts/catalog/watchdog.sh).
     # Off the hour on purpose: that's when GitHub is busiest.
     - cron: "7 3 * * 1"
     - cron: "37 5 * * 1"
@@ -45,14 +46,18 @@ on:
         type: boolean
         default: false
 
+# Workflow-level on purpose: per job, another run could take the group between collect and publish.
+# queue: max — waiting runs queue up instead of the default, where a newer one cancels the waiting one.
 concurrency:
   group: directory
   cancel-in-progress: false
+  queue: max
 
 permissions:
   contents: read
   issues: write
-  actions: read
+  # Read the run's own step times; start the site deploy after publishing.
+  actions: write
 
 env:
   DATA_REPO: ${{ vars.DATA_REPO || 'Tanmay-Mhatre/rawjobs-directory' }}
@@ -298,6 +303,14 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.DATA_REPO_TOKEN }}
         run: bash scripts/catalog/state.sh save
+
+      - name: Refresh the site's numbers
+        # The site reads the latest release at build time; its own Monday schedule is only a backup.
+        if: steps.publish.outcome == 'success'
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh workflow run site.yml -R "${{ github.repository }}" --ref main
 
       - name: Commit the coverage report
         if: ${{ !inputs.smoke }}

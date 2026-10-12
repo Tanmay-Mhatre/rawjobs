@@ -19,9 +19,10 @@ on:
       - apps/web/src/design/**
       - design/components/bundle.css
       - .github/workflows/site.yml
-  # Mondays, after the weekly directory rebuild (03:00), so the page's numbers stay current.
+  # The weekly rebuild starts a deploy when it publishes; this Monday run is the backup, off the
+  # hour (GitHub's busiest time) and well after the rebuild's usual finish.
   schedule:
-    - cron: "0 12 * * 1"
+    - cron: "47 13 * * 1"
   workflow_dispatch:
 
 permissions:

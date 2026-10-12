@@ -12,12 +12,17 @@ on:
     - cron: "40 13 * * *"
   workflow_dispatch:
 
+# queue: max — wait behind a running rebuild instead of being cancelled by the next run to queue.
 concurrency:
   group: directory
   cancel-in-progress: false
+  queue: max
 
 permissions:
   contents: read
+  # To start an overdue weekly rebuild and keep the schedules on (scripts/catalog/watchdog.sh).
+  actions: write
+  issues: read
 
 env:
   DATA_REPO: ${{ vars.DATA_REPO || 'Tanmay-Mhatre/rawjobs-directory' }}
@@ -27,7 +32,8 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 70
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - id: checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
@@ -52,3 +58,15 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.DATA_REPO_TOKEN }}
         run: bash scripts/catalog/state.sh save
+
+      - name: Start the weekly rebuild if it's overdue
+        if: always() && steps.checkout.outcome == 'success'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: bash scripts/catalog/watchdog.sh rebuild
+
+      - name: Keep the schedules alive
+        if: always() && steps.checkout.outcome == 'success'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: bash scripts/catalog/watchdog.sh keepalive
