@@ -2,9 +2,9 @@ import { companyLabel } from "@rawjobs/core/display-name";
 import { INDUSTRIES, INDUSTRY_BY_ID, INDUSTRY_GROUPS } from "@rawjobs/core/catalog/industries";
 import { isPlaceholderBoard, safeUrl } from "@rawjobs/core/text";
 import { ChevronDown, CloudDownload, ExternalLink, Link2, LoaderCircle, RefreshCw } from "lucide-react";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 import { ATS_LABEL, groupBoards, SUPPORTED, type CompanyRef } from "../lib/companies";
-import { companyIndex, companyMatches, type CompanyIndex } from "../lib/companySearch";
+import { companyIndex, companyMatches, MATCH, type CompanyIndex } from "../lib/companySearch";
 import { canRunLocally } from "../lib/data";
 import { DirectoryBar, updateDirectory } from "./DirectoryBar";
 import { AddButton } from "./CompanyButtons";
@@ -42,14 +42,16 @@ type Props = {
   industries?: string[];
   /** The search from the page header (the page has one search box). */
   q: string;
-  /** Open "Add by link" (for a company the directory doesn't have). */
-  onAddByLink: () => void;
+  /** Open "Add by link" for a company the directory doesn't have (named as typed in the search). */
+  onAddByLink: (name?: string) => void;
   /** The page's one company count (countCompanies), for the directory bar. */
   companyCount?: number;
+  /** The directory's search index (companyIndex), shared with the page; built here when not given. */
+  index?: CompanyIndex<DirCompany>;
 };
 
 /** Browse all: the whole directory, filtered by the header search, industry or hiring system. */
-export function CompanyFinder({ watched, directory, directoryError, onAddMany, onRemove, onDirectoryUpdated, fit, industries, q, onAddByLink, companyCount }: Props) {
+export function CompanyFinder({ watched, directory, directoryError, onAddMany, onRemove, onDirectoryUpdated, fit, industries, q, onAddByLink, companyCount, index }: Props) {
   return (
     <div className="space-y-4">
       <DirectoryBar onUpdated={onDirectoryUpdated} companies={companyCount} />
@@ -64,6 +66,7 @@ export function CompanyFinder({ watched, directory, directoryError, onAddMany, o
         q={q}
         onAddByLink={onAddByLink}
         onReload={onDirectoryUpdated}
+        index={index}
       />
     </div>
   );
@@ -72,11 +75,11 @@ export function CompanyFinder({ watched, directory, directoryError, onAddMany, o
 // ---------- search the whole directory ----------
 
 /**
- * Directory search, one row per company (its other careers pages fold under it). Browsing lists companies
- * with open jobs; a search finds any, and yours always show. The search forgives typos (companyMatches):
- * exact and starts-with names first, then close spellings; within each, the best fit for your profile,
- * then the biggest. Sandbox and test boards never show (unless one
- * is already in My companies).
+ * Directory search, one row per company (its other careers pages fold under it), each with how it matched
+ * (`rank`, MATCH). Browsing lists companies with open jobs; a search finds any, and yours always show. The
+ * search looks at names only, never careers addresses (companyMatches): the exact name first, then names
+ * that start with it, then names that contain it, then close spellings; within each, the best fit for your
+ * profile, then the biggest. Sandbox and test boards never show (unless one is already in My companies).
  */
 export function searchDirectory(
   all: readonly DirCompany[],
@@ -101,7 +104,22 @@ export function searchDirectory(
     .filter((c) => !o.industry || !!c.tags?.includes(o.industry) || !!c.title_tags?.includes(o.industry))
     .filter((c) => !matches || matches.has(c))
     .sort((a, b) => rank(a) - rank(b) || (o.fit?.get(b.key) ?? 0) - (o.fit?.get(a.key) ?? 0) || (b.open_jobs ?? 0) - (a.open_jobs ?? 0));
-  return groupBoards(sorted, new Set(o.watched));
+  return groupBoards(sorted, new Set(o.watched)).map((g) => ({ ...g, rank: Math.min(rank(g.lead), ...g.others.map(rank)) }));
+}
+
+/** Title case for a name typed in lower case ("revolut" is "Revolut"); a name typed with capitals stays as typed. */
+export function typedName(q: string): string {
+  const s = q.trim().replace(/\s+/g, " ");
+  return s === s.toLowerCase() ? s.replace(/(^|\s)\p{L}/gu, (c) => c.toUpperCase()) : s;
+}
+
+/** How a search result matched, said plainly ("name starts with “revolut”"); nothing for the exact name. */
+function matchWhy(rank: number, term: string): string | undefined {
+  if (rank === MATCH.starts) return `name starts with “${term}”`;
+  if (rank === MATCH.word) return `a word in the name starts with “${term}”`;
+  if (rank === MATCH.contains) return `name contains “${term}”`;
+  if (rank === MATCH.close) return "similar spelling";
+  return undefined;
 }
 
 /** The directory couldn't load: say so, and offer the fix (download it) and a retry. */
@@ -152,6 +170,7 @@ function Browse({
   q,
   onAddByLink,
   onReload,
+  index: shared,
 }: {
   all: DirCompany[] | null;
   error: string | null;
@@ -161,15 +180,16 @@ function Browse({
   onAdd: (c: DirCompany) => void;
   onRemove: (key: string) => void;
   q: string;
-  onAddByLink: () => void;
+  onAddByLink: (name?: string) => void;
   onReload: () => void;
+  index?: CompanyIndex<DirCompany>;
 }) {
   const [system, setSystem] = useState<"all" | "supported" | "soon">("all");
   const [industry, setIndustry] = useState("");
   const [page, setPage] = useState(1);
   const top = useRef<HTMLDivElement>(null);
 
-  const index = useMemo(() => (all ? companyIndex(all) : undefined), [all]);
+  const index = useMemo(() => shared ?? (all ? companyIndex(all) : undefined), [shared, all]);
   const results = useMemo(() => (all ? searchDirectory(all, { q, watched, fit, system, industry, index }) : []), [all, index, q, system, industry, watched, fit]);
 
   // Back to page 1 whenever the search or filters change.
@@ -192,6 +212,13 @@ function Browse({
   const from = (page - 1) * BROWSE_PAGE + 1;
   const to = Math.min(results.length, page * BROWSE_PAGE);
   const term = q.trim();
+  const exact = term ? results.filter((g) => g.rank === MATCH.exact).length : 0;
+  const close = results.length - exact;
+  const filtered = system !== "all" || !!industry;
+  const clearFilters = () => {
+    setSystem("all");
+    setIndustry("");
+  };
 
   return (
     <div className="space-y-3">
@@ -225,32 +252,52 @@ function Browse({
       </div>
       {/* Filtered counts stay exact, and say what they count (the directory size is the rounded-md one). */}
       <p role="status" className="tabular type-meta text-muted">
-        {results.length === 0
-          ? "No matching companies"
-          : `Showing ${from.toLocaleString()}–${to.toLocaleString()} of ${results.length.toLocaleString()} matching ${results.length === 1 ? "company" : "companies"}${term ? ` for “${term}”` : ""}`}
+        {term
+          ? [
+              exact ? `${exact.toLocaleString()} exact ${exact === 1 ? "match" : "matches"} for “${term}”` : `No exact match for “${term}”`,
+              close > 0 && `${close.toLocaleString()} close ${close === 1 ? "match" : "matches"}`,
+            ]
+              .filter(Boolean)
+              .join(" · ")
+          : results.length === 0
+            ? "No matching companies"
+            : `Showing ${from.toLocaleString()}–${to.toLocaleString()} of ${results.length.toLocaleString()} matching ${results.length === 1 ? "company" : "companies"}`}
       </p>
       <ul className="divide-y divide-line rounded-md border border-line">
-        {pageItems.map((g) => (
-          <BrowseRow key={g.lead.key} lead={g.lead} others={g.others} mine={mine} watched={watched} onAdd={onAdd} onRemove={onRemove} />
-        ))}
-        {results.length === 0 && (
+        {/* No company has the name typed: say so, and offer to add it by link under that name. */}
+        {term && !exact && page === 1 && (
+          <li className="space-y-2 px-3 py-4">
+            <h3 className="type-body font-semibold">
+              No company called “{term}” {filtered ? "with these filters" : "in the directory"}
+            </h3>
+            <p className="type-small text-muted">Paste its careers page link and RawJobs checks it right away.</p>
+            <div className="flex flex-wrap gap-2">
+              <Button size="sm" variant="primary" onClick={() => onAddByLink(typedName(term))}>
+                <Link2 className="size-3.5" /> Add {typedName(term)} by link
+              </Button>
+              {filtered && (
+                <Button size="sm" onClick={clearFilters}>
+                  Clear filters
+                </Button>
+              )}
+            </div>
+          </li>
+        )}
+        {pageItems.map((g, i) => {
+          const firstClose = !!term && g.rank > MATCH.exact && (i === 0 ? page === 1 : pageItems[i - 1]!.rank === MATCH.exact);
+          return (
+            <Fragment key={g.lead.key}>
+              {firstClose && <li className="bg-inset px-3 py-1.5 type-label text-muted">Close matches</li>}
+              <BrowseRow lead={g.lead} others={g.others} mine={mine} watched={watched} onAdd={onAdd} onRemove={onRemove} why={term ? matchWhy(g.rank, term) : undefined} />
+            </Fragment>
+          );
+        })}
+        {results.length === 0 && !term && (
           <li className="space-y-3 px-3 py-6 text-center type-small text-muted">
-            <p>{term ? <>No company matches “{term}”. If you know its careers page, add it by link.</> : "No company matches these filters."}</p>
-            {term ? (
-              <Button size="sm" onClick={onAddByLink}>
-                <Link2 className="size-3.5" /> Add by link
-              </Button>
-            ) : (
-              <Button
-                size="sm"
-                onClick={() => {
-                  setSystem("all");
-                  setIndustry("");
-                }}
-              >
-                Clear filters
-              </Button>
-            )}
+            <p>No company matches these filters.</p>
+            <Button size="sm" onClick={clearFilters}>
+              Clear filters
+            </Button>
           </li>
         )}
       </ul>
@@ -261,6 +308,8 @@ function Browse({
 
 export type LineProps = {
   watched: Set<string>;
+  /** How a search found this company ("name starts with “revolut”"). */
+  why?: string;
   /** Your industries: a company's industry line names one of these first. */
   mine: readonly string[];
   onAdd: (c: DirCompany) => void;
@@ -275,7 +324,7 @@ export function industryOf(c: Pick<DirCompany, "tags" | "title_tags">, mine: rea
 }
 
 /** One careers page: the company and what it is (industry), no job counts (those are on the Radar). */
-function BoardLine({ c, watched, mine, onAdd, onRemove, sub }: LineProps & { c: DirCompany; sub?: boolean }) {
+function BoardLine({ c, watched, mine, onAdd, onRemove, sub, why }: LineProps & { c: DirCompany; sub?: boolean }) {
   const soon = !SUPPORTED.has(c.ats);
   const name = companyLabel(c);
   return (
@@ -290,6 +339,7 @@ function BoardLine({ c, watched, mine, onAdd, onRemove, sub }: LineProps & { c: 
         <p className="type-small text-muted">
           {[
             !sub && industryOf(c, mine),
+            !sub && why,
             c.status === "dormant" ? "not hiring right now" : c.status === "unverified" ? "not checked yet" : null,
             c.origin === "user" && "added by you",
             soon && "not supported yet",
