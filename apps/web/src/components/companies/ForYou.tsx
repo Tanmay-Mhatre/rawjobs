@@ -4,7 +4,7 @@ import { isPlaceholderBoard } from "@rawjobs/core/text";
 import { Briefcase, History, Info, LoaderCircle, Package, Plus, RefreshCw, Undo2, X } from "lucide-react";
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { keyOf, type CompanyRef } from "../../lib/companies";
-import { refOf, visible, type CompanySuggestion, type CompanySuggestions, type SuggestState } from "../../lib/companySuggest";
+import { companyReasons, refOf, visible, type CompanySuggestion, type CompanySuggestions, type SuggestState } from "../../lib/companySuggest";
 import { canRunLocally } from "../../lib/data";
 import { load, save } from "../../lib/storage";
 import { settingsHash } from "../settings/registry";
@@ -349,7 +349,6 @@ function LikeLens({
               <li key={c!.key} className="flex items-center gap-2 rounded-md border border-line py-1.5 pl-2 pr-1.5">
                 <Monogram name={companyLabel(c!)} size="sm" />
                 <span className="type-label">{companyLabel(c!)}</span>
-                {c!.open_jobs ? <span className="type-meta text-muted">{c!.open_jobs} jobs</span> : null}
                 <AddButton added={watched.has(c!.key)} onAdd={() => void onAddMany([c!])} onRemove={() => onRemoveMany([c!.key])} name={companyLabel(c!)} />
                 <button
                   type="button"
@@ -394,13 +393,7 @@ function Packs({
               const on = watched.has(s.key);
               return (
                 <li key={s.key}>
-                  <Chip
-                    pressed={on}
-                    onClick={() => (on ? onRemoveMany([s.key]) : onAddMany([refOf(s)]))}
-                    title={s.reasons.join(" · ")}
-                    count={s.matches > 0 ? s.matches : undefined}
-                    className="pl-1.5"
-                  >
+                  <Chip pressed={on} onClick={() => (on ? onRemoveMany([s.key]) : onAddMany([refOf(s)]))} title={companyReasons(s.reasons).join(" · ")} className="pl-1.5">
                     <Monogram name={companyLabel(s)} size="xs" />
                     {companyLabel(s)}
                   </Chip>

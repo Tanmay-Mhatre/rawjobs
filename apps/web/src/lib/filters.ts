@@ -452,6 +452,13 @@ export function toQuery(f: Filters, sort: Sort, base: Filters = DEFAULT_FILTERS)
   return p.toString();
 }
 
+/**
+ * The Radar on one company's jobs ("#radar?companies=Kraken"), from My companies. Pass every name its
+ * jobs carry (a scan and the directory can name it differently): the Company filter keeps any of them.
+ * Everything else comes from your profile, like any Radar link.
+ */
+export const radarCompanyHash = (names: readonly string[]) => `#radar?${new URLSearchParams({ companies: [...new Set(names)].join("|") })}`;
+
 export function fromQuery(query: string, base: Filters = DEFAULT_FILTERS): { filters: Filters; sort: Sort } | null {
   if (!query) return null;
   const p = new URLSearchParams(query);

@@ -4,6 +4,7 @@ import { Clock, ExternalLink, RefreshCw, X } from "lucide-react";
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { ATS_LABEL, keyOf } from "../lib/companies";
 import type { CompanyHealth, DataMeta } from "../lib/data";
+import { radarCompanyHash } from "../lib/filters";
 import { formatDate, formatDateTime, timeAgo } from "../lib/format";
 import type { CompanyRow } from "../lib/setup";
 import { Status as BoardStatus } from "./primitives";
@@ -21,7 +22,8 @@ type Row = {
   key: string;
   /** Not saved yet. */
   isNew: boolean;
-  forYou: number;
+  /** Opens the Radar on this company's jobs. */
+  radar: string;
   last?: { h: CompanyHealth; at: string };
   history: (CompanyHealth | undefined)[];
   /** Scans in a row (newest first) that found nothing for you, and since when. */
@@ -97,7 +99,7 @@ export function MyCompanies({
   rows: list,
   savedKeys,
   meta,
-  forYou,
+  jobNames,
   onRemove,
   onRemoveMany,
   onScan,
@@ -108,7 +110,8 @@ export function MyCompanies({
   rows: CompanyRow[];
   savedKeys: Set<string>;
   meta?: DataMeta;
-  forYou: ReadonlyMap<string, number>;
+  /** The names the Radar's jobs use for each company key (a scan and the directory can differ), for the Radar link. */
+  jobNames?: ReadonlyMap<string, readonly string[]>;
   onRemove: (key: string) => void;
   onRemoveMany: (keys: string[]) => void;
   /** Scan now (offered when a company's last scan failed). */
@@ -119,7 +122,7 @@ export function MyCompanies({
   /** Shown instead of the list when there are no companies (what your scan covers without them). */
   empty?: ReactNode;
 }) {
-  const [sort, setSort] = useState<"jobs" | "name" | "attention">(attention ? "attention" : "jobs");
+  const [sort, setSort] = useState<"name" | "attention">(attention ? "attention" : "name");
   useEffect(() => {
     if (attention) setSort("attention");
   }, [attention]);
@@ -132,17 +135,15 @@ export function MyCompanies({
           .slice(0, 14)
           .map((run) => run.health.find((x) => keyOf(x) === key))
           .reverse();
-        return { r, key, isNew: !savedKeys.has(key), forYou: forYou.get(key) ?? 0, last: seen[0], history, quiet: quietOf(seen) };
+        const radar = radarCompanyHash(jobNames?.get(key) ?? [r.name || r.slug || companyLabel(r)]);
+        return { r, key, isNew: !savedKeys.has(key), radar, last: seen[0], history, quiet: quietOf(seen) };
       }),
-    [list, savedKeys, meta, forYou],
+    [list, savedKeys, meta, jobNames],
   );
-  const quiet = rows.filter((x) => x.forYou === 0 && isQuiet(x.quiet));
+  const quiet = rows.filter((x) => isQuiet(x.quiet));
   const broken = rows.filter(failing).length;
-  const sorted = [...rows].sort((a, b) => {
-    if (sort === "name") return companyLabel(a.r).localeCompare(companyLabel(b.r));
-    if (sort === "attention") return Number(failing(b)) - Number(failing(a)) || b.quiet.scans - a.quiet.scans || a.forYou - b.forYou;
-    return b.forYou - a.forYou || (b.last?.h.jobsFound ?? 0) - (a.last?.h.jobsFound ?? 0);
-  });
+  const byName = (a: Row, b: Row) => companyLabel(a.r).localeCompare(companyLabel(b.r));
+  const sorted = [...rows].sort((a, b) => (sort === "attention" ? Number(failing(b)) - Number(failing(a)) || b.quiet.scans - a.quiet.scans || byName(a, b) : byName(a, b)));
   const oldestQuiet = quiet
     .map((x) => x.quiet.since)
     .filter(Boolean)
@@ -164,9 +165,8 @@ export function MyCompanies({
               value={sort}
               onChange={setSort}
               options={[
-                { value: "jobs", label: "Most jobs for you" },
-                { value: "attention", label: "Needs attention" },
                 { value: "name", label: "A–Z" },
+                { value: "attention", label: "Needs attention" },
               ]}
             />
           )}
@@ -201,10 +201,6 @@ export function MyCompanies({
               <li key={x.r.id} className={cx("flex items-start gap-3 px-4 py-3 type-small", x.isNew && "bg-inset")}>
                 <div className="min-w-0 flex-1 space-y-1.5">
                   <NameCell x={x} />
-                  <p className="type-small text-muted">
-                    <span className={cx("tabular", x.forYou > 0 && "font-semibold text-ink")}>{x.forYou || "No"} for you</span>
-                    {x.last?.h.ok && <span className="tabular"> · {x.last.h.jobsFound} open jobs</span>}
-                  </p>
                   <ScanHistory history={x.history} />
                   <Status row={x} onScan={onScan} scanning={scanning} />
                 </div>
@@ -219,8 +215,6 @@ export function MyCompanies({
               <thead className="border-b border-line text-left type-label text-muted">
                 <tr>
                   <th className="px-4 py-2.5 font-medium">Company</th>
-                  <th className="px-3 py-2.5 text-right font-semibold">For you</th>
-                  <th className="px-3 py-2.5 text-right font-semibold">Open jobs</th>
                   <th className="px-3 py-2.5 font-medium">Recent scans</th>
                   <th className="px-3 py-2.5 font-medium">Status</th>
                   <th className="w-10 px-2 py-2.5">
@@ -234,8 +228,6 @@ export function MyCompanies({
                     <td className="px-4 py-2.5">
                       <NameCell x={x} />
                     </td>
-                    <td className={cx("tabular px-3 py-2.5 text-right", x.forYou > 0 ? "font-semibold text-ink" : "text-muted")}>{x.forYou || "—"}</td>
-                    <td className="tabular px-3 py-2.5 text-right text-muted">{x.last?.h.ok ? x.last.h.jobsFound : "—"}</td>
                     <td className="px-3 py-2.5">
                       <ScanHistory history={x.history} />
                     </td>
@@ -258,27 +250,33 @@ export function MyCompanies({
   );
 }
 
-/** Name, careers page link and hiring system. */
+/** The name opens the company's jobs on your Radar (they live there, not here); the icon opens its careers page. */
 function NameCell({ x }: { x: Row }) {
+  const name = companyLabel(x.r);
   return (
-    <>
-      <div className="flex items-center gap-1.5 font-medium">
-        {companyLabel(x.r)}
-        {/^https?:/.test(x.r.input) && (
-          <a
-            href={safeUrl(x.r.input)}
-            target="_blank"
-            rel="noreferrer"
-            className="inline-flex size-6 items-center justify-center rounded-md text-muted hover:text-ink"
-            aria-label={`${companyLabel(x.r)} careers page`}
-          >
-            <ExternalLink className="size-3.5" />
-          </a>
-        )}
-        {x.isNew && <span className="type-small font-normal text-muted">new</span>}
-      </div>
-      {x.r.ats && <div className="type-small text-muted">Hiring system: {atsName(x.r.ats)}</div>}
-    </>
+    <div className="flex items-center gap-1.5 font-medium">
+      <a
+        href={x.radar}
+        onClick={() => window.scrollTo({ top: 0 })}
+        className="min-w-0 truncate underline-offset-2 hover:underline"
+        aria-label={`${name}: see its jobs on your Radar`}
+        title={`See ${name} on your Radar`}
+      >
+        {name}
+      </a>
+      {/^https?:/.test(x.r.input) && (
+        <a
+          href={safeUrl(x.r.input)}
+          target="_blank"
+          rel="noreferrer"
+          className="inline-flex size-6 items-center justify-center rounded-md text-muted hover:text-ink"
+          aria-label={`${name} careers page`}
+        >
+          <ExternalLink className="size-3.5" />
+        </a>
+      )}
+      {x.isNew && <span className="type-small font-normal text-muted">new</span>}
+    </div>
   );
 }
 
@@ -316,7 +314,7 @@ function Status({ row, onScan, scanning }: { row: Row; onScan?: () => void; scan
   return (
     <span className="flex flex-wrap items-center gap-x-2 gap-y-1">
       <BoardStatus state={last.h.jobsFound > 0 ? "healthy" : "dormant"} />
-      <span className="type-small text-muted">{isQuiet(quiet) && !row.forYou ? `Nothing for you since ${formatDate(quiet.since)}` : `Scanned ${timeAgo(last.at)}`}</span>
+      <span className="type-small text-muted">{isQuiet(quiet) ? `Nothing for you since ${formatDate(quiet.since)}` : `Scanned ${timeAgo(last.at)}`}</span>
     </span>
   );
 }
