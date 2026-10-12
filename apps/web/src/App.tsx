@@ -419,6 +419,7 @@ export function App() {
                   hiddenNames={prefs.prefs.hiddenCompanies}
                   onUnhideName={(name) => prefs.setCompanyHidden(name, false)}
                   draft={draft}
+                  loaded={draftLoaded}
                   saved={saved}
                   update={update}
                   onSaved={async () => {

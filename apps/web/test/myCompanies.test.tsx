@@ -28,3 +28,16 @@ describe("MyCompanies sort", () => {
     expect(checked()).toBe("Needs attention");
   });
 });
+
+describe("MyCompanies summary", () => {
+  it("says how many companies there are and that each is checked on every scan", () => {
+    renderList();
+    expect(screen.getByText(/companies, checked on every scan\./).textContent).toBe("2 companies, checked on every scan.");
+  });
+
+  it("shows what the scan covers instead of a list when there are none", () => {
+    render(<MyCompanies rows={[]} savedKeys={new Set()} forYou={new Map()} onRemove={() => {}} onRemoveMany={() => {}} empty="Right now: 0 companies, so your Radar stays empty." />);
+    expect(screen.getByText("Right now: 0 companies, so your Radar stays empty.")).toBeTruthy();
+    expect(screen.queryByText(/checked on every scan/)).toBeNull();
+  });
+});

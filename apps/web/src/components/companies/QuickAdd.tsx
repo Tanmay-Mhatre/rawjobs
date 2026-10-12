@@ -25,7 +25,7 @@ export function QuickAdd({ q, onQ, count, linkOpen, onToggleLink, linkPanelId, s
   return (
     <div className="space-y-2">
       <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1">
-        <p className="type-small text-muted">Companies you add are scanned every time and their jobs come first on your Radar.</p>
+        <p className="type-small text-muted">Companies you add are checked on every scan and their jobs come first on your Radar.</p>
         {status}
       </div>
       <div className="flex flex-col gap-2 sm:flex-row">

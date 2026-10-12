@@ -131,6 +131,8 @@
 .rj-tab[aria-selected="true"]::after { content: ""; position: absolute; left: 0; right: 0; bottom: 0; height: 2px; background: var(--tab-indicator); }
 .rj-tab:focus-visible { outline-offset: -2px; }
 .rj-tab__count { font-weight: 400; font-variant-numeric: tabular-nums; }
+/* Wrapping tabs: every tab stays visible on a phone, on a second line if need be (no scroll, no edge fade). */
+.rj-tabs.rj-tabs--wrap { flex-wrap: wrap; row-gap: 0; overflow-x: visible; -webkit-mask-image: none; mask-image: none; }
 
 /* ---------- field ---------- */
 .rj-field { display: grid; gap: var(--space-2); }

@@ -15,6 +15,7 @@ export function Tabs<T extends string>({
   idPrefix = "tab",
   panelId,
   className,
+  wrap,
 }: {
   label: string;
   items: TabItem<T>[];
@@ -25,6 +26,8 @@ export function Tabs<T extends string>({
   /** The panel these tabs control. */
   panelId?: string;
   className?: string;
+  /** Wrap onto more lines instead of scrolling sideways (rj-tabs--wrap): for a few long labels that must all stay visible. */
+  wrap?: boolean;
 }) {
   const refs = useRef(new Map<T, HTMLButtonElement>());
 
@@ -41,7 +44,7 @@ export function Tabs<T extends string>({
   // With no tab selected (e.g. a saved view is showing), the first tab keeps the list reachable by Tab.
   const anySelected = items.some((t) => t.id === value);
   return (
-    <div className={cx("rj-tabs", className)} role="tablist" aria-label={label} onKeyDown={onKeyDown}>
+    <div className={cx("rj-tabs", wrap && "rj-tabs--wrap", className)} role="tablist" aria-label={label} onKeyDown={onKeyDown}>
       {items.map((t, i) => {
         const selected = t.id === value;
         const tabbable = selected || (!anySelected && i === 0);
