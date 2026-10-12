@@ -35,7 +35,11 @@ export function QuickAdd({ q, onQ, count, linkOpen, onToggleLink, linkPanelId, s
             type="search"
             value={q}
             onChange={(e) => onQ(e.target.value)}
-            onKeyDown={(e) => e.key === "Escape" && q && (e.preventDefault(), onQ(""))}
+            onKeyDown={(e) => {
+              if (e.key !== "Escape" || !q) return;
+              e.preventDefault();
+              onQ("");
+            }}
             placeholder={count ? `Search ${roughCount(count)} companies…` : "Search companies…"}
             aria-label="Search companies"
             className="h-11 w-full rounded-md border border-line bg-raised pl-9 pr-10 type-small placeholder:text-muted [&::-webkit-search-cancel-button]:hidden"

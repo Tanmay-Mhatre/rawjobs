@@ -34,8 +34,8 @@ export const lever: Connector<LeverPosting> = {
   detect(url) {
     const host = url.hostname.toLowerCase();
     // API URL: api.lever.co/v0/postings/acme
-    const api = (host === "api.lever.co" || host === "api.eu.lever.co") && url.pathname.match(/^\/v0\/postings\/([^/?]+)/);
-    if (api && api[1]) return { ats: "lever", slug: decodeURIComponent(api[1]), region: host === "api.eu.lever.co" ? "eu" : undefined };
+    const api = host === "api.lever.co" || host === "api.eu.lever.co" ? url.pathname.match(/^\/v0\/postings\/([^/?]+)/) : null;
+    if (api?.[1]) return { ats: "lever", slug: decodeURIComponent(api[1]), region: host === "api.eu.lever.co" ? "eu" : undefined };
     if (host !== "jobs.lever.co" && host !== "jobs.eu.lever.co") return null;
     const slug = firstPathSegment(url);
     // jobs.lever.co also serves its own images and assets; those paths aren't company boards.

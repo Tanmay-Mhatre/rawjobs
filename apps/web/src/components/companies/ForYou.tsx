@@ -76,6 +76,7 @@ export function ForYou({ state, watched, muted, pastEmployers, onPastEmployers, 
   // Open on the most useful lens once the first answer arrives.
   // Open on packs (the quickest way to add many), else the most useful list.
   const current: Lens = lens ?? (lists?.packs.length ? "packs" : lists && lists.hiring.length < 3 ? (lists.like.length ? "like" : "watching") : "hiring");
+  // biome-ignore lint/correctness/useExhaustiveDependencies: switching lists starts the new one at its first page
   useEffect(() => setShown(compact ? 6 : PAGE), [current, compact]);
 
   const hide = (s: CompanySuggestion) => {
@@ -199,7 +200,10 @@ export function ForYou({ state, watched, muted, pastEmployers, onPastEmployers, 
                 <button
                   type="button"
                   className="inline-flex items-center gap-1 type-label text-ink underline underline-offset-2 hover:text-muted"
-                  onClick={() => (onUnmute(hidden.key), setHidden(null))}
+                  onClick={() => {
+                    onUnmute(hidden.key);
+                    setHidden(null);
+                  }}
                 >
                   <Undo2 className="size-3.5" /> Undo
                 </button>

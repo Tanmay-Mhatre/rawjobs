@@ -126,6 +126,7 @@ export function ReasonPicker({ job, label, live }: { job: Job; label: string; li
   const lineRef = useRef<HTMLDivElement>(null);
   const chipsRef = useRef<HTMLDivElement>(null);
   const focusNext = useRef<"undo" | "chip" | null>(null);
+  // biome-ignore lint/correctness/useExhaustiveDependencies: `step` is the trigger: focus moves after each step renders
   useEffect(() => {
     // The button you pressed is replaced: focus moves to the one that takes its place, never to the page.
     if (focusNext.current === "undo") lineRef.current?.querySelector("button")?.focus();

@@ -59,7 +59,7 @@ export function termRegex(term: string): RegExp {
   let re = regexCache.get(key);
   if (!re) {
     const body = key
-      .split(/[\s\-]+/)
+      .split(/[\s-]+/)
       .filter(Boolean)
       .map((w) => w.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"))
       .join("[\\s\\-]+");
@@ -150,6 +150,7 @@ const PLANT_MAINTENANCE = /(?<!\p{L})(sap|eam|maximo)([\s/-]+)pm(?!\p{L})/gu;
 
 function wordsOf(text: string): string[] {
   const lower = text.toLowerCase().replace(TIME_OF_DAY, " ").replace(PLANT_MAINTENANCE, "$1$2plant maintenance");
+  // biome-ignore lint/suspicious/noControlCharactersInRegex: "anything outside ASCII", control characters included
   return (/[^\x00-\x7f]/.test(lower) ? lower.normalize("NFKD") : lower)
     .replace(/[\u0300-\u036f'’.]/g, "")
     .replace(/&/g, " and ")

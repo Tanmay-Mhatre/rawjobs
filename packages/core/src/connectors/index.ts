@@ -30,6 +30,7 @@ import { workday } from "./workday";
 import { zoho } from "./zoho";
 
 /** One connector per hiring system in ATS_TYPES. */
+// biome-ignore lint/suspicious/noExplicitAny: each connector has its own raw posting type; the registry only routes to them
 export const connectors: Partial<Record<AtsType, Connector<any>>> = {
   greenhouse,
   lever,

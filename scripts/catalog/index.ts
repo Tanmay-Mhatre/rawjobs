@@ -12,7 +12,7 @@
 import { appendFileSync, readdirSync, readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { getConnector, HttpClient, HttpError, inferWorkplace, type CompanyRef, type NormalizedJob } from "../../packages/core/src/index";
+import { getConnector, HttpClient, type HttpError, inferWorkplace, type CompanyRef, type NormalizedJob } from "../../packages/core/src/index";
 import { maxMsFromArgs, nextInTime } from "./lib/time-box";
 
 const here = dirname(fileURLToPath(import.meta.url));

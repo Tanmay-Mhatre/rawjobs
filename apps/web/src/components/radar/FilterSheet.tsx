@@ -1,6 +1,6 @@
 import { Check, X } from "lucide-react";
 import type { ReactNode } from "react";
-import type { Filters, Sort } from "../../lib/filters";
+import type { Sort } from "../../lib/filters";
 import { Dialog } from "../Dialog";
 import { IconButton } from "../primitives";
 import { Button, cx } from "../ui";

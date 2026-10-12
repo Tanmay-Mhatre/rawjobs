@@ -1,4 +1,4 @@
-import { existsSync, mkdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, rmSync, statSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { rawjobsHome } from "./paths";
 import { writeFileAtomic } from "./atomic";

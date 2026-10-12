@@ -1,6 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { parseConfig } from "../src/config";
-import { findCandidates, pickChecks, readLedger, recordChecks, toIndexJobs, type IndexFile } from "../src/discover";
+import { findCandidates, pickChecks, recordChecks, toIndexJobs, type IndexFile } from "../src/discover";
 import type { IndexedCompany, IndexRow } from "../src/suggest";
 import { profile } from "./helpers";
 
@@ -13,7 +12,6 @@ const co = (key: string, rows: IndexRow[]): IndexedCompany => {
 };
 const pm = (location: string, age = 2): IndexRow => ["Senior Product Manager", location, "onsite", age, 1];
 const index = (companies: IndexedCompany[], generated = now): IndexFile => ({ generated_at: generated.toISOString(), companies });
-const noLedger = { version: 1 as const, companies: {} };
 
 describe("findCandidates", () => {
   it("keeps rows that pass your gates, best estimate first, ages counted from the index build", () => {

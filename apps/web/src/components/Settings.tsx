@@ -111,6 +111,7 @@ export function Settings({
 
   const active = useActiveGroup();
   // "#settings?section=schedule" (from the Radar's checklist): open and scroll to that section.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: registers the hashchange listener once; the section ids it checks never change
   useEffect(() => {
     const go = () => {
       const id = sectionFromHash();
@@ -122,7 +123,7 @@ export function Settings({
     go();
     window.addEventListener("hashchange", go);
     return () => window.removeEventListener("hashchange", go);
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  }, []);
 
   useEffect(() => {
     if (dirty) setStatus(null);

@@ -21,9 +21,10 @@ export const parseList = (text: string) => [
  */
 function ListField({ label, help, placeholder, value, onChange }: { label: string; help: string; placeholder: string; value: string[]; onChange: (v: string[]) => void }) {
   const [text, setText] = useState(value.join(", "));
+  // biome-ignore lint/correctness/useExhaustiveDependencies: rewrites the text only when the list changes elsewhere, not on every keystroke
   useEffect(() => {
     if (parseList(text).join("\u0000") !== value.join("\u0000")) setText(value.join(", "));
-  }, [value]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [value]);
   return (
     <Field
       label={label}

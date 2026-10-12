@@ -266,6 +266,7 @@ function Review({
   const places = groupPlaces(officePlaces(draft)).map((g) => placeLabel(g.name));
   const remote = groupPlaces(draft.remoteOk).map((g) => (g.name === "remote" ? "anywhere" : placeLabel(g.name)));
 
+  // biome-ignore lint/correctness/useExhaustiveDependencies: any change to the draft clears the last error
   useEffect(() => setError(null), [draft]);
 
   const saveAndScan = async () => {
@@ -306,7 +307,9 @@ function Review({
           Using your <b>master resume</b> for suggestions.
         </>
       ) : (
-        <span className="text-muted">No resume added.</span>
+        <span key="no-resume" className="text-muted">
+          No resume added.
+        </span>
       ),
     ],
     [
@@ -343,7 +346,9 @@ function Review({
       draft.industries.length ? (
         <>Also scan companies in {some(draft.industries.map(industryLabel), 6)}.</>
       ) : (
-        <span className="text-muted">No industries. Jobs are found by your roles and places.</span>
+        <span key="no-industries" className="text-muted">
+          No industries. Jobs are found by your roles and places.
+        </span>
       ),
     ],
   ];

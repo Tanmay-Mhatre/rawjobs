@@ -1,4 +1,4 @@
-import { ArrowRight, KanbanSquare, StickyNote } from "lucide-react";
+import { ArrowRight, StickyNote } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import type { Job } from "../lib/data";
 import { timeAgo } from "../lib/format";

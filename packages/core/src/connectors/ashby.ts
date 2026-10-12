@@ -48,8 +48,8 @@ export const ashby: Connector<AshbyJob> = {
   detect(url) {
     const host = url.hostname.toLowerCase();
     // API URL: api.ashbyhq.com/posting-api/job-board/acme
-    const api = host === "api.ashbyhq.com" && url.pathname.match(/^\/posting-api\/job-board\/([^/?]+)/);
-    if (api && api[1]) return { ats: "ashby", slug: decodeURIComponent(api[1]) };
+    const api = host === "api.ashbyhq.com" ? url.pathname.match(/^\/posting-api\/job-board\/([^/?]+)/) : null;
+    if (api?.[1]) return { ats: "ashby", slug: decodeURIComponent(api[1]) };
     if (host !== "jobs.ashbyhq.com") return null;
     const slug = firstPathSegment(url);
     // jobs.ashbyhq.com/api/... is the board's own API, not a company.

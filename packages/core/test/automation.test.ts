@@ -190,7 +190,10 @@ describe("schedule", () => {
     const home = mkdtempSync(join(tmpdir(), "jh-home-"));
     const dataDir = mkdtempSync(join(tmpdir(), "jh-sched-"));
     const calls: string[][] = [];
-    const exec = (cmd: string, args: string[]) => (calls.push([cmd, ...args]), { status: 0, stdout: "", stderr: "" });
+    const exec = (cmd: string, args: string[]) => {
+      calls.push([cmd, ...args]);
+      return { status: 0, stdout: "", stderr: "" };
+    };
     const ctx = { repoRoot: "/repo", dataDir, exec, platform: "darwin" as const, home };
     const legacy = join(home, "Library/LaunchAgents/com.jobhunter.scan.plist");
     mkdirSync(join(home, "Library/LaunchAgents"), { recursive: true });

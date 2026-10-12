@@ -702,7 +702,8 @@ export function IndustriesStep({ draft, update, suggest }: StepProps) {
   const fromResume = (suggest?.industries ?? []).filter((id) => INDUSTRY_BY_ID.has(id));
   // No resume industries: suggest from the chosen roles instead ("Registered Nurse" -> Healthcare).
   const rolesKey = draft.include.join("\n");
-  const fromRoles = useMemo(() => industriesFromTitles(draft.include).slice(0, 5), [rolesKey]); // eslint-disable-line react-hooks/exhaustive-deps
+  // biome-ignore lint/correctness/useExhaustiveDependencies: rolesKey stands for the roles' contents (a new array each render)
+  const fromRoles = useMemo(() => industriesFromTitles(draft.include).slice(0, 5), [rolesKey]);
   const suggested = fromResume.length ? fromResume : suggest?.template ? [] : fromRoles;
   const why = fromResume
     .flatMap((id) => suggest?.industryWhy[id] ?? [])
@@ -1008,7 +1009,11 @@ function AddKeyword({ onAdd }: { onAdd: (k: string) => void }) {
       <input
         value={text}
         onChange={(e) => setText(e.target.value)}
-        onKeyDown={(e) => e.key === "Enter" && (e.preventDefault(), submit())}
+        onKeyDown={(e) => {
+          if (e.key !== "Enter") return;
+          e.preventDefault();
+          submit();
+        }}
         placeholder="Add a keyword, e.g. tokenization"
         aria-label="Add a keyword"
         className="h-9 min-w-0 flex-1 rounded-md border border-line bg-raised px-3 type-small placeholder:text-muted"

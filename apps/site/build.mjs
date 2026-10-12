@@ -85,7 +85,7 @@ export function wallHost(url) {
   let h = parts[0];
   if (/greenhouse|ashbyhq|lever\.co|smartrecruiters|workable|rippling|comeet|jobvite/.test(h) && parts[1]) h += "/" + parts[1];
   h = h.toLowerCase();
-  return h.length <= 38 && /^[a-z0-9.\/_-]+$/.test(h) ? h : null;
+  return h.length <= 38 && /^[a-z0-9./_-]+$/.test(h) ? h : null;
 }
 /**
  * A deterministic, varied sample of live boards: every hiring system gets a share in proportion to
@@ -194,7 +194,7 @@ const wordmark = read(join(DS, "logos/rawjobs-wordmark-ink.svg"))
 // Pass --wall-fallback to also save this build's wall as src/wall-fallback.json (the offline list).
 const stampHosts = [...read(join(SITE, "src/index.html")).matchAll(/"host":\s*"([^"]+)"/g)].map((m) => m[1]);
 const wallHosts = n.wall.filter((h) => !stampHosts.includes(h)).slice(0, WALL_SIZE - stampHosts.length);
-stampHosts.forEach((h, i) => wallHosts.splice(Math.round(((i + 0.5) * wallHosts.length) / stampHosts.length), 0, h));
+for (const [i, h] of stampHosts.entries()) wallHosts.splice(Math.round(((i + 0.5) * wallHosts.length) / stampHosts.length), 0, h);
 if (process.argv.includes("--wall-fallback") && n.live) writeFileSync(WALL_FALLBACK, JSON.stringify(n.wall, null, 0) + "\n");
 const escHtml = (x) => x.replace(/&/g, "&amp;").replace(/</g, "&lt;");
 const wallMarkup = wallHosts.map((h) => `<span>${escHtml(h)}</span>`).join("");

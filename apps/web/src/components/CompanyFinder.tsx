@@ -187,6 +187,7 @@ function Browse({
   );
 
   // Back to page 1 whenever the search or filters change.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: back to page 1 whenever the search or a filter changes: they are the triggers
   useEffect(() => setPage(1), [q, onlyForYou, system, industry]);
   const goTo = (p: number) => {
     setPage(p);
@@ -345,6 +346,7 @@ export function BrowseRow({ lead, others, ...line }: LineProps & { lead: DirComp
 export function useDirectory(rev: number): { directory: DirCompany[] | null; error: string | null } {
   const [directory, setDirectory] = useState<DirCompany[] | null>(null);
   const [error, setError] = useState<string | null>(null);
+  // biome-ignore lint/correctness/useExhaustiveDependencies: `rev` is the trigger: bumped to load the directory again
   useEffect(() => {
     const get = (path: string) => fetch(path, { cache: "no-store" }).then((r) => (r.ok ? (r.json() as Promise<{ companies: DirCompany[] }>) : null));
     let live = true;

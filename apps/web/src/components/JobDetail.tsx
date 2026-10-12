@@ -82,6 +82,7 @@ export function JobDetail(p: JobDetailProps) {
   const notForMe = useNotForMe();
   const source = atsLabel(job.ats);
 
+  // biome-ignore lint/correctness/useExhaustiveDependencies: another job opened: scroll back to the top and reset
   useEffect(() => {
     scrollRef.current?.scrollTo({ top: 0 });
     setCopied(false);
@@ -129,7 +130,7 @@ export function JobDetail(p: JobDetailProps) {
     ...(workplace ? [workplace] : []),
     SENIORITY_LABEL[job.seniority],
     isOlder(job) && job.status === "open" ? (
-      <span className="text-warning-text" title="Most roles are filled within two months. It's still listed, but may no longer be hiring.">
+      <span key="older" className="text-warning-text" title="Most roles are filled within two months. It's still listed, but may no longer be hiring.">
         {job.postedAt ? "Posted" : "First seen"} {age} ago · may be filled
       </span>
     ) : job.postedAt ? (
@@ -140,14 +141,14 @@ export function JobDetail(p: JobDetailProps) {
     ...(salary ? [salary] : []),
     ...(evergreen === "pool"
       ? [
-          <span className="text-warning-text" title="A talent pool or open application: it collects applications rather than filling one role">
+          <span key="pool" className="text-warning-text" title="A talent pool or open application: it collects applications rather than filling one role">
             Talent pool
           </span>,
         ]
       : []),
     ...(evergreen === "reposted"
       ? [
-          <span className="text-warning-text" title={`Taken down and posted again on ${formatDate(job.repostedAt)}: dated from the first posting`}>
+          <span key="reposted" className="text-warning-text" title={`Taken down and posted again on ${formatDate(job.repostedAt)}: dated from the first posting`}>
             Reposted
           </span>,
         ]
@@ -376,6 +377,7 @@ export function JobDetail(p: JobDetailProps) {
 function TrackButton({ yours, onTrack }: { yours: boolean; onTrack: (on: boolean) => Promise<string | null> }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // biome-ignore lint/correctness/useExhaustiveDependencies: a change of `yours` clears the last error
   useEffect(() => setError(null), [yours]);
   const click = async () => {
     setBusy(true);

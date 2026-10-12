@@ -91,6 +91,7 @@ function clean(b: unknown): Board | null {
   const name =
     typeof o.name === "string"
       ? o.name
+          // biome-ignore lint/suspicious/noControlCharactersInRegex: stripping control characters is the point
           .replace(/[\u0000-\u001f<>]/g, "")
           .trim()
           .slice(0, 100)

@@ -479,7 +479,8 @@ function SavedResume({
       .find((l) => l.trim())
       ?.replace(/^#+\s*/, "") ?? "Resume";
 
-  useEffect(() => onArrive(), []); // eslint-disable-line react-hooks/exhaustive-deps
+  // biome-ignore lint/correctness/useExhaustiveDependencies: once, when the step is shown
+  useEffect(() => onArrive(), []);
 
   return (
     <div className="space-y-4">

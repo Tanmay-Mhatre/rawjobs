@@ -345,7 +345,11 @@ export function foldCompanies(groups: JobGroup[], open: ReadonlySet<string> = ne
     if (n <= PER_COMPANY || open.has(company)) rows.push({ kind: "group", group });
     else {
       let rest = folded.get(company);
-      if (!rest) folded.set(company, (rest = [])), rows.push({ kind: "more", company, groups: rest });
+      if (!rest) {
+        rest = [];
+        folded.set(company, rest);
+        rows.push({ kind: "more", company, groups: rest });
+      }
       rest.push(group);
     }
   }

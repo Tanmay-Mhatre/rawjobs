@@ -14,7 +14,6 @@ import {
   connectors,
   detectCompany,
   loadConfig,
-  readIndex,
   readResume,
   deleteResume,
   saveResume,
@@ -70,7 +69,6 @@ import {
   type Config,
   type Profile,
   type SuggestResult,
-  type DirectoryCompany,
   type IndexedCompany,
   type Job,
 } from "@rawjobs/core";
@@ -645,16 +643,25 @@ async function cmdAlerts(args: string[]): Promise<number> {
     }
     if (action === "token") {
       const token = String((JSON.parse((await readStdin()) || "{}") as { token?: unknown }).token ?? "").trim();
-      if (!looksLikeToken(token)) return out({ ok: false, error: "That doesn't look like a bot token. It looks like 123456789:AAF… and comes from @BotFather." }), 0;
+      if (!looksLikeToken(token)) {
+        out({ ok: false, error: "That doesn't look like a bot token. It looks like 123456789:AAF… and comes from @BotFather." });
+        return 0;
+      }
       const bot = await telegramBotName(token);
       saveTelegramSecrets({ token, chatId: "", bot });
       out({ ok: true, bot });
       return 0;
     }
-    if (!secrets.token) return out({ ok: false, error: "Add your bot token first." }), 0;
+    if (!secrets.token) {
+      out({ ok: false, error: "Add your bot token first." });
+      return 0;
+    }
     if (action === "connect") {
       const chat = await findTelegramChat(secrets.token);
-      if (!chat) return out({ ok: false, error: 'No message from you yet. Open your bot in Telegram, press Start (or send it "hi"), then try again.' }), 0;
+      if (!chat) {
+        out({ ok: false, error: 'No message from you yet. Open your bot in Telegram, press Start (or send it "hi"), then try again.' });
+        return 0;
+      }
       saveTelegramSecrets({ chatId: chat.chatId });
       setEnabled(true);
       await sendTelegram("✅ RawJobs is connected. New jobs from your scans will arrive here.", { ...secrets, chatId: chat.chatId });

@@ -1,4 +1,4 @@
-import { ArrowRight, Building2, Keyboard, KanbanSquare, LoaderCircle, Radar as RadarIcon, RefreshCw, Settings as SettingsIcon, TriangleAlert, X } from "lucide-react";
+import { ArrowRight, Building2, Keyboard, KanbanSquare, Radar as RadarIcon, RefreshCw, Settings as SettingsIcon, TriangleAlert, X } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { CompaniesTab } from "./components/CompaniesTab";
 import { Dialog } from "./components/Dialog";
@@ -131,9 +131,10 @@ export function App() {
   const [tg, setTg] = useState<TelegramStatus | null | undefined>(undefined);
   const refreshTg = useCallback(async () => setTg(await telegramStatus().catch(() => null)), []);
   // Checked again as each scan starts: it may have been set up in Settings since.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: rechecks Telegram when a scan starts (or before the first check); a new `tg` value must not trigger it
   useEffect(() => {
     if (canRunLocally && (scanning || tg === undefined)) void refreshTg();
-  }, [scanning, refreshTg]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [scanning, refreshTg]);
   const [notifyFailed, setNotifyFailed] = useState(false);
   const notifyAsked = useRef(false);
   useEffect(() => {
@@ -148,9 +149,10 @@ export function App() {
     void notifyScan().then((ok) => setNotifyFailed(!ok));
   }, [scanning, scan.total, scan.notify, tg, notifyScan]);
   // A message that went out is a toast; one that didn't stays on the page (NotifyFailed).
+  // biome-ignore lint/correctness/useExhaustiveDependencies: fires when the notify result arrives; `tg` is only read for the bot's name
   useEffect(() => {
     if (!scanning && scan.notify?.result === "sent") toast({ message: <>Sent the results to Telegram{tg?.bot ? <> ({tg.bot})</> : null}.</> });
-  }, [scanning, scan.notify?.result]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [scanning, scan.notify?.result]);
   /** Setup just saved and started the first scan: say how it went when it ends. */
   const announceScan = useRef(false);
   useEffect(() => {
@@ -251,10 +253,11 @@ export function App() {
   }, []);
 
   // Only the very first visit opens the Welcome; after Start or Skip, setup is reached through CTAs.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: decides once, when setup status first loads; later route changes mustn't reopen the Welcome
   useEffect(() => {
     if (!status || status.isPersonal || "setup" in route) return;
     if (!load(WELCOME_SEEN_KEY, false)) go({ setup: 0 });
-  }, [status]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [status]);
 
   // Remember how far the wizard got, so "Continue setup" resumes there.
   const wizardStep = "setup" in route ? route.setup : 0;
@@ -355,7 +358,10 @@ export function App() {
       <div className="min-h-dvh">
         <a
           href="#main"
-          onClick={(e) => (e.preventDefault(), document.getElementById("main")?.focus())}
+          onClick={(e) => {
+            e.preventDefault();
+            document.getElementById("main")?.focus();
+          }}
           className="sr-only-focusable fixed left-3 top-3 z-[70] rounded-md bg-raised px-3 py-2 type-label shadow-l3"
         >
           Skip to content

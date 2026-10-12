@@ -189,7 +189,10 @@ describe("g then a letter goes to a section", () => {
   it("g r, g p, g c and g s go to Radar, Pipeline, Companies and Settings", () => {
     const onGo = vi.fn();
     render(<GoTo onGo={onGo} />);
-    for (const k of ["r", "p", "c", "s"]) press("g"), press(k);
+    for (const k of ["r", "p", "c", "s"]) {
+      press("g");
+      press(k);
+    }
     expect(onGo.mock.calls.map((c) => c[0])).toEqual(["radar", "pipeline", "companies", "settings"]);
   });
 

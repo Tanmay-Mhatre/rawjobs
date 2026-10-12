@@ -56,6 +56,7 @@ export function cleanBoard(b: SharedBoard): SharedBoard | string {
   const name =
     typeof b.name === "string"
       ? b.name
+          // biome-ignore lint/suspicious/noControlCharactersInRegex: stripping control characters is the point
           .replace(/[\u0000-\u001f<>]/g, "")
           .trim()
           .slice(0, 100)

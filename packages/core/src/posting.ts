@@ -145,7 +145,7 @@ export function extractPay(text: string | undefined): Pay | undefined {
       const cur = cur1 ?? cur2;
       const [na, ka, nb, kb] = cur1 ? [a1, k1, b1, kb1] : [a2, k2, b2, kb2];
       let lo = amount(na, ka);
-      let hi = amount(nb, kb);
+      const hi = amount(nb, kb);
       if (lo === undefined || !cur) continue;
       // "65-78k": the k on the top of a range counts for the bottom too.
       if (hi !== undefined && kb && !ka && lo < 1000) lo *= 1000;

@@ -82,7 +82,7 @@ function normalizeProfile(raw: unknown): AiProfile | undefined {
 /** Find the JSON object that holds the profile: a ```json fence first, then any balanced {...}. */
 function findProfileJson(text: string): { start: number; end: number; value: unknown } | undefined {
   const fence = /```(?:json)?\s*\n([\s\S]*?)```/gi;
-  for (let m; (m = fence.exec(text)); ) {
+  for (let m: RegExpExecArray | null; (m = fence.exec(text)); ) {
     if (!profileKeyIn(m[1]!)) continue;
     try {
       return { start: m.index, end: m.index + m[0].length, value: JSON.parse(m[1]!) };

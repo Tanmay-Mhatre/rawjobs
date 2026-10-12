@@ -54,6 +54,7 @@ export function Menu({
   }, [open, active]);
 
   // A click outside closes it without stealing focus back.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: re-registered on each open; close only uses refs and setters
   useEffect(() => {
     if (!open) return;
     const onDown = (e: PointerEvent) => {

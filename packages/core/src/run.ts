@@ -74,7 +74,7 @@ export async function runRadar(config: Config, opts: RunOptions = {}): Promise<R
   const order = new Map<string, number>();
   const health: CompanyHealth[] = [];
   const todo = [...companies.map((c) => [c, false] as const), ...checks.map((c) => [c, true] as const)].filter(([c]) => !opts.skip?.has(jobCompanyKey(c)));
-  todo.forEach(([c], i) => order.set(`${c.ats}:${c.slug}`, i));
+  for (const [i, [c]] of todo.entries()) order.set(`${c.ats}:${c.slug}`, i);
 
   /** A company's open jobs from the last fetch, if that was less than `hours` ago. */
   const recentJobs = (key: string, hours: number): Job[] | undefined => {

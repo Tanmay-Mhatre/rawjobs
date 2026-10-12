@@ -24,7 +24,7 @@ function client(responses: (Response | Error)[], extra: { sleeps?: number[]; bre
       tick(ms);
     },
     fetchImpl: (async (url: string, init?: RequestInit) => {
-      seen.push({ url, ua: (init?.headers as Record<string, string>)["user-agent"] });
+      seen.push({ url, ua: (init?.headers as Record<string, string> | undefined)?.["user-agent"] });
       const next = responses.shift();
       if (!next) throw new Error("no more responses");
       if (next instanceof Error) throw next;
@@ -64,7 +64,7 @@ describe("HttpClient", () => {
       hostDelayMs: 0,
       cache,
       fetchImpl: (async (_u: string, init?: RequestInit) => {
-        sent.push((init?.headers as Record<string, string>)["if-none-match"]);
+        sent.push((init?.headers as Record<string, string> | undefined)?.["if-none-match"]);
         return replies.shift()!;
       }) as typeof fetch,
     });

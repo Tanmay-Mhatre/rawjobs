@@ -1,4 +1,4 @@
-import { ArrowRight, ArrowUpDown, LoaderCircle, SlidersHorizontal, UserRound, X } from "lucide-react";
+import { ArrowRight, ArrowUpDown, SlidersHorizontal, UserRound, X } from "lucide-react";
 import { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from "react";
 import { useOtherJobs, type DataMeta, type Job, type Profile } from "../../lib/data";
 import {
@@ -107,12 +107,14 @@ function useRadarFilters(base: Filters, linkBase: Filters) {
   const baseRef = useRef(base);
   /** Set after "Save to my profile": the next profile is yours, so the filters follow it. */
   const adopt = useRef(false);
+  // biome-ignore lint/correctness/useExhaustiveDependencies: runs when the profile's filters change; reading the current filters mustn't re-run it
   useEffect(() => {
     // Profile changed: follow it, unless you've changed the filters yourself.
     if (adopt.current || sameFilters(state.filters, baseRef.current)) setState((s) => ({ ...s, filters: { ...base, q: s.filters.q } }));
     adopt.current = false;
     baseRef.current = base;
-  }, [base]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [base]);
+  // biome-ignore lint/correctness/useExhaustiveDependencies: linkBase changes only with the filters above
   useEffect(() => {
     save(FILTER_KEY, { filters: { ...state.filters, q: "" }, sort: state.sort, custom: !sameFilters(state.filters, baseRef.current) });
     const q = toQuery(state.filters, state.sort, linkBase);
@@ -158,7 +160,8 @@ export function RadarPage(p: Props) {
   const placesKey = JSON.stringify(profile.locations);
   const [everywhereFor, setEverywhereFor] = useState(() => load<string | null>(EVERYWHERE_KEY, null));
   const everywhere = everywhereFor === placesKey;
-  const placeBase = useMemo(() => profileFilters(profile), [profileKey]); // eslint-disable-line react-hooks/exhaustive-deps
+  // biome-ignore lint/correctness/useExhaustiveDependencies: profileKey stands for the parts of the profile the filters use
+  const placeBase = useMemo(() => profileFilters(profile), [profileKey]);
   const base = useMemo(() => (everywhere ? { ...placeBase, countries: [], locations: [] } : placeBase), [placeBase, everywhere]);
   const { filters, sort, setFilters, setSort, replace, adoptNextProfile } = useRadarFilters(base, placeBase);
   const setEverywhere = (on: boolean) => {
@@ -189,25 +192,23 @@ export function RadarPage(p: Props) {
   // One clock for filters, tags and order, moved on every hour.
   const now = useHourlyNow();
   const maxAgeDays = useMaxAge();
-  const ctx: Ctx = useMemo(
-    () => {
-      const places = profilePlaces(profile);
-      return {
-        firstScan,
-        newSince,
-        now,
-        maxAgeDays,
-        user: p.user,
-        min,
-        industriesOf: (c: string) => industriesByCompany.get(c) ?? [],
-        hiddenCompanies: hidden,
-        hideRules: p.prefs.hideRules,
-        isYours: p.isYours,
-        mine: { countries: new Set([...places.countries, ...(places.remote ? ["Remote"] : [])]), locations: new Set(places.locations), industries: new Set(profile.industries) },
-      };
-    },
-    [p.user, min, industriesByCompany, hidden, p.prefs.hideRules, profileKey, p.isYours, firstScan, newSince, now, maxAgeDays], // eslint-disable-line react-hooks/exhaustive-deps
-  );
+  // biome-ignore lint/correctness/useExhaustiveDependencies: profileKey stands for the parts of the profile the context uses
+  const ctx: Ctx = useMemo(() => {
+    const places = profilePlaces(profile);
+    return {
+      firstScan,
+      newSince,
+      now,
+      maxAgeDays,
+      user: p.user,
+      min,
+      industriesOf: (c: string) => industriesByCompany.get(c) ?? [],
+      hiddenCompanies: hidden,
+      hideRules: p.prefs.hideRules,
+      isYours: p.isYours,
+      mine: { countries: new Set([...places.countries, ...(places.remote ? ["Remote"] : [])]), locations: new Set(places.locations), industries: new Set(profile.industries) },
+    };
+  }, [p.user, min, industriesByCompany, hidden, p.prefs.hideRules, profileKey, p.isYours, firstScan, newSince, now, maxAgeDays]);
 
   // One list, in the order you picked: your companies are starred and nudged up in Best match, never pinned.
   // Typing in search updates the box at once; the list catches up when React has a moment (useDeferredValue).
@@ -218,6 +219,7 @@ export function RadarPage(p: Props) {
   // One company can't fill the page ("+N more at …"), except in Newest (a plain date order) and when you've
   // picked companies yourself.
   const [openCompanies, setOpenCompanies] = useState<ReadonlySet<string>>(() => new Set());
+  // biome-ignore lint/correctness/useExhaustiveDependencies: new filters or sort close the companies you opened
   useEffect(() => setOpenCompanies(new Set()), [filters, sort]);
   const fold = sort !== "newest" && !filters.mine && !filters.companies.length;
   // Best match: your companies' freshest roles in a strip above the list, and not again in it.
@@ -258,6 +260,7 @@ export function RadarPage(p: Props) {
 
   // ----- list paging and selection -----
   const [limit, setLimit] = useState(PAGE);
+  // biome-ignore lint/correctness/useExhaustiveDependencies: new filters or sort start the list at its first page
   useEffect(() => setLimit(PAGE), [filters, sort]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const selectedGroup = groups.find((g) => g.jobs.some((j) => j.id === selectedId)) ?? (wide ? navGroups[0] : undefined);
@@ -267,6 +270,7 @@ export function RadarPage(p: Props) {
   const rowRefs = useRef(new Map<string, HTMLLIElement>());
   const sentinel = useRef<HTMLLIElement>(null);
 
+  // biome-ignore lint/correctness/useExhaustiveDependencies: the list growing or paging moves the sentinel: re-observe it
   useEffect(() => {
     const el = sentinel.current;
     if (!el) return;
@@ -336,9 +340,13 @@ export function RadarPage(p: Props) {
       const view = /^[1-6]$/.test(e.key) ? builtInViews(firstScan)[Number(e.key) - 1] : undefined;
       if (view) return replace({ ...base, ...view.filters }, sort);
       if (e.key === "Enter" && t?.closest?.("button, a, [role=button]")) return;
-      if (e.key === "j" || e.key === "ArrowDown") e.preventDefault(), move(1);
-      else if (e.key === "k" || e.key === "ArrowUp") e.preventDefault(), move(-1);
-      else if (!selected) return;
+      if (e.key === "j" || e.key === "ArrowDown") {
+        e.preventDefault();
+        move(1);
+      } else if (e.key === "k" || e.key === "ArrowUp") {
+        e.preventDefault();
+        move(-1);
+      } else if (!selected) return;
       else if (e.key === "Enter" || e.key === "o") {
         // Desktop: the details are already showing, so Enter opens the job page (and asks "Did you apply?" later).
         if (wide) {
@@ -352,6 +360,7 @@ export function RadarPage(p: Props) {
   });
 
   // ----- jobs you saved or applied to that closed since your last visit: said once per visit -----
+  // biome-ignore lint/correctness/useExhaustiveDependencies: said once per visit, keyed by `newSince`
   useEffect(() => {
     if (newSince === undefined || closedToldFor.has(newSince)) return;
     closedToldFor.add(newSince);
@@ -370,7 +379,7 @@ export function RadarPage(p: Props) {
       actionLabel: "See",
       onAction: () => replace({ ...base, status: view }, sort),
     });
-  }, [newSince]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [newSince]);
 
   // ----- hide a company, with undo -----
   const hideCompany = (company: string, hide: boolean) => {
@@ -514,7 +523,11 @@ export function RadarPage(p: Props) {
             className="order-1 min-w-0 flex-1 basis-40 lg:order-none lg:w-48 lg:flex-none lg:basis-auto xl:w-64"
             value={filters.q}
             onChange={(e) => setFilters({ q: e.target.value })}
-            onKeyDown={(e) => e.key === "Escape" && (e.currentTarget.blur(), setFilters({ q: "" }))}
+            onKeyDown={(e) => {
+              if (e.key !== "Escape") return;
+              e.currentTarget.blur();
+              setFilters({ q: "" });
+            }}
             placeholder="Search jobs"
           />
           {/* Phones sort in the filter sheet, so search and Filters share one row. */}

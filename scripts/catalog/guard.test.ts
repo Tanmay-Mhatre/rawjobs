@@ -76,7 +76,9 @@ describe("release gate", () => {
     expect(few.warnings).toEqual(["1 rows without a careers_url"]);
     const many = gate(
       null,
-      candidate(30_000, 12_000, (rows) => rows.slice(0, 400).forEach((r) => (r.careers_url = ""))),
+      candidate(30_000, 12_000, (rows) => {
+        for (const r of rows.slice(0, 400)) r.careers_url = "";
+      }),
     );
     expect(many.reasons).toEqual([expect.stringMatching(/^400 rows without a careers_url \(over 1%\)/)]);
   });
