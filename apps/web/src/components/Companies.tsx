@@ -3,6 +3,7 @@ import { safeUrl } from "@rawjobs/core/text";
 import { Clock, ExternalLink, EyeOff, RefreshCw, Undo2, X } from "lucide-react";
 import { useEffect, useId, useMemo, useState, type ReactNode } from "react";
 import { keyOf } from "../lib/companies";
+import { nameRank } from "../lib/companySearch";
 import type { DataMeta } from "../lib/data";
 import { radarCompanyHash } from "../lib/filters";
 import { formatDateTime, timeAgo } from "../lib/format";
@@ -107,6 +108,7 @@ export function MyCompanies({
   meta,
   jobNames,
   query = "",
+  noMatch,
   onRemove,
   onRemoveMany,
   onRestore,
@@ -123,8 +125,10 @@ export function MyCompanies({
   meta?: DataMeta;
   /** The names the Radar's jobs use for each company key (a scan and the directory can differ), for the Radar link. */
   jobNames?: ReadonlyMap<string, readonly string[]>;
-  /** Shows only your companies whose name contains this (the page's search). */
+  /** Shows only your companies whose name (raw or clean) matches this (the page's search). */
   query?: string;
+  /** Shown instead of the list when none of your companies match the search (and the filter is All). */
+  noMatch?: ReactNode;
   onRemove: (key: string) => void;
   /** Removes several at once (the quiet banner); the banner offers Undo, via onRestore. */
   onRemoveMany: (keys: string[]) => void;
@@ -189,7 +193,7 @@ export function MyCompanies({
   const byName = (a: Row, b: Row) => companyLabel(a.r).localeCompare(companyLabel(b.r));
   const rank = (x: Row) => (needsAttention(x.problem) ? 2 : x.problem?.kind === "notChecked" ? 1 : 0);
   const shown = rows
-    .filter((x) => matchesFilter(active, { problem: x.problem, quiet: x.isQuiet }) && (!q || companyLabel(x.r).toLowerCase().includes(q)))
+    .filter((x) => matchesFilter(active, { problem: x.problem, quiet: x.isQuiet }) && (!q || nameRank(q, x.r.name, companyLabel(x.r)) >= 0))
     .sort((a, b) => (sort === "recent" ? b.index - a.index : sort === "attention" ? rank(b) - rank(a) || b.quiet.scans - a.quiet.scans || byName(a, b) : byName(a, b)));
   const { items, page: at } = pageOf(shown, page);
 
@@ -303,6 +307,8 @@ export function MyCompanies({
       <Card className="overflow-hidden">
         {rows.length === 0 ? (
           <p className="px-4 py-6 type-small text-muted">{empty ?? "You haven't added any companies yet."}</p>
+        ) : items.length === 0 && q && noMatch && active === "all" ? (
+          <div className="px-4 py-6 type-small">{noMatch}</div>
         ) : items.length === 0 ? (
           <p className="flex flex-wrap items-center gap-x-2 px-4 py-6 type-small text-muted">
             {q ? `None of your companies match “${query.trim()}”.` : active === "attention" ? "Every company answered on the last scan." : "Nothing here."}

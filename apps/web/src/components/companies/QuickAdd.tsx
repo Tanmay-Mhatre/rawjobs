@@ -4,11 +4,13 @@ import { roughCount } from "../../lib/format";
 import { Button, cx } from "../ui";
 
 type Props = {
-  /** The page's one search (results show in Browse all). */
+  /** The page's one search: your own companies on My companies, the directory elsewhere. */
   q: string;
   onQ: (q: string) => void;
   /** Companies in the directory (countCompanies), once loaded. */
   count?: number;
+  /** Says what the search covers when it isn't the directory ("Search your 91 companies"). */
+  placeholder?: string;
   /** "Add by link" panel state, and the id of that panel. */
   linkOpen: boolean;
   onToggleLink: () => void;
@@ -18,10 +20,10 @@ type Props = {
 };
 
 /**
- * The Companies page header: one search over the whole directory and one "Add by link" button.
- * Typing shows matching companies in the Browse all tab (sandbox and test boards are filtered there).
+ * The Companies page header: one search and one "Add by link" button. On My companies the search filters
+ * your own list in place; elsewhere it searches the whole directory, in Browse all.
  */
-export function QuickAdd({ q, onQ, count, linkOpen, onToggleLink, linkPanelId, status }: Props) {
+export function QuickAdd({ q, onQ, count, placeholder, linkOpen, onToggleLink, linkPanelId, status }: Props) {
   return (
     <div className="space-y-2">
       <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1">
@@ -41,7 +43,7 @@ export function QuickAdd({ q, onQ, count, linkOpen, onToggleLink, linkPanelId, s
               e.preventDefault();
               onQ("");
             }}
-            placeholder={count ? `Search ${roughCount(count)} companies…` : "Search companies…"}
+            placeholder={placeholder ?? (count ? `Search ${roughCount(count)} companies…` : "Search companies…")}
             aria-label="Search companies"
             className="h-11 w-full rounded-md border border-line bg-raised pl-9 pr-10 type-small placeholder:text-muted [&::-webkit-search-cancel-button]:hidden"
           />
