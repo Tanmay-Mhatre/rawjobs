@@ -210,6 +210,8 @@ describe("hiresIn", () => {
     expect(hiresIn({ rows }, { now })).toEqual({ remote: false, countries: ["Germany"] });
     expect(hiresIn({ rows: [["Engineer", "", "unknown", 2, 4]] }, { now })).toBeUndefined();
     expect(hiresIn({ rows: [] }, { now })).toBeUndefined();
+    // "Remote" in the place counts, whatever the hiring system calls the workplace.
+    expect(hiresIn({ rows: [pm("Remote - European Region", 2, 3, "hybrid")] }, { now })).toEqual({ remote: true, countries: [] });
   });
 
   it("comes with each suggestion from the index, and not with directory-only ones", () => {

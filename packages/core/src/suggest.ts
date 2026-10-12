@@ -323,7 +323,7 @@ export function suggestCompanies(
 /** A country counts when at least this share of a company's postings name it; remote, this share of them. */
 const COUNTRY_SHARE = 0.1;
 const REMOTE_SHARE = 0.2;
-const REMOTE = /remote/i;
+const REMOTE = /\bremote\b/i;
 const countryCache = new Map<string, string[]>();
 function countriesOf(location: string): string[] {
   let c = countryCache.get(location);

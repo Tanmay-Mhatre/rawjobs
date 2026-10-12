@@ -7,10 +7,25 @@ import { Button } from "./ui";
  * Add to / remove from My companies. `name` makes the label specific for screen readers ("Add Acme").
  * Outlined, never orange: a list shows many of these, and the accent is kept for one main action per view.
  */
-export function AddButton({ added, onAdd, onRemove, soon, name }: { added: boolean; onAdd: () => void; onRemove: () => void; soon?: boolean; name?: string }) {
+export function AddButton({
+  added,
+  onAdd,
+  onRemove,
+  soon,
+  name,
+  addedText = "Added",
+}: {
+  added: boolean;
+  onAdd: () => void;
+  onRemove: () => void;
+  soon?: boolean;
+  name?: string;
+  /** What an added one says ("Watching", for companies not hiring for you yet). */
+  addedText?: string;
+}) {
   return added ? (
-    <Button size="sm" onClick={onRemove} aria-pressed className="border-ink bg-active text-ink" aria-label={name ? `Added ${name}` : undefined} title="In My companies. Click to remove">
-      <Check className="size-3.5" /> Added
+    <Button size="sm" onClick={onRemove} aria-pressed className="border-ink bg-active text-ink" aria-label={name ? `${addedText} ${name}` : undefined} title="In My companies. Click to remove">
+      <Check className="size-3.5" /> {addedText}
     </Button>
   ) : (
     <Button size="sm" onClick={onAdd} aria-label={name ? `Add ${name}` : undefined} title={soon ? "Not supported yet: it's scanned once its hiring system is supported" : "Add to My companies"}>
@@ -19,19 +34,24 @@ export function AddButton({ added, onAdd, onRemove, soon, name }: { added: boole
   );
 }
 
-/** "Add all (N)" for a list, then "Added N · Undo" until the list changes. `primary`: the view's one main action (orange). */
+/**
+ * "Add all (N)" for a list, then "Added N · Undo" until the list changes. `primary`: the view's one
+ * main action (orange). `label` words the button instead ("Add top 10").
+ */
 export function AddAll({
   items,
   watched,
   onAddMany,
   onRemoveMany,
   primary,
+  label,
 }: {
   items: CompanyRef[];
   watched: Set<string>;
   onAddMany: (c: CompanyRef[]) => string[];
   onRemoveMany: (keys: string[]) => void;
   primary?: boolean;
+  label?: (n: number) => string;
 }) {
   const [last, setLast] = useState<{ keys: string[]; soon: number } | null>(null);
   const todo = items.filter((c) => !watched.has(keyOf(c)));
@@ -68,7 +88,7 @@ export function AddAll({
         setLast({ keys, soon });
       }}
     >
-      <Plus className="size-3.5" /> Add all ({todo.length})
+      <Plus className="size-3.5" /> {label ? label(todo.length) : `Add all (${todo.length})`}
     </Button>
   );
 }

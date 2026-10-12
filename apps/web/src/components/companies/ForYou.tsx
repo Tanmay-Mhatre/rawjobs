@@ -1,11 +1,11 @@
 import { companyLabel, displayName } from "@rawjobs/core/display-name";
 import { isPlaceholderBoard } from "@rawjobs/core/text";
-import { Briefcase, Check, History, Info, LoaderCircle, Package, Plus, RefreshCw, Undo2, X } from "lucide-react";
+import { Briefcase, Check, ChevronRight, History, Info, LoaderCircle, Package, Plus, RefreshCw, Undo2, X } from "lucide-react";
 import { useEffect, useId, useMemo, useState, type ReactNode } from "react";
 import { keyOf, type CompanyRef } from "../../lib/companies";
-import { companyReasons, refOf, visible, type CompanySuggestion, type CompanySuggestions, type SuggestState } from "../../lib/companySuggest";
+import { companyReasons, groupSuggestions, refOf, type SuggestionGroup, visible, type CompanySuggestion, type CompanySuggestions, type SuggestState } from "../../lib/companySuggest";
 import { canRunLocally } from "../../lib/data";
-import { isAdded, packState, uniqueMembers } from "../../lib/packVisit";
+import { clearFresh, isAdded, type NextUp, packMembers, packState, revealNext, uniqueMembers } from "../../lib/packVisit";
 import { load, save } from "../../lib/storage";
 import { settingsHash } from "../settings/registry";
 import { AddAll, AddButton } from "../CompanyButtons";
@@ -45,6 +45,10 @@ export const DISMISSED_KEY = "rawjobs.goBackDismissed";
 /** "Off" for less than this right after mount or a change is just the request starting: keep the skeleton (M3). */
 const OFF_GRACE_MS = 1000;
 const PAGE = 9;
+/** "Add top 10": the bulk add in Hiring for you now and Not hiring yet, in your industries only. */
+const TOP = 10;
+
+type Pack = { industry: string; items: CompanySuggestion[]; more: CompanySuggestion[] };
 
 /** Suggestions to show: not in My companies or hidden, and never a sandbox or test board. */
 const real = <T extends CompanySuggestion>(list: readonly T[], skip: ReadonlySet<string>) => visible(list, skip).filter((s) => !isPlaceholderBoard(s.name));
@@ -69,6 +73,7 @@ export function ForYou({ state, watched, muted, pastEmployers, onPastEmployers, 
   const [hidden, setHidden] = useState<{ key: string; name: string } | null>(null);
   const [dismissed, setDismissed] = useState<string[]>(() => load<string[]>(DISMISSED_KEY, []));
   const packs: PackActions = packActions ?? { add: (refs) => void onAddMany(refs), remove: (keys) => onRemoveMany(keys) };
+  const [nextUp, setNextUp] = useState<NextUp>({});
 
   const lists = useMemo(() => {
     if (!data) return null;
@@ -77,7 +82,7 @@ export function ForYou({ state, watched, muted, pastEmployers, onPastEmployers, 
       watching: real(data.worthWatching, muted),
       soon: real(data.notScannable, muted),
       like: data.lookalikes.map((r) => ({ ...r, items: real(r.items, muted) })).filter((r) => r.items.length),
-      packs: data.packs.map((p) => ({ ...p, items: real(p.items, muted) })).filter((p) => p.items.length),
+      packs: data.packs.map((p): Pack => ({ industry: p.industry, items: real(p.items, muted), more: real(p.more ?? [], muted) })).filter((p) => p.items.length),
     };
   }, [data, muted]);
 
@@ -92,20 +97,20 @@ export function ForYou({ state, watched, muted, pastEmployers, onPastEmployers, 
     onMute(s.key);
     setHidden({ key: s.key, name: s.name });
   };
-  const card = (s: CompanySuggestion) => (
-    <SuggestionCard key={s.key} s={s} added={watched.has(s.key) || watched.has(keyOf(s))} onAdd={() => void onAddMany([refOf(s)])} onRemove={() => onRemoveMany([s.key])} onHide={() => hide(s)} />
+  const card = (s: CompanySuggestion, opts: { note?: string } = {}) => (
+    <SuggestionCard
+      key={s.key}
+      s={s}
+      added={isAdded(watched, s)}
+      onAdd={() => void onAddMany([refOf(s)])}
+      onRemove={() => onRemoveMany([s.key, keyOf(s)])}
+      onHide={() => hide(s)}
+      note={opts.note}
+      addedText={current === "watching" ? "Watching" : undefined}
+    />
   );
-  const grid = (items: CompanySuggestion[], limit = shown, more = () => setShown((n) => n + PAGE)) => (
-    <>
-      <div className={cx("grid gap-3", compact ? "sm:grid-cols-2" : "sm:grid-cols-2 xl:grid-cols-3")}>{items.slice(0, limit).map(card)}</div>
-      {items.length > limit && (
-        <div className="flex justify-center">
-          <Button variant="ghost" onClick={more}>
-            Show more ({items.length - limit})
-          </Button>
-        </div>
-      )}
-    </>
+  const cards = (items: CompanySuggestion[], note?: (s: CompanySuggestion) => string | undefined) => (
+    <div className={cx("grid gap-3", compact ? "sm:grid-cols-2" : "sm:grid-cols-2 xl:grid-cols-3")}>{items.map((s) => card(s, { note: note?.(s) }))}</div>
   );
 
   type Tab = { id: Lens; label: string; count?: number };
@@ -126,13 +131,35 @@ export function ForYou({ state, watched, muted, pastEmployers, onPastEmployers, 
 
   const goBack = (data?.pastEmployers ?? []).filter((p) => p.company && !dismissed.includes(p.company.key) && !muted.has(p.company.key) && !isPlaceholderBoard(p.company.name));
 
+  // Packs as shown (each with the extras revealed so far); a pack change other than a pick drops the "new" marks.
+  const shownPacks = (lists?.packs ?? []).map((p) => ({ ...p, items: packMembers(p, nextUp) }));
+  const packActs: PackActions = {
+    add: (refs, text, packOf) => {
+      setNextUp(clearFresh);
+      packs.add(refs, text, packOf);
+    },
+    remove: (keys, text) => {
+      setNextUp(clearFresh);
+      packs.remove(keys, text);
+    },
+  };
+  /** One company picked in a pack: add it, then the next 2 from that pack join its end. */
+  const pick = (industry: string, s: CompanySuggestion) => {
+    const p = lists?.packs.find((x) => x.industry === industry);
+    packs.add(
+      [refOf(s)],
+      () => `Added ${companyLabel(s)}`,
+      () => industry,
+    );
+    if (p) setNextUp((st) => revealNext(st, p, companyLabel(s), watched));
+  };
+
   const Wrap = compact ? "div" : Card;
   const top5 = lists ? [...lists.hiring, ...lists.like.flatMap((r) => r.items)].filter((s, i, all) => all.findIndex((x) => x.key === s.key) === i).slice(0, 5) : [];
   return (
     <Wrap className={compact ? "" : "p-5 sm:p-6"}>
       {/* The Suggestions tab names this panel. */}
       <h2 className="sr-only">Suggestions</h2>
-      <PastEmployers names={pastEmployers} suggested={data?.pastEmployers.map((p) => p.name)} onChange={onPastEmployers} />
       {compact && top5.length > 0 && (
         <div className="mt-4 flex flex-wrap items-center gap-2 rounded-md bg-inset p-3 type-small">
           <span className="mr-auto">
@@ -196,16 +223,18 @@ export function ForYou({ state, watched, muted, pastEmployers, onPastEmployers, 
               needIndustries ? (
                 <NeedIndustries />
               ) : (
-                <PacksHeader packs={lists.packs} watched={watched} actions={packs} />
+                <PacksHeader packs={shownPacks} watched={watched} actions={packActs} />
               )
-            ) : (
-              <LensHeader lens={current} lists={lists} watched={watched} onAddMany={onAddMany} onRemoveMany={onRemoveMany} />
-            )}
+            ) : current === "soon" ? (
+              <LensHeader items={lists.soon} watched={watched} onAddMany={onAddMany} onRemoveMany={onRemoveMany} />
+            ) : current === "like" ? (
+              <PastEmployers names={pastEmployers} suggested={data?.pastEmployers.map((p) => p.name)} onChange={onPastEmployers} />
+            ) : null}
 
             {hidden && muted.has(hidden.key) && (
               <p className="flex items-center gap-2 rounded-md bg-inset px-3 py-2 type-small">
                 <span className="mr-auto">
-                  Hid <b>{displayName(hidden.name)}</b>. Its jobs won't show either.
+                  Hid <b>{displayName(hidden.name)}</b>. It won't be suggested, and its jobs won't show on your Radar.
                 </span>
                 <button
                   type="button"
@@ -221,15 +250,43 @@ export function ForYou({ state, watched, muted, pastEmployers, onPastEmployers, 
             )}
 
             {current === "hiring" &&
-              (lists.hiring.length ? grid(lists.hiring) : <Empty>No company has an opening that passes your filters today. Try the Not hiring yet list, or widen your places.</Empty>)}
-            {current === "watching" && grid(lists.watching)}
-            {current === "soon" && grid(lists.soon)}
+              (lists.hiring.length ? (
+                <Grouped
+                  lens="hiring"
+                  items={lists.hiring}
+                  industries={industries}
+                  asOf={data?.index_generated_at}
+                  watched={watched}
+                  onAddMany={onAddMany}
+                  onRemoveMany={onRemoveMany}
+                  cards={cards}
+                  shown={shown}
+                  onMore={() => setShown((n) => n + PAGE)}
+                />
+              ) : (
+                <Empty>No company has an opening that passes your filters today. Try the Not hiring yet list, or widen your places.</Empty>
+              ))}
+            {current === "watching" && (
+              <Grouped
+                lens="watching"
+                items={lists.watching}
+                industries={industries}
+                watched={watched}
+                onAddMany={onAddMany}
+                onRemoveMany={onRemoveMany}
+                cards={cards}
+                shown={shown}
+                onMore={() => setShown((n) => n + PAGE)}
+              />
+            )}
+            {current === "soon" && <GroupList groups={groupSuggestions(lists.soon.slice(0, shown), "watching")} cards={cards} />}
+            {current === "soon" && lists.soon.length > shown && <ShowMore onClick={() => setShown((n) => n + PAGE)}>Show {lists.soon.length - shown} more</ShowMore>}
             {current === "like" && (
               <LikeLens
                 rows={lists.like}
                 goBack={goBack}
                 hasEmployers={pastEmployers.length > 0 || !!data?.pastEmployers.length}
-                grid={grid}
+                cards={cards}
                 compact={compact}
                 watched={watched}
                 onAddMany={onAddMany}
@@ -241,7 +298,7 @@ export function ForYou({ state, watched, muted, pastEmployers, onPastEmployers, 
                 }}
               />
             )}
-            {current === "packs" && !needIndustries && <Packs packs={lists.packs} watched={watched} actions={packs} />}
+            {current === "packs" && !needIndustries && <Packs packs={shownPacks} nextUp={nextUp} watched={watched} actions={packActs} onPick={pick} />}
           </TabPanel>
         </div>
       )}
@@ -253,8 +310,6 @@ export function ForYou({ state, watched, muted, pastEmployers, onPastEmployers, 
     </Wrap>
   );
 }
-
-const unique = (items: CompanySuggestion[]) => items.filter((s, i) => items.findIndex((x) => x.key === s.key) === i);
 
 /** No industries in your profile, so no starter packs: say so and link to picking them. */
 function NeedIndustries() {
@@ -271,25 +326,143 @@ function NeedIndustries() {
 
 /** "Add all" for everything in the lens (not just the cards on screen). */
 function LensHeader({
-  lens,
-  lists,
+  items,
   watched,
   onAddMany,
   onRemoveMany,
 }: {
-  lens: Exclude<Lens, "packs">;
-  lists: { hiring: CompanySuggestion[]; watching: CompanySuggestion[]; soon: CompanySuggestion[]; like: { items: CompanySuggestion[] }[] };
+  items: CompanySuggestion[];
   watched: Set<string>;
   onAddMany: (list: CompanyRef[]) => string[];
   onRemoveMany: (keys: string[]) => void;
 }) {
-  const items = lens === "like" ? unique(lists.like.flatMap((r) => r.items)) : lens === "hiring" ? lists.hiring : lens === "watching" ? lists.watching : lists.soon;
   if (!items.length) return null;
   return (
     <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
-      {/* Keyed by lens, so its "Added n · Undo" belongs to this list only. */}
-      <AddAll key={lens} items={items.map(refOf)} watched={watched} onAddMany={onAddMany} onRemoveMany={onRemoveMany} />
+      <AddAll items={items.map(refOf)} watched={watched} onAddMany={onAddMany} onRemoveMany={onRemoveMany} />
     </div>
+  );
+}
+
+function ShowMore({ onClick, children }: { onClick: () => void; children: ReactNode }) {
+  return (
+    <div className="flex justify-center">
+      <Button variant="ghost" onClick={onClick}>
+        {children}
+      </Button>
+    </div>
+  );
+}
+
+/** Cards under one header per shared reason: "Crypto & Web3 14 · Your industry, and your topics crypto and web3". */
+function GroupList({ groups, counts, cards }: { groups: SuggestionGroup[]; counts?: Map<string, number>; cards: (items: CompanySuggestion[]) => ReactNode }) {
+  return (
+    <div className="space-y-5">
+      {groups.map((g) => (
+        <GroupSection key={g.id} title={g.title} reason={g.reason} count={counts?.get(g.id) ?? g.items.length}>
+          {cards(g.items)}
+        </GroupSection>
+      ))}
+    </div>
+  );
+}
+
+function GroupSection({ title, reason, count, children }: { title: string; reason: string; count: number; children: ReactNode }) {
+  const id = useId();
+  return (
+    <section aria-labelledby={id} className="space-y-2.5">
+      <h3 id={id} className="flex flex-wrap items-baseline gap-x-3 gap-y-0.5 type-small font-semibold">
+        <span>
+          {title} <span className="tabular font-normal text-muted">{count}</span>
+        </span>
+        {reason && <span className="type-meta font-normal text-muted">{reason}</span>}
+      </h3>
+      {children}
+    </section>
+  );
+}
+
+const shortDate = (iso?: string) => {
+  const d = iso ? new Date(iso) : null;
+  return d && !Number.isNaN(d.getTime()) ? d.toLocaleDateString(undefined, { month: "short", day: "numeric" }) : null;
+};
+
+/**
+ * Hiring for you now and Not hiring yet: the companies in your industries, grouped by the reason they
+ * share, with "Add top 10" for them; the ones outside your industries fold away below and aren't in
+ * the bulk add. Without industries in your profile there's nothing to split, so all show.
+ */
+function Grouped({
+  lens,
+  items,
+  industries,
+  asOf,
+  watched,
+  onAddMany,
+  onRemoveMany,
+  cards,
+  shown,
+  onMore,
+}: {
+  lens: "hiring" | "watching";
+  items: CompanySuggestion[];
+  industries?: number;
+  asOf?: string;
+  watched: Set<string>;
+  onAddMany: (list: CompanyRef[]) => string[];
+  onRemoveMany: (keys: string[]) => void;
+  cards: (items: CompanySuggestion[]) => ReactNode;
+  shown: number;
+  onMore: () => void;
+}) {
+  const split = industries !== 0 && items.some((s) => s.industries.length);
+  const inside = split ? items.filter((s) => s.industries.length) : items;
+  const outside = split ? items.filter((s) => !s.industries.length) : [];
+  const counts = new Map(groupSuggestions(inside, lens).map((g) => [g.id, g.items.length]));
+  const top = inside.filter((s) => !isAdded(watched, s)).slice(0, TOP);
+  const date = shortDate(asOf);
+  const intro = lens === "watching" ? "Nothing open for you yet. Add them to hear first." : `${split ? "In your industries" : "Companies hiring for you"}${date ? `, as of ${date}` : ""}`;
+  const left = inside.length - shown;
+  return (
+    <>
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
+        <p className="min-w-0 flex-1 type-small text-muted">{intro}</p>
+        {/* Keyed by lens, so its "Added n · Undo" belongs to this list only. */}
+        <AddAll
+          key={lens}
+          items={top.map(refOf)}
+          watched={watched}
+          onAddMany={onAddMany}
+          onRemoveMany={onRemoveMany}
+          primary={watched.size === 0}
+          label={(n) => (n >= TOP ? `Add top ${TOP}` : `Add all ${n}`)}
+        />
+      </div>
+      <GroupList groups={groupSuggestions(inside.slice(0, shown), lens)} counts={counts} cards={cards} />
+      {left > 0 && (
+        <ShowMore onClick={onMore}>
+          Show {left} more{split ? " in your industries" : ""}
+        </ShowMore>
+      )}
+      {outside.length > 0 && <Outside items={outside} lens={lens} cards={cards} />}
+    </>
+  );
+}
+
+/** Companies outside your industries, folded: they fit, but you didn't pick their industry. */
+function Outside({ items, lens, cards }: { items: CompanySuggestion[]; lens: "hiring" | "watching"; cards: (items: CompanySuggestion[]) => ReactNode }) {
+  const [shown, setShown] = useState(PAGE);
+  const counts = new Map(groupSuggestions(items, lens).map((g) => [g.id, g.items.length]));
+  return (
+    <details className="group/fold space-y-3 border-t border-hairline pt-4">
+      <summary className="inline-flex min-h-8 cursor-pointer list-none items-center gap-1.5 type-label [&::-webkit-details-marker]:hidden">
+        <ChevronRight className="size-4 text-muted transition-transform duration-150 group-open/fold:rotate-90" aria-hidden />
+        Outside your industries <span className="tabular font-normal text-muted">{items.length}</span>
+      </summary>
+      <p className="type-small text-muted">Not in an industry you picked, so Add top {TOP} leaves them out.</p>
+      <GroupList groups={groupSuggestions(items.slice(0, shown), lens)} counts={counts} cards={cards} />
+      {items.length > shown && <ShowMore onClick={() => setShown((n) => n + PAGE)}>Show {items.length - shown} more</ShowMore>}
+    </details>
   );
 }
 
@@ -331,11 +504,17 @@ function Empty({ children }: { children: ReactNode }) {
   return <p className="rounded-md border border-dashed border-line p-4 type-small text-muted">{children}</p>;
 }
 
+/** What only this lookalike says: "Like Careem: Mobility · hires Product Management" without the name the header has. */
+const likeWhy = (s: CompanySuggestion) => {
+  const why = s.reasons.find((r) => r.startsWith("Like "))?.replace(/^Like [^:]*:\s*/, "");
+  return why ? why.charAt(0).toUpperCase() + why.slice(1) : undefined;
+};
+
 function LikeLens({
   rows,
   goBack,
   hasEmployers,
-  grid,
+  cards,
   compact,
   watched,
   onAddMany,
@@ -345,7 +524,7 @@ function LikeLens({
   rows: { seed: string; in_directory: boolean; items: CompanySuggestion[] }[];
   goBack: CompanySuggestions["pastEmployers"];
   hasEmployers: boolean;
-  grid: (items: CompanySuggestion[], limit?: number, more?: () => void) => ReactNode;
+  cards: (items: CompanySuggestion[], note?: (s: CompanySuggestion) => string | undefined) => ReactNode;
   compact?: boolean;
   watched: Set<string>;
   onAddMany: (list: CompanyRef[]) => string[];
@@ -353,7 +532,13 @@ function LikeLens({
   onDismiss: (key: string) => void;
 }) {
   const [open, setOpen] = useState<string[]>([]);
-  if (!hasEmployers) return <Empty>Add the companies you've worked at above to see companies like them that are hiring for you.</Empty>;
+  if (!hasEmployers)
+    return (
+      <div className="rounded-md border border-dashed border-line p-4 type-small">
+        <p className="font-semibold">No past employers yet</p>
+        <p className="mt-1 text-muted">Add a company you've worked at to see companies like it. Past employers are only checked if you also add them to My companies.</p>
+      </div>
+    );
   return (
     <div className="space-y-5">
       {rows.length === 0 && <Empty>No close match yet for your past employers among companies that fit your roles and places.</Empty>}
@@ -366,7 +551,8 @@ function LikeLens({
             </h3>
             <AddAll items={r.items.map(refOf)} watched={watched} onAddMany={onAddMany} onRemoveMany={onRemoveMany} />
           </div>
-          {grid(r.items, open.includes(r.seed) ? r.items.length : compact ? 2 : 3, () => setOpen((o) => [...o, r.seed]))}
+          {cards(r.items.slice(0, open.includes(r.seed) ? r.items.length : compact ? 2 : 3), likeWhy)}
+          {!open.includes(r.seed) && r.items.length > (compact ? 2 : 3) && <ShowMore onClick={() => setOpen((o) => [...o, r.seed])}>Show {r.items.length - (compact ? 2 : 3)} more</ShowMore>}
         </section>
       ))}
       {goBack.length > 0 && (
@@ -406,17 +592,45 @@ function LikeLens({
  * reload. Progress ("4 of 8 added") shows below the chips once you've started a pack, so nothing
  * above the one you pressed moves.
  */
-function Packs({ packs, watched, actions }: { packs: { industry: string; items: CompanySuggestion[] }[]; watched: Set<string>; actions: PackActions }) {
+function Packs({
+  packs,
+  nextUp,
+  watched,
+  actions,
+  onPick,
+}: {
+  packs: { industry: string; items: CompanySuggestion[] }[];
+  nextUp: NextUp;
+  watched: Set<string>;
+  actions: PackActions;
+  onPick: (industry: string, s: CompanySuggestion) => void;
+}) {
   return (
     <div className="grid items-start gap-3 md:grid-cols-2 xl:grid-cols-3">
       {packs.map((p) => (
-        <PackCard key={p.industry} pack={p} watched={watched} actions={actions} />
+        <PackCard key={p.industry} pack={p} next={nextUp[p.industry]} watched={watched} actions={actions} onPick={(s) => onPick(p.industry, s)} />
       ))}
     </div>
   );
 }
 
-function PackCard({ pack: p, watched, actions }: { pack: { industry: string; items: CompanySuggestion[] }; watched: Set<string>; actions: PackActions }) {
+/**
+ * Picking one company in a pack brings the next ones from it ("Next in this pack, after Kraken"):
+ * they join the end of the chips, the new ones with a dot until the next change, so nothing moves.
+ */
+function PackCard({
+  pack: p,
+  next,
+  watched,
+  actions,
+  onPick,
+}: {
+  pack: { industry: string; items: CompanySuggestion[] };
+  next?: NextUp[string];
+  watched: Set<string>;
+  actions: PackActions;
+  onPick: (s: CompanySuggestion) => void;
+}) {
   const headingId = useId();
   const label = packLabel(p.industry);
   const { kind, done, todo, total } = packState(p.items, watched);
@@ -457,19 +671,13 @@ function PackCard({ pack: p, watched, actions }: { pack: { industry: string; ite
             <PackChip
               s={s}
               on={isAdded(watched, s)}
-              onToggle={(on) =>
-                on
-                  ? actions.remove([s.key, keyOf(s)], () => `Removed ${companyLabel(s)}`)
-                  : actions.add(
-                      [refOf(s)],
-                      () => `Added ${companyLabel(s)}`,
-                      () => p.industry,
-                    )
-              }
+              fresh={!!next?.fresh.includes(s.key)}
+              onToggle={(on) => (on ? actions.remove([s.key, keyOf(s)], () => `Removed ${companyLabel(s)}`) : onPick(s))}
             />
           </li>
         ))}
       </ul>
+      {next && <p className="-mt-1 type-meta text-muted">Next in this pack, after {next.after}</p>}
       {done > 0 && (
         <div className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-2">
           <span className="h-1 overflow-hidden bg-active" aria-hidden>
@@ -494,16 +702,17 @@ function PackCard({ pack: p, watched, actions }: { pack: { industry: string; ite
  * A company in a pack: its name and a plus; once added, filled with a check (and an x on hover, as
  * the way to remove it). The icons share one slot, so the chip keeps its width.
  */
-function PackChip({ s, on, onToggle }: { s: CompanySuggestion; on: boolean; onToggle: (on: boolean) => void }) {
+function PackChip({ s, on, fresh, onToggle }: { s: CompanySuggestion; on: boolean; fresh?: boolean; onToggle: (on: boolean) => void }) {
   const name = companyLabel(s);
   return (
     <Chip
       pressed={on}
       onClick={() => onToggle(on)}
-      aria-label={on ? `${name}, in My companies. Press to remove` : `${name}, add to My companies`}
+      aria-label={`${on ? `${name}, in My companies. Press to remove` : `${name}, add to My companies`}${fresh ? ". New in this pack" : ""}`}
       title={companyReasons(s.reasons).join(" · ") || undefined}
-      className="group max-w-full pr-2 pl-2.5"
+      className={cx("group max-w-full pr-2 pl-2.5", fresh && "motion-safe:animate-[rj-fade_var(--duration-base)_var(--ease-enter)]")}
     >
+      {fresh && <span className="rj-dot" aria-hidden />}
       <span className="min-w-0 truncate">{name}</span>
       <span className="relative size-3.5 shrink-0" aria-hidden>
         <Plus className="absolute inset-0 size-3.5 transition-[opacity,transform] group-aria-pressed:scale-75 group-aria-pressed:opacity-0" />
@@ -517,6 +726,7 @@ function PackChip({ s, on, onToggle }: { s: CompanySuggestion; on: boolean; onTo
 /** The companies on your resume, as editable chips. They seed "companies like them". */
 export function PastEmployers({ names, suggested = [], onChange }: { names: string[]; suggested?: string[]; onChange: (names: string[]) => void }) {
   const [text, setText] = useState("");
+  const inputId = useId();
   if (!names.length && suggested.length) {
     return (
       <div className="flex flex-wrap items-center gap-1.5 rounded-md border border-dashed border-line p-2.5">
@@ -536,10 +746,17 @@ export function PastEmployers({ names, suggested = [], onChange }: { names: stri
     setText("");
   };
   return (
-    <div className="flex flex-wrap items-center gap-1.5">
-      <span className="mr-1 inline-flex items-center gap-1.5 type-label text-muted">
-        <Briefcase className="size-4" aria-hidden /> You've worked at
-      </span>
+    <form
+      aria-label="Past employers"
+      className="flex flex-wrap items-center gap-2"
+      onSubmit={(e) => {
+        e.preventDefault();
+        add();
+      }}
+    >
+      <label htmlFor={inputId} className="mr-1 inline-flex items-center gap-1.5 type-label">
+        <Briefcase className="size-4 text-muted" aria-hidden /> You've worked at
+      </label>
       {names.map((n) => (
         <span key={n} className="rj-chip cursor-default gap-1 pr-1">
           {n}
@@ -554,26 +771,10 @@ export function PastEmployers({ names, suggested = [], onChange }: { names: stri
           </button>
         </span>
       ))}
-      <form
-        className="inline-flex items-center"
-        onSubmit={(e) => {
-          e.preventDefault();
-          add();
-        }}
-      >
-        <input
-          value={text}
-          onChange={(e) => setText(e.target.value)}
-          placeholder={names.length ? "Add another" : "Past employer…"}
-          aria-label="Add a past employer"
-          className="h-7 w-44 rounded-md border border-dashed border-line bg-transparent px-2 type-small placeholder:text-muted"
-        />
-        {text.trim() && (
-          <button type="submit" aria-label={`Add ${text.trim()} as a past employer`} className="ml-1 inline-flex size-7 items-center justify-center rounded-md text-ink hover:bg-hover">
-            <Plus className="size-4" />
-          </button>
-        )}
-      </form>
-    </div>
+      <span className="flex w-full max-w-sm gap-2">
+        <input id={inputId} value={text} onChange={(e) => setText(e.target.value)} placeholder="Company name, e.g. Careem" autoComplete="off" className="rj-input h-9 min-w-0 flex-1 type-small" />
+        <Button type="submit">Add employer</Button>
+      </span>
+    </form>
   );
 }

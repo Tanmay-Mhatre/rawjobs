@@ -56,6 +56,8 @@ describe("displayName", () => {
     expect(displayName("Redgate", "red-gate")).toBe("Redgate");
     expect(displayName("Oplabs", "oplabs")).toBe("OP Labs");
     expect(displayName("Coinmarketcap", "coinmarketcap")).toBe("CoinMarketCap");
+    expect(displayName("SeiLabs", "seilabs")).toBe("Sei Labs");
+    expect(displayName("Bvnk", "bvnk")).toBe("BVNK");
   });
 
   it("leaves ordinary names alone and trims", () => {
