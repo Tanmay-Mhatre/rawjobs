@@ -278,11 +278,6 @@ export function CompaniesTab({ configured, meta, jobs, draft, loaded, saved, upd
       onAction: () => restore(removed),
     });
   };
-  /** Put removed entries back (Undo), skipping any added again meanwhile. */
-  const restore = (removed: readonly CompanyRow[]) => {
-    const have = new Set(latest.current.companies.map(keyOf));
-    update({ companies: [...latest.current.companies, ...removed.filter((r) => !have.has(keyOf(r)))] });
-  };
 
   // Hidden companies: muted in your config (by key) and hidden on the Radar (by name), shown once each.
   const names = new Map((directory ?? []).map((c) => [c.key, c.name]));
