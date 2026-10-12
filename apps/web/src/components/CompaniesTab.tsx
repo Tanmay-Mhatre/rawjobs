@@ -15,6 +15,7 @@ import { MyCompanies, type HiddenCompany } from "./Companies";
 import { CompanyFinder, searchDirectory, useDirectory, type DirCompany } from "./CompanyFinder";
 import { ForYou } from "./companies/ForYou";
 import { QuickAdd } from "./companies/QuickAdd";
+import { packActions, Tray, useVisit } from "./companies/Tray";
 import { TabList, TabPanel, useTabIds } from "./companies/Tabs";
 import { EmptyState } from "./EmptyState";
 import { toast } from "./Toast";
@@ -240,6 +241,8 @@ export function CompaniesTab({ configured, meta, jobs, draft, loaded, saved, upd
   // Undo needs the draft as it is when clicked, not when the toast was made.
   const latest = useRef(draft);
   latest.current = draft;
+  /** This visit's Starter pack changes, for the tray (session memory, nothing saved). */
+  const visit = useVisit();
 
   if (!configured) {
     return (
@@ -266,6 +269,11 @@ export function CompaniesTab({ configured, meta, jobs, draft, loaded, saved, upd
     const drop = new Set(keys);
     update({ companies: draft.companies.filter((r) => !drop.has(keyOf(r))) });
   };
+  /** Put removed entries back as they were (Undo), skipping any that are back already. */
+  const restore = (removed: readonly CompanyRow[]) => {
+    const have = new Set(latest.current.companies.map(keyOf));
+    update({ companies: [...latest.current.companies, ...removed.filter((r) => !have.has(keyOf(r)))] });
+  };
   /** Remove right away, with Undo in a toast that puts the same entries back (H11). */
   const removeWithUndo = (keys: readonly string[]) => {
     const drop = new Set(keys);
@@ -279,17 +287,14 @@ export function CompaniesTab({ configured, meta, jobs, draft, loaded, saved, upd
       onAction: () => restore(removed),
     });
   };
-  /** Put removed entries back (Undo), skipping any added again meanwhile. */
-  const restore = (removed: readonly CompanyRow[]) => {
-    const have = new Set(latest.current.companies.map(keyOf));
-    update({ companies: [...latest.current.companies, ...removed.filter((r) => !have.has(keyOf(r)))] });
-  };
 
   // Hidden companies: muted in your config (by key) and hidden on the Radar (by name), shown once each.
   const names = new Map((directory ?? []).map((c) => [c.key, c.name]));
   const mutedRows = draft.muted.map((key) => ({ key, name: names.get(key) }));
   const mutedNames = new Set(mutedRows.map((m) => m.name).filter(Boolean));
   const hidden: HiddenCompany[] = [...mutedRows, ...hiddenNames.filter((n) => !mutedNames.has(n)).map((name) => ({ key: undefined, name }))];
+
+  const packs = packActions(visit, { companies: draft.companies, addMany, removeMany, restore });
 
   const openLink = (name?: string) => {
     setLinkName(name);
@@ -409,6 +414,7 @@ export function CompaniesTab({ configured, meta, jobs, draft, loaded, saved, upd
             onUnmute={(key) => update({ muted: draft.muted.filter((k) => k !== key) })}
             onRetry={() => setRetrying(true)}
             industries={saved.industries.length}
+            packActions={packs}
             offHint="Suggestions aren't available in this version of the app. Search the directory or add a company by link instead."
           />
         </TabPanel>
@@ -432,6 +438,12 @@ export function CompaniesTab({ configured, meta, jobs, draft, loaded, saved, upd
           />
         </TabPanel>
       )}
+
+      <Tray visit={visit.visit} watched={watched} actions={packs} />
+      {/* One polite line that reads out each pack change and Undo, always there so none is missed. */}
+      <p role="status" aria-live="polite" className="sr-only">
+        {visit.said}
+      </p>
     </div>
   );
 }
