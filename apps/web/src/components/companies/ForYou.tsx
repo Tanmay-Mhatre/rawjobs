@@ -1,19 +1,19 @@
 import { companyLabel, displayName } from "@rawjobs/core/display-name";
-import { INDUSTRY_BY_ID } from "@rawjobs/core/catalog/industries";
 import { isPlaceholderBoard } from "@rawjobs/core/text";
-import { Briefcase, History, Info, LoaderCircle, Package, Plus, RefreshCw, Undo2, X } from "lucide-react";
-import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { Briefcase, Check, History, Info, LoaderCircle, Package, Plus, RefreshCw, Undo2, X } from "lucide-react";
+import { useEffect, useId, useMemo, useState, type ReactNode } from "react";
 import { keyOf, type CompanyRef } from "../../lib/companies";
 import { companyReasons, refOf, visible, type CompanySuggestion, type CompanySuggestions, type SuggestState } from "../../lib/companySuggest";
 import { canRunLocally } from "../../lib/data";
+import { isAdded, packState, uniqueMembers } from "../../lib/packVisit";
 import { load, save } from "../../lib/storage";
 import { settingsHash } from "../settings/registry";
 import { AddAll, AddButton } from "../CompanyButtons";
-import { Chip } from "../primitives";
-import { buttonClass } from "../primitives";
+import { buttonClass, Chip } from "../primitives";
 import { Button, Card, cx } from "../ui";
 import { CardSkeleton, Monogram, SuggestionCard } from "./SuggestionCard";
 import { TabList, TabPanel, useTabIds } from "./Tabs";
+import { packLabel, type PackActions } from "./Tray";
 
 type Lens = "hiring" | "like" | "watching" | "packs" | "soon";
 
@@ -37,6 +37,8 @@ type Props = {
   onRetry?: () => void;
   /** Industries in your profile. With none, the Starter packs lens stays and links to picking them. */
   industries?: number;
+  /** How Starter packs add and remove (the Companies page's tray records them); else straight to the list. */
+  packActions?: PackActions;
 };
 
 export const DISMISSED_KEY = "rawjobs.goBackDismissed";
@@ -52,7 +54,7 @@ const real = <T extends CompanySuggestion>(list: readonly T[], skip: ReadonlySet
  * watching, one pack per industry, and ones RawJobs can't scan yet. Rule-based and local: nothing
  * about you leaves this computer.
  */
-export function ForYou({ state, watched, muted, pastEmployers, onPastEmployers, onAddMany, onRemoveMany, onMute, onUnmute, compact, offHint, onRetry, industries }: Props) {
+export function ForYou({ state, watched, muted, pastEmployers, onPastEmployers, onAddMany, onRemoveMany, onMute, onUnmute, compact, offHint, onRetry, industries, packActions }: Props) {
   const ids = useTabIds("suggest");
   // "Off" only counts once it has lasted a moment: the first render and profile changes pass through it.
   const [offSettled, setOffSettled] = useState(!canRunLocally);
@@ -66,6 +68,7 @@ export function ForYou({ state, watched, muted, pastEmployers, onPastEmployers, 
   const [shown, setShown] = useState(compact ? 6 : PAGE);
   const [hidden, setHidden] = useState<{ key: string; name: string } | null>(null);
   const [dismissed, setDismissed] = useState<string[]>(() => load<string[]>(DISMISSED_KEY, []));
+  const packs: PackActions = packActions ?? { add: (refs) => void onAddMany(refs), remove: (keys) => onRemoveMany(keys) };
 
   const lists = useMemo(() => {
     if (!data) return null;
@@ -189,7 +192,15 @@ export function ForYou({ state, watched, muted, pastEmployers, onPastEmployers, 
           />
 
           <TabPanel id={current} ids={ids} className="space-y-4">
-            {current === "packs" && needIndustries ? <NeedIndustries /> : <LensHeader lens={current} lists={lists} watched={watched} onAddMany={onAddMany} onRemoveMany={onRemoveMany} />}
+            {current === "packs" ? (
+              needIndustries ? (
+                <NeedIndustries />
+              ) : (
+                <PacksHeader packs={lists.packs} watched={watched} actions={packs} />
+              )
+            ) : (
+              <LensHeader lens={current} lists={lists} watched={watched} onAddMany={onAddMany} onRemoveMany={onRemoveMany} />
+            )}
 
             {hidden && muted.has(hidden.key) && (
               <p className="flex items-center gap-2 rounded-md bg-inset px-3 py-2 type-small">
@@ -230,7 +241,7 @@ export function ForYou({ state, watched, muted, pastEmployers, onPastEmployers, 
                 }}
               />
             )}
-            {current === "packs" && !needIndustries && <Packs packs={lists.packs} watched={watched} onAddMany={onAddMany} onRemoveMany={onRemoveMany} />}
+            {current === "packs" && !needIndustries && <Packs packs={lists.packs} watched={watched} actions={packs} />}
           </TabPanel>
         </div>
       )}
@@ -258,7 +269,7 @@ function NeedIndustries() {
   );
 }
 
-/** "Add all" for everything in the lens (not just the cards on screen); on Starter packs, how many packs. */
+/** "Add all" for everything in the lens (not just the cards on screen). */
 function LensHeader({
   lens,
   lists,
@@ -266,32 +277,52 @@ function LensHeader({
   onAddMany,
   onRemoveMany,
 }: {
-  lens: Lens;
-  lists: { hiring: CompanySuggestion[]; watching: CompanySuggestion[]; soon: CompanySuggestion[]; like: { items: CompanySuggestion[] }[]; packs: { items: CompanySuggestion[] }[] };
+  lens: Exclude<Lens, "packs">;
+  lists: { hiring: CompanySuggestion[]; watching: CompanySuggestion[]; soon: CompanySuggestion[]; like: { items: CompanySuggestion[] }[] };
   watched: Set<string>;
   onAddMany: (list: CompanyRef[]) => string[];
   onRemoveMany: (keys: string[]) => void;
 }) {
-  const items =
-    lens === "packs"
-      ? unique(lists.packs.flatMap((p) => p.items))
-      : lens === "like"
-        ? unique(lists.like.flatMap((r) => r.items))
-        : lens === "hiring"
-          ? lists.hiring
-          : lens === "watching"
-            ? lists.watching
-            : lists.soon;
+  const items = lens === "like" ? unique(lists.like.flatMap((r) => r.items)) : lens === "hiring" ? lists.hiring : lens === "watching" ? lists.watching : lists.soon;
   if (!items.length) return null;
   return (
     <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
-      {lens === "packs" && (
-        <p className="min-w-0 flex-1 type-small text-muted">
-          {lists.packs.length} {lists.packs.length === 1 ? "pack" : "packs"} from your industries
-        </p>
-      )}
-      {/* Keyed by lens, so its "Added n · Undo" belongs to this list only. Orange only as the way to start, at 0 companies. */}
-      <AddAll key={lens} items={items.map(refOf)} watched={watched} onAddMany={onAddMany} onRemoveMany={onRemoveMany} primary={lens === "packs" && watched.size === 0} />
+      {/* Keyed by lens, so its "Added n · Undo" belongs to this list only. */}
+      <AddAll key={lens} items={items.map(refOf)} watched={watched} onAddMany={onAddMany} onRemoveMany={onRemoveMany} />
+    </div>
+  );
+}
+
+/**
+ * "13 packs from your industries" and one button for all of them: "Add all 54" counts each company
+ * once, even when it sits in two packs, then "Add 20 more". Orange only as the way to start, at 0
+ * companies. The button stays put once everything is in, so focus never drops.
+ */
+function PacksHeader({ packs, watched, actions }: { packs: { industry: string; items: CompanySuggestion[] }[]; watched: Set<string>; actions: PackActions }) {
+  const all = uniqueMembers(packs);
+  if (!all.length) return null;
+  const { kind, todo } = packState(all, watched);
+  const packOf = (r: CompanyRef) => packs.find((p) => p.items.some((s) => keyOf(s) === keyOf(r)))?.industry ?? null;
+  const n = packs.length;
+  return (
+    <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
+      <p className="min-w-0 flex-1 type-small text-muted">
+        {n} {n === 1 ? "pack" : "packs"} from your industries
+      </p>
+      <Button
+        size="sm"
+        variant={watched.size === 0 ? "primary" : "outline"}
+        aria-disabled={kind === "done"}
+        className="aria-disabled:cursor-default aria-disabled:opacity-60"
+        onClick={() => {
+          if (kind === "done") return;
+          const refs = all.filter((s) => !isAdded(watched, s)).map(refOf);
+          actions.add(refs, (k) => `Added ${k} from ${n} ${n === 1 ? "pack" : "packs"}`, packOf);
+        }}
+      >
+        {kind === "done" ? <Check className="size-3.5" /> : <Plus className="size-3.5" />}
+        {kind === "all" ? `Add all ${todo}` : kind === "more" ? `Add ${todo} more` : "Every pack added"}
+      </Button>
     </div>
   );
 }
@@ -368,42 +399,118 @@ function LikeLens({
   );
 }
 
-function Packs({
-  packs,
-  watched,
-  onAddMany,
-  onRemoveMany,
-}: {
-  packs: { industry: string; items: CompanySuggestion[] }[];
-  watched: Set<string>;
-  onAddMany: (list: CompanyRef[]) => string[];
-  onRemoveMany: (keys: string[]) => void;
-}) {
+/**
+ * One card per industry. Chips are name-only toggles that flip in place; the pack button counts what's
+ * left ("Add all 8", "Add 4 more"), then offers Remove pack once "All added" shows under the chips.
+ * Both come from your companies, not this visit, so a finished pack still offers Remove pack after a
+ * reload. Progress ("4 of 8 added") shows below the chips once you've started a pack, so nothing
+ * above the one you pressed moves.
+ */
+function Packs({ packs, watched, actions }: { packs: { industry: string; items: CompanySuggestion[] }[]; watched: Set<string>; actions: PackActions }) {
   return (
-    <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+    <div className="grid items-start gap-3 md:grid-cols-2 xl:grid-cols-3">
       {packs.map((p) => (
-        <section key={p.industry} className="flex min-w-0 flex-col gap-3 rounded-md border border-line p-4">
-          <header className="flex items-center gap-2">
-            <Package className="size-4 text-muted" aria-hidden />
-            <h3 className="mr-auto type-small font-semibold">{INDUSTRY_BY_ID.get(p.industry)?.label ?? p.industry}</h3>
-            <AddAll items={p.items.map(refOf)} watched={watched} onAddMany={onAddMany} onRemoveMany={onRemoveMany} />
-          </header>
-          <ul className="flex flex-wrap gap-1.5">
-            {p.items.map((s) => {
-              const on = watched.has(s.key);
-              return (
-                <li key={s.key}>
-                  <Chip pressed={on} onClick={() => (on ? onRemoveMany([s.key]) : onAddMany([refOf(s)]))} title={companyReasons(s.reasons).join(" · ")} className="pl-1.5">
-                    <Monogram name={companyLabel(s)} size="xs" />
-                    {companyLabel(s)}
-                  </Chip>
-                </li>
-              );
-            })}
-          </ul>
-        </section>
+        <PackCard key={p.industry} pack={p} watched={watched} actions={actions} />
       ))}
     </div>
+  );
+}
+
+function PackCard({ pack: p, watched, actions }: { pack: { industry: string; items: CompanySuggestion[] }; watched: Set<string>; actions: PackActions }) {
+  const headingId = useId();
+  const label = packLabel(p.industry);
+  const { kind, done, todo, total } = packState(p.items, watched);
+  const act = () => {
+    if (kind === "done") actions.remove(p.items.map(keyOf), (k) => `Removed ${k} from ${label}`);
+    else
+      actions.add(
+        p.items.filter((s) => !isAdded(watched, s)).map(refOf),
+        (k) => `Added ${k} from ${label}`,
+        () => p.industry,
+      );
+  };
+  return (
+    <section aria-labelledby={headingId} className="flex min-w-0 flex-col gap-3 rounded-md border border-line p-4">
+      <header className="flex items-start gap-2">
+        <h3 id={headingId} className="flex min-w-0 flex-1 items-start gap-2 pt-1 type-small font-semibold">
+          <Package className="mt-0.5 size-4 shrink-0 text-muted" aria-hidden />
+          {label}
+        </h3>
+        {/* Every label fills one cell sized by the widest, so the header never reflows; and it's one
+            button throughout, so focus stays on it. */}
+        <div className="grid shrink-0 justify-items-end">
+          <span aria-hidden className="invisible col-start-1 row-start-1 grid justify-items-end">
+            <span className={buttonClass("secondary", "sm", "col-start-1 row-start-1")}>
+              <Plus className="size-3.5" /> Add {total} more
+            </span>
+            <span className={buttonClass("secondary", "sm", "col-start-1 row-start-1")}>Remove pack</span>
+          </span>
+          <Button size="sm" variant={kind === "done" ? "ghost" : "outline"} className="col-start-1 row-start-1" aria-label={kind === "done" ? `Remove the ${label} pack` : undefined} onClick={act}>
+            {kind !== "done" && <Plus className="size-3.5" />}
+            {kind === "all" ? `Add all ${todo}` : kind === "more" ? `Add ${todo} more` : "Remove pack"}
+          </Button>
+        </div>
+      </header>
+      <ul className="flex flex-wrap gap-1.5">
+        {p.items.map((s) => (
+          <li key={s.key} className="max-w-full">
+            <PackChip
+              s={s}
+              on={isAdded(watched, s)}
+              onToggle={(on) =>
+                on
+                  ? actions.remove([s.key, keyOf(s)], () => `Removed ${companyLabel(s)}`)
+                  : actions.add(
+                      [refOf(s)],
+                      () => `Added ${companyLabel(s)}`,
+                      () => p.industry,
+                    )
+              }
+            />
+          </li>
+        ))}
+      </ul>
+      {done > 0 && (
+        <div className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-2">
+          <span className="h-1 overflow-hidden bg-active" aria-hidden>
+            <span className="block h-full origin-left bg-ink transition-transform duration-200 ease-enter" style={{ transform: `scaleX(${done / total})` }} />
+          </span>
+          {kind === "done" ? (
+            <span className="inline-flex items-center gap-1 whitespace-nowrap type-meta text-muted">
+              <Check className="size-3.5" aria-hidden /> All added
+            </span>
+          ) : (
+            <span className="tabular whitespace-nowrap type-meta text-muted">
+              {done} of {total} added
+            </span>
+          )}
+        </div>
+      )}
+    </section>
+  );
+}
+
+/**
+ * A company in a pack: its name and a plus; once added, filled with a check (and an x on hover, as
+ * the way to remove it). The icons share one slot, so the chip keeps its width.
+ */
+function PackChip({ s, on, onToggle }: { s: CompanySuggestion; on: boolean; onToggle: (on: boolean) => void }) {
+  const name = companyLabel(s);
+  return (
+    <Chip
+      pressed={on}
+      onClick={() => onToggle(on)}
+      aria-label={on ? `${name}, in My companies. Press to remove` : `${name}, add to My companies`}
+      title={companyReasons(s.reasons).join(" · ") || undefined}
+      className="group max-w-full pr-2 pl-2.5"
+    >
+      <span className="min-w-0 truncate">{name}</span>
+      <span className="relative size-3.5 shrink-0" aria-hidden>
+        <Plus className="absolute inset-0 size-3.5 transition-[opacity,transform] group-aria-pressed:scale-75 group-aria-pressed:opacity-0" />
+        <Check className="absolute inset-0 size-3.5 scale-75 opacity-0 transition-[opacity,transform] group-aria-pressed:scale-100 group-aria-pressed:opacity-100 group-aria-pressed:group-hover:scale-75 group-aria-pressed:group-hover:opacity-0" />
+        <X className="absolute inset-0 size-3.5 scale-75 opacity-0 transition-[opacity,transform] group-aria-pressed:group-hover:scale-100 group-aria-pressed:group-hover:opacity-100" />
+      </span>
+    </Chip>
   );
 }
 
