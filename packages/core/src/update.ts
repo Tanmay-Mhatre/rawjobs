@@ -359,10 +359,10 @@ const alive = (pid: number) => {
 };
 
 /** Wait until this folder's server answers as `version`; false when it hasn't within `ms`. */
-async function waitFor(home: string, version: string, ms: number): Promise<boolean> {
+async function waitFor(home: string, version: string, ms: number, pollMs = 1000): Promise<boolean> {
   const deadline = Date.now() + ms;
   while (Date.now() < deadline) {
-    await sleep(1000);
+    await sleep(pollMs);
     if ((await runningVersion(home)) === version) return true;
   }
   return false;
@@ -377,6 +377,8 @@ export type FinishOptions = {
   backup?: string;
   notes?: string;
   timeoutMs?: number;
+  /** How often to ask whether the new server answers (tests ask more often, to finish sooner). */
+  pollMs?: number;
   /** Tests replace how the server is started. */
   start?: (home: string) => void;
 };
@@ -402,7 +404,7 @@ export async function finishUpdate(o: FinishOptions): Promise<UpdateRecord> {
   }
   console.log("The old server has stopped; starting the new version.");
   start(o.home);
-  const running = (await waitFor(o.home, o.to, o.timeoutMs ?? START_TIMEOUT_MS)) ? o.to : await runningVersion(o.home);
+  const running = (await waitFor(o.home, o.to, o.timeoutMs ?? START_TIMEOUT_MS, o.pollMs)) ? o.to : await runningVersion(o.home);
   console.log(running === o.to ? `${o.to} answers.` : `${o.to} didn't answer (last seen: ${running ?? "nothing"}); going back to ${o.from}.`);
   let record: UpdateRecord;
   if (running === o.to) {
@@ -424,7 +426,7 @@ export async function finishUpdate(o: FinishOptions): Promise<UpdateRecord> {
     writeUpdateFile(o.home, { skip: [...new Set([...(f.skip ?? []), o.to])] });
     start(o.home);
     // Only say it's back once it answers (macOS spaces out restarts by a few seconds).
-    const back = await waitFor(o.home, o.from, o.timeoutMs ?? START_TIMEOUT_MS);
+    const back = await waitFor(o.home, o.from, o.timeoutMs ?? START_TIMEOUT_MS, o.pollMs);
     console.log(back ? `${o.from} answers again.` : `${o.from} didn't answer yet either.`);
     const secs = Math.round((o.timeoutMs ?? START_TIMEOUT_MS) / 1000);
     record = {
