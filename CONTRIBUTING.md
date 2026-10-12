@@ -20,9 +20,8 @@ signed with a throwaway key, as CI does (`release-files` in `.github/workflows/c
 `pnpm release:files --key <key.pem> --public-key <base64>`, plus `pnpm bundle --version <v>` and
 `--broken` for a newer and a broken version. See `docs/install.md` and `docs/plans/local-install.md`.
 
-The contribution inbox (`services/contribute`) is a Cloudflare Worker with its own `package.json`.
-Its tests run with the rest (`pnpm test`); typecheck it with `npm install && npm run typecheck`
-in that folder.
+The contribution inbox (`services/contribute`) is a Cloudflare Worker in the same pnpm workspace:
+`pnpm install` sets it up, and `pnpm test` and `pnpm typecheck` cover it with the rest.
 
 ## Pull requests
 

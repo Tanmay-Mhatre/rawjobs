@@ -158,7 +158,7 @@ filtering is instant. The first format is still published next to it while insta
    `pnpm catalog:release --out dist`, then `gh release create directory-YYYY-MM-DD dist/* --latest -R <repo>`;
    and upload `catalog-state.tar.gz` (out/checks.jsonl, out/index-all.jsonl, out/resolved.json) to a prerelease tagged `state`.
 4. **Inbox** (Cloudflare account needed): in `services/contribute`
-   `npm install`, `npx wrangler login`, `npx wrangler kv namespace create INBOX` (put the id in `wrangler.toml`),
+   (after `pnpm install` at the repo root) `npx wrangler login`, `npx wrangler kv namespace create INBOX` (put the id in `wrangler.toml`),
    `npx wrangler secret put INBOX_TOKEN` (a long random string), `npx wrangler deploy`.
 5. **Secrets in the code repo** (`gh secret set NAME`):
    - `INBOX_URL`: the Worker URL from step 4

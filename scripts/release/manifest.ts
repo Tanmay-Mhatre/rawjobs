@@ -12,7 +12,9 @@ import { NODE_PLATFORMS, nodeArchive, verifyRelease, type ReleaseManifest } from
  *   pnpm release:files [--node v24.11.0] [--min-version 0.2.0] [--critical] [--notes-file notes.md]
  *                      [--key key.pem] [--public-key <base64>]
  * The signing key is RAWJOBS_SIGNING_KEY (PEM text) or --key. --public-key checks the signature
- * against another key than the release key (tests sign with a throwaway one).
+ * against another key than the release key (tests sign with a throwaway one). --unsigned leaves
+ * latest.json.sig out: the release workflow signs in a job of its own, with no dependencies
+ * installed (scripts/catalog/sign.mjs), so no package can reach the key.
  * Without --node it uses the newest Node 24 LTS on nodejs.org.
  */
 const root = resolve(import.meta.dirname, "../..");
@@ -23,6 +25,7 @@ const { values } = parseArgs({
     critical: { type: "boolean", default: false },
     "notes-file": { type: "string" },
     key: { type: "string" },
+    unsigned: { type: "boolean", default: false },
     "public-key": { type: "string" },
     out: { type: "string", default: "dist/release" },
     /** The bundle's version when it isn't package.json's (pnpm bundle --version; update tests). */
@@ -36,7 +39,7 @@ const bundleDir = join(root, "dist/bundle", bundleName);
 if (!existsSync(join(bundleDir, "cli.mjs"))) fail(`${bundleDir} is missing: run pnpm bundle first.`);
 
 const pem = values.key ? readFileSync(values.key, "utf8") : process.env.RAWJOBS_SIGNING_KEY;
-if (!pem) fail("No signing key: set RAWJOBS_SIGNING_KEY or pass --key <file>.");
+if (!pem && !values.unsigned) fail("No signing key: set RAWJOBS_SIGNING_KEY or pass --key <file> (or --unsigned).");
 
 const out = resolve(root, values.out);
 rmSync(out, { recursive: true, force: true });
@@ -73,10 +76,12 @@ const manifest: ReleaseManifest = {
 };
 // One key per line: install.sh picks values out with sed.
 const body = `${JSON.stringify(manifest, null, 2)}\n`;
-const signature = sign(null, Buffer.from(body), createPrivateKey(pem)).toString("base64");
-if (!verifyRelease(body, signature, values["public-key"])) fail("The signature doesn't match the public key: wrong signing key?");
 writeFileSync(join(out, "latest.json"), body);
-writeFileSync(join(out, "latest.json.sig"), `${signature}\n`);
+if (pem && !values.unsigned) {
+  const signature = sign(null, Buffer.from(body), createPrivateKey(pem)).toString("base64");
+  if (!verifyRelease(body, signature, values["public-key"])) fail("The signature doesn't match the public key: wrong signing key?");
+  writeFileSync(join(out, "latest.json.sig"), `${signature}\n`);
+}
 for (const f of ["install.sh", "install.ps1"]) copyFileSync(join(root, "packaging", f), join(out, f));
 
 console.log(`Release files for RawJobs ${version} (Node ${nodeVersion}) in ${out}`);
