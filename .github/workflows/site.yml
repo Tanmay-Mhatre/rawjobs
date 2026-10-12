@@ -48,6 +48,9 @@ jobs:
         env:
           SITE_URL: ${{ vars.SITE_URL }}
           DATA_REPO: ${{ vars.DATA_REPO }}
+          # The update beacon (v1/latest.json) reads the app's releases; a deploy must never drop it.
+          GITHUB_TOKEN: ${{ github.token }}
+          REQUIRE_BEACON: ${{ github.event_name != 'pull_request' && '1' || '0' }}
           CF_ANALYTICS_TOKEN: ${{ vars.CF_ANALYTICS_TOKEN || secrets.CF_ANALYTICS_TOKEN }}
       - name: Deploy to Cloudflare
         # Skipped (not failed) until the two Cloudflare secrets are added.

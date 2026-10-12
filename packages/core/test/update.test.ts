@@ -256,8 +256,8 @@ describe("what an update keeps", () => {
 
 describe("release notes", () => {
   it("take the mandatory and minimum-version lines out of the notes", () => {
-    expect(parseReleaseNotes("RawJobs 0.5.1\n\n- Faster scans")).toEqual({ notes: "RawJobs 0.5.1\n\n- Faster scans", critical: false, minVersion: null });
-    expect(parseReleaseNotes("Fixes alerts.\r\nUpdate: mandatory\r\nMin-version: v0.4.0\r\n")).toEqual({ notes: "Fixes alerts.", critical: true, minVersion: "0.4.0" });
+    expect(parseReleaseNotes("RawJobs 0.5.1\n\n- Faster scans")).toEqual({ notes: "RawJobs 0.5.1\n\n- Faster scans", critical: false, minVersion: null, changes: [] });
+    expect(parseReleaseNotes("Fixes alerts.\r\nUpdate: mandatory\r\nMin-version: v0.4.0\r\n")).toEqual({ notes: "Fixes alerts.", critical: true, minVersion: "0.4.0", changes: [] });
     expect(parseReleaseNotes("Update: optional").critical).toBe(false);
   });
 });

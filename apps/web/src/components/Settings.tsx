@@ -21,6 +21,7 @@ import { Button, Card, cx, IconButton, Segmented, Toggle } from "./ui";
 import { useUpdateStatus } from "../lib/update";
 import { DesktopShortcutSettings } from "./DesktopShortcut";
 import { AboutRawJobs, UpdatesSettings } from "./Updates";
+import { ReleaseNotes } from "./WhatsNew";
 
 type Props = {
   draft: Draft;
@@ -291,6 +292,9 @@ export function Settings({
             )}
             <Section id="update" title="Updates" hint="New versions come from RawJobs' releases on GitHub, and install only when you say.">
               <UpdatesSettings />
+            </Section>
+            <Section id="release-notes" title="Release notes" hint="What changed in each version.">
+              <ReleaseNotes />
             </Section>
           </Group>
         )}

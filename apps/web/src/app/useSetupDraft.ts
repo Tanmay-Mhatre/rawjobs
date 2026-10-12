@@ -22,6 +22,8 @@ export function useSetupDraft(status: SetupStatus | null | undefined, meta: Data
     return emptyDraft();
   }, [status, meta]);
   const [draft, setDraft] = useState<Draft>(emptyDraft);
+  /** The saved setup (or this browser's unfinished draft) is in place: until then `draft` is a blank one. */
+  const [loaded, setLoaded] = useState(false);
   const appliedRef = useRef<string>("");
   /** The saved setup the draft was last based on, so a newer save can be merged under unsaved edits. */
   const baseRef = useRef<Draft | null>(null);
@@ -30,6 +32,7 @@ export function useSetupDraft(status: SetupStatus | null | undefined, meta: Data
     const key = JSON.stringify(draftToConfig(saved));
     if (key === appliedRef.current) return;
     appliedRef.current = key;
+    setLoaded(true);
     const base = baseRef.current;
     baseRef.current = saved;
     // The config was saved from elsewhere (the Companies page saves itself): keep unsaved edits.
@@ -47,5 +50,5 @@ export function useSetupDraft(status: SetupStatus | null | undefined, meta: Data
   const forgetBase = useCallback(() => {
     baseRef.current = null;
   }, []);
-  return { saved, draft, setDraft, update, dirty, forgetBase };
+  return { saved, draft, setDraft, update, dirty, forgetBase, loaded };
 }

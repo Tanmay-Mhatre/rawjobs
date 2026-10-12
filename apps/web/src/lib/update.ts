@@ -1,3 +1,4 @@
+import type { ChangelogEntry, ReleaseChange } from "@rawjobs/core/release-notes";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { canRunLocally } from "./data";
 
@@ -5,10 +6,11 @@ import { canRunLocally } from "./data";
 export type UpdateStatus = {
   installed: boolean;
   current: string;
-  settings: { mode: "ask" | "off"; channel: "stable" | "beta" };
+  /** `telegram`: a Telegram message when an update is ready (missing on an older server: on). */
+  settings: { mode: "ask" | "off"; channel: "stable" | "beta"; telegram?: boolean };
   lastCheck?: string;
   /** A newer version. `critical`: a required update; `ready`: downloaded already, installs in seconds. */
-  available: { version: string; notes: string; critical: boolean; date: string; major: boolean; ready: boolean } | null;
+  available: { version: string; notes: string; changes?: ReleaseChange[]; critical: boolean; date: string; major: boolean; ready: boolean } | null;
   tooOld: boolean;
   state: "idle" | "checking" | "downloading" | "waiting" | "updating";
   error?: string;
@@ -50,6 +52,20 @@ export const markUpdateSeen = () => call("/api/update/seen", { method: "POST" })
 export const addDesktopShortcut = () => call("/api/update/shortcut", { method: "POST" });
 /** The "RawJobs is on your Desktop" popup was seen: it doesn't show again on this computer. */
 export const markShortcutNoticeSeen = () => call("/api/update/shortcut-seen", { method: "POST" });
+/** You came back to the dashboard: the server looks for a new version (at most every 15 minutes). */
+export const checkOnFocus = () => fetch("/api/update/focus", { method: "POST" }).catch(() => null);
+
+/** What GET /api/update/changelog says: this version's history (newest first), and the version waiting, if any. */
+export type Changelog = { current: string; entries: ChangelogEntry[]; upcoming: ChangelogEntry | null };
+export async function loadChangelog(): Promise<Changelog | null> {
+  try {
+    const res = await fetch("/api/update/changelog", { cache: "no-store" });
+    return res.ok ? ((await res.json()) as Changelog) : null;
+  } catch {
+    return null;
+  }
+}
+
 export const saveUpdateSettings = (s: Partial<UpdateStatus["settings"]>) => call("/api/update/settings", { method: "PUT", body: JSON.stringify(s) });
 
 /** The update status, shared by the notice and Settings, refreshed when the tab comes back. */
@@ -62,7 +78,11 @@ export function useUpdateStatus() {
   }, []);
   useEffect(() => {
     void refresh();
-    const onVisible = () => document.visibilityState === "visible" && void refresh();
+    const onVisible = () => {
+      if (document.visibilityState !== "visible") return;
+      void refresh();
+      if (canRunLocally) void checkOnFocus();
+    };
     document.addEventListener("visibilitychange", onVisible);
     window.addEventListener("rawjobs:update-status", refresh as () => void);
     return () => {
@@ -80,23 +100,29 @@ const POLL_MS = 5000;
 
 /**
  * Whether the local server answers. While it doesn't (it's restarting for an update, or stopped),
- * `down` is true; when it comes back as another version, the page reloads to match it.
+ * `down` is true; when it comes back as another version, the page reloads to match it. When the
+ * server finds a new version (its `update` changes), every useUpdateStatus reads the status again,
+ * so the Update pill shows within seconds.
  */
 export function useServerHealth(): { down: boolean } {
   const [down, setDown] = useState(false);
   const first = useRef<string | null>(null);
+  const hint = useRef<string | null | undefined>(undefined);
   useEffect(() => {
     if (!canRunLocally) return;
     let live = true;
     const poll = async () => {
       try {
         const res = await fetch("/api/health", { cache: "no-store", signal: AbortSignal.timeout(3000) });
-        const h = (await res.json()) as { ok?: boolean; version?: string };
+        const h = (await res.json()) as { ok?: boolean; version?: string; update?: { version: string } | null };
         if (!live) return;
         if (h.ok && h.version) {
           first.current ??= h.version;
           if (h.version !== first.current) location.reload();
         }
+        const waiting = h.update?.version ?? null;
+        if (hint.current !== undefined && waiting !== hint.current) announceUpdateStatus();
+        hint.current = waiting;
         setDown(!h.ok);
       } catch {
         if (live) setDown(true);

@@ -3,6 +3,7 @@ import { chmodSync, copyFileSync, cpSync, existsSync, mkdirSync, readFileSync, r
 import { dirname, join, resolve } from "node:path";
 import { parseArgs } from "node:util";
 import { build } from "esbuild";
+import { changelogFromTags, readTags } from "../release/changelog";
 
 /**
  * Build the copy of RawJobs that gets installed: it needs only Node, no pnpm or tsx.
@@ -10,6 +11,7 @@ import { build } from "esbuild";
  *   web/           the built dashboard
  *   bin/           the launchers (copied into the install's own bin/)
  *   package.json   the version
+ *   changelog.json every release's notes up to this version, from the git tags (scripts/release/changelog.ts)
  *
  *   pnpm bundle                 → dist/bundle/rawjobs-<version>/
  *   pnpm bundle --skip-web      reuse apps/web/dist as it is
@@ -58,6 +60,12 @@ cpSync(join(root, "packaging/bin"), join(out, "bin"), { recursive: true });
 chmodSync(join(out, "bin/rawjobs"), 0o755);
 writeFileSync(join(out, "package.json"), `${JSON.stringify({ name: "rawjobs", version, type: "module", license: "MIT" }, null, 2)}\n`);
 copyFileSync(join(root, "LICENSE"), join(out, "LICENSE"));
+// What's new in each version, for the dashboard (a checkout without tags ships an empty one).
+writeFileSync(
+  join(out, "changelog.json"),
+  `${JSON.stringify(changelogFromTags(readTags(root), version), null, 1)}
+`,
+);
 
 const mb = (statSync(join(out, "cli.mjs")).size / 1e6).toFixed(1);
 console.log(`Bundled RawJobs ${version} in ${Date.now() - started} ms: ${out} (cli.mjs ${mb} MB)`);

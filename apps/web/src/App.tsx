@@ -12,6 +12,7 @@ import { FeedSkeleton } from "./components/radar/FeedSkeleton";
 import { RadarPage } from "./components/radar/RadarPage";
 import { NotifyBell, NotifyFailed, notifyLine } from "./components/NotifyWhenDone";
 import { ServerNotices } from "./components/Updates";
+import { UpdatePill } from "./components/WhatsNew";
 import { ScanButton, ScanChooser } from "./components/ScanButton";
 import { Settings } from "./components/Settings";
 import { Toaster } from "./components/Toast";
@@ -62,7 +63,7 @@ export function App() {
   const setupState = status === null ? "configured" : !status ? "loading" : !status.isPersonal ? "none" : !status.valid ? "invalid" : "configured";
   const notSetUp = setupState === "none";
 
-  const { saved, draft, setDraft, update, dirty, forgetBase } = useSetupDraft(status, meta);
+  const { saved, draft, setDraft, update, dirty, forgetBase, loaded: draftLoaded } = useSetupDraft(status, meta);
   const { resume, saveResume, removeResume } = useResume();
   const progress = setupProgress(draft, !!resume.text);
   const suggest = useMemo(() => buildSuggestions(resume.text, draft.aiProfile), [resume.text, draft.aiProfile]);
@@ -249,6 +250,8 @@ export function App() {
               </nav>
             )}
             <div className="ml-auto flex items-center gap-1.5">
+              {/* A new version, downloaded and ready: one click updates (like the Claude desktop app's). */}
+              {canRunLocally && <UpdatePill />}
               {inSetup ? (
                 <Button size="sm" variant="ghost" onClick={exitSetup}>
                   <X className="size-4" /> Exit setup
@@ -316,6 +319,7 @@ export function App() {
               step={wizardStep}
               goStep={goStep}
               draft={draft}
+              draftLoaded={draftLoaded}
               update={update}
               existing={personal}
               configErrors={status?.valid === false ? status.errors : undefined}
