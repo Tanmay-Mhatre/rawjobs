@@ -1,3 +1,4 @@
+import { companyLabel } from "@rawjobs/core/display-name";
 import { safeUrl } from "@rawjobs/core/text";
 import { ChevronDown, ExternalLink, EyeOff } from "lucide-react";
 import { useState } from "react";
@@ -95,14 +96,15 @@ export function SuggestionCard({ s, added, onAdd, onRemove, onHide }: Props) {
       : null;
   const chips = s.reasons.filter((r) => !HEADLINE.test(r) && !r.startsWith("Like "));
   const like = s.reasons.find((r) => r.startsWith("Like "));
+  const name = companyLabel(s);
   return (
     <article className={cx("flex min-w-0 flex-col gap-3 rounded-md border bg-raised p-4 transition-colors", added ? "border-ink/40" : "border-line hover:border-muted/40")}>
       <header className="flex items-start gap-3">
-        <Monogram name={s.name} />
+        <Monogram name={name} />
         <div className="min-w-0 flex-1">
           <p className="flex items-center gap-1.5 font-semibold leading-5">
-            <span className="truncate">{s.name}</span>
-            <a href={safeUrl(s.careers_url)} target="_blank" rel="noreferrer" className="shrink-0 text-muted hover:text-ink" aria-label={`${s.name} careers page`}>
+            <span className="truncate">{name}</span>
+            <a href={safeUrl(s.careers_url)} target="_blank" rel="noreferrer" className="shrink-0 text-muted hover:text-ink" aria-label={`${name} careers page`}>
               <ExternalLink className="size-3.5" />
             </a>
           </p>
@@ -139,16 +141,9 @@ export function SuggestionCard({ s, added, onAdd, onRemove, onHide }: Props) {
       )}
 
       <footer className="mt-auto flex items-center gap-1.5 pt-1">
-        <AddButton added={added} onAdd={onAdd} onRemove={onRemove} soon={soon} name={s.name} />
+        <AddButton added={added} onAdd={onAdd} onRemove={onRemove} soon={soon} name={name} />
         {onHide && !added && (
-          <Button
-            size="sm"
-            variant="ghost"
-            onClick={onHide}
-            className="text-muted"
-            aria-label={`Don't suggest ${s.name}`}
-            title="Hides this company: no more suggestions, and its jobs leave your Radar"
-          >
+          <Button size="sm" variant="ghost" onClick={onHide} className="text-muted" aria-label={`Don't suggest ${name}`} title="Hides this company: no more suggestions, and its jobs leave your Radar">
             <EyeOff className="size-3.5" /> Don't suggest
           </Button>
         )}
@@ -156,7 +151,7 @@ export function SuggestionCard({ s, added, onAdd, onRemove, onHide }: Props) {
           type="button"
           onClick={() => setOpen((v) => !v)}
           aria-expanded={open}
-          aria-label={`Why ${s.name}?`}
+          aria-label={`Why ${name}?`}
           className="ml-auto inline-flex min-h-8 items-center gap-0.5 type-label text-muted hover:text-ink"
         >
           Why? <ChevronDown className={cx("size-3.5 transition-transform", open && "rotate-180")} />

@@ -1,3 +1,4 @@
+import { companyLabel, displayName } from "@rawjobs/core/display-name";
 import { INDUSTRY_BY_ID } from "@rawjobs/core/catalog/industries";
 import { isPlaceholderBoard } from "@rawjobs/core/text";
 import { Briefcase, History, Info, LoaderCircle, Package, Plus, RefreshCw, Undo2, X } from "lucide-react";
@@ -132,7 +133,7 @@ export function ForYou({ state, watched, muted, pastEmployers, onPastEmployers, 
       {compact && top5.length > 0 && (
         <div className="mt-4 flex flex-wrap items-center gap-2 rounded-md bg-inset p-3 type-small">
           <span className="mr-auto">
-            Quick start: add the {top5.length} best fits ({top5.map((s) => s.name).join(", ")}).
+            Quick start: add the {top5.length} best fits ({top5.map(companyLabel).join(", ")}).
           </span>
           <AddAll items={top5.map(refOf)} watched={watched} onAddMany={onAddMany} onRemoveMany={onRemoveMany} />
         </div>
@@ -193,7 +194,7 @@ export function ForYou({ state, watched, muted, pastEmployers, onPastEmployers, 
             {hidden && muted.has(hidden.key) && (
               <p className="flex items-center gap-2 rounded-md bg-inset px-3 py-2 type-small">
                 <span className="mr-auto">
-                  Hid <b>{hidden.name}</b>. Its jobs won't show either.
+                  Hid <b>{displayName(hidden.name)}</b>. Its jobs won't show either.
                 </span>
                 <button
                   type="button"
@@ -346,13 +347,13 @@ function LikeLens({
           <ul className="flex flex-wrap gap-2">
             {goBack.map(({ company: c }) => (
               <li key={c!.key} className="flex items-center gap-2 rounded-md border border-line py-1.5 pl-2 pr-1.5">
-                <Monogram name={c!.name} size="sm" />
-                <span className="type-label">{c!.name}</span>
+                <Monogram name={companyLabel(c!)} size="sm" />
+                <span className="type-label">{companyLabel(c!)}</span>
                 {c!.open_jobs ? <span className="type-meta text-muted">{c!.open_jobs} jobs</span> : null}
-                <AddButton added={watched.has(c!.key)} onAdd={() => void onAddMany([c!])} onRemove={() => onRemoveMany([c!.key])} name={c!.name} />
+                <AddButton added={watched.has(c!.key)} onAdd={() => void onAddMany([c!])} onRemove={() => onRemoveMany([c!.key])} name={companyLabel(c!)} />
                 <button
                   type="button"
-                  aria-label={`Don't suggest ${c!.name}`}
+                  aria-label={`Don't suggest ${companyLabel(c!)}`}
                   title="Don't suggest"
                   className="inline-flex size-7 items-center justify-center rounded-md text-muted hover:bg-inset hover:text-ink"
                   onClick={() => onDismiss(c!.key)}
@@ -400,8 +401,8 @@ function Packs({
                     count={s.matches > 0 ? s.matches : undefined}
                     className="pl-1.5"
                   >
-                    <Monogram name={s.name} size="xs" />
-                    {s.name}
+                    <Monogram name={companyLabel(s)} size="xs" />
+                    {companyLabel(s)}
                   </Chip>
                 </li>
               );

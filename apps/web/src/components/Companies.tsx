@@ -1,3 +1,4 @@
+import { companyLabel } from "@rawjobs/core/display-name";
 import { safeUrl } from "@rawjobs/core/text";
 import { Clock, ExternalLink, RefreshCw, X } from "lucide-react";
 import { useEffect, useMemo, useState, type ReactNode } from "react";
@@ -138,7 +139,7 @@ export function MyCompanies({
   const quiet = rows.filter((x) => x.forYou === 0 && isQuiet(x.quiet));
   const broken = rows.filter(failing).length;
   const sorted = [...rows].sort((a, b) => {
-    if (sort === "name") return (a.r.name || "").localeCompare(b.r.name || "");
+    if (sort === "name") return companyLabel(a.r).localeCompare(companyLabel(b.r));
     if (sort === "attention") return Number(failing(b)) - Number(failing(a)) || b.quiet.scans - a.quiet.scans || a.forYou - b.forYou;
     return b.forYou - a.forYou || (b.last?.h.jobsFound ?? 0) - (a.last?.h.jobsFound ?? 0);
   });
@@ -207,7 +208,7 @@ export function MyCompanies({
                   <ScanHistory history={x.history} />
                   <Status row={x} onScan={onScan} scanning={scanning} />
                 </div>
-                <IconButton label={`Remove ${x.r.name || x.r.slug}`} onClick={() => onRemove(x.key)} className="-mr-1 shrink-0 hover:text-danger-text">
+                <IconButton label={`Remove ${companyLabel(x.r)}`} onClick={() => onRemove(x.key)} className="-mr-1 shrink-0 hover:text-danger-text">
                   <X className="size-4" />
                 </IconButton>
               </li>
@@ -242,7 +243,7 @@ export function MyCompanies({
                       <Status row={x} onScan={onScan} scanning={scanning} />
                     </td>
                     <td className="px-2 py-2.5 text-right">
-                      <IconButton label={`Remove ${x.r.name || x.r.slug}`} onClick={() => onRemove(x.key)} className="hover:text-danger-text">
+                      <IconButton label={`Remove ${companyLabel(x.r)}`} onClick={() => onRemove(x.key)} className="hover:text-danger-text">
                         <X className="size-4" />
                       </IconButton>
                     </td>
@@ -262,14 +263,14 @@ function NameCell({ x }: { x: Row }) {
   return (
     <>
       <div className="flex items-center gap-1.5 font-medium">
-        {x.r.name || x.r.slug}
+        {companyLabel(x.r)}
         {/^https?:/.test(x.r.input) && (
           <a
             href={safeUrl(x.r.input)}
             target="_blank"
             rel="noreferrer"
             className="inline-flex size-6 items-center justify-center rounded-md text-muted hover:text-ink"
-            aria-label={`${x.r.name || x.r.slug} careers page`}
+            aria-label={`${companyLabel(x.r)} careers page`}
           >
             <ExternalLink className="size-3.5" />
           </a>

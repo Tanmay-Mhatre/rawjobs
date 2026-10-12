@@ -1,3 +1,4 @@
+import { displayName } from "@rawjobs/core/display-name";
 import { INDUSTRY_BY_ID } from "@rawjobs/core/catalog/industries";
 import { citiesIn, placeOwner } from "@rawjobs/core/catalog/places";
 import { SENIORITY_LEVELS, type Seniority } from "@rawjobs/core/catalog/seniority";
@@ -262,7 +263,7 @@ export function facetCounts(jobs: Job[], f: Filters, ctx: Ctx): Record<FacetKey,
     ),
     companies: sorted(
       tally("companies", (j) => [j.company]),
-      undefined,
+      (v) => displayName(v),
       f.companies,
     ),
     topics: sorted(
@@ -380,7 +381,7 @@ function chipsOf(f: Filters, ctx: Pick<Ctx, "min">): { key: string; label: strin
   list("workplace", (v) => WORKPLACE_LABEL[v as Workplace] ?? v);
   list("seniority", (v) => SENIORITY_LABEL[v as Seniority] ?? v);
   list("industries", (v) => INDUSTRY_BY_ID.get(v)?.label ?? v);
-  list("companies", (v) => v);
+  list("companies", (v) => displayName(v));
   list("topics", (v) => `Topic: ${v}`);
   list("ats", (v) => `Hiring system: ${atsLabel(v)}`);
   if (f.match !== "all") chips.push({ key: "match", label: f.match === "strong" ? `Strong matches (${ctx.min}+)` : `Good matches (${Math.max(0, ctx.min - 20)}+)`, remove: { match: "all" } });

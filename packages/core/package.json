@@ -9,6 +9,7 @@
     "./diagnose": "./src/diagnose.ts",
     "./yaml-writer": "./src/yaml-writer.ts",
     "./text": "./src/text.ts",
+    "./display-name": "./src/display-name.ts",
     "./detect": "./src/connectors/index.ts",
     "./resume-parse": "./src/resume-parse.ts",
     "./employers": "./src/employers.ts",
