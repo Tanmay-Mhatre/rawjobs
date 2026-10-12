@@ -1,0 +1,45 @@
+{
+  // Lint and format for TypeScript/JavaScript (pnpm lint; pnpm format writes the formatting).
+  // CSS (Tailwind) and HTML stay out: design:lint checks the CSS against the design tokens.
+  "$schema": "./node_modules/@biomejs/biome/configuration_schema.json",
+  "vcs": { "enabled": true, "clientKind": "git", "useIgnoreFile": true },
+  "files": { "includes": ["**", "!.claude", "!**/dist", "!**/*.json", "!**/*.css", "!**/*.html", "!**/fixtures"] },
+  // 200: the width the code was written to, so formatting it changed as little as possible.
+  "formatter": { "indentStyle": "space", "indentWidth": 2, "lineWidth": 200 },
+  "javascript": { "formatter": { "quoteStyle": "double", "semicolons": "always", "trailingCommas": "all", "arrowParentheses": "always" } },
+  "assist": { "enabled": false },
+  "linter": {
+    "enabled": true,
+    "rules": {
+      "preset": "recommended",
+      "style": {
+        // With noUncheckedIndexedAccess, `list[0]!` after a length check is the idiom, not a smell.
+        "noNonNullAssertion": "off",
+        "useTemplate": "off"
+      },
+      "complexity": { "useArrowFunction": "off" },
+      "correctness": {
+        // Function declarations in blocks are block-scoped in modules (strict mode): no hoisting surprise.
+        "noInnerDeclarations": "off"
+      },
+      "suspicious": {
+        // `cache.get(k) ?? cache.set(k, (v = make()))`-style caching is used on purpose.
+        "noAssignInExpressions": "off",
+        "noArrayIndexKey": "warn"
+      },
+      // Warnings, not errors, for now: the dashboard's custom widgets (radio groups, menus, a
+      // combobox, live regions) use ARIA roles on purpose, and focusing a field when a menu opens is
+      // deliberate. Each warning gets a proper look in the frontend refactor; new ones still show.
+      "a11y": {
+        "useSemanticElements": "warn",
+        "noStaticElementInteractions": "warn",
+        "noNoninteractiveElementToInteractiveRole": "warn",
+        "noNoninteractiveTabindex": "warn",
+        "useFocusableInteractive": "warn",
+        "useKeyWithClickEvents": "warn",
+        "useValidAnchor": "warn",
+        "noAutofocus": "warn"
+      }
+    }
+  }
+}
