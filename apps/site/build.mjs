@@ -44,29 +44,66 @@ async function getJson(url) {
   return res.json();
 }
 
-/** Directory companies whose job board answered at the last check (status "live"; the rest are dormant). */
-async function liveBoardCount(url) {
+/** The whole directory (companies with name, ats, careers_url, status...). */
+async function getDirectory(url) {
   const res = await fetch(url, { redirect: "follow", signal: AbortSignal.timeout(30_000) });
   if (!res.ok) throw new Error(`${url}: HTTP ${res.status}`);
   const d = JSON.parse(gunzipSync(Buffer.from(await res.arrayBuffer())).toString("utf8"));
-  const list = Array.isArray(d) ? d : (d.companies ?? []);
-  return list.filter((c) => c.status === "live").length;
+  return Array.isArray(d) ? d : (d.companies ?? []);
+}
+
+// ---------- the hero wall: real careers-page addresses from the directory ----------
+const WALL_SIZE = 520;
+const WALL_FALLBACK = join(SITE, "src/wall-fallback.json");
+/** "https://jobs.ashbyhq.com/airwallex/" -> "jobs.ashbyhq.com/airwallex"; hosts that carry the company in the path keep it. */
+export function wallHost(url) {
+  const parts = String(url).replace(/^https?:\/\//, "").replace(/^www\./, "").replace(/\/$/, "").split("/");
+  let h = parts[0];
+  if (/greenhouse|ashbyhq|lever\.co|smartrecruiters|workable|rippling|comeet|jobvite/.test(h) && parts[1]) h += "/" + parts[1];
+  h = h.toLowerCase();
+  return h.length <= 38 && /^[a-z0-9.\/_-]+$/.test(h) ? h : null;
+}
+/**
+ * A deterministic, varied sample of live boards: every hiring system gets a share in proportion to
+ * its live boards (at least 6), picked by a seeded shuffle of the sorted directory, then interleaved.
+ * The same directory always gives the same wall; a new directory gives a new one.
+ */
+export function wallSample(companies, size = WALL_SIZE) {
+  let seed = 20261011;
+  const rnd = () => ((seed = (seed * 16807) % 2147483647) / 2147483647);
+  const shuffle = (a) => { for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(rnd() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; } return a; };
+  const live = companies.filter((c) => c.status === "live" && c.careers_url).sort((a, b) => String(a.key ?? a.name).localeCompare(String(b.key ?? b.name)));
+  const by = new Map();
+  let usable = 0;
+  for (const c of live) { const h = wallHost(c.careers_url); if (h) { (by.get(c.ats) ?? by.set(c.ats, []).get(c.ats)).push(h); usable++; } }
+  const seen = new Set();
+  const out = [];
+  for (const [, hosts] of [...by].sort((a, b) => a[0].localeCompare(b[0]))) {
+    const take = Math.max(6, Math.ceil((size * hosts.length) / usable));
+    let n = 0;
+    for (const h of shuffle(hosts)) { if (n >= take) break; if (!seen.has(h)) { seen.add(h); out.push(h); n++; } }
+  }
+  return shuffle(out).slice(0, size);
 }
 
 async function directoryNumbers() {
   const base = `https://github.com/${DATA_REPO}/releases`;
   try {
-    const [dir, feed, liveBoards] = await Promise.all([
+    const [dir, feed, companies] = await Promise.all([
       getJson(`${base}/latest/download/manifest.json`),
       getJson(`${base}/download/jobs/jobs-manifest.json`),
-      liveBoardCount(`${base}/latest/download/directory.json.gz`),
+      getDirectory(`${base}/latest/download/directory.json.gz`),
     ]);
+    // Directory companies whose job board answered at the last check (status "live"; the rest are dormant).
+    const liveBoards = companies.filter((c) => c.status === "live").length;
     const feedJobs = Object.values(feed.shards ?? {}).reduce((sum, s) => sum + (s.jobs ?? 0), 0);
     if (!(dir.companies > 0 && dir.indexed > 0 && feedJobs > 0 && liveBoards > 0)) throw new Error("manifest without counts");
-    return { companies: dir.companies, liveBoards, indexed: dir.indexed, builtAt: dir.generated_at, feedJobs, feedAt: feed.generated_at, live: true };
+    const wall = wallSample(companies);
+    if (wall.length < WALL_SIZE / 2) throw new Error("directory without enough live boards for the wall");
+    return { companies: dir.companies, liveBoards, indexed: dir.indexed, builtAt: dir.generated_at, feedJobs, feedAt: feed.generated_at, wall, live: true };
   } catch (err) {
     console.warn(`Directory numbers: ${err.message}. Using the last known ones.`);
-    return { ...FALLBACK, live: false };
+    return { ...FALLBACK, wall: JSON.parse(read(WALL_FALLBACK)), live: false };
   }
 }
 
@@ -112,6 +149,14 @@ const wordmark = read(join(DS, "logos/rawjobs-wordmark-ink.svg"))
   .replace('fill="#151412"', 'fill="currentColor"')
   .replace('fill="#ff5a1f"', 'style="fill: var(--brand-signal)"')
   .replace('role="img" aria-label="rawjobs"', 'aria-hidden="true" focusable="false"');
+// The wall's addresses, with the hero's example stamps forced in so each stamp sits on a real address.
+// Pass --wall-fallback to also save this build's wall as src/wall-fallback.json (the offline list).
+const stampHosts = [...read(join(SITE, "src/index.html")).matchAll(/"host":\s*"([^"]+)"/g)].map((m) => m[1]);
+const wallHosts = n.wall.filter((h) => !stampHosts.includes(h)).slice(0, WALL_SIZE - stampHosts.length);
+stampHosts.forEach((h, i) => wallHosts.splice(Math.round(((i + 0.5) * wallHosts.length) / stampHosts.length), 0, h));
+if (process.argv.includes("--wall-fallback") && n.live) writeFileSync(WALL_FALLBACK, JSON.stringify(n.wall, null, 0) + "\n");
+const escHtml = (x) => x.replace(/&/g, "&amp;").replace(/</g, "&lt;");
+const wallMarkup = wallHosts.map((h) => `<span>${escHtml(h)}</span>`).join("");
 const ats = SYSTEMS.map((s) => `<li class="ats">${s}</li>`).join("");
 // The scoring demo's rules, inlined as a plain script (packages/core/test/site-demo.test.ts checks them).
 const score = read(join(SITE, "src/score.js")).replace(/^export /gm, "");
@@ -126,6 +171,7 @@ const page = (name) => {
     .replace("/*__SCORE__*/", () => score)
     .replaceAll("__WORDMARK__", () => wordmark)
     .replace("__ATS__", () => ats)
+    .replace("<!--__WALL__-->", () => wallMarkup)
     .replace("<!--__ANALYTICS__-->", () => analytics)
     .replaceAll("__SITE_URL__", () => SITE_URL);
   for (const [key, value] of Object.entries(NUMBERS)) out = out.replaceAll(key, () => value);

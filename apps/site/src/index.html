@@ -30,12 +30,29 @@
   r.classList.add('js');
 })();
 </script>
+<link rel="preload" href="/fonts/GeistMono-500.woff2" as="font" type="font/woff2" crossorigin>
+<script>
+/* Intro: first visit per browser session only, never with reduced motion, never on a deep link or a background tab.
+   html.intro shows the overlay (CSS) and makes the wall wait for rawjobs:intro-done. Without JS nothing happens. */
+(function () {
+  var r = document.documentElement;
+  try {
+    if (!('animate' in r) || matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+    if (location.hash.length > 1 || document.visibilityState === 'hidden') return;
+    if (sessionStorage.getItem('rawjobs:intro')) return;
+    sessionStorage.setItem('rawjobs:intro', '1');
+  } catch (e) { return; }
+  r.classList.add('intro');
+  /* failsafe: if the intro script never runs, the overlay goes and the wall starts anyway */
+  setTimeout(function () { if (r.classList.contains('intro')) { r.classList.remove('intro'); dispatchEvent(new Event('rawjobs:intro-done')); } }, 4000);
+})();
+</script>
 <style>
 /*__TOKENS__*/
 /*__BUNDLE__*/
 
 /* ===== Site layer =====
-   Layout: a source log on paper. Asymmetric split hero (copy left, live radar right),
+   Layout: a source log on paper. The hero's copy sits on clean paper over a wall of real careers-page addresses,
    then sections with a sticky label column on the left and content on the right.
    Colors, type, spacing and motion come only from the RawJobs tokens above (design/README.md).
    The one marketing exception is duration-story, for the hero load and the route animation. */
@@ -98,61 +115,94 @@ h1, h2, h3 { margin: 0; text-wrap: balance; }
 @media (hover: hover) and (pointer: fine) { .rj-btn:hover .rj-icon--nudge { transform: translateX(4px); } }
 @media (pointer: coarse) { .rj-btn, .rj-chip { min-height: var(--control-lg); } }
 
-/* ---------- hero ---------- */
-.hero { padding-block: clamp(40px, 7vw, 96px) clamp(48px, 7vw, 96px); }
-.hero__grid { display: grid; grid-template-columns: minmax(0, 1.05fr) minmax(0, 1fr); gap: clamp(32px, 5vw, 72px); align-items: center; }
-.hero__copy { display: grid; gap: var(--space-6); min-width: 0; }
+/* ---------- hero: the wall ----------
+   Behind the copy, a wall of real careers-page addresses from the directory (picked at build time).
+   A scan line reads it, then a few example matches are pressed onto it in ink. The copy column
+   sits on clean paper: the wall is masked out behind it and fills the rest of the hero. */
+.hero { position: relative; padding-block: clamp(40px, 6vw, 80px) clamp(56px, 7vw, 96px); min-height: min(calc(100svh - 64px), 780px); display: grid; align-content: center; box-sizing: border-box; overflow: hidden; }
+.hero > .wrap { width: 100%; box-sizing: border-box; }
+.hero__copy { display: grid; gap: var(--space-6); max-width: 36rem; }
+.hero__copy > :not(.wall) { position: relative; z-index: 2; }
 .hero h1 { font: var(--text-display-xl); letter-spacing: -0.045em; }
 /* the logo's cursor, the same orange in every theme (design/README.md, Logo) */
 .cursor { display: inline-block; width: 0.28em; height: 0.72em; margin-left: 0.06em; background: var(--brand-signal); vertical-align: -0.02em; }
-.hero__sub { font: var(--text-heading); }
 .hero__lede { font: var(--text-lede); color: var(--text-secondary); max-width: 34ch; text-wrap: pretty; }
 .hero__ctas { display: flex; flex-wrap: wrap; gap: var(--space-3); align-items: center; }
 .hero__note { font: var(--text-small); color: var(--text-secondary); display: flex; flex-wrap: wrap; gap: var(--space-2) var(--space-4); }
 .hero__note span { display: inline-flex; align-items: center; gap: var(--space-2); }
-@media (max-width: 920px) { .hero__grid { grid-template-columns: minmax(0, 1fr); } .hero__lede { max-width: 46ch; } }
+
+/* The wall spans the whole hero. --clear is where the copy column ends: the wall is clear up to it. */
+.wall { --clear: calc((100% - min(100%, var(--page-max))) / 2 + var(--gutter) + 39rem); position: absolute; inset: 0; z-index: 1; }
+.wall__hosts {
+  position: absolute; inset: 0; overflow: hidden; margin: 0;
+  padding: var(--space-4) max(var(--gutter), calc((100% - var(--page-max)) / 2 + var(--gutter)));
+  display: flex; flex-wrap: wrap; align-content: flex-start; gap: var(--space-1) 18px;
+  font: var(--text-source); line-height: 1.25rem; color: var(--text-disabled); user-select: none;
+  -webkit-mask-image: linear-gradient(90deg, transparent 0, transparent var(--clear), color-mix(in srgb, black 50%, transparent) calc(var(--clear) + 8%), black calc(var(--clear) + 18%)), linear-gradient(color-mix(in srgb, black 80%, transparent) 0, color-mix(in srgb, black 80%, transparent) 26px, transparent 46px);
+  mask-image: linear-gradient(90deg, transparent 0, transparent var(--clear), color-mix(in srgb, black 50%, transparent) calc(var(--clear) + 8%), black calc(var(--clear) + 18%)), linear-gradient(color-mix(in srgb, black 80%, transparent) 0, color-mix(in srgb, black 80%, transparent) 26px, transparent 46px);
+}
+.wall__hosts span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; transition: color var(--duration-base) var(--ease-standard); }
+.js .wall__hosts span { color: var(--border-subtle); }
+.js .wall__hosts span[data-read] { color: var(--text-disabled); }
+.wall__scan { position: absolute; left: 0; right: 0; top: 0; height: 1px; background: var(--text-primary); opacity: 0; pointer-events: none; z-index: 2;
+  -webkit-mask-image: linear-gradient(90deg, transparent var(--clear), black calc(var(--clear) + 18%)); mask-image: linear-gradient(90deg, transparent var(--clear), black calc(var(--clear) + 18%)); }
+.wall__scan[data-go] { animation: wall-scan var(--wall-sweep, var(--duration-story)) var(--ease-standard) forwards; }
+@keyframes wall-scan { 0% { opacity: 0; transform: translateY(0); } 5% { opacity: .6; } 92% { opacity: .6; } 100% { opacity: 0; transform: translateY(var(--wall-h, 600px)); } }
+.wall__stamps { position: absolute; inset: 0; z-index: 3; margin: 0; padding: 0; list-style: none; pointer-events: none; }
+.wall__stamps li { position: absolute; pointer-events: auto; }
+.stamp {
+  display: inline-flex; align-items: center; gap: var(--space-2); margin: -2px -6px; padding: 2px 6px; border: 0; cursor: default; white-space: nowrap;
+  font: var(--text-source); line-height: 1.25rem; color: var(--bg-raised); background: var(--text-primary);
+  border-radius: var(--radius-sm); box-shadow: 0 0 0 4px var(--bg-canvas); transform-origin: 30% 50%;
+  animation: wall-press var(--duration-slow) var(--ease-enter) both; animation-delay: var(--d, 0ms);
+}
+.stamp b { font: var(--text-meta); font-weight: 600; padding: 1px 5px; border-radius: var(--radius-sm); font-variant-numeric: tabular-nums; }
+.stamp b[data-band="strong"] { background: var(--score-strong-bg); color: var(--score-strong-fg); }
+.stamp b[data-band="fair"] { background: var(--score-fair-bg); color: var(--score-fair-fg); }
+.stamp:hover, .stamp[aria-expanded="true"] { box-shadow: 0 0 0 4px var(--bg-canvas), 0 0 0 5px var(--text-primary); }
+.stamp:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 5px; }
+/* ink press: lands a touch large with a soft bleed, then settles flat on the paper */
+@keyframes wall-press {
+  0% { opacity: 0; transform: scale(1.04); box-shadow: 0 0 0 4px var(--bg-canvas), 0 0 0 0 transparent; }
+  35% { opacity: 1; transform: scale(1.04); box-shadow: 0 0 0 4px var(--bg-canvas), 0 1px 10px 2px color-mix(in srgb, var(--text-primary) 28%, transparent); }
+  100% { opacity: 1; transform: scale(1); box-shadow: 0 0 0 4px var(--bg-canvas), 0 0 1px 0 color-mix(in srgb, var(--text-primary) 20%, transparent); }
+}
+.wall__tip { position: absolute; z-index: 4; width: 360px; max-width: calc(100% - 2 * var(--gutter)); box-sizing: border-box; display: grid; gap: var(--space-2); padding: var(--space-3);
+  background: var(--bg-overlay); color: var(--text-primary); border: 1px solid var(--border-default); border-radius: var(--radius-md); box-shadow: var(--shadow-l2);
+  font: var(--text-small); pointer-events: none; animation: rj-menu-in var(--duration-quick) var(--ease-enter); }
+.wall__tip[hidden] { display: none; }
+.wall__tip-t { font: var(--text-label); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.wall__tip-co { font: var(--text-meta); color: var(--text-secondary); }
+.wall__tip .rj-breakdown__legend { display: flex; flex-wrap: wrap; gap: 2px var(--space-3); }
+.wall__tip-apply { display: grid; gap: 2px; padding-top: var(--space-2); border-top: 1px solid var(--border-subtle); font: var(--text-meta); color: var(--text-secondary); }
+.wall__tip-apply code { font: var(--text-source); color: var(--text-primary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.wall__meter { position: absolute; z-index: 3; right: max(var(--gutter), calc((100% - var(--page-max)) / 2 + var(--gutter))); bottom: var(--space-6);
+  display: flex; align-items: baseline; gap: var(--space-3); padding: var(--space-2) var(--space-3);
+  background: var(--bg-raised); border: 1px solid var(--border-default); border-radius: var(--radius-md); font: var(--text-meta); color: var(--text-secondary); }
+.wall__meter strong { font: var(--text-label); font-weight: 600; color: var(--text-primary); font-variant-numeric: tabular-nums; min-width: 6ch; text-align: right; }
 
 /* hero load: one short sequence, transform + opacity only; the headline itself never waits */
 @keyframes rise { from { opacity: 0; transform: translateY(8px); } }
-@keyframes rise-panel { from { opacity: 0; transform: translateY(12px); } }
 .js .hero [data-step]:not(h1):not(.eyebrow) { animation: rise var(--duration-slow) var(--ease-enter) both; animation-delay: calc(var(--i, 0) * 40ms); }
-.js .hero .radar { animation: rise-panel var(--duration-slow) var(--ease-enter) var(--duration-instant) both; }
 
-/* ---------- radar panel (hero) ---------- */
-.radar { box-shadow: var(--shadow-l1); min-width: 0; }
-.radar__bar { display: flex; align-items: center; gap: var(--space-3); padding: var(--space-2) var(--space-2) var(--space-2) var(--space-4); border-bottom: 1px solid var(--feed-divider); }
-.radar__cmd { font: var(--text-small); color: var(--text-secondary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; flex: 1; }
-.radar__cmd b { color: var(--text-primary); font-weight: 500; }
-.radar__status { display: flex; align-items: center; gap: var(--space-2); justify-content: space-between; }
-.scanning { display: inline-flex; align-items: center; gap: var(--space-2); min-width: 0; overflow: hidden; white-space: nowrap; }
-.scanning__host { font-family: var(--font-mono); overflow: hidden; text-overflow: ellipsis; }
-.pulse { width: 8px; height: 8px; border-radius: var(--radius-dot); background: var(--live-dot); flex: none; }
-.radar[data-running="false"] .pulse { background: var(--text-disabled); }
-.radar__list { position: relative; }
-.radar .rj-row { grid-template-columns: 56px minmax(0, 1fr) auto; }
-.radar .rj-row__title > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.radar .rj-row > * { position: relative; z-index: 1; }
-.radar .rj-row[data-current] { background: var(--feed-row-selected); box-shadow: inset 2px 0 0 var(--feed-row-selected-bar); }
-.radar .rj-row[data-enter] { animation: row-in var(--duration-base) var(--ease-enter) both; }
-/* a new row is lit for a moment, then fades to the row's own background */
-.radar .rj-row[data-enter]::before { content: ""; position: absolute; inset: 0; z-index: 0; background: var(--feed-row-hover); animation: tint var(--duration-slow) var(--ease-standard) var(--duration-slow) both; pointer-events: none; }
-@keyframes tint { from { opacity: 1; } to { opacity: 0; } }
-.radar .rj-row[data-leave] { animation: row-out var(--duration-quick) var(--ease-exit) forwards; }
-@keyframes row-in { from { opacity: 0; transform: translateY(-8px); } }
-@keyframes row-out { to { opacity: 0; transform: translateY(4px); } }
-.radar__why { padding: var(--space-4); border-top: 1px solid var(--feed-divider); background: var(--feed-section-bg); display: grid; gap: var(--space-3); }
-.radar__why-head { display: flex; justify-content: space-between; gap: var(--space-3); align-items: baseline; }
-.radar__why-title { font: var(--text-label); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
-.radar__why-head > *, .radar__why .rj-breakdown { min-width: 0; }
-/* room for a legend that wraps to two lines, so a new job never makes the panel grow (no layout shift) */
-.radar .rj-breakdown__legend { min-height: 2lh; }
-@media (max-width: 400px) { .radar__why-title { white-space: normal; } }
 .bd-fill { transform-origin: left; transition: transform var(--duration-base) var(--ease-enter); }
-@media (max-width: 560px) {
-  .radar .rj-row { grid-template-columns: 56px minmax(0, 1fr); }
-  .radar .rj-row__side { grid-column: 2; justify-content: flex-start; flex-direction: row; }
-  .radar__why-head .eyebrow, .hide-sm { display: none; }
-  .radar .rj-row:nth-child(n+4) { display: none; }
+
+/* Phones and narrow tablets: the headline first, then the wall as a band right under it, then the rest. */
+@media (max-width: 760px) {
+  .hero { min-height: 0; display: block; overflow: visible; padding-top: var(--space-8); }
+  .hero__copy { max-width: none; }
+  .wall { position: relative; inset: auto; height: 290px; margin: 0 calc(-1 * var(--gutter)); --clear: 0%; }
+  .wall__hosts { bottom: 64px; gap: var(--space-1) 14px; font-size: 0.6875rem; line-height: 1.125rem; padding: var(--space-2) var(--gutter);
+    -webkit-mask-image: linear-gradient(transparent 0, black 14px, black 72%, transparent 100%); mask-image: linear-gradient(transparent 0, black 14px, black 72%, transparent 100%); }
+  .wall__scan { -webkit-mask-image: none; mask-image: none; }
+  .wall__stamps li { left: var(--gutter) !important; right: var(--gutter); }
+  .stamp { display: flex; font-size: 0.6875rem; line-height: 1.125rem; box-shadow: 0 0 0 3px var(--bg-canvas); }
+  .stamp::after { content: ""; position: absolute; inset: -8px 0; }
+  .wall__tip { left: var(--gutter) !important; right: var(--gutter); width: auto; max-width: none; }
+  .wall__meter { left: var(--gutter); right: var(--gutter); bottom: var(--space-2); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .wall__scan { display: none; }
 }
 
 /* ---------- proof strip ---------- */
@@ -575,10 +625,434 @@ label.rj-chip:has(input:focus-visible) { outline: 2px solid var(--focus-ring); o
   .rv-wait { opacity: 1; transform: none; }
   .routes[data-play="ready"] .node--end { opacity: 1; }
 }
+
+/* ---------- intro and micro-animations (21st.dev Preloader, Scramble Text, Animate Digits, Text Blur Reveal; ported to plain CSS/JS) ---------- */
+/* ---------- intro: first visit only (html.intro, set by the head script) ----------
+   A paper sheet over the real page: the cursor blinks, "rawjobs" types itself in from symbols, the directory count
+   rolls, then the sheet lifts with a curved edge that flattens (21st.dev Preloader) and the cursor drops into the
+   headline. Timing lives in intro.js, computed from the motion tokens. Without html.intro none of this renders. */
+.rj-intro { display: none; }
+html.intro .rj-intro { display: block; position: fixed; inset: 0; z-index: calc(var(--z-toast) + 1); }
+.rj-intro__sheet {
+  position: absolute; inset: 0; display: grid; place-content: center; justify-items: center; gap: var(--space-6);
+  padding: 0 var(--space-4); background: var(--bg-canvas); color: var(--text-primary);
+}
+/* The logo's proportions: Geist Mono at a 0.58em advance, the cursor 0.5em by 0.71em on the baseline. */
+.rj-intro__mark { display: flex; align-items: baseline; font: var(--text-display-xl); font-family: var(--font-mono); font-weight: 500; letter-spacing: -0.02em; white-space: nowrap; }
+.rj-intro__word span { visibility: hidden; }
+.rj-intro__cursor {
+  width: 0.5em; height: 0.71em; margin-left: 0.18em; background: var(--brand-signal);
+  /* starts where typing starts, left of the seven letters, and steps right as each one lands */
+  transform: translateX(calc(-7 * 0.58em));
+}
+.rj-intro__line { margin: 0; font: var(--text-code); color: var(--text-secondary); opacity: 0; }
+.rj-intro__n { color: var(--text-primary); font-variant-numeric: tabular-nums; }
+.rj-intro__skip {
+  position: absolute; right: var(--space-4); bottom: calc(var(--space-4) + env(safe-area-inset-bottom, 0px));
+  min-height: var(--control-md); padding: 0 var(--space-3); border: 1px solid var(--border-default); border-radius: var(--radius-md);
+  background: transparent; color: var(--text-secondary); font: var(--text-label); cursor: pointer;
+}
+.rj-intro__skip:hover { color: var(--text-primary); border-color: var(--border-control); }
+@media (pointer: coarse) { .rj-intro__skip { min-height: var(--control-lg); } }
+/* The sheet's bottom edge: a bulge hanging below the viewport. Scaling it to flat is the same as moving the curve's
+   control point, so the morph runs on the compositor. */
+.rj-intro__edge { position: absolute; left: 0; top: 100%; width: 100%; height: clamp(56px, 14vh, 140px); overflow: visible; transform-origin: 50% 0; }
+.rj-intro__fill { fill: var(--bg-canvas); }
+.rj-intro__rule { fill: none; stroke: var(--text-primary); stroke-opacity: 0.55; stroke-width: 1; vector-effect: non-scaling-stroke; }
+/* the flying cursor, lifted out of the sheet for the hand-off */
+.rj-intro__fly { position: fixed; z-index: calc(var(--z-toast) + 2); pointer-events: none; }
+.rj-intro__fly > i { position: absolute; inset: 0; background: var(--brand-signal); transform-origin: 0 0; }
+@media (forced-colors: active) { .rj-intro__cursor, .rj-intro__fly > i { background: CanvasText; forced-color-adjust: none; } }
+/* reduced motion never gets html.intro (head script); this is a second guard */
+@media (prefers-reduced-motion: reduce) { html.intro .rj-intro { display: none; } }
+/* ---------- motion.js helpers (digit roll, heading blur reveal) ---------- */
+.rj-roll { display: inline-flex; }
+.rj-roll__c { position: relative; display: inline-block; font-variant-numeric: tabular-nums; }
+.rj-roll__c > span { display: inline-block; }
+.rj-roll__c > .rj-roll__out { position: absolute; left: 0; top: 0; }
+.rj-bw { display: inline-block; }
+.rj-bw-wait .rj-bw { opacity: 0; filter: blur(6px); transform: translateY(0.2em); }
+@media (prefers-reduced-motion: reduce) { .rj-bw-wait .rj-bw { opacity: 1; filter: none; transform: none; } }
 </style>
 <!--__ANALYTICS__-->
 </head>
 <body>
+<!-- Intro overlay: shown only under html.intro (see head.html). Decorative, so aria-hidden; the page under it stays reachable. -->
+<div class="rj-intro" id="rj-intro" aria-hidden="true">
+  <div class="rj-intro__sheet">
+    <div class="rj-intro__mark"><span class="rj-intro__word"><span>r</span><span>a</span><span>w</span><span>j</span><span>o</span><span>b</span><span>s</span></span><span class="rj-intro__cursor"></span></div>
+    <p class="rj-intro__line">reading <span class="rj-intro__n">__COMPANIES__</span> careers pages</p>
+    <button class="rj-intro__skip" type="button" tabindex="-1">Skip</button>
+    <svg class="rj-intro__edge" viewBox="0 0 100 100" preserveAspectRatio="none" focusable="false"><path class="rj-intro__fill" d="M0 0H100Q50 200 0 0Z"/><path class="rj-intro__rule" d="M100 0Q50 200 0 0"/></svg>
+  </div>
+</div>
+<script>
+/* RawJobs site motion: digit roll, heading blur reveal, hover scramble. Plain JS, no dependencies.
+   Ideas and timing ported from 21st.dev components (React + Framer Motion there, vanilla WAAPI here):
+     - "Animate Digits" by @unlumen (21st.dev id 20071): only the digits that change blur-slide.
+     - "Text Blur Reveal" by @wensity (21st.dev id 27105): words blur and fade in, staggered, as a heading scrolls in.
+     - "Scramble Text" by @dqnamo (21st.dev id 16620): symbols decode left to right on a 32ms tick, same symbol set.
+   Durations come from the motion tokens; nothing here runs under prefers-reduced-motion.
+   API: window.rawjobsMotion = { rollNumber, blurReveal, scramble, ms } */
+(function () {
+  var root = document.documentElement;
+  var css = getComputedStyle(root);
+  function ms(name, d) { var v = parseFloat(css.getPropertyValue(name)); return isNaN(v) ? d : v; }
+  function token(name, d) { return css.getPropertyValue(name).trim() || d; }
+  var reduce = function () { return matchMedia('(prefers-reduced-motion: reduce)').matches; };
+  var canAnimate = 'animate' in root;
+  var QUICK = ms('--duration-quick', 150), SLOW = ms('--duration-slow', 300), STORY = ms('--duration-story', 380);
+  var ENTER = token('--ease-enter', 'ease-out');
+  var TICK = 32; /* 21st Scramble Text's interval */
+  var SYMBOLS = '-_~`!@#$%^&*()+=[]{}|;:,.<>?';
+  var rand = function () { return SYMBOLS.charAt(Math.floor(Math.random() * SYMBOLS.length)); };
+
+  /* ---------- digit roll ----------
+     rollNumber(el, to, { from, duration, steps, pad, ease, format, prefix, suffix, decimals }) -> { finished, cancel }
+     Walks from `from` to `to` in a few eased steps; in each step only the characters that changed slide up out of
+     view with a blur while the new ones slide up into place. When it ends, el holds plain text again.
+     pad: true zero-pads to the final width (an odometer: 00,000 -> 47,737), so the width never changes. */
+  function parseNum(text) {
+    var m = String(text).match(/^(\D*?)(\d[\d,]*(?:\.\d+)?)(.*)$/);
+    if (!m) return null;
+    var dec = (m[2].split('.')[1] || '').length;
+    return { prefix: m[1], value: parseFloat(m[2].replace(/,/g, '')), suffix: m[3], decimals: dec };
+  }
+  function rollNumber(el, to, o) {
+    o = o || {};
+    if (el._rjRoll) el._rjRoll.cancel();
+    var parsed = parseNum(el.textContent) || { prefix: '', suffix: '', decimals: 0 };
+    var prefix = o.prefix != null ? o.prefix : parsed.prefix, suffix = o.suffix != null ? o.suffix : parsed.suffix;
+    var decimals = o.decimals != null ? o.decimals : parsed.decimals;
+    var format = o.format || function (n) { return n.toLocaleString('en-US', { minimumFractionDigits: decimals, maximumFractionDigits: decimals }); };
+    var from = o.from != null ? o.from : 0;
+    var finalText = prefix + format(to) + suffix;
+    var done, finished = new Promise(function (r) { done = r; });
+    var handle = { finished: finished, cancel: function () { stop(); el.textContent = finalText; } };
+    if (reduce() || !canAnimate) { el.textContent = finalText; done(); return handle; }
+    var duration = o.duration || STORY * 2;
+    var steps = o.steps || Math.max(3, Math.min(14, Math.round(duration / 90)));
+    var width = format(to).length;
+    var str = function (n) {
+      var s = format(n);
+      if (o.pad) { var f = format(to); while (s.length < width) { var c = f.charAt(f.length - s.length - 1); s = (/\d/.test(c) ? '0' : c) + s; } }
+      return s;
+    };
+    /* the visible digits are aria-hidden; screen readers get the final value only */
+    var vis = document.createElement('span'); vis.className = 'rj-roll'; vis.setAttribute('aria-hidden', 'true');
+    var sr = document.createElement('span'); sr.className = 'rj-sr'; sr.textContent = finalText;
+    el.textContent = ''; el.appendChild(vis); el.appendChild(sr);
+    var slots = [];
+    function slot(ch) {
+      var s = document.createElement('span'); s.className = 'rj-roll__c';
+      var g = document.createElement('span'); g.textContent = ch; s.appendChild(g);
+      return s;
+    }
+    function set(text, animate, slide) {
+      /* align from the right: digits keep their place value when the number grows or shrinks */
+      while (slots.length > text.length) vis.removeChild(slots.shift());
+      while (slots.length < text.length) {
+        var s = slot(text.charAt(text.length - slots.length - 1));
+        vis.insertBefore(s, vis.firstChild); slots.unshift(s);
+        if (animate) enter(s.firstChild, slide);
+      }
+      for (var i = 0; i < text.length; i++) {
+        var sl = slots[i], ch = text.charAt(i), cur = sl.lastChild;
+        if (cur.textContent === ch) continue;
+        if (!animate) { cur.textContent = ch; continue; }
+        var old = cur; old.className = 'rj-roll__out';
+        var g = document.createElement('span'); g.textContent = ch; sl.appendChild(g);
+        exit(old, slide); enter(g, slide);
+      }
+    }
+    function enter(g, d) { g.animate([{ transform: 'translateY(60%)', filter: 'blur(4px)', opacity: 0 }, { transform: 'none', filter: 'blur(0)', opacity: 1 }], { duration: d, easing: ENTER }); }
+    function exit(g, d) { g.animate([{ transform: 'none', filter: 'blur(0)', opacity: 1 }, { transform: 'translateY(-60%)', filter: 'blur(4px)', opacity: 0 }], { duration: d, easing: ENTER, fill: 'forwards' }).onfinish = function () { g.remove(); }; }
+    var ease = o.ease || function (t) { return 1 - Math.pow(1 - t, 3); };
+    var timers = [], every = duration / steps, slide = Math.min(SLOW, Math.max(QUICK * 0.8, every * 1.4));
+    set(prefix + str(from) + suffix, false, slide);
+    var last = from;
+    for (var k = 1; k <= steps; k++) (function (k) {
+      timers.push(setTimeout(function () {
+        var v = k === steps ? to : from + (to - from) * ease(k / steps);
+        v = Math.round(v * Math.pow(10, decimals)) / Math.pow(10, decimals);
+        if (v === last && k !== steps) return;
+        last = v; set(prefix + str(v) + suffix, true, slide);
+        if (k === steps) timers.push(setTimeout(function () { stop(); el.textContent = finalText; }, slide));
+      }, k * every));
+    })(k);
+    function stop() { timers.forEach(clearTimeout); timers = []; if (el._rjRoll === handle) el._rjRoll = null; done(); }
+    el._rjRoll = handle;
+    return handle;
+  }
+
+  /* ---------- heading blur reveal ----------
+     blurReveal(selector): each matching heading that sits below the fold at load gets its words wrapped, hidden,
+     and revealed once when it scrolls in: blur 6px -> 0, fade, 0.2em rise, 40ms per word. Headings already on
+     screen are never touched, so the resting state is always visible. */
+  function wrapWords(el) {
+    var words = [];
+    (function walk(n) {
+      Array.prototype.slice.call(n.childNodes).forEach(function (c) {
+        if (c.nodeType === 1) { if (!/^(svg|br)$/i.test(c.nodeName)) walk(c); return; }
+        if (c.nodeType !== 3 || !c.nodeValue.trim()) return;
+        var frag = document.createDocumentFragment();
+        c.nodeValue.split(/(\s+)/).forEach(function (part) {
+          if (!part) return;
+          if (/^\s+$/.test(part)) { frag.appendChild(document.createTextNode(part)); return; }
+          var w = document.createElement('span'); w.className = 'rj-bw'; w.textContent = part;
+          frag.appendChild(w); words.push(w);
+        });
+        n.replaceChild(frag, c);
+      });
+    })(el);
+    return words;
+  }
+  function blurReveal(selector, opts) {
+    opts = opts || {};
+    if (reduce() || !canAnimate || !('IntersectionObserver' in window)) return;
+    var PER = opts.stagger || 40, DUR = opts.duration || SLOW;
+    var vh = innerHeight;
+    var io = new IntersectionObserver(function (es) {
+      es.forEach(function (e) {
+        if (!e.isIntersecting) return;
+        var h = e.target; io.unobserve(h);
+        h._rjWords.forEach(function (w, i) {
+          w.animate([{ opacity: 0, filter: 'blur(6px)', transform: 'translateY(0.2em)' }, { opacity: 1, filter: 'blur(0)', transform: 'none' }],
+            { duration: DUR, delay: i * PER, easing: ENTER, fill: 'backwards' });
+        });
+        h.classList.remove('rj-bw-wait');
+      });
+    }, { rootMargin: '0px 0px -10% 0px', threshold: 0.2 });
+    Array.prototype.forEach.call(document.querySelectorAll(selector), function (h) {
+      if (h._rjWords || h.getBoundingClientRect().top < vh * 0.92) return;
+      h._rjWords = wrapWords(h);
+      h.classList.add('rj-bw-wait');
+      io.observe(h);
+    });
+  }
+
+  /* ---------- hover scramble ----------
+     scramble(el): the label decodes from symbols, left to right, one letter per 32ms tick (21st Scramble Text).
+     The box width is pinned while it runs, so nothing around it moves. Fine pointers only. */
+  function scramble(el) {
+    if (el._rjScr || reduce()) return;
+    var text = el._rjText || (el._rjText = el.textContent);
+    var chars = Array.from(text), n = 0;
+    var w = el.getBoundingClientRect().width;
+    el.style.width = w + 'px'; el.style.overflow = 'hidden'; el.style.whiteSpace = 'nowrap';
+    el._rjScr = setInterval(function () {
+      n++;
+      el.textContent = chars.map(function (c, i) { return c.trim() === '' || i < n ? c : rand(); }).join('');
+      if (n >= chars.length) { clearInterval(el._rjScr); el._rjScr = null; el.textContent = text; el.style.width = el.style.overflow = el.style.whiteSpace = ''; }
+    }, TICK);
+  }
+  function hoverScramble(selector) {
+    if (!matchMedia('(hover: hover) and (pointer: fine)').matches) return;
+    Array.prototype.forEach.call(document.querySelectorAll(selector), function (el) {
+      /* text-only labels: anything with an icon or markup inside is left alone */
+      if (el.children.length || !el.textContent.trim()) return;
+      if (!el.hasAttribute('aria-label')) el.setAttribute('aria-label', el.textContent.trim());
+      el.addEventListener('mouseenter', function () { scramble(el); });
+    });
+  }
+
+  /* ---------- the site's wiring ---------- */
+  function rollOnView(selector) {
+    if (reduce() || !canAnimate || !('IntersectionObserver' in window)) return;
+    var vh = innerHeight;
+    var io = new IntersectionObserver(function (es) {
+      es.forEach(function (e) {
+        if (!e.isIntersecting) return;
+        io.unobserve(e.target);
+        rollNumber(e.target, e.target._rjTo.value, { from: 0, duration: STORY * 2.5, prefix: e.target._rjTo.prefix, suffix: e.target._rjTo.suffix, decimals: e.target._rjTo.decimals });
+      });
+    }, { threshold: 0.6 });
+    Array.prototype.forEach.call(document.querySelectorAll(selector), function (el) {
+      var p = parseNum(el.textContent);
+      /* numbers already on screen at load keep their value; only ones below the fold roll in */
+      if (!p || el.getBoundingClientRect().top < vh * 0.92) return;
+      el._rjTo = p;
+      el.textContent = p.prefix + (0).toFixed(p.decimals) + p.suffix;
+      io.observe(el);
+    });
+  }
+  function init() {
+    blurReveal('.section h2');
+    rollOnView('.stat__n');
+    hoverScramble('.nav__links a');
+  }
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init); else init();
+
+  window.rawjobsMotion = { rollNumber: rollNumber, blurReveal: blurReveal, scramble: scramble, ms: ms };
+})();
+</script>
+<script>
+/* RawJobs intro: runs only when the head script set html.intro (first visit this session, motion allowed).
+   Story, about 1.5s, all on a paper sheet over the already-rendered page:
+     0      the orange cursor sits alone and blinks once
+     ~200   "rawjobs" types in left to right, each letter decoding from symbols (21st.dev Scramble Text, 32ms tick)
+     ~350   "reading 47,737 careers pages" fades in; the count rolls up, only changing digits move (Animate Digits)
+     ~860   the sheet lifts with a curved bottom edge that flattens as it rises (21st.dev Preloader: ease
+            cubic-bezier(0.76,0,0.24,1), curve starting a beat after the slide); rawjobs:intro-done fires, so the
+            wall's ink sweep starts under the rising sheet; the cursor leaves the sheet and drops into the
+            headline's cursor (a FLIP onto the real element)
+     ~1540  overlay removed, html.intro removed
+   Any click, key, wheel or touch (or the Skip button) ends it at once. Ported from React/Framer Motion to WAAPI;
+   credits: 21st.dev @info-mdshakeeb/preloader (id 2556), @dqnamo/scramble-text (id 16620), @unlumen Animate Digits. */
+(function () {
+  var root = document.documentElement;
+  var box = document.getElementById('rj-intro');
+  if (!root.classList.contains('intro')) return;
+  if (!box || !('animate' in root)) { root.classList.remove('intro'); dispatchEvent(new Event('rawjobs:intro-done')); return; }
+
+  var css = getComputedStyle(root);
+  var ms = function (name, d) { var v = parseFloat(css.getPropertyValue(name)); return isNaN(v) ? d : v; };
+  var INSTANT = ms('--duration-instant', 100), QUICK = ms('--duration-quick', 150), BASE = ms('--duration-base', 200);
+  var SLOW = ms('--duration-slow', 300), STORY = ms('--duration-story', 380);
+  var ENTER = css.getPropertyValue('--ease-enter').trim() || 'ease-out', EXIT = css.getPropertyValue('--ease-exit').trim() || 'ease-in';
+  var LIFT_EASE = 'cubic-bezier(0.76, 0, 0.24, 1)'; /* 21st Preloader */
+  var TICK = 32; /* 21st Scramble Text */
+
+  /* the timeline, from the motion tokens (default tokens: type 250, line 400, roll 380, lift at 880 for 680, curve 580) */
+  var T_TYPE = QUICK + INSTANT;         /* the blink (on 150, off 100), then typing starts */
+  var PER_CHAR = TICK * 1.5;            /* a new letter every 48ms */
+  var RESOLVE = TICK * 3;               /* each letter shows symbols for ~3 ticks before it settles */
+  var T_LINE = T_TYPE + QUICK;          /* the count line fades in */
+  var ROLL = STORY;                     /* the count rolls */
+  var T_LIFT = T_LINE + ROLL + INSTANT; /* a beat on the final count, then the sheet lifts and the wall sweeps */
+  var LIFT = STORY + SLOW;              /* sheet travel */
+  var CURVE = STORY + BASE;             /* bulge flattening, ends with the travel (Preloader: 0.7s inside 0.8s) */
+  var FLIGHT = STORY;                   /* the cursor's trip into the headline: it lands just after the sheet uncovers its slot */
+
+  var sheet = box.querySelector('.rj-intro__sheet');
+  var edge = box.querySelector('.rj-intro__edge');
+  var cursor = box.querySelector('.rj-intro__cursor');
+  var letters = Array.prototype.slice.call(box.querySelectorAll('.rj-intro__word span'));
+  var line = box.querySelector('.rj-intro__line');
+  var num = box.querySelector('.rj-intro__n');
+  var SYMBOLS = '-_~`!@#$%^&*()+=[]{}|;:,.<>?';
+  var rand = function () { return SYMBOLS.charAt(Math.floor(Math.random() * SYMBOLS.length)); };
+
+  var timers = [], anims = [], ticker = null, state = 'play', fly = null, landTarget = null, fired = false;
+  /* the wall starts on this (it waits for it under html.intro); sent once, whichever way the intro ends */
+  var fire = function () { if (!fired) { fired = true; dispatchEvent(new Event('rawjobs:intro-done')); } };
+  var later = function (fn, t) { timers.push(setTimeout(fn, t)); };
+  var run = function (el, kf, opt) { var a = el.animate(kf, opt); anims.push(a); return a; };
+
+  /* type + decode state: letters appear one by one as symbols, the caret steps right, each letter settles after ~3 ticks */
+  var real = letters.map(function (l) { return l.textContent; });
+  var typed = 0, born = [];
+  var ADV = 0.58; /* em: the logo's letter advance (intro.css) */
+  function caret(n) { cursor.style.transform = n < letters.length ? 'translateX(' + -(letters.length - n) * ADV + 'em)' : 'none'; }
+  function type(t0) {
+    ticker = setInterval(function () {
+      var t = performance.now() - t0, settled = 0;
+      while (typed < letters.length && t >= typed * PER_CHAR) { born[typed] = t; letters[typed].style.visibility = 'visible'; typed++; }
+      letters.forEach(function (l, i) {
+        if (i >= typed) return;
+        if (t - born[i] >= RESOLVE) { l.textContent = real[i]; settled++; } else l.textContent = rand();
+      });
+      caret(typed);
+      if (settled === letters.length) { clearInterval(ticker); ticker = null; }
+    }, TICK);
+  }
+  var total = parseInt(num.textContent.replace(/\D/g, ''), 10) || 0;
+
+  /* The clock starts on the first rendered frame: this script runs while the rest of the page is still parsing,
+     and timers started now would spend the intro before anyone sees it. */
+  function start() {
+    if (state !== 'play') return;
+    /* 1. one blink: on, off, on (a terminal caret, so hard steps, no fade) */
+    run(cursor, [{ opacity: 1, easing: 'steps(1, end)' }, { opacity: 0, offset: QUICK / T_TYPE, easing: 'steps(1, end)' }, { opacity: 1 }], { duration: T_TYPE });
+    /* 2. type */
+    later(function () { type(performance.now()); }, T_TYPE);
+    /* 3. the count line */
+    later(function () {
+      run(line, [{ opacity: 0, transform: 'translateY(4px)' }, { opacity: 1, transform: 'none' }], { duration: BASE, easing: ENTER, fill: 'forwards' });
+      if (window.rawjobsMotion && total) window.rawjobsMotion.rollNumber(num, total, { from: 0, duration: ROLL, pad: true, steps: 6 });
+    }, T_LINE);
+    /* the count line has said its piece: it is gone by the lift, so the cursor never drops through it */
+    later(function () { run(line, [{ opacity: 1 }, { opacity: 0 }], { duration: QUICK, easing: EXIT, fill: 'forwards' }); }, T_LIFT - QUICK);
+    /* 4. lift */
+    later(lift, T_LIFT);
+  }
+  requestAnimationFrame(start);
+
+  function visible(el) {
+    if (!el) return null;
+    var r = el.getBoundingClientRect();
+    return r.width > 0 && r.height > 0 && r.bottom > 0 && r.top < innerHeight && r.left < innerWidth ? r : null;
+  }
+  function finishType() {
+    if (ticker) { clearInterval(ticker); ticker = null; }
+    letters.forEach(function (l, i) { l.textContent = real[i]; l.style.visibility = 'visible'; });
+    caret(letters.length);
+  }
+  function lift() {
+    if (state !== 'play') return;
+    state = 'lift';
+    timers.forEach(clearTimeout); timers = [];
+    finishType();
+    box.style.pointerEvents = 'none'; /* the page is usable from here on */
+    fire();
+
+    var H = innerHeight, bulge = edge.getBoundingClientRect().height;
+    run(sheet, [{ transform: 'translateY(0)' }, { transform: 'translateY(' + -(H + bulge + 2) + 'px)' }], { duration: LIFT, easing: LIFT_EASE, fill: 'forwards' });
+    run(edge, [{ transform: 'scaleY(1)' }, { transform: 'scaleY(0.01)' }], { duration: CURVE, delay: LIFT - CURVE, easing: LIFT_EASE, fill: 'forwards' });
+
+    /* the cursor leaves the sheet and lands on the headline's cursor (or the logo's), measured now that layout is settled */
+    var from = cursor.getBoundingClientRect();
+    landTarget = document.querySelector(box.getAttribute('data-land') || '.hero h1 .cursor');
+    var to = visible(landTarget);
+    if (!to) { landTarget = document.querySelector('.brand svg rect'); to = visible(landTarget); }
+    if (to) {
+      /* Two layers so the path arcs instead of cutting a straight line through the letters: the outer one carries x
+         on the lift's ease-in-out, the inner one carries y and size on ease-enter, so the cursor first drops clear of
+         the rising word, then slides along the headline's line into its slot. */
+      fly = document.createElement('div'); fly.className = 'rj-intro__fly'; fly.setAttribute('aria-hidden', 'true');
+      fly.style.cssText = 'left:' + from.left + 'px;top:' + from.top + 'px;width:' + from.width + 'px;height:' + from.height + 'px';
+      var inner = document.createElement('i'); fly.appendChild(inner);
+      box.appendChild(fly);
+      cursor.style.visibility = 'hidden';
+      landTarget.style.visibility = 'hidden';
+      var dx = to.left - from.left, dy = to.top - from.top, sx = to.width / from.width, sy = to.height / from.height;
+      run(inner, [{ transform: 'none' }, { transform: 'translateY(' + dy + 'px) scale(' + sx + ',' + sy + ')' }], { duration: FLIGHT, easing: ENTER, fill: 'forwards' });
+      run(fly, [{ transform: 'none' }, { transform: 'translateX(' + dx + 'px)' }], { duration: FLIGHT, easing: LIFT_EASE, fill: 'forwards' })
+        .onfinish = land;
+    }
+    later(end, LIFT);
+  }
+  function land() {
+    if (landTarget) landTarget.style.visibility = '';
+    if (fly) { fly.remove(); fly = null; }
+  }
+  function end() {
+    if (state === 'done') return;
+    state = 'done';
+    timers.forEach(clearTimeout); timers = [];
+    if (ticker) clearInterval(ticker);
+    anims.forEach(function (a) { try { a.cancel(); } catch (e) {} });
+    land();
+    fire();
+    box.remove();
+    root.classList.remove('intro');
+    ['pointerdown', 'keydown', 'wheel', 'touchstart'].forEach(function (t) { removeEventListener(t, skip, true); });
+  }
+  /* skip: before the lift, the sheet fades out fast and the wall starts; during the lift, everything jumps to the end */
+  function skip() {
+    if (state === 'done') return;
+    if (state === 'lift') { end(); return; }
+    state = 'lift';
+    timers.forEach(clearTimeout); timers = [];
+    box.style.pointerEvents = 'none';
+    fire();
+    run(box, [{ opacity: 1 }, { opacity: 0 }], { duration: QUICK, easing: EXIT, fill: 'forwards' }).onfinish = end;
+  }
+  ['pointerdown', 'keydown', 'wheel', 'touchstart'].forEach(function (t) { addEventListener(t, skip, { capture: true, passive: true }); });
+  /* a tab that loads in the background never shows the intro half-way through */
+  document.addEventListener('visibilitychange', function () { if (document.hidden) end(); }, { once: true });
+})();
+</script>
 <div class="page rj-root">
 <a class="rj-btn rj-btn--primary skip" href="#main">Skip to content</a>
 
@@ -604,10 +1078,18 @@ label.rj-chip:has(input:focus-visible) { outline: 2px solid var(--focus-ring); o
 <main id="main">
 <!-- ================= HERO ================= -->
 <section class="hero" id="top" aria-labelledby="hero-title">
-  <div class="wrap hero__grid">
+  <div class="wrap">
     <div class="hero__copy">
       <p class="eyebrow" data-step style="--i:0">Free and open source</p>
       <h1 id="hero-title" data-step style="--i:1">Jobs, straight from the source.<span class="cursor" aria-hidden="true"></span></h1>
+      <div class="wall" id="wall">
+        <p class="rj-sr">Behind the headline: a wall of real careers-page addresses from the RawJobs directory. A few example matches are marked on it with their score.</p>
+        <div class="wall__hosts" id="wall-hosts" aria-hidden="true"><!--__WALL__--></div>
+        <div class="wall__scan" id="wall-scan" aria-hidden="true"></div>
+        <ul class="wall__stamps" id="wall-stamps" aria-label="Example matches marked on the wall"></ul>
+        <div class="wall__tip" id="wall-tip" role="tooltip" hidden></div>
+        <p class="wall__meter"><strong id="wall-count" class="num">__COMPANIES__</strong> <span id="wall-label">careers pages in the directory</span></p>
+      </div>
       <p class="hero__lede" data-step style="--i:3">RawJobs finds jobs on the careers pages of __COMPANIES_ROUND__ companies and ranks each one by how well it fits you. Free, and it runs on your computer.</p>
       <div class="hero__ctas" data-step style="--i:4">
         <a class="rj-btn rj-btn--primary btn-lg" href="#get">
@@ -622,41 +1104,18 @@ label.rj-chip:has(input:focus-visible) { outline: 2px solid var(--focus-ring); o
         <span><i class="rj-glyph rj-glyph--full" style="color:var(--success-text)" aria-hidden="true"></i>Scores you can read</span>
       </p>
     </div>
-
-    <section class="rj-panel rj-feed radar" id="radar" data-running="false" aria-label="Example Radar with made-up jobs">
-      <div class="radar__bar">
-        <span class="radar__cmd"><b>Your Radar</b> · best match first</span>
-        <button class="rj-btn rj-btn--quiet rj-btn--icon rj-btn--sm" type="button" id="radar-toggle" aria-label="Pause the example feed" title="Pause">
-          <svg class="rj-icon" viewBox="0 0 24 24" aria-hidden="true" id="radar-icon"><rect x="14" y="4" width="4" height="16" rx="1"/><rect x="6" y="4" width="4" height="16" rx="1"/></svg>
-        </button>
-      </div>
-      <div class="rj-feed__head radar__status">
-        <span class="scanning"><span class="pulse" aria-hidden="true"></span><span>Scanning</span><span class="scanning__host" id="scan-host">jobs.lever.co/acme-exchange</span></span>
-        <span class="num" style="white-space:nowrap"><span class="hide-sm"><span id="scan-count">214</span> companies · </span><span id="scan-new">9</span> new</span>
-      </div>
-      <div class="radar__list">
-        <ul class="rj-feed__list" id="radar-list" aria-label="Jobs for you, best match first">
-          <li class="rj-row" data-current><span class="rj-score rj-score--strong" role="img" aria-label="Strong match, score 87"><i class="rj-glyph rj-glyph--full"></i>87</span><span class="rj-row__main"><span class="rj-row__title"><span>Head of Product, Exchange</span></span><span class="rj-row__meta">Acme Exchange<span class="rj-sep" aria-hidden="true">·</span>Dubai<span class="rj-sep" aria-hidden="true">·</span>Hybrid</span></span><span class="rj-row__side"><span class="rj-source"><span class="rj-dot" role="img" aria-label="New this scan"></span>Lever<span class="rj-source__age">2h</span></span></span></li>
-          <li class="rj-row"><span class="rj-score rj-score--strong" role="img" aria-label="Strong match, score 72"><i class="rj-glyph rj-glyph--full"></i>72</span><span class="rj-row__main"><span class="rj-row__title"><span>Senior Product Manager, Custody</span></span><span class="rj-row__meta">Halcyon Labs<span class="rj-sep" aria-hidden="true">·</span>Abu Dhabi<span class="rj-sep" aria-hidden="true">·</span>On-site</span></span><span class="rj-row__side"><span class="rj-source">Ashby<span class="rj-source__age">1d</span></span></span></li>
-          <li class="rj-row"><span class="rj-score rj-score--fair" role="img" aria-label="Fair match, score 61"><i class="rj-glyph rj-glyph--half"></i>61</span><span class="rj-row__main"><span class="rj-row__title"><span>Product Manager, Payments</span></span><span class="rj-row__meta">Northwind Pay<span class="rj-sep" aria-hidden="true">·</span>Remote (EMEA)<span class="rj-sep" aria-hidden="true">·</span>Remote</span></span><span class="rj-row__side"><span class="rj-source">Greenhouse<span class="rj-source__age">3d</span></span></span></li>
-          <li class="rj-row"><span class="rj-score rj-score--fair" role="img" aria-label="Fair match, score 56"><i class="rj-glyph rj-glyph--half"></i>56</span><span class="rj-row__main"><span class="rj-row__title"><span>Product Lead, Tokenization</span></span><span class="rj-row__meta">Meridian Bank<span class="rj-sep" aria-hidden="true">·</span>Dubai<span class="rj-sep" aria-hidden="true">·</span>Hybrid</span></span><span class="rj-row__side"><span class="rj-source">Workday<span class="rj-source__age">5d</span></span></span></li>
-          <li class="rj-row"><span class="rj-score rj-score--weak" role="img" aria-label="Weak match, score 31"><i class="rj-glyph rj-glyph--empty"></i>31</span><span class="rj-row__main"><span class="rj-row__title"><span>Product Manager, Growth</span></span><span class="rj-row__meta">Parcel Freight<span class="rj-sep" aria-hidden="true">·</span>Riyadh<span class="rj-sep" aria-hidden="true">·</span>On-site</span></span><span class="rj-row__side"><span class="rj-source">SmartRecruiters<span class="rj-source__age">9d</span></span></span></li>
-        </ul>
-      </div>
-      <div class="radar__why">
-        <div class="radar__why-head"><span class="radar__why-title" id="why-title">Why “Head of Product, Exchange” scored 87</span><span class="eyebrow">Score breakdown</span></div>
-        <div class="rj-breakdown">
-          <div class="rj-breakdown__bar" id="why-bar" role="img" aria-label="Score breakdown: title 30 of 30, place 20 of 20, keywords 27 of 40, industry 10 of 10">
-            <span class="rj-breakdown__seg"><i class="bd-fill" data-k="t" style="transform:scaleX(1)"></i></span>
-            <span class="rj-breakdown__seg"><i class="bd-fill" data-k="p" style="transform:scaleX(1)"></i></span>
-            <span class="rj-breakdown__seg"><i class="bd-fill" data-k="k" style="transform:scaleX(.675)"></i></span>
-            <span class="rj-breakdown__seg"><i class="bd-fill" data-k="i" style="transform:scaleX(1)"></i></span>
-          </div>
-          <div class="rj-breakdown__legend num" id="why-legend" aria-hidden="true"><span>Title <b>30</b></span><span>Place <b>20</b></span><span>Keywords <b>27</b>/40</span><span>Industry <b>10</b></span></div>
-        </div>
-      </div>
-    </section>
   </div>
+  <!-- Example matches stamped on the wall: real postings from the 11 Oct 2026 feed, with scores for an example
+       product manager's resume. b: title, place, keywords, industry (they add up to s). build.mjs puts each host in the wall. -->
+  <script type="application/json" id="wall-data">[
+    {"s": 92, "t": "Senior Product Manager, Liquidity Platform", "co": "Airwallex", "loc": "Singapore", "host": "jobs.ashbyhq.com/airwallex", "b": [30, 18, 34, 10]},
+    {"s": 87, "t": "Senior Product Manager, Onchain", "co": "Meshpay", "loc": "United States, remote", "host": "job-boards.greenhouse.io/mesh", "b": [30, 20, 28, 9]},
+    {"s": 84, "t": "Staff Product Manager, Payments", "co": "Stripe", "loc": "SF, SEA, NYC, remote", "host": "job-boards.greenhouse.io/stripe", "b": [26, 20, 30, 8]},
+    {"s": 77, "t": "Senior Product Manager", "co": "Polymarket", "loc": "New York", "host": "jobs.ashbyhq.com/polymarket", "b": [30, 12, 27, 8]},
+    {"s": 71, "t": "Product Manager, Orderly", "co": "Orderly Network", "loc": "Remote", "host": "job-boards.greenhouse.io/orderly", "b": [24, 16, 24, 7]},
+    {"s": 62, "t": "Product Manager II, Growth", "co": "Coinbase", "loc": "Remote, USA", "host": "job-boards.greenhouse.io/coinbase", "b": [22, 14, 20, 6]},
+    {"s": 49, "t": "Senior Product Manager, Consumer Payments", "co": "Affirm", "loc": "Remote, US", "host": "job-boards.greenhouse.io/affirm", "b": [18, 10, 16, 5]}
+  ]</script>
 </section>
 
 <!-- ================= PROOF ================= -->
@@ -1235,89 +1694,142 @@ label.rj-chip:has(input:focus-visible) { outline: 2px solid var(--focus-ring); o
   form.addEventListener('submit', function (e) { e.preventDefault(); });
   render();
 
-  /* ---------- hero radar: made-up jobs arriving from the source, one pass, then it stops ---------- */
-  /* b: title, place, keywords, industry (they add up to s) */
-  var POOL = [
-    { s: 88, t: 'Director of Product, Digital Assets', c: 'Saltmarsh Capital', p: 'Dubai', w: 'Hybrid', src: 'Greenhouse', host: 'job-boards.greenhouse.io/saltmarsh', b: [30, 20, 28, 10] },
-    { s: 76, t: 'Senior Product Manager, Trading', c: 'Kestrel Markets', p: 'Abu Dhabi', w: 'On-site', src: 'Ashby', host: 'jobs.ashbyhq.com/kestrel', b: [30, 20, 16, 10] },
-    { s: 81, t: 'Head of Product, Payments', c: 'Lumen Pay', p: 'Remote (EMEA)', w: 'Remote', src: 'Lever', host: 'jobs.lever.co/lumen-pay', b: [30, 15, 26, 10] },
-    { s: 66, t: 'Senior Product Manager, Search', c: 'Fernway Travel', p: 'Dubai', w: 'Hybrid', src: 'Greenhouse', host: 'job-boards.greenhouse.io/fernway', b: [30, 20, 6, 10] },
-    { s: 79, t: 'Lead Product Manager, Custody', c: 'Orbit Vault', p: 'Dubai', w: 'On-site', src: 'Workable', host: 'apply.workable.com/orbit-vault', b: [30, 20, 19, 10] },
-    { s: 69, t: 'Group Product Manager, Patient Apps', c: 'Medline Clinics', p: 'Abu Dhabi', w: 'Hybrid', src: 'Workday', host: 'medline.wd3.myworkdayjobs.com/careers', b: [30, 20, 14, 5] },
-    { s: 86, t: 'Head of Product, Tokenization', c: 'Granite RWA', p: 'Abu Dhabi', w: 'Hybrid', src: 'Ashby', host: 'jobs.ashbyhq.com/granite', b: [30, 20, 26, 10] },
-    { s: 45, t: 'Product Owner, Mobile App', c: 'Brightline Retail', p: 'Dubai', w: 'On-site', src: 'SmartRecruiters', host: 'careers.smartrecruiters.com/brightline', b: [20, 20, 0, 5] },
-    { s: 73, t: 'Senior Product Manager, Exchange', c: 'Cobalt Exchange', p: 'Dubai', w: 'Hybrid', src: 'Teamtailor', host: 'cobalt.teamtailor.com/jobs', b: [30, 20, 13, 10] }
-  ];
-  var START = 4000, EVERY = 5000;
-  var radar = $('#radar'), list = $('#radar-list'), btn = $('#radar-toggle'), icon = $('#radar-icon');
-  var hostEl = $('#scan-host'), countEl = $('#scan-count'), newEl = $('#scan-new');
-  var idx = 0, timer = null, userPaused = reduce, hover = false, touched = null, visible = true, companies = 214, fresh = 9;
-  var cls = function (s) { return s >= 70 ? 'strong' : s >= 40 ? 'fair' : 'weak'; };
-  var glyph = { strong: 'full', fair: 'half', weak: 'empty' }, word = { strong: 'Strong', fair: 'Fair', weak: 'Weak' };
-  function rowHTML(j) {
-    var k = cls(j.s);
-    return '<span class="rj-score rj-score--' + k + '" role="img" aria-label="' + word[k] + ' match, score ' + j.s + '"><i class="rj-glyph rj-glyph--' + glyph[k] + '"></i>' + j.s + '</span>' +
-      '<span class="rj-row__main"><span class="rj-row__title"><span>' + j.t + '</span></span><span class="rj-row__meta">' + j.c + '<span class="rj-sep" aria-hidden="true">·</span>' + j.p + '<span class="rj-sep" aria-hidden="true">·</span>' + j.w + '</span></span>' +
-      '<span class="rj-row__side"><span class="rj-source"><span class="rj-dot" role="img" aria-label="New this scan"></span>' + j.src + '<span class="rj-source__age">now</span></span></span>';
+  /* ---------- hero wall: a scan reads real careers-page addresses, then example matches are pressed onto it ----------
+     Timing comes from the motion tokens: the sweep is 3.5 x duration-story (about 1.3s), the first stamp lands at
+     about 0.65s and the rest follow every ~170ms, so all seven are down before 2s. */
+  var wall = $('#wall'), hostsEl = $('#wall-hosts'), scanEl = $('#wall-scan'), stampsEl = $('#wall-stamps'), wallTip = $('#wall-tip');
+  var wallCount = $('#wall-count'), wallLabel = $('#wall-label');
+  var STAMPS = JSON.parse($('#wall-data').textContent);
+  var WALL_TOTAL = parseInt(wallCount.textContent.replace(/\D/g, ''), 10) || 0;
+  var SWEEP = Math.round(STORY * 3.5), FIRST = Math.round(STORY * 1.7), GAP = Math.round(STORY * 0.45);
+  var wallSpans = $$('span', hostsEl), wallTimers = [], wallRun = 0, wallStarted = false;
+  var wallNarrow = function () { return matchMedia('(max-width: 760px)').matches; };
+  var wallBand = function (s) { return s >= 70 ? 'strong' : s >= 40 ? 'fair' : 'weak'; };
+  var wallEsc = function (s) { return String(s).replace(/[&<>"]/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]; }); };
+  var wallCopy = $('.hero__copy');
+
+  /* Pick one readable address per row band, top to bottom, right of the copy column (or anywhere in the band on phones). */
+  function wallSlots(n) {
+    var wr = hostsEl.getBoundingClientRect(), m = wallNarrow();
+    var clearX = m ? wr.left : wallCopy.getBoundingClientRect().right + 96;
+    var rows = [];
+    wallSpans.forEach(function (s) {
+      var r = s.getBoundingClientRect(), y = r.top - wr.top;
+      if (r.width < 1 || r.right > wr.right - 8 || r.left < clearX) return;
+      if (m ? (y < 10 || y > wr.height - 40) : (y < 60 || y > wr.height - 140)) return;
+      var row = null; for (var i = 0; i < rows.length; i++) if (rows[i].y === Math.round(r.top)) row = rows[i];
+      if (!row) rows.push(row = { y: Math.round(r.top), list: [] });
+      row.list.push(s);
+    });
+    rows.sort(function (a, b) { return a.y - b.y; });
+    var out = [], step = rows.length / n;
+    for (var k = 0; k < n && rows.length; k++) out.push(rows[Math.min(rows.length - 1, Math.floor(k * step + step / 2))].list);
+    return out;
   }
-  function setWhy(j) {
-    $('#why-title').textContent = 'Why “' + j.t + '” scored ' + j.s;
-    $$('.radar .bd-fill').forEach(function (el, i) { el.style.transform = 'scaleX(' + (j.b[i] / PARTS[i][1]) + ')'; });
-    $('#why-legend').innerHTML = legend(j.b);
-    $('#why-bar').setAttribute('aria-label', barLabel(j.b));
+  /* Each stamp sits on the address it names: as it lands, the slot under it and the span that held that address
+     swap text. Widths are pinned first, so nothing on the wall reflows. */
+  function swapInto(slot, host) {
+    var twin = wallSpans.filter(function (s) { return s !== slot && s.textContent === host; })[0];
+    if (!twin) return;
+    slot.style.width = slot.getBoundingClientRect().width + 'px';
+    twin.style.width = twin.getBoundingClientRect().width + 'px';
+    twin.textContent = slot.textContent;
+    slot.textContent = host;
   }
-  /* new jobs go where their score puts them: the list is best match first */
-  function placeFor(j) {
-    var rows = $$('.rj-row', list);
-    for (var i = 0; i < rows.length; i++) if (+rows[i].getAttribute('data-score') < j.s) return rows[i];
-    return null;
+  function hideTip() { wallTip.hidden = true; $$('.stamp[aria-expanded="true"]', stampsEl).forEach(function (b) { b.setAttribute('aria-expanded', 'false'); }); }
+  function showTip(btn, j) {
+    $$('.stamp[aria-expanded="true"]', stampsEl).forEach(function (b) { if (b !== btn) b.setAttribute('aria-expanded', 'false'); });
+    btn.setAttribute('aria-expanded', 'true');
+    wallTip.innerHTML = '<div><div class="wall__tip-t">' + wallEsc(j.t) + '</div><div class="wall__tip-co">' + wallEsc(j.co) + ' / ' + wallEsc(j.loc) + '</div></div>' +
+      '<div class="rj-breakdown"><div class="rj-breakdown__bar" role="img" aria-label="' + barLabel(j.b) + '">' +
+      PARTS.map(function (p, i) { return '<span class="rj-breakdown__seg"><i style="transform:scaleX(' + (j.b[i] / p[1]).toFixed(3) + ')"></i></span>'; }).join('') +
+      '</div><div class="rj-breakdown__legend num" aria-hidden="true">' + legend(j.b) + '</div></div>' +
+      '<div class="wall__tip-apply"><span>Apply opens</span><code>' + wallEsc(j.host) + '</code><span>Real job; example score for a sample resume</span></div>';
+    wallTip.hidden = false;
+    var fr = wall.getBoundingClientRect(), br = btn.getBoundingClientRect(), tr = wallTip.getBoundingClientRect();
+    var top = br.bottom - fr.top + 10;
+    if (top + tr.height > fr.height - 8) top = br.top - fr.top - tr.height - 10;
+    wallTip.style.top = top + 'px';
+    wallTip.style.left = wallNarrow() ? '' : Math.max(8, Math.min(br.left - fr.left, fr.width - tr.width - 16)) + 'px';
   }
-  function tick() {
-    if (idx >= POOL.length) { done(); return; }
-    var j = POOL[idx++];
-    hostEl.textContent = j.host;
-    var rows = $$('.rj-row', list), lastRow = rows[rows.length - 1];
-    lastRow.setAttribute('data-leave', '');
-    setTimeout(function () {
-      var before = new Map(); $$('.rj-row', list).forEach(function (r) { before.set(r, r.getBoundingClientRect().top); });
-      lastRow.remove();
-      $$('.rj-row', list).forEach(function (r) { r.removeAttribute('data-current'); var d = r.querySelector('.rj-dot'); if (d && Math.random() < 0.5) d.remove(); var a = r.querySelector('.rj-source__age'); if (a && a.textContent === 'now') a.textContent = '1m'; });
-      var li = document.createElement('li'); li.className = 'rj-row'; li.setAttribute('data-current', ''); li.setAttribute('data-score', j.s); li.innerHTML = rowHTML(j);
-      list.insertBefore(li, placeFor(j)); li.setAttribute('data-enter', '');
-      if (!reduce) $$('.rj-row', list).forEach(function (r) {
-        if (!before.has(r)) return;
-        var dy = before.get(r) - r.getBoundingClientRect().top; if (!dy) return;
-        r.animate([{ transform: 'translateY(' + dy + 'px)' }, { transform: 'translateY(0)' }], { duration: BASE, easing: ENTER });
-      });
-      setWhy(j);
-      companies += 3 + Math.floor(Math.random() * 6); countEl.textContent = companies;
-      if (j.s >= 40) { fresh += 1; newEl.textContent = fresh; }
-    }, QUICK);
+  function placeStamps(first, gap) {
+    hideTip(); stampsEl.innerHTML = '';
+    wallSpans.forEach(function (s) { s.style.visibility = ''; });
+    var jobs = STAMPS.slice(0, wallNarrow() ? 4 : STAMPS.length);
+    var fr = wall.getBoundingClientRect(), wr = hostsEl.getBoundingClientRect();
+    wallSlots(jobs.length).forEach(function (row, i) {
+      var j = jobs[i];
+      /* in that row, the address closest in length to the match's, so the swap barely changes either line */
+      var slot = row.slice().sort(function (a, b) { return Math.abs(a.textContent.length - j.host.length) - Math.abs(b.textContent.length - j.host.length); })[0];
+      var r = slot.getBoundingClientRect();
+      var li = document.createElement('li'), b = document.createElement('button');
+      b.type = 'button'; b.className = 'stamp'; b.setAttribute('aria-expanded', 'false');
+      b.setAttribute('aria-label', 'Example match, score ' + j.s + ': ' + j.t + ' at ' + j.co + '. Apply opens ' + j.host);
+      b.innerHTML = '<b data-band="' + wallBand(j.s) + '">' + j.s + '</b>' + wallEsc(j.host);
+      b.style.setProperty('--d', (first + i * gap) + 'ms');
+      li.style.top = (r.top - fr.top) + 'px';
+      li.appendChild(b); stampsEl.appendChild(li);
+      if (!wallNarrow()) li.style.left = Math.min(r.left - fr.left, wr.right - fr.left - b.getBoundingClientRect().width - 16) + 'px';
+      /* the address under a stamp goes when the stamp lands, so the wall never shows a hole */
+      wallTimers.push(setTimeout(function () { swapInto(slot, j.host); slot.style.visibility = 'hidden'; }, first + i * gap + 60));
+      var shownAt = 0;
+      var show = function () { if (b.getAttribute('aria-expanded') !== 'true') shownAt = performance.now(); showTip(b, j); };
+      b.addEventListener('mouseenter', show);
+      b.addEventListener('focus', show);
+      /* a tap fires focus, then click: only a second tap on an open stamp closes it */
+      b.addEventListener('click', function () { if (b.getAttribute('aria-expanded') === 'true' && performance.now() - shownAt > 400) hideTip(); else show(); });
+      b.addEventListener('mouseleave', function () { if (document.activeElement !== b) hideTip(); });
+      b.addEventListener('blur', hideTip);
+    });
   }
-  function done() { clearInterval(timer); timer = null; idx = 0; userPaused = true; setBtn(); sync(); }
-  function sync() {
-    var run = !userPaused && !hover && !touched && visible && !document.hidden;
-    radar.setAttribute('data-running', run ? 'true' : 'false');
-    if (run && !timer) { timer = setInterval(tick, EVERY); }
-    if (!run && timer) { clearInterval(timer); timer = null; }
+  document.addEventListener('keydown', function (e) { if (e.key === 'Escape') hideTip(); });
+  document.addEventListener('pointerdown', function (e) { if (!e.target.closest('.stamp')) hideTip(); });
+
+  function wallDone() { wallCount.textContent = WALL_TOTAL.toLocaleString('en-US'); wallLabel.textContent = 'careers pages read, ' + stampsEl.children.length + ' example matches'; }
+  function startWall() {
+    var my = ++wallRun; wallStarted = true;
+    wallTimers.forEach(clearTimeout); wallTimers = [];
+    if (reduce) { placeStamps(0, 0); wallSpans.forEach(function (s) { s.setAttribute('data-read', ''); }); wallDone(); return; }
+    var wr = hostsEl.getBoundingClientRect();
+    wallSpans.forEach(function (s) { s.removeAttribute('data-read'); });
+    scanEl.style.setProperty('--wall-h', wr.height + 'px');
+    scanEl.style.setProperty('--wall-sweep', SWEEP + 'ms');
+    scanEl.removeAttribute('data-go'); void scanEl.offsetWidth; scanEl.setAttribute('data-go', '');
+    /* each row darkens as the scan line reaches it */
+    var ease = function (t) { return 1 - Math.pow(1 - t, 2.2); }, inv = function (p) { return 1 - Math.pow(1 - p, 1 / 2.2); };
+    var rows = {};
+    wallSpans.forEach(function (s) { var y = Math.round(s.getBoundingClientRect().top - wr.top); (rows[y] = rows[y] || []).push(s); });
+    Object.keys(rows).forEach(function (y) {
+      wallTimers.push(setTimeout(function () { rows[y].forEach(function (s) { s.setAttribute('data-read', ''); }); }, inv(Math.min(1, y / wr.height)) * SWEEP * 0.7));
+    });
+    placeStamps(FIRST, GAP);
+    var t0 = performance.now();
+    wallLabel.textContent = 'careers pages read';
+    if (window.rawjobsMotion) window.rawjobsMotion.rollNumber(wallCount, WALL_TOTAL, { from: 0, duration: SWEEP, ease: ease })
+      .finished.then(function () { if (my === wallRun) wallDone(); });
+    else (function count(t) {
+      if (my !== wallRun) return;
+      var p = Math.min(1, (t - t0) / SWEEP);
+      wallCount.textContent = Math.round(ease(p) * WALL_TOTAL).toLocaleString('en-US');
+      if (p < 1) requestAnimationFrame(count); else wallDone();
+    })(t0);
   }
-  function setBtn() {
-    btn.setAttribute('aria-label', userPaused ? 'Play the example feed' : 'Pause the example feed');
-    btn.title = userPaused ? 'Play' : 'Pause';
-    icon.innerHTML = userPaused ? '<path d="M6 3 20 12 6 21 6 3z"/>' : '<rect x="14" y="4" width="4" height="16" rx="1"/><rect x="6" y="4" width="4" height="16" rx="1"/>';
-  }
-  btn.addEventListener('click', function () { userPaused = !userPaused; setBtn(); sync(); if (!userPaused && timer) tick(); });
-  radar.addEventListener('pointerenter', function (e) { if (e.pointerType === 'mouse') { hover = true; sync(); } });
-  radar.addEventListener('pointerleave', function (e) { if (e.pointerType === 'mouse') { hover = false; sync(); } });
-  /* a tap holds the feed still for a while, so a row doesn't move under a finger */
-  radar.addEventListener('touchstart', function () { clearTimeout(touched); touched = setTimeout(function () { touched = null; sync(); }, EVERY * 2); sync(); }, { passive: true });
-  radar.addEventListener('focusin', function (e) { if (e.target !== btn) { hover = true; sync(); } });
-  radar.addEventListener('focusout', function () { hover = false; sync(); });
-  document.addEventListener('visibilitychange', sync);
-  if ('IntersectionObserver' in window) new IntersectionObserver(function (es) { visible = es[0].isIntersecting; sync(); }).observe(radar);
-  $$('.rj-row', list).forEach(function (r) { r.setAttribute('data-score', r.querySelector('.rj-score').textContent.replace(/\D/g, '')); });
-  setBtn();
-  setTimeout(sync, reduce ? 0 : START);
+  /* Hook for an intro animation: with html.intro, the wall waits for rawjobs:intro-done (or 2.5s at most). */
+  window.rawjobsWall = { start: function () { if (!wallStarted) startWall(); } };
+  if (document.documentElement.classList.contains('intro')) {
+    addEventListener('rawjobs:intro-done', window.rawjobsWall.start, { once: true });
+    setTimeout(window.rawjobsWall.start, 2500);
+  } else if (document.fonts && document.fonts.ready) {
+    var wallGo = window.rawjobsWall.start;
+    document.fonts.ready.then(wallGo); setTimeout(wallGo, 120);
+  } else window.rawjobsWall.start();
+  /* a resize moves the addresses, so the stamps are placed again (no animation) */
+  var wallResize = null, wallW = innerWidth;
+  addEventListener('resize', function () {
+    if (innerWidth === wallW) return; wallW = innerWidth;
+    clearTimeout(wallResize);
+    wallResize = setTimeout(function () { if (!wallStarted) return; wallSpans.forEach(function (s) { s.style.width = ''; s.setAttribute('data-read', ''); }); placeStamps(0, 0); wallDone(); }, 200);
+  });
 
   /* ---------- routes: the resume goes the long way first, then the direct way ---------- */
   var routes = $('#routes'), replay = $('#routes-replay'), run = 0;
