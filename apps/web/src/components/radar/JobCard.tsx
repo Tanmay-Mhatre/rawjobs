@@ -34,6 +34,7 @@ function Meta({ parts }: { parts: ReactNode[] }) {
   return (
     <span className="rj-row__meta">
       {parts.map((p, i) => (
+        // biome-ignore lint/suspicious/noArrayIndexKey: a fixed list rebuilt from the same input, never reordered: the index is a stable key
         <span key={i}>
           {i > 0 && (
             <span className="rj-sep" aria-hidden>

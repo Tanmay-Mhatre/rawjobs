@@ -16,6 +16,7 @@ export function FeedSkeleton({ rows = 6 }: { rows?: number }) {
       {Array.from({ length: rows }, (_, i) => {
         const [a, b] = widths[i % widths.length]!;
         return (
+          // biome-ignore lint/suspicious/noArrayIndexKey: a fixed list rebuilt from the same input, never reordered: the index is a stable key
           <div key={i} className="grid grid-cols-[52px_minmax(0,1fr)] items-center gap-4">
             <span className="rj-skel h-7" />
             <span className="grid gap-2">

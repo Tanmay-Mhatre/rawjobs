@@ -91,6 +91,7 @@ function ToastRow({ item }: { item: ToastItem }) {
   }, [item.closing, item.id]);
 
   return (
+    // biome-ignore lint/a11y/noStaticElementInteractions: hover, focus or drop handling around real controls; nothing here is only reachable by mouse
     <div
       className={item.surface === "popover" ? "rj-menu pointer-events-auto flex w-full max-w-md items-start gap-2 p-3 type-small text-ink" : "rj-toast pointer-events-auto"}
       data-state={item.closing ? "closing" : undefined}

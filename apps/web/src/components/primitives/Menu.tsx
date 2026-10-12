@@ -114,6 +114,7 @@ export function Menu({
           className={cx("rj-menu absolute top-full z-menu mt-1", align === "end" ? "right-0" : "left-0")}
         >
           {items.map((item) => {
+            // biome-ignore lint/a11y/useSemanticElements: an ARIA role on purpose: the native element (fieldset, output, input, hr, ul) would change layout or behaviour here
             if (!isAction(item)) return <div key={item.id} className="rj-menu__sep" role="separator" />;
             const i = ++actionIndex;
             return (

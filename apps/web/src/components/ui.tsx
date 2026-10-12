@@ -34,6 +34,7 @@ export function Segmented<T extends string | number>({ value, options, onChange,
   return (
     <div role="radiogroup" aria-label={label} className="inline-flex h-9 rounded-md border border-line bg-raised p-0.5">
       {options.map((o) => (
+        // biome-ignore lint/a11y/useSemanticElements: an ARIA role on purpose: the native element (fieldset, output, input, hr, ul) would change layout or behaviour here
         <button
           key={String(o.value)}
           type="button"
@@ -104,6 +105,7 @@ export function Pagination({ page, pageSize, total, onPage }: { page: number; pa
           </span>
           {pageList(page, pages).map((p, i) =>
             p === null ? (
+              // biome-ignore lint/suspicious/noArrayIndexKey: a fixed list rebuilt from the same input, never reordered: the index is a stable key
               <span key={`gap${i}`} className="hidden px-1 type-meta text-muted sm:inline">
                 …
               </span>

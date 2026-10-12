@@ -21,6 +21,7 @@ export function Chip({
 /** Chips always sit in a labelled group ("Filters"). */
 export function ChipGroup({ label, className, children }: { label: string; className?: string; children: ReactNode }) {
   return (
+    // biome-ignore lint/a11y/useSemanticElements: an ARIA role on purpose: the native element (fieldset, output, input, hr, ul) would change layout or behaviour here
     <div role="group" aria-label={label} className={cx("flex flex-wrap items-center gap-2", className)}>
       {children}
     </div>

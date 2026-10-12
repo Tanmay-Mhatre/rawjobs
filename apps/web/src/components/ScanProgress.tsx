@@ -29,6 +29,7 @@ export function ScanProgress({ scan, onRetry }: { scan: ScanState; onRetry?: () 
             {scanLine(scan)}
           </p>
           {bars.length > 0 && (
+            // biome-ignore lint/a11y/useSemanticElements: an ARIA role on purpose: the native element (fieldset, output, input, hr, ul) would change layout or behaviour here
             <div className="rj-progress" role="group" aria-label="Scan progress">
               {bars.map((b) => (
                 <div key={b.ats || "all"} className="rj-progress__row">

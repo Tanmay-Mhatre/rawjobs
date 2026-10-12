@@ -54,6 +54,7 @@ function MetaLine({ parts, className }: { parts: ReactNode[]; className?: string
   return (
     <p className={className}>
       {parts.map((part, i) => (
+        // biome-ignore lint/suspicious/noArrayIndexKey: a fixed list rebuilt from the same input, never reordered: the index is a stable key
         <Fragment key={i}>
           {i > 0 && (
             <span className="rj-sep" aria-hidden>
@@ -565,6 +566,7 @@ function WhyItMatches({ job, profile, yours }: { job: Job; profile: Profile; you
           <ScoreBreakdown score={job.score} parts={scoreParts(w)} missing={missing} />
           <ul className="space-y-1.5 type-small">
             {items.map((it, i) => (
+              // biome-ignore lint/suspicious/noArrayIndexKey: a fixed list rebuilt from the same input, never reordered: the index is a stable key
               <li key={i} className="flex items-start gap-2">
                 {it.ok ? <CircleCheck className="mt-0.5 size-4 shrink-0 text-success-text" /> : <X className="mt-0.5 size-4 shrink-0 text-muted" />}
                 <span className={cx(!it.ok && "text-muted")}>{it.text}</span>
@@ -630,6 +632,7 @@ function NotesField({ id, note, onSave }: { id: string; note: string; onSave: (n
       <textarea
         id={id}
         // Opened from "Add a note": straight into typing.
+        // biome-ignore lint/a11y/noAutofocus: focus moves into what was just opened (a menu, a dialog field), as the pattern expects
         autoFocus={!note}
         defaultValue={note}
         onChange={(e) => (pending.current = e.target.value)}
@@ -653,10 +656,12 @@ function Highlighted({ text, terms, wide }: { text: string; terms: string[]; wid
     <div className={cx("max-w-prose whitespace-pre-wrap break-words text-ink", wide ? "type-body leading-7" : "type-small leading-6")}>
       {parts.map((part, i) =>
         i % 2 === 1 ? (
+          // biome-ignore lint/suspicious/noArrayIndexKey: a fixed list rebuilt from the same input, never reordered: the index is a stable key
           <mark key={i} className="rounded-sm bg-inset px-0.5 text-ink">
             {part}
           </mark>
         ) : (
+          // biome-ignore lint/suspicious/noArrayIndexKey: a fixed list rebuilt from the same input, never reordered: the index is a stable key
           <Fragment key={i}>{part}</Fragment>
         ),
       )}

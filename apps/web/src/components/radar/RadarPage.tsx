@@ -4,20 +4,16 @@ import { useOtherJobs, type DataMeta, type Job, type Profile } from "../../lib/d
 import {
   activeChips,
   applyFilters,
-  DEFAULT_FILTERS,
   facetCounts,
   foldCompanies,
-  fromQuery,
   groupJobs,
   hasNewTag,
   isNewJob,
   profileFilters,
   profilePlaces,
   roleCount,
-  sameFilters,
   sortJobs,
   suggestRelax,
-  toQuery,
   type Ctx,
   type FacetKey,
   type FeedRow,
@@ -44,6 +40,9 @@ import { JobCard } from "./JobCard";
 import { ageLimit, MoreMenu, MoreToggles } from "./MoreFilters";
 import { ProfileBar } from "./ProfileBar";
 import { builtInViews, ViewsBar } from "./ViewsBar";
+import { useHourlyNow, useIsWide, useLatestKeydown } from "./hooks";
+import { useClosedSinceToast } from "./useClosedSinceToast";
+import { useRadarFilters } from "./useRadarFilters";
 
 type Props = {
   jobs: Job[];
@@ -82,75 +81,11 @@ type Props = {
   onSaveProfile?: (picks: FilterPicks) => Promise<string | null>;
 };
 
-const FILTER_KEY = "rawjobs.radar.v2";
-/** Visits (by their "new since" line) whose closed jobs were already announced, so switching tabs doesn't repeat it. */
-const closedToldFor = new Set<number>();
 /** "Show everywhere" was picked for these profile places (JSON); a change of places brings the place filter back. */
 const EVERYWHERE_KEY = "rawjobs.radar.everywhere";
 const PAGE = 40;
 /** Your companies' freshest roles shown above the list in Best match. */
 const STRIP = 3;
-
-/**
- * Filters + sort: from the URL (shareable, Back works), else your own changes if you made any,
- * else your profile's filters. Until you change them, they follow your profile (e.g. after Settings).
- * The URL is written against `linkBase` (your profile's places, before "Show everywhere"), so a link
- * leaves out what your profile already says, and what it leaves out comes from your profile.
- */
-function useRadarFilters(base: Filters, linkBase: Filters) {
-  const [state, setState] = useState<{ filters: Filters; sort: Sort }>(() => {
-    const fromUrl = fromQuery(location.hash.split("?")[1] ?? "", linkBase);
-    if (fromUrl) return fromUrl;
-    const stored = load<{ filters?: Partial<Filters>; sort?: Sort; custom?: boolean }>(FILTER_KEY, {});
-    return { filters: stored.custom ? { ...DEFAULT_FILTERS, ...stored.filters, q: "" } : base, sort: stored.sort ?? "best" };
-  });
-  const baseRef = useRef(base);
-  /** Set after "Save to my profile": the next profile is yours, so the filters follow it. */
-  const adopt = useRef(false);
-  // biome-ignore lint/correctness/useExhaustiveDependencies: runs when the profile's filters change; reading the current filters mustn't re-run it
-  useEffect(() => {
-    // Profile changed: follow it, unless you've changed the filters yourself.
-    if (adopt.current || sameFilters(state.filters, baseRef.current)) setState((s) => ({ ...s, filters: { ...base, q: s.filters.q } }));
-    adopt.current = false;
-    baseRef.current = base;
-  }, [base]);
-  // biome-ignore lint/correctness/useExhaustiveDependencies: linkBase changes only with the filters above
-  useEffect(() => {
-    save(FILTER_KEY, { filters: { ...state.filters, q: "" }, sort: state.sort, custom: !sameFilters(state.filters, baseRef.current) });
-    const q = toQuery(state.filters, state.sort, linkBase);
-    const next = `#radar${q ? `?${q}` : ""}`;
-    if (location.hash !== next && location.hash.split("?")[0] === "#radar") history.replaceState(null, "", next);
-  }, [state]);
-  const setFilters = useCallback((patch: Partial<Filters>) => setState((s) => ({ ...s, filters: { ...s.filters, ...patch } })), []);
-  const setSort = useCallback((sort: Sort) => setState((s) => ({ ...s, sort })), []);
-  const replace = useCallback((filters: Filters, sort: Sort) => setState({ filters, sort }), []);
-  const adoptNextProfile = useCallback((on = true) => {
-    adopt.current = on;
-  }, []);
-  return { ...state, setFilters, setSort, replace, adoptNextProfile };
-}
-
-/** The time freshness is worked out at, moved on every hour: often enough to stay right, never while you read. */
-function useHourlyNow() {
-  const [now, setNow] = useState(() => Date.now());
-  useEffect(() => {
-    const id = setInterval(() => setNow(Date.now()), 3_600_000);
-    return () => clearInterval(id);
-  }, []);
-  return now;
-}
-
-function useIsWide() {
-  const query = "(min-width: 1024px)";
-  const [wide, setWide] = useState(() => matchMedia(query).matches);
-  useEffect(() => {
-    const m = matchMedia(query);
-    const on = () => setWide(m.matches);
-    m.addEventListener("change", on);
-    return () => m.removeEventListener("change", on);
-  }, []);
-  return wide;
-}
 
 export function RadarPage(p: Props) {
   const profile = p.profile ?? p.meta.profile;
@@ -318,68 +253,41 @@ export function RadarPage(p: Props) {
   // ----- keyboard: j/k move, s/a/x status, Enter opens (phones), "/" search, 1-6 views -----
   const searchRef = useRef<HTMLInputElement>(null);
   // One listener for the page's life; it calls the latest handler (props change on every render).
-  const onKeyRef = useRef<(e: KeyboardEvent) => void>(() => {});
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => onKeyRef.current(e);
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, []);
-  useEffect(() => {
-    onKeyRef.current = (e: KeyboardEvent) => {
-      const t = e.target as HTMLElement | null;
-      if (ignoreShortcut(e)) return;
-      const phoneJob = !wide && p.overlayOpen;
-      // Not under some other dialog (the shortcut sheet, "Did you apply?"): the page behind it is inert.
-      if (!phoneJob && document.querySelector("dialog[open]")) return;
-      if (e.key === "/") {
-        e.preventDefault();
-        searchRef.current?.focus();
-        return;
-      }
-      if (phoneJob && !["j", "k", "ArrowDown", "ArrowUp"].includes(e.key)) return;
-      const view = /^[1-6]$/.test(e.key) ? builtInViews(firstScan)[Number(e.key) - 1] : undefined;
-      if (view) return replace({ ...base, ...view.filters }, sort);
-      if (e.key === "Enter" && t?.closest?.("button, a, [role=button]")) return;
-      if (e.key === "j" || e.key === "ArrowDown") {
-        e.preventDefault();
-        move(1);
-      } else if (e.key === "k" || e.key === "ArrowUp") {
-        e.preventDefault();
-        move(-1);
-      } else if (!selected) return;
-      else if (e.key === "Enter" || e.key === "o") {
-        // Desktop: the details are already showing, so Enter opens the job page (and asks "Did you apply?" later).
-        if (wide) {
-          window.open(selected.url, "_blank", "noopener");
-          p.onApply(selected);
-        } else p.onOpenOverlay(selected);
-      } else if (e.key === "s") p.onStatus(selected, "saved");
-      else if (e.key === "a") p.onStatus(selected, "applied");
-      else if (e.key === "x") p.onStatus(selected, "dismissed");
-    };
+  useLatestKeydown((e: KeyboardEvent) => {
+    const t = e.target as HTMLElement | null;
+    if (ignoreShortcut(e)) return;
+    const phoneJob = !wide && p.overlayOpen;
+    // Not under some other dialog (the shortcut sheet, "Did you apply?"): the page behind it is inert.
+    if (!phoneJob && document.querySelector("dialog[open]")) return;
+    if (e.key === "/") {
+      e.preventDefault();
+      searchRef.current?.focus();
+      return;
+    }
+    if (phoneJob && !["j", "k", "ArrowDown", "ArrowUp"].includes(e.key)) return;
+    const view = /^[1-6]$/.test(e.key) ? builtInViews(firstScan)[Number(e.key) - 1] : undefined;
+    if (view) return replace({ ...base, ...view.filters }, sort);
+    if (e.key === "Enter" && t?.closest?.("button, a, [role=button]")) return;
+    if (e.key === "j" || e.key === "ArrowDown") {
+      e.preventDefault();
+      move(1);
+    } else if (e.key === "k" || e.key === "ArrowUp") {
+      e.preventDefault();
+      move(-1);
+    } else if (!selected) return;
+    else if (e.key === "Enter" || e.key === "o") {
+      // Desktop: the details are already showing, so Enter opens the job page (and asks "Did you apply?" later).
+      if (wide) {
+        window.open(selected.url, "_blank", "noopener");
+        p.onApply(selected);
+      } else p.onOpenOverlay(selected);
+    } else if (e.key === "s") p.onStatus(selected, "saved");
+    else if (e.key === "a") p.onStatus(selected, "applied");
+    else if (e.key === "x") p.onStatus(selected, "dismissed");
   });
 
   // ----- jobs you saved or applied to that closed since your last visit: said once per visit -----
-  // biome-ignore lint/correctness/useExhaustiveDependencies: said once per visit, keyed by `newSince`
-  useEffect(() => {
-    if (newSince === undefined || closedToldFor.has(newSince)) return;
-    closedToldFor.add(newSince);
-    const closed = p.jobs.filter((j) => j.status === "closed" && j.closedAt && Date.parse(j.closedAt) > newSince && ["saved", "applied", "interviewing", "offer"].includes(p.user[j.id]?.status ?? ""));
-    if (!closed.length) return;
-    const view = closed.some((j) => p.user[j.id]?.status === "saved") ? "saved" : "applied";
-    toast({
-      message:
-        closed.length === 1 ? (
-          <>
-            <b>{closed[0]!.title}</b> at {closed[0]!.company} closed since your last visit.
-          </>
-        ) : (
-          <>{closed.length} jobs you saved or applied to closed since your last visit.</>
-        ),
-      actionLabel: "See",
-      onAction: () => replace({ ...base, status: view }, sort),
-    });
-  }, [newSince]);
+  useClosedSinceToast(newSince, p.jobs, p.user, (view) => replace({ ...base, status: view }, sort));
 
   // ----- hide a company, with undo -----
   const hideCompany = (company: string, hide: boolean) => {

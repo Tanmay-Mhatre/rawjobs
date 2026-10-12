@@ -24,21 +24,7 @@
       },
       "suspicious": {
         // `cache.get(k) ?? cache.set(k, (v = make()))`-style caching is used on purpose.
-        "noAssignInExpressions": "off",
-        "noArrayIndexKey": "warn"
-      },
-      // Warnings, not errors, for now: the dashboard's custom widgets (radio groups, menus, a
-      // combobox, live regions) use ARIA roles on purpose, and focusing a field when a menu opens is
-      // deliberate. Each warning gets a proper look in the frontend refactor; new ones still show.
-      "a11y": {
-        "useSemanticElements": "warn",
-        "noStaticElementInteractions": "warn",
-        "noNoninteractiveElementToInteractiveRole": "warn",
-        "noNoninteractiveTabindex": "warn",
-        "useFocusableInteractive": "warn",
-        "useKeyWithClickEvents": "warn",
-        "useValidAnchor": "warn",
-        "noAutofocus": "warn"
+        "noAssignInExpressions": "off"
       }
     }
   }
