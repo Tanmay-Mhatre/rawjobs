@@ -52,32 +52,34 @@ export function DesktopShortcutNotice({ status, onSeen }: { status: UpdateStatus
   const title = s.desktop ? (updated ? "New: RawJobs is on your Desktop" : "RawJobs is on your Desktop") : `Open RawJobs from the ${where.name === "App menu" ? "app menu" : where.name}`;
 
   return (
-    <Dialog open onClose={seen} labelledBy="shortcut-notice-title" className="max-w-md">
+    // Focus starts on the button: Enter closes it, rather than following the link to Settings.
+    <Dialog open onClose={seen} labelledBy="shortcut-notice-title" describedBy="shortcut-notice-body" initialFocus="[data-autofocus]">
       <Card className="p-5 shadow-l3 sm:p-6">
-        <div className="flex flex-col gap-4 sm:flex-row sm:items-start">
-          {/* What to look for on the Desktop: the real icon and its name. */}
-          <figure aria-hidden className="flex w-16 shrink-0 flex-col items-center gap-1.5">
-            <img src={mark} alt="" className="size-12 rounded-md" />
+        <div className="flex items-start gap-4">
+          {/* What to look for on the Desktop: the real icon (as it is, both themes) and its name. The
+              border-control frame keeps its dark square visible on a dark card (3:1). */}
+          <figure aria-hidden className="flex w-14 shrink-0 flex-col items-center gap-2 sm:w-16">
+            <img src={mark} alt="" className="size-10 rounded-md border border-control sm:size-12" />
             <figcaption className="type-meta text-ink">RawJobs</figcaption>
           </figure>
-          <div className="min-w-0 flex-1 space-y-3">
-            <h2 id="shortcut-notice-title" className="type-subheading font-semibold">
+          <div className="min-w-0 flex-1 space-y-2">
+            <h2 id="shortcut-notice-title" className="type-subheading font-semibold text-balance">
               {title}
             </h2>
-            <ul className="list-disc space-y-1.5 pl-4 type-small">
-              <li>Opens RawJobs at the right address, and starts it if it's stopped. No address to remember.</li>
-              {s.desktop && s.menu && <li>Also {where.in}.</li>}
-            </ul>
+            <p id="shortcut-notice-body" className="type-small text-ink">
+              It opens RawJobs at the right address, and starts it if it's stopped. No address to remember.
+              {s.desktop && s.menu && ` It's also ${where.in}.`}
+            </p>
             <p className="type-small text-muted">
               {s.desktop ? "Deleted it? " : "Want it on your Desktop too? "}
-              <a href={SETTINGS_LINK} onClick={seen} className="text-ink underline underline-offset-2 hover:decoration-2">
+              <a href={SETTINGS_LINK} onClick={seen} className="font-medium text-ink underline underline-offset-2 hover:text-muted">
                 {s.desktop ? "Add it back in Settings." : "Add it in Settings."}
               </a>
             </p>
           </div>
         </div>
-        <div className="mt-5 flex justify-end">
-          <Button variant="primary" onClick={seen} className="w-full sm:w-auto">
+        <div className="mt-5 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+          <Button variant="primary" data-autofocus onClick={seen}>
             Got it
           </Button>
         </div>
@@ -145,13 +147,13 @@ export function DesktopShortcutSettings({ status, setStatus }: { status: UpdateS
       )}
       <div className="flex flex-wrap items-center gap-2">
         {missing ? (
-          <Button variant="primary" onClick={() => void make()} disabled={busy}>
+          <Button variant="primary" onClick={() => void make()} disabled={busy} aria-busy={busy}>
             {busy ? <LoaderCircle className="size-3.5 animate-spin" /> : null}
-            {s.desktopError ? "Try again" : "Add to Desktop"}
+            {busy ? "Adding…" : s.desktopError ? "Try again" : "Add to Desktop"}
           </Button>
         ) : (
-          <Button onClick={() => void make()} disabled={busy}>
-            {busy ? <LoaderCircle className="size-3.5 animate-spin" /> : <Plus className="size-3.5" />} Add shortcut
+          <Button onClick={() => void make()} disabled={busy} aria-busy={busy}>
+            {busy ? <LoaderCircle className="size-3.5 animate-spin" /> : <Plus className="size-3.5" />} {busy ? "Adding…" : "Add shortcut"}
           </Button>
         )}
         {!missing && <span className="type-small text-muted">Adds it again if the icon looks wrong or the shortcut doesn't open RawJobs.</span>}
