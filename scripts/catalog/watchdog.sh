@@ -15,7 +15,6 @@ set -euo pipefail
 REBUILD=directory-rebuild.yml
 # What a failed rebuild opens (directory-rebuild.yml, "Report a run that didn't publish").
 FAILED_TITLE="Directory rebuild did not publish"
-SCHEDULED=(jobs-daily.yml directory-contributions.yml directory-commoncrawl.yml directory-rebuild.yml site.yml weekly-release.yml)
 
 # The weekly rebuild's releases are directory-YYYY-MM-DD (-HHMM for a second one that day);
 # contributions' end in -shared. Every page: a busy week of -shared releases can't hide the last rebuild.
@@ -71,15 +70,29 @@ rebuild() {
 
 # Re-enabling through the API resets the 60-day switch-off with no commit (not documented as such;
 # cheap insurance, since commits reset it too). A workflow turned off by hand stays off.
+# The list is every workflow file with a schedule trigger, read from the checkout so it can't go
+# stale (a fixed list still named weekly-release.yml after it was deleted). Best effort: insurance
+# only, so a failure is a warning and never turns a finished run red.
 keepalive() {
-  local wf state
-  for wf in "${SCHEDULED[@]}"; do
-    state=$(gh api "repos/$GITHUB_REPOSITORY/actions/workflows/$wf" -q .state)
+  local f wf state
+  for f in .github/workflows/*.yml .github/workflows/*.yaml; do
+    [ -f "$f" ] && grep -qE '^[[:space:]]+schedule:' "$f" || continue
+    wf=$(basename "$f")
+    # On an HTTP error gh prints the error JSON to stdout, so set the state rather than keep it.
+    state=$(gh api "repos/$GITHUB_REPOSITORY/actions/workflows/$wf" -q .state 2> /dev/null) || state=unknown
     case "$state" in
-      active | disabled_inactivity) gh api -X PUT "repos/$GITHUB_REPOSITORY/actions/workflows/$wf/enable" && echo "$wf: enabled (was $state)" ;;
+      active | disabled_inactivity)
+        if gh api -X PUT "repos/$GITHUB_REPOSITORY/actions/workflows/$wf/enable" > /dev/null; then
+          echo "$wf: enabled (was $state)"
+        else
+          echo "::warning::keepalive: couldn't re-enable $wf (was $state)"
+        fi
+        ;;
+      unknown) echo "::warning::keepalive: couldn't read $wf's state; skipped" ;;
       *) echo "$wf: left $state" ;;
     esac
   done
+  return 0
 }
 
 case "${1:-}" in

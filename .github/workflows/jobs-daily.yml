@@ -27,7 +27,8 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 340
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - id: checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
@@ -120,7 +121,7 @@ jobs:
       - name: Check the directory isn't stale
         # The weekly rebuild publishes a dated release (directory-YYYY-MM-DD); contributions publish
         # "-shared" ones in between, which don't count. More than 8 days old means a rebuild went missing.
-        if: always()
+        if: always() && steps.checkout.outcome == 'success'
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
@@ -141,14 +142,14 @@ jobs:
           fi
 
       - name: Start the weekly rebuild if it's overdue
-        if: always()
+        if: always() && steps.checkout.outcome == 'success'
         env:
           GH_TOKEN: ${{ github.token }}
         run: bash scripts/catalog/watchdog.sh rebuild
 
       - name: Keep the schedules alive
         # GitHub turns off scheduled workflows after 60 days without repository activity.
-        if: always()
+        if: always() && steps.checkout.outcome == 'success'
         env:
           GH_TOKEN: ${{ github.token }}
         run: bash scripts/catalog/watchdog.sh keepalive
