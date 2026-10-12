@@ -2,21 +2,13 @@ import { useCallback, useEffect, useState } from "react";
 import { ROLE_FAMILIES } from "@rawjobs/core/catalog/roles";
 import { careersUrl, companyKey, connectors, detectCompany } from "@rawjobs/core/detect";
 import type { AiProfile } from "@rawjobs/core/resume-parse";
-import type { AtsType, CompanyHealth, Config } from "@rawjobs/core/schema";
+import type { CompanyCheck, RunEvent, SaveResult, ScanPlan, ScanScope, SetupStatus } from "@rawjobs/core/protocol";
+import type { AtsType, Config } from "@rawjobs/core/schema";
+
+export type { CompanyCheck, RunEvent, SaveResult, ScanPlan, ScanScope, SetupStatus };
 import { canRunLocally } from "./data";
 
 // ---------- API (dev server only, see apps/web/vite.config.ts) ----------
-
-export type SetupStatus = {
-  configPath: string;
-  isPersonal: boolean;
-  valid: boolean;
-  errors?: string;
-  config?: Config;
-  raw?: unknown;
-  hasData: boolean;
-  hasResume: boolean;
-};
 
 /** null = no local API (hosted build): setup is done by editing the config file. */
 export function useSetupStatus() {
@@ -36,8 +28,6 @@ export function useSetupStatus() {
   return { status, refresh };
 }
 
-export type SaveResult = { ok: true; path: string } | { ok: false; errors: string; issues?: { path: string; message: string }[] };
-
 export async function saveConfig(config: Config): Promise<SaveResult> {
   const res = await fetch("/api/setup/config", { method: "POST", body: JSON.stringify(config) });
   return (await res.json()) as SaveResult;
@@ -53,29 +43,6 @@ export async function resetSetup(): Promise<{ ok: true; backup: string | null } 
   }
 }
 
-/** One checked careers link, with the same fields as a company directory entry (see core setup.ts). */
-export type CompanyCheck = {
-  input: string;
-  /** live: open jobs · dormant: no openings right now · soon: support coming · error: wrong link · unknown: not recognised */
-  status: "live" | "dormant" | "soon" | "error" | "unknown";
-  key?: string;
-  name?: string;
-  name_source?: "ats" | "directory" | "slug";
-  ats?: AtsType;
-  slug?: string;
-  region?: "global" | "eu";
-  shard?: string;
-  site?: string;
-  careers_url?: string;
-  open_jobs?: number;
-  top_locations?: string[];
-  sample_titles?: string[];
-  matches?: number;
-  match_examples?: string[];
-  in_directory?: boolean;
-  error?: string;
-};
-
 /** Live check through the local API; offline (hosted) falls back to URL detection only. */
 export async function checkCompanies(urls: string[]): Promise<CompanyCheck[]> {
   if (!canRunLocally) {
@@ -90,63 +57,6 @@ export async function checkCompanies(urls: string[]): Promise<CompanyCheck[]> {
   if (!res.ok) throw new Error(((await res.json()) as { errors?: string }).errors ?? `HTTP ${res.status}`);
   return (await res.json()) as CompanyCheck[];
 }
-
-/** What a scan covers besides your companies: "mine" = your industries, "all" = the whole directory. */
-export type ScanScope = "mine" | "all";
-
-export type RunEvent =
-  /** Syncing with the shared company directory (the first step of every scan). */
-  | { type: "sync" }
-  | { type: "synced"; updated: boolean; offline?: boolean; message: string /** What the shared job feed sync said. */; feed?: string }
-  | {
-      type: "start";
-      /** Your companies, in fetch order. */
-      companies: string[];
-      /** Everything this scan covers (yours + directory companies), including ones done before a resume. */
-      total?: number;
-      /** Directory companies beyond yours. */
-      extra?: number;
-      /** Done by the stopped scan this one resumes. */
-      resumed?: number;
-      scope?: ScanScope;
-      /** About how long the rest takes. */
-      seconds?: number;
-      /** Directory companies skipped: the shared job feed shows nothing for you there. */
-      skippedByFeed?: number;
-      /** Older CLIs: the last `checking` companies aren't yours. */
-      checking?: number;
-      /** Companies this scan covers per hiring system ("greenhouse": 120). Older CLIs leave it out. */
-      byAts?: Record<string, number>;
-      /** Of those, done before this scan started (it resumed a stopped one), per hiring system. */
-      doneByAts?: Record<string, number>;
-    }
-  /** A company done: every one of yours, and directory ones that matched or failed. */
-  | ({ type: "company"; done?: number; doneByAts?: Record<string, number> } & CompanyHealth)
-  /** Directory companies done, as a count (`ats`: the hiring system of the last one). */
-  | { type: "progress"; done: number; ats?: string; doneByAts?: Record<string, number> }
-  | {
-      type: "done";
-      jobsFound: number;
-      matches: number;
-      strong: number;
-      newMatches: number;
-      failed: number;
-      /** Directory companies checked besides yours. */
-      checked?: number;
-      /** Stopped before the end; the next scan of the same type resumes. */
-      stopped?: boolean;
-      /** Your companies whose board moved; your config is updated. */
-      moves?: { name: string; from: string; to: string }[];
-      moveError?: string;
-      /** Older CLIs: jobs found in the directory index. */
-      indexJobs?: number;
-    }
-  /** The Telegram message asked for during the scan: "sent", "off" (not set up) or why it failed. */
-  | { type: "notified"; result: string }
-  | { type: "error"; message: string };
-
-/** What each scan type covers (GET /api/scan/plan). */
-export type ScanPlan = Record<ScanScope, { yours: number; extra: number; seconds: number; resumable: { done: number; startedAt: string } | null }>;
 
 export async function scanPlan(): Promise<ScanPlan | null> {
   try {

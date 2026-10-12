@@ -4,6 +4,7 @@ import { companyIndustries } from "./catalog/industries";
 import { companyKey, connectors } from "./connectors";
 import { companyWords } from "./employers";
 import { isPlaceholderBoard } from "./text";
+import type { ScanScope } from "./protocol";
 import type { CompanyHealth, CompanyRef, Config } from "./schema";
 import type { DirectoryCompany } from "./suggest";
 
@@ -13,7 +14,7 @@ import type { DirectoryCompany } from "./suggest";
  *   all:  every company in the directory we can read
  * The directory is only the list of companies and their boards; the jobs are always fetched live.
  */
-export type ScanScope = "mine" | "all";
+export type { ScanScope } from "./protocol";
 export const SCAN_SCOPES: readonly ScanScope[] = ["mine", "all"];
 
 export type DirectoryEntry = DirectoryCompany & { indexed?: boolean; status?: string; origin?: "user" };

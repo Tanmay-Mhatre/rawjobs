@@ -1,5 +1,5 @@
 /** The cheapest live check each hiring system offers for one board (shared by check.ts and contributions). */
-import { getConnector, HttpError, type AtsType, type HttpClient } from "../../../packages/core/src/index";
+import { getConnector, HttpError, type AtsType, type HttpClient } from "@rawjobs/core";
 
 export type Board = { key: string; ats: string; slug: string; region?: string; shard?: string; site?: string };
 export type CheckResult = { status: "live" | "dormant" | "dead" | "error"; jobs: number | null; name?: string; http?: number; error?: string };

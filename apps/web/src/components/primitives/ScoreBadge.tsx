@@ -1,4 +1,4 @@
-import { cx } from "../ui";
+import { cx } from "../../lib/cx";
 import { StatusGlyph, type GlyphShape } from "./Status";
 
 /** design/components/ScoreBadge bands: strong at or above your threshold, fair from 40, weak below. */

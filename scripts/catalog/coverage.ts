@@ -11,7 +11,7 @@
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { companyKey, connectors, detectCompany, INDUSTRY_BY_ID } from "../../packages/core/src/index";
+import { companyKey, connectors, detectCompany, INDUSTRY_BY_ID } from "@rawjobs/core";
 import { SYSTEMS, universe, universeMarkdown } from "./lib/universe";
 import type { Resolved, Seed } from "./resolve";
 

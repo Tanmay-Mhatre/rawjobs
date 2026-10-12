@@ -1,5 +1,5 @@
 import type { ReactNode } from "react";
-import { cx } from "../ui";
+import { cx } from "../../lib/cx";
 
 /** One score factor: points earned of its maximum. */
 export type ScorePart = { label: string; earned: number; max: number };

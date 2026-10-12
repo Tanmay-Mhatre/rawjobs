@@ -1,6 +1,6 @@
 import { CircleAlert, Search } from "lucide-react";
 import { useId, type InputHTMLAttributes, type Ref } from "react";
-import { cx } from "../ui";
+import { cx } from "../../lib/cx";
 import { Kbd } from "./Kbd";
 
 type InputProps = Omit<InputHTMLAttributes<HTMLInputElement>, "className"> & { ref?: Ref<HTMLInputElement>; inputClassName?: string };

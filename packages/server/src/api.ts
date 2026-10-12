@@ -2,8 +2,8 @@ import { spawn, type ChildProcess } from "node:child_process";
 import { statSync, writeFileSync } from "node:fs";
 import type { IncomingMessage, ServerResponse } from "node:http";
 import { resolve } from "node:path";
-import { APP_VERSION, cliCommand, type Command } from "../../core/src/runtime";
-import { readTracking, saveTracking } from "../../core/src/tracking";
+import { APP_VERSION, cliCommand, type Command } from "@rawjobs/core";
+import { readTracking, saveTracking } from "@rawjobs/core";
 import { refuse } from "./guard";
 import type { Updater } from "./updater";
 

@@ -18,18 +18,7 @@ import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { gunzipSync, gzipSync } from "node:zlib";
-import {
-  getConnector,
-  HttpClient,
-  jobCompanyKey,
-  JOB_FEED_SCHEMA,
-  NotModifiedError,
-  type CompanyRef,
-  type FeedRow,
-  type HttpCache,
-  type JobFeedManifest,
-  type JobFeedShard,
-} from "../../packages/core/src/index";
+import { getConnector, HttpClient, jobCompanyKey, JOB_FEED_SCHEMA, NotModifiedError, type CompanyRef, type FeedRow, type HttpCache, type JobFeedManifest, type JobFeedShard } from "@rawjobs/core";
 import { readDenylist } from "./lib/denylist";
 import { stateOf, writeFeedV2 } from "./lib/feed-v2";
 

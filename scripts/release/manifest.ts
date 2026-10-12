@@ -3,7 +3,7 @@ import { createHash, createPrivateKey, sign } from "node:crypto";
 import { copyFileSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { parseArgs } from "node:util";
-import { NODE_PLATFORMS, nodeArchive, verifyRelease, type ReleaseManifest } from "../../packages/core/src/release";
+import { NODE_PLATFORMS, nodeArchive, verifyRelease, type ReleaseManifest } from "@rawjobs/core/release";
 
 /**
  * Turn a built bundle (pnpm bundle) into the files a release publishes, in dist/release/:

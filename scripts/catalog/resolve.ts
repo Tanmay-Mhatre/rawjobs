@@ -19,7 +19,7 @@
 import { existsSync, readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { atsHints, careersLinks, findBoards, HttpClient, HttpError, type FoundBoard } from "../../packages/core/src/index";
+import { atsHints, careersLinks, findBoards, HttpClient, HttpError, type FoundBoard } from "@rawjobs/core";
 import { writeFileAtomic } from "./lib/fs";
 import { maxMsFromArgs, nextInTime } from "./lib/time-box";
 
