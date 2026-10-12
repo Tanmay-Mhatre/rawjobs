@@ -1,6 +1,6 @@
 import { safeUrl } from "@rawjobs/core/text";
 import { CircleAlert, ExternalLink, HelpCircle, Link2, LoaderCircle, MapPin, X } from "lucide-react";
-import { useId, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import { ATS_LABEL, keyOf, SUPPORTED, type CompanyRef } from "../lib/companies";
 import { displayPlace } from "../lib/format";
 import { checkCompanies, type CompanyCheck } from "../lib/setup";
@@ -29,10 +29,24 @@ const toRef = (r: CompanyCheck, name: string): CompanyRef => ({
 const FORMATS = "Paste the link to the company's jobs page, e.g. jobs.lever.co/acme or boards.greenhouse.io/acme.";
 
 /**
- * Paste careers links, see what each one is (the same details as the company directory, plus how
- * many jobs match you), then choose which to add to My companies. New careers pages are remembered in the directory.
+ * Paste careers links, see what each one is (found or not, and whether RawJobs can check it yet), then
+ * choose which to add to My companies. New careers pages are remembered in the directory. Jobs, and which
+ * of them suit you, are on the Radar.
  */
-export function AddByLink({ watched, onAddMany, onRemove, autoFocus }: { watched: Set<string>; onAddMany: (c: CompanyRef[]) => string[]; onRemove: (key: string) => void; autoFocus?: boolean }) {
+export function AddByLink({
+  watched,
+  onAddMany,
+  onRemove,
+  autoFocus,
+  name: typed,
+}: {
+  watched: Set<string>;
+  onAddMany: (c: CompanyRef[]) => string[];
+  onRemove: (key: string) => void;
+  autoFocus?: boolean;
+  /** The company searched for ("Add Revolut by link"): names the first link checked. */
+  name?: string;
+}) {
   const helpId = useId();
   const [text, setText] = useState("");
   const [checking, setChecking] = useState(false);
@@ -40,6 +54,11 @@ export function AddByLink({ watched, onAddMany, onRemove, autoFocus }: { watched
   const [showHelp, setShowHelp] = useState(false);
   const [results, setResults] = useState<Result[]>([]);
   const [names, setNames] = useState<Record<string, string>>({});
+  /** The searched-for name, until it has named a checked link. */
+  const pendingName = useRef(typed);
+  useEffect(() => {
+    pendingName.current = typed;
+  }, [typed]);
 
   const check = async (only?: string[]) => {
     const urls = only ?? [
@@ -55,12 +74,19 @@ export function AddByLink({ watched, onAddMany, onRemove, autoFocus }: { watched
     setError(null);
     try {
       const found = await checkCompanies(urls);
+      const fresh = found.map((r) => ({ ...r, id: `c${seq++}` }));
       // Newest first; a link checked again replaces its old card.
       setResults((prev) => {
-        const fresh = found.map((r) => ({ ...r, id: `c${seq++}` }));
         const keys = new Set(fresh.map((r) => r.key ?? r.input));
         return [...fresh, ...prev.filter((r) => !keys.has(r.key ?? r.input))];
       });
+      // One link pasted after searching for a company: it gets the name searched for.
+      const first = fresh[0];
+      if (pendingName.current && fresh.length === 1 && first && addable(first)) {
+        const name = pendingName.current;
+        pendingName.current = undefined;
+        setNames((m) => ({ ...m, [first.id]: name }));
+      }
       if (!only) setText("");
     } catch (err) {
       setError((err as Error).message);
@@ -239,7 +265,6 @@ function ResultCard({
   const facts = [
     r.status === "live" && `${r.open_jobs?.toLocaleString()} open job${r.open_jobs === 1 ? "" : "s"}`,
     r.status === "dormant" && "No openings right now",
-    r.matches !== undefined && r.matches > 0 && (r.matches === 1 ? "1 role matches you" : `${r.matches} roles match you`),
     ok && (r.in_directory ? "In the company directory" : r.status !== "soon" && "New: added to the directory"),
   ].filter(Boolean);
 
@@ -290,23 +315,6 @@ function ResultCard({
           <span className="min-w-0 truncate">{places.slice(0, 2).map(displayPlace).join(", ")}</span>
           {places.length > 2 && <span className="shrink-0">+{places.length - 2}</span>}
         </p>
-      )}
-      {r.match_examples && r.match_examples.length > 0 ? (
-        <ul className="space-y-0.5 type-small">
-          {r.match_examples.map((e) => (
-            <li key={e} className="truncate">
-              • {e}
-            </li>
-          ))}
-        </ul>
-      ) : (
-        r.sample_titles &&
-        r.sample_titles.length > 0 && (
-          <p className="truncate type-small text-muted">
-            {r.matches === 0 ? "Nothing matching you today. Roles there now: " : "Roles there now: "}
-            {r.sample_titles.join(", ")}
-          </p>
-        )
       )}
       {r.status === "dormant" && <p className="type-small text-muted">The careers page exists but has no openings. Add it and you'll see its jobs as soon as one appears.</p>}
       {r.status === "soon" && r.ats && <p className="type-small text-muted">{ATS_LABEL[r.ats] ?? "This hiring system"} isn't supported yet. Add it now and it's scanned once support ships.</p>}

@@ -3,6 +3,7 @@ import { safeUrl } from "@rawjobs/core/text";
 import { Clock, ExternalLink, RefreshCw, X } from "lucide-react";
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { ATS_LABEL, keyOf } from "../lib/companies";
+import { nameRank } from "../lib/companySearch";
 import type { CompanyHealth, DataMeta } from "../lib/data";
 import { radarCompanyHash } from "../lib/filters";
 import { formatDate, formatDateTime, timeAgo } from "../lib/format";
@@ -106,6 +107,8 @@ export function MyCompanies({
   scanning,
   attention = 0,
   empty,
+  q = "",
+  noMatch,
 }: {
   rows: CompanyRow[];
   savedKeys: Set<string>;
@@ -121,6 +124,10 @@ export function MyCompanies({
   attention?: number;
   /** Shown instead of the list when there are no companies (what your scan covers without them). */
   empty?: ReactNode;
+  /** The page search: only your companies whose name matches it are listed (in place). */
+  q?: string;
+  /** Shown instead of the list when none of your companies match the search. */
+  noMatch?: ReactNode;
 }) {
   const [sort, setSort] = useState<"name" | "attention">(attention ? "attention" : "name");
   useEffect(() => {
@@ -143,7 +150,9 @@ export function MyCompanies({
   const quiet = rows.filter((x) => isQuiet(x.quiet));
   const broken = rows.filter(failing).length;
   const byName = (a: Row, b: Row) => companyLabel(a.r).localeCompare(companyLabel(b.r));
-  const sorted = [...rows].sort((a, b) => (sort === "attention" ? Number(failing(b)) - Number(failing(a)) || b.quiet.scans - a.quiet.scans || byName(a, b) : byName(a, b)));
+  const sorted = rows
+    .filter((x) => !q.trim() || nameRank(q, x.r.name, companyLabel(x.r)) >= 0)
+    .sort((a, b) => (sort === "attention" ? Number(failing(b)) - Number(failing(a)) || b.quiet.scans - a.quiet.scans || byName(a, b) : byName(a, b)));
   const oldestQuiet = quiet
     .map((x) => x.quiet.since)
     .filter(Boolean)
@@ -193,6 +202,8 @@ export function MyCompanies({
 
       {rows.length === 0 ? (
         <p className="px-4 py-6 type-small text-muted">{empty ?? "You haven't added any companies yet."}</p>
+      ) : sorted.length === 0 ? (
+        <div className="px-4 py-6 type-small">{noMatch ?? <p className="text-muted">None of your companies match “{q.trim()}”.</p>}</div>
       ) : (
         <>
           {/* Phones: one card per company. */}

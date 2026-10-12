@@ -2,16 +2,17 @@ import { companyLabel, displayName } from "@rawjobs/core/display-name";
 import { ArrowRight, Check, CircleAlert, EyeOff, LoaderCircle, Radar, RefreshCw, X } from "lucide-react";
 import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
 import { addCompanies, countCompanies, jobCompanyKey, keyOf, wantsAttention, type CompanyRef } from "../lib/companies";
+import { companyIndex, nameRank, type CompanyIndex } from "../lib/companySearch";
 import { useCompanySuggestions, type SuggestState } from "../lib/companySuggest";
 import { coverageLine, initialCompaniesTab, type CompaniesTabId } from "../lib/companiesPage";
 import type { DataMeta, Job } from "../lib/data";
 import { canRunLocally, useDirectorySize } from "../lib/data";
 import { useScanPrefs } from "../lib/scan";
-import { draftToConfig, saveConfig, scanPlan, type Draft, type ScanPlan } from "../lib/setup";
+import { draftToConfig, saveConfig, scanPlan, type CompanyRow, type Draft, type ScanPlan } from "../lib/setup";
 import { load, save } from "../lib/storage";
 import { AddByLink } from "./AddByLink";
 import { MyCompanies, RecentRuns } from "./Companies";
-import { CompanyFinder, useDirectory } from "./CompanyFinder";
+import { CompanyFinder, searchDirectory, useDirectory, type DirCompany } from "./CompanyFinder";
 import { ForYou } from "./companies/ForYou";
 import { QuickAdd } from "./companies/QuickAdd";
 import { TabList, TabPanel, useTabIds } from "./companies/Tabs";
@@ -180,15 +181,23 @@ export function CompaniesTab({ configured, meta, jobs, draft, loaded, saved, upd
     window.addEventListener("hashchange", follow);
     return () => window.removeEventListener("hashchange", follow);
   }, []);
-  /** The page's one search: its results show in Browse all. */
+  /** The page's one search: it filters My companies in place, and searches the directory in Browse all. */
   const [q, setQ] = useState("");
   const [linkOpen, setLinkOpen] = useState(false);
+  /** The company searched for when "Add <name> by link" opened the link panel. */
+  const [linkName, setLinkName] = useState<string | undefined>();
   /** Bumped after the directory updates (or to retry loading it), so search reloads it. */
   const [rev, setRev] = useState(0);
   const { directory, error: directoryError } = useDirectory(rev);
   /** The one directory size shown on this page (H9). */
   const directorySize = useDirectorySize(rev);
   const companyCount = useMemo(() => directorySize ?? (directory ? countCompanies(directory) : undefined), [directorySize, directory]);
+  /** The directory's search index, built the first time a search needs it (about a quarter second), then kept. */
+  const indexCache = useRef<{ of: DirCompany[]; index: CompanyIndex<DirCompany> } | null>(null);
+  const searchMine = tab === "mine" && draft.companies.length > 0;
+  const needIndex = !!directory && (tab === "browse" || (searchMine && !!q.trim()));
+  if (needIndex && indexCache.current?.of !== directory) indexCache.current = { of: directory, index: companyIndex(directory) };
+  const index = indexCache.current?.of === directory ? indexCache.current.index : undefined;
   const autosave = useAutoSave(draft, saved, onSaved, configured && canRunLocally);
   const plan = useScanPlan(saved, configured && canRunLocally);
   const { scope } = useScanPrefs();
@@ -280,7 +289,8 @@ export function CompaniesTab({ configured, meta, jobs, draft, loaded, saved, upd
   const mutedNames = new Set(mutedRows.map((m) => m.name).filter(Boolean));
   const hidden = [...mutedRows, ...hiddenNames.filter((n) => !mutedNames.has(n)).map((name) => ({ key: undefined, name }))];
 
-  const openLink = () => {
+  const openLink = (name?: string) => {
+    setLinkName(name);
     setLinkOpen(true);
     setTimeout(() => document.getElementById(linkPanelId)?.scrollIntoView({ behavior: "smooth", block: "nearest" }), 50);
   };
@@ -291,11 +301,17 @@ export function CompaniesTab({ configured, meta, jobs, draft, loaded, saved, upd
         q={q}
         onQ={(text) => {
           setQ(text);
-          if (text.trim() && tab !== "browse") setTab("browse");
+          // My companies filters your own list in place; Suggestions shows the directory's matches in Browse all.
+          if (text.trim() && tab === "suggestions") setTab("browse");
+          if (text.trim() && tab === "mine" && !draft.companies.length) setTab("browse");
         }}
         count={companyCount}
+        placeholder={searchMine ? `Search your ${draft.companies.length.toLocaleString()} ${draft.companies.length === 1 ? "company" : "companies"}` : undefined}
         linkOpen={linkOpen}
-        onToggleLink={() => setLinkOpen((v) => !v)}
+        onToggleLink={() => {
+          setLinkName(undefined);
+          setLinkOpen((v) => !v);
+        }}
         linkPanelId={linkPanelId}
         status={
           <span role="status">
@@ -307,12 +323,12 @@ export function CompaniesTab({ configured, meta, jobs, draft, loaded, saved, upd
       {linkOpen && (
         <Card className="p-4 sm:p-5" id={linkPanelId}>
           <div className="mb-3 flex items-center justify-between gap-3">
-            <h2 className="type-body font-semibold">Add by link</h2>
+            <h2 className="type-body font-semibold">{linkName ? `Add ${linkName} by link` : "Add by link"}</h2>
             <IconButton label="Close" onClick={() => setLinkOpen(false)}>
               <X className="size-4" />
             </IconButton>
           </div>
-          <AddByLink watched={watched} onAddMany={addMany} onRemove={(k) => removeMany([k])} autoFocus />
+          <AddByLink watched={watched} onAddMany={addMany} onRemove={(k) => removeMany([k])} autoFocus name={linkName} />
         </Card>
       )}
 
@@ -344,7 +360,20 @@ export function CompaniesTab({ configured, meta, jobs, draft, loaded, saved, upd
             scanning={scanning}
             attention={attention}
             empty={coverage ?? "You haven't added any companies yet."}
+            q={q}
+            noMatch={
+              <p className="flex flex-wrap items-center gap-x-3 gap-y-1">
+                <b className="font-semibold">None of your companies match “{q.trim()}”.</b>
+                <button type="button" className="min-h-6 font-medium text-ink underline underline-offset-2 hover:text-muted" onClick={() => setQ("")}>
+                  Clear search
+                </button>
+                <button type="button" className="min-h-6 font-medium text-ink underline underline-offset-2 hover:text-muted" onClick={() => setTab("browse")}>
+                  Search the directory for “{q.trim()}”
+                </button>
+              </p>
+            }
           />
+          {searchMine && q.trim() && <MoreInDirectory q={q} mine={draft.companies} directory={directory} index={index} watched={watched} onBrowse={() => setTab("browse")} />}
           {draft.companies.length === 0 && (
             <div className="flex flex-wrap gap-2">
               <Button variant="primary" onClick={() => setTab("suggestions")}>
@@ -419,10 +448,51 @@ export function CompaniesTab({ configured, meta, jobs, draft, loaded, saved, upd
             q={q}
             onAddByLink={openLink}
             companyCount={companyCount}
+            index={index}
           />
         </TabPanel>
       )}
     </div>
+  );
+}
+
+/** Under a search of My companies: how many of yours match, and how many more the directory has (one click to Browse all). */
+function MoreInDirectory({
+  q,
+  mine,
+  directory,
+  index,
+  watched,
+  onBrowse,
+}: {
+  q: string;
+  mine: readonly CompanyRow[];
+  directory: DirCompany[] | null;
+  index?: CompanyIndex<DirCompany>;
+  watched: Set<string>;
+  onBrowse: () => void;
+}) {
+  const yours = mine.filter((r) => nameRank(q, r.name, companyLabel(r)) >= 0).length;
+  const more = useMemo(
+    () => (directory && index ? searchDirectory(directory, { q, watched, index }).filter((g) => ![g.lead, ...g.others].some((c) => watched.has(c.key))).length : 0),
+    [directory, index, q, watched],
+  );
+  // None of yours match: the list itself says so and links to the directory.
+  if (!yours) return null;
+  return (
+    <p className="flex flex-wrap items-center gap-x-1.5 type-small text-muted" aria-live="polite">
+      <span className="tabular">
+        {yours.toLocaleString()} {yours === 1 ? "match" : "matches"} in your list
+      </span>
+      {more > 0 && (
+        <>
+          <span aria-hidden>·</span>
+          <button type="button" className="tabular inline-flex min-h-6 items-center gap-1 font-medium text-ink underline underline-offset-2 hover:text-muted" onClick={onBrowse}>
+            {more.toLocaleString()} more in the directory <ArrowRight className="size-3.5" />
+          </button>
+        </>
+      )}
+    </p>
   );
 }
 
