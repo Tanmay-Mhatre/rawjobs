@@ -31,6 +31,22 @@ no GitHub auto-merge (`mcp__ccd_pr__set_auto_merge`). Those skip the queue.
 
 Don't change `main`'s branch protection or `.mergify.yml` to get your PR in faster.
 
+## Releasing: remind the user to tag
+
+Merging releases nothing: a release happens only when the user pushes a version tag
+(`.github/workflows/release.yml`). So after any PR merges into `main` (yours, or one you watched
+merge), end your message with a reminder that it isn't released yet, with the commands to release
+it: the next version (the latest `vX.Y.Z` tag with the patch + 1) and a tag message drafted from the
+merged PRs' "Release note" lines (`pnpm release:notes` prints it). For example:
+
+```bash
+git tag -a v0.6.1 -m "RawJobs 0.6.1" -m "New: …" -m "Fixed: …"
+git push origin v0.6.1
+```
+
+Write a "Release note" section in every PR you open (`New:` / `Improved:` / `Fixed:` lines, or
+`none`): it becomes the app's "What's new". Never push a tag yourself unless the user asks.
+
 ### Pull requests that change `.mergify.yml`
 
 Mergify always uses the config on `main`, so these go through the queue like any other PR. The

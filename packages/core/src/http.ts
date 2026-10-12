@@ -1,7 +1,7 @@
 /** Set by the bundle build (scripts/bundle/build.ts) to the release's version. */
 declare const __RAWJOBS_VERSION__: string | undefined;
 /** This version, for the User-Agent: the bundle's, or package.json's when running the sources. */
-export const VERSION = typeof __RAWJOBS_VERSION__ === "string" ? __RAWJOBS_VERSION__ : "0.5.0";
+export const VERSION = typeof __RAWJOBS_VERSION__ === "string" ? __RAWJOBS_VERSION__ : "0.6.0";
 
 export function defaultUserAgent(): string {
   const repo = process.env.GITHUB_REPOSITORY;

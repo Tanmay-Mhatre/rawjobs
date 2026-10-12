@@ -76,19 +76,21 @@ your network can't reach it.
 
 ## Updates
 
-RawJobs never installs an update by itself. Once a day it checks for a new version and downloads
-it in the background (checked against RawJobs' signing key), then the dashboard says it's ready.
-It installs when you click **Update now**: that takes a few seconds, the dashboard shows
-"Reconnecting…" and reloads by itself.
+RawJobs never installs an update by itself. Every few minutes it looks whether a new version is
+out; within minutes of a release it downloads it in the background (checked against RawJobs'
+signing key), and an **Update to 0.x.y** button appears at the top of the dashboard. Click it and
+RawJobs updates in a few seconds: the dashboard shows "Reconnecting…" and reloads by itself, then
+shows **What's new** once (everything new since the version you had).
 
-- **New releases come out at most once a week** (Mondays), however many changes went in that week.
-- **A scan is never cut off.** Click Update now while a scan runs (also a scheduled one) and RawJobs
+- **On Telegram too.** If Telegram alerts are set up and on, you get one message per version when
+  it's downloaded and ready. Turn that off in Settings → About → Updates.
+- **A scan is never cut off.** Click Update while a scan runs (also a scheduled one) and RawJobs
   waits for it to finish, then updates.
 - **Required updates** (an important fix) come up in a window that only closes by updating. If the
   update fails, for example while you're offline, you can continue for now; it asks again next time.
 - **Settings → About** shows your version, when it was installed or updated, the newest version,
-  when RawJobs last checked, and has **Check for updates**. Below it you can turn the daily check
-  off, or get test versions early.
+  when RawJobs last checked, and has **Check for updates**. Below it: turn watching for new versions
+  off, get test versions early, and **Release notes**, what changed in every version.
 - **Your data is never removed.** Before every update and every reinstall, your profile, tracking
   and scan data are copied to the `backups` folder (the last three are kept). If a new version
   doesn't start within a minute, RawJobs goes back to the one you had and tells you; your data stays

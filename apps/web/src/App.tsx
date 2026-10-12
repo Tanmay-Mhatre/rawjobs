@@ -12,6 +12,7 @@ import { FeedSkeleton } from "./components/radar/FeedSkeleton";
 import { RadarPage } from "./components/radar/RadarPage";
 import { NotifyBell, NotifyFailed, notifyLine } from "./components/NotifyWhenDone";
 import { ServerNotices } from "./components/Updates";
+import { UpdatePill } from "./components/WhatsNew";
 import { ScanButton, ScanChooser } from "./components/ScanButton";
 import { Settings } from "./components/Settings";
 import { Toaster } from "./components/Toast";
@@ -249,6 +250,8 @@ export function App() {
               </nav>
             )}
             <div className="ml-auto flex items-center gap-1.5">
+              {/* A new version, downloaded and ready: one click updates (like the Claude desktop app's). */}
+              {canRunLocally && <UpdatePill />}
               {inSetup ? (
                 <Button size="sm" variant="ghost" onClick={exitSetup}>
                   <X className="size-4" /> Exit setup

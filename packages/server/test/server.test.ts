@@ -120,7 +120,7 @@ console.log(JSON.stringify({ type: "done", scope: args[args.indexOf("--scope") +
   it("answers health with the version", async () => {
     const { port } = await start();
     const r = await call(port, "GET", "/api/health");
-    expect(JSON.parse(r.text)).toEqual({ ok: true, version: "9.9.9", scanning: false });
+    expect(JSON.parse(r.text)).toEqual({ ok: true, version: "9.9.9", scanning: false, update: null });
   });
 
   it("runs the CLI in your RawJobs folder", async () => {

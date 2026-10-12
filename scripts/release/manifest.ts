@@ -76,6 +76,8 @@ const manifest: ReleaseManifest = {
   minVersion: values["min-version"] ?? parsed.minVersion ?? "0.0.0",
   critical: values.critical || parsed.critical,
   notes: parsed.notes,
+  // After `notes`: install.sh reads the keys above with sed and takes the first match.
+  changes: parsed.changes,
 };
 // One key per line: install.sh picks values out with sed.
 const body = `${JSON.stringify(manifest, null, 2)}\n`;
