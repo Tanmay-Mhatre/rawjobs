@@ -1,0 +1,58 @@
+name: Release reminder
+
+# Releases happen only when a tag is pushed (release.yml), so after every merge to main this keeps
+# one issue open, assigned to the maintainer: what's merged but not released yet, and the tag
+# message and commands to release it (drafted from each PR's "Release note"; pnpm release:notes
+# prints the same). release.yml closes the issue when it publishes.
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-reminder
+  cancel-in-progress: true
+
+jobs:
+  remind:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      issues: write
+      pull-requests: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+      - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Draft the release
+        id: draft
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: pnpm -s release:notes --out "$RUNNER_TEMP/body.md"
+      - name: Open or update the reminder issue
+        if: steps.draft.outputs.count != '0'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          NEXT: ${{ steps.draft.outputs.next }}
+          COUNT: ${{ steps.draft.outputs.count }}
+        run: |
+          gh label create release-pending --repo "$GITHUB_REPOSITORY" --color FBCA04 --description "Merged into main, not released yet" 2>/dev/null || true
+          title="Not released yet: $COUNT merged since the last release (next: $NEXT)"
+          n="$(gh issue list --repo "$GITHUB_REPOSITORY" --label release-pending --state open --json number --jq '.[0].number // empty')"
+          if [ -n "$n" ]; then
+            gh issue edit "$n" --repo "$GITHUB_REPOSITORY" --title "$title" --body-file "$RUNNER_TEMP/body.md"
+            # A comment, so the maintainer is notified about each new merge (an edit alone isn't).
+            gh issue comment "$n" --repo "$GITHUB_REPOSITORY" --body "Another merge: $COUNT changes are waiting for a release. Push the tag when you're ready (commands above)."
+          else
+            gh issue create --repo "$GITHUB_REPOSITORY" --title "$title" --body-file "$RUNNER_TEMP/body.md" --label release-pending --assignee "$GITHUB_REPOSITORY_OWNER"
+          fi

@@ -1,7 +1,7 @@
-import { CircleAlert, CloudDownload, Copy, ExternalLink, LoaderCircle, RefreshCw, X } from "lucide-react";
+import type { ReleaseChange } from "@rawjobs/core/release-notes";
+import { CircleAlert, Copy, ExternalLink, LoaderCircle, RefreshCw, X } from "lucide-react";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { formatDate, timeAgo } from "../lib/format";
-import { load, save } from "../lib/storage";
 import {
   announceUpdateStatus,
   checkForUpdate,
@@ -18,15 +18,18 @@ import {
 import { DesktopShortcutNotice, Row } from "./DesktopShortcut";
 import { Dialog } from "./Dialog";
 import { toast } from "./Toast";
-import { Button, Card, cx, Toggle } from "./ui";
+import { Button, Card, Toggle } from "./ui";
+import { ReleaseList, WhatsNewDialog } from "./WhatsNew";
 
-/** Release notes, as plain lines (they come from the release's tag message). */
-function Notes({ text, open = false }: { text: string; open?: boolean }) {
-  if (!text.trim()) return null;
+/** A release's notes, folded: its New / Improved / Fixed lines (WhatsNew.tsx). */
+function Notes({ notes, changes }: { notes: string; changes?: ReleaseChange[] }) {
+  if (!notes.trim() && !changes?.length) return null;
   return (
-    <details className="mt-1 type-small" open={open}>
+    <details className="mt-1 type-small">
       <summary className="cursor-pointer text-muted">What's new</summary>
-      <div className="mt-1 max-h-60 space-y-1 overflow-y-auto whitespace-pre-wrap text-ink">{text.trim()}</div>
+      <div className="mt-2 max-h-60 overflow-y-auto">
+        <ReleaseList notes={notes} changes={changes} />
+      </div>
     </details>
   );
 }
@@ -54,21 +57,19 @@ function UpdateButton({ status, onClick, busy, label }: { status: UpdateStatus; 
   );
 }
 
-const DISMISSED_KEY = "rawjobs.update.dismissed";
-
 /**
  * Above the page, on an installed copy: "RawJobs is restarting" while the server is away (the page
- * reloads by itself when it's back as a new version), then how the last update went, or a new
- * version (a quiet note you can dismiss). A required update, or a version too old to update by
+ * reloads by itself when it's back as a new version), then, once after an update, "What's new"
+ * (WhatsNewDialog), or a note when an update didn't work. A new version waiting shows as the Update
+ * pill in the header (UpdatePill), not here. A required update, or a version too old to update by
  * itself, comes up in a window instead (RequiredUpdate). The first time you land on the Radar,
- * once per computer, a popup says where the RawJobs shortcuts are (DesktopShortcutNotice); never
- * on top of the required-update window or after an update that didn't work.
+ * once per computer, a popup says where the RawJobs shortcuts are (DesktopShortcutNotice); never on
+ * top of another window or after an update that didn't work.
  */
 export function ServerNotices({ onRadar = false }: { onRadar?: boolean }) {
   const { down } = useServerHealth();
   const { status, setStatus, refresh } = useUpdateStatus();
   const [busy, setBusy] = useState(false);
-  const [dismissed, setDismissed] = useState(() => load<string | null>(DISMISSED_KEY, null));
   // Back after a restart as the same version (an update that went back): read how it went.
   const wasDown = useRef(false);
   useEffect(() => {
@@ -101,91 +102,37 @@ export function ServerNotices({ onRadar = false }: { onRadar?: boolean }) {
     setBusy(false);
   };
   const required = !!status.available?.critical || status.tooOld;
-  const dialog = required ? <RequiredUpdate status={status} update={update} busy={busy} /> : null;
   const last = status.lastUpdate;
-  // The shortcut popup shows next to the quiet notes ("Updated to…", "… is ready"): an update is
-  // exactly when existing users land on the Radar. It waits only for a window that needs an
-  // answer (a required update) or an update that didn't work.
-  const intro = onRadar && !required && last?.ok !== false && status.about?.shortcuts?.notice ? <DesktopShortcutNotice status={status} onSeen={(s) => s && setStatus(s)} /> : null;
 
-  if (last) {
-    const seen = async () => {
-      const s = await markUpdateSeen();
-      if (s) setStatus(s);
-    };
-    return (
-      <>
-        {dialog ?? intro}
-        <div role={last.ok ? "status" : "alert"} className={cx("mb-3 flex items-start gap-2 rounded-md px-3 py-2 type-small", last.ok ? "bg-inset/60" : "bg-warning-subtle/50 text-warning-text")}>
-          {last.ok ? <CloudDownload className="mt-0.5 size-4 shrink-0 text-muted" aria-hidden /> : <CircleAlert className="mt-0.5 size-4 shrink-0" aria-hidden />}
-          <div className="min-w-0 flex-1">
-            {last.ok ? (
-              <>
-                <p>
-                  <b>Updated to RawJobs {last.to}.</b>
-                </p>
-                <Notes text={last.notes ?? ""} />
-              </>
-            ) : (
-              <p>
-                <b>
-                  The update to {last.to} didn't work, so you're still on {last.from}.
-                </b>{" "}
-                Nothing of yours changed. RawJobs won't offer that version again.
-              </p>
-            )}
-          </div>
-          <button
-            type="button"
-            aria-label="Dismiss"
-            title="Dismiss"
-            className="inline-flex size-7 items-center justify-center rounded-md text-muted hover:bg-inset hover:text-ink"
-            onClick={() => void seen()}
-          >
-            <X className="size-4" />
-          </button>
-        </div>
-      </>
-    );
-  }
+  // One window at a time: a required update first, then What's new, then the shortcut popup.
+  if (required) return <RequiredUpdate status={status} update={update} busy={busy} />;
+  if (last?.ok) return <WhatsNewDialog from={last.from} to={last.to} notes={last.notes} onSeen={(s) => s && setStatus(s)} />;
+  const intro = onRadar && last?.ok !== false && status.about?.shortcuts?.notice ? <DesktopShortcutNotice status={status} onSeen={(s) => s && setStatus(s)} /> : null;
+  if (!last) return intro;
 
-  const a = status.available;
-  if (required || !a || dismissed === a.version) return dialog ?? intro;
-  const dismiss = () => {
-    save(DISMISSED_KEY, a.version);
-    setDismissed(a.version);
+  const seen = async () => {
+    const s = await markUpdateSeen();
+    if (s) setStatus(s);
   };
   return (
-    <>
-      {intro}
-      <div role="status" className="mb-3 flex flex-wrap items-start gap-x-3 gap-y-1.5 rounded-md bg-inset/60 px-3 py-2 type-small">
-        <CloudDownload className="mt-0.5 size-4 shrink-0 text-muted" aria-hidden />
-        <div className="min-w-0 flex-1">
-          <p>
-            <b>RawJobs {a.version} is ready.</b>{" "}
-            <span className="text-muted">
-              {status.state === "waiting" ? "It installs as soon as the scan that's running is done." : "Install it when it suits you: it takes a few seconds, and your data stays."}
-            </span>
-          </p>
-          <Notes text={a.notes} />
-          {status.error && <p className="mt-1 text-danger-text">{status.error}</p>}
-        </div>
-        <div className="flex items-center gap-1">
-          <UpdateButton status={status} onClick={() => void update()} busy={busy} label="Update now" />
-          {status.state === "idle" && (
-            <button
-              type="button"
-              aria-label="Not now"
-              title="Not now (it's in Settings → About too)"
-              className="inline-flex size-7 items-center justify-center rounded-md text-muted hover:bg-inset hover:text-ink"
-              onClick={dismiss}
-            >
-              <X className="size-4" />
-            </button>
-          )}
-        </div>
-      </div>
-    </>
+    <div role="alert" className="mb-3 flex items-start gap-2 rounded-md bg-warning-subtle/50 px-3 py-2 type-small text-warning-text">
+      <CircleAlert className="mt-0.5 size-4 shrink-0" aria-hidden />
+      <p className="min-w-0 flex-1">
+        <b>
+          The update to {last.to} didn't work, so you're still on {last.from}.
+        </b>{" "}
+        Nothing of yours changed. RawJobs won't offer that version again.
+      </p>
+      <button
+        type="button"
+        aria-label="Dismiss"
+        title="Dismiss"
+        className="inline-flex size-7 items-center justify-center rounded-md text-muted hover:bg-inset hover:text-ink"
+        onClick={() => void seen()}
+      >
+        <X className="size-4" />
+      </button>
+    </div>
   );
 }
 
@@ -218,7 +165,11 @@ function RequiredUpdate({ status, update, busy }: { status: UpdateStatus; update
               This is a required update. It takes a few seconds; your profile, tracking and scan data stay as they are, and are backed up first.
               {status.state === "waiting" && " A scan is running: RawJobs updates as soon as it's done."}
             </p>
-            {a && <Notes text={a.notes} open />}
+            {a && (a.notes.trim() || a.changes?.length) ? (
+              <div className="max-h-60 overflow-y-auto rounded-md border border-line p-3">
+                <ReleaseList notes={a.notes} changes={a.changes} />
+              </div>
+            ) : null}
             {failed && (
               <p role="alert" className="type-small text-danger-text">
                 {status.error}
@@ -250,11 +201,16 @@ export function UpdatesSettings() {
   return (
     <div className="space-y-3">
       <Toggle checked={status.settings.mode !== "off"} onChange={(on) => void saveUpdateSettings({ mode: on ? "ask" : "off" }).then(apply)}>
-        Check for new versions every day
+        Watch for new versions
       </Toggle>
       <p className="type-small text-muted">
-        A new version is downloaded in the background and checked against RawJobs' signing key, but it only installs when you click Update. A required fix asks until you update.
+        Every few minutes RawJobs looks whether a new version is out. When one is, it's downloaded in the background and checked against RawJobs' signing key, then an Update button appears at the top.
+        It only installs when you click it. A required fix asks until you update.
       </p>
+      <Toggle checked={status.settings.telegram !== false} onChange={(on) => void saveUpdateSettings({ telegram: on }).then(apply)}>
+        Tell me on Telegram when an update is ready
+      </Toggle>
+      <p className="type-small text-muted">Only if Telegram alerts are set up and on (Scans and alerts). One message per version.</p>
       <Toggle checked={status.settings.channel === "beta"} onChange={(on) => void saveUpdateSettings({ channel: on ? "beta" : "stable" }).then(apply)}>
         Get test versions early (beta: newer, and more likely to have problems)
       </Toggle>
@@ -314,7 +270,7 @@ export function AboutRawJobs() {
         {about?.since && <Row label={about.since.by === "update" ? "Updated on" : "Installed on"}>{formatDate(about.since.at)}</Row>}
         <Row label="Latest version">
           {latest}
-          {a && <Notes text={a.notes} />}
+          {a && <Notes notes={a.notes} changes={a.changes} />}
         </Row>
         <Row label="Last checked">
           {status.settings.mode === "off" ? "Checking is off (Updates, below)." : status.lastCheck ? `${timeAgo(status.lastCheck)}, ${formatDate(status.lastCheck)}` : "Not yet"}

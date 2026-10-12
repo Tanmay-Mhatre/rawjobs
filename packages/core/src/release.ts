@@ -1,4 +1,7 @@
 import { createPublicKey, verify } from "node:crypto";
+import type { ReleaseChange } from "./release-notes";
+
+export { type ChangelogEntry, parseReleaseNotes, type ReleaseChange, releaseItems } from "./release-notes";
 
 /**
  * What a release publishes next to its bundle (docs/plans/local-install.md, section 5):
@@ -22,7 +25,10 @@ export type ReleaseManifest = {
   minVersion: string;
   /** A required update: the dashboard asks for it in a window that only closes by updating. */
   critical: boolean;
+  /** The tag's message, as written (without the Update: / Min-version: lines). */
   notes: string;
+  /** The notes' "New: / Improved: / Fixed:" lines (parseReleaseNotes). Missing before 0.6. */
+  changes?: ReleaseChange[];
 };
 
 /** Where releases are downloaded from (the latest one). */
@@ -55,30 +61,6 @@ export function verifyRelease(data: Buffer | string, signature: string, publicKe
   } catch {
     return false;
   }
-}
-
-/**
- * A release's notes, from its tag message, with the lines that set how it's offered taken out:
- *   Update: mandatory     a required update (critical): the dashboard asks until you update
- *   Min-version: 0.5.0    older versions can't update by themselves (run the install line again)
- */
-export function parseReleaseNotes(text: string): { notes: string; critical: boolean; minVersion: string | null } {
-  let critical = false;
-  let minVersion: string | null = null;
-  const kept = text.split(/\r?\n/).filter((line) => {
-    const update = line.match(/^\s*Update:\s*(\S+)\s*$/i);
-    if (update) {
-      critical ||= /^(mandatory|required|critical)$/i.test(update[1]!);
-      return false;
-    }
-    const min = line.match(/^\s*Min-version:\s*v?(\d+\.\d+\.\d+\S*)\s*$/i);
-    if (min) {
-      minVersion = min[1]!;
-      return false;
-    }
-    return true;
-  });
-  return { notes: kept.join("\n").trim(), critical, minVersion };
 }
 
 /** Compare "0.10.2" and "0.9.0" as versions (a pre-release like 0.3.0-beta.1 sorts before 0.3.0). */
