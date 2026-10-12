@@ -32,7 +32,7 @@ Users pick companies from a large shared directory instead of hunting for career
 - our own Common Crawl CDX pass
 - enrichment from Wikidata (CC0); yc-oss only after a licence check
 
-A hand-picked list (`scripts/curate/candidates.json`) seeds the curated tier.
+A hand-picked list seeded the curated tier (since 2026-10-12 it gives no ranking boost, and the tooling that built it is gone: suggestions come only from the user's own roles, places and industries).
 
 **Files** (published as GitHub Release assets on a rolling `latest` tag; clients fetch with an ETag and cache locally):
 1. `directory.json`: curated identity, PR-reviewed. Per company: `{ id, name, domain, boards:[{ats, slug, region?, shard?, site?, careers_url}], parent_id, industries[], hq_country, tier: "profiled"|"dump", supported, sources[], added_at }`.

@@ -1,5 +1,5 @@
 {
- "_about": "Hand-reviewed boards: the curated tier. Each was found and checked live from scripts/curate/candidates.json and the crypto-jobs-fyi list (scripts/curate/sources). Only the board, a fallback display name and the segment (for industry tags); nothing about anyone's own search.",
+ "_about": "Hand-reviewed boards (tier \"curated\"): each was checked live by hand, from a hand-picked list and the crypto-jobs-fyi list (seeds/crypto-jobs-fyi.companies.json). Only the board, a fallback display name and the segment (for industry tags). The tier gives no ranking boost: suggestions come only from the user's own roles, places and industries.",
  "companies": [
   {
    "key": "ashby:0x",

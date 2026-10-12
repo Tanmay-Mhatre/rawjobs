@@ -4,10 +4,11 @@
  *
  *   pnpm exec tsx scripts/catalog/build.ts  -> scripts/catalog/out/{directory.json,summary.md}
  */
-import { existsSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { careersUrl, guessName, isPlaceholderBoard, type DetectedCompany } from "../../packages/core/src/index";
+import { readChecks, type CheckRow } from "./lib/checks";
 import { readDenylist } from "./lib/denylist";
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -18,21 +19,14 @@ type Check = { key: string; status: "live" | "dormant" | "dead" | "error" | "unr
  * Workday answers a wrong site name with 500 and a protected board with 401/403, after retries.
  * Those aren't transient errors: call them unreachable (left out, re-checked on the monthly pass).
  */
-function settle(c: Check): Check {
-  if (c.status === "error" && c.key.startsWith("workday:") && c.http && [401, 403, 500].includes(c.http)) return { ...c, status: "unreachable" };
+function settle(c: CheckRow): CheckRow {
+  if (c.status === "error" && c.key.startsWith("workday:") && typeof c.http === "number" && [401, 403, 500].includes(c.http)) return { ...c, status: "unreachable" };
   return c;
 }
 
 const merged = (JSON.parse(readFileSync(join(here, "out", "merged.json"), "utf8")) as { boards: Merged[] }).boards;
-const checks = new Map<string, Check>();
-const checkFiles = readdirSync(join(here, "out")).filter((n) => /^checks(-.+)?\.jsonl$/.test(n));
-for (const line of checkFiles.flatMap((f) => readFileSync(join(here, "out", f), "utf8").split("\n"))) {
-  if (!line) continue;
-  const c = settle(JSON.parse(line) as Check);
-  const prev = checks.get(c.key);
-  // Latest result wins, but a definite answer beats a later error.
-  if (!prev || c.status !== "error" || prev.status === "error") checks.set(c.key, c);
-}
+// Latest result wins, but a definite answer beats a later error (mergeCheck).
+const checks = readChecks(join(here, "out"), settle) as unknown as Map<string, Check>;
 
 // The hand-reviewed boards (seeds/curated-boards.json) are the curated tier.
 const curated = new Set<string>();

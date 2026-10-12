@@ -10,12 +10,13 @@
  *
  * Result per board: live (has jobs) · dormant (exists, 0 jobs) · dead (404/410/422) · error (retry later)
  */
-import { appendFileSync, readdirSync, readFileSync } from "node:fs";
+import { appendFileSync, readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { HttpClient } from "../../packages/core/src/index";
-import { dueKind, isCurrent, mergeCheck, type CheckRow, type Due } from "./lib/checks";
+import { dueKind, isCurrent, mergeCheck, readChecks, type Due } from "./lib/checks";
 import { checkBoard } from "./lib/live-check";
+import { maxMsFromArgs } from "./lib/time-box";
 
 const here = dirname(fileURLToPath(import.meta.url));
 /** `--ats greenhouse,lever` limits this process to those systems; each process writes its own file. */
@@ -25,9 +26,8 @@ const OUT_DIR = join(here, "out");
 const recheckArg = process.argv.indexOf("--recheck-days");
 /** Results older than this are checked again (default: never, i.e. only unchecked boards). */
 const RECHECK_DAYS = recheckArg > 0 ? Number(process.argv[recheckArg + 1]) : Infinity;
-const maxArg = process.argv.indexOf("--max-minutes");
 /** Stop starting new checks after this long (default: no limit). */
-const MAX_MS = maxArg > 0 ? Number(process.argv[maxArg + 1]) * 60_000 : Infinity;
+const MAX_MS = maxMsFromArgs();
 const OUT = join(OUT_DIR, ONLY ? `checks-${[...ONLY].sort().join("-")}.jsonl` : "checks.jsonl");
 // Polite: each lane is sequential, with a small gap per host on top of request latency.
 const http = new HttpClient({ retries: 2, hostDelayMs: 200, timeoutMs: 20_000, backoffMs: 3_000, userAgent: "RawJobs-catalog/0.1 (open-source job radar; low-rate board validation)" });
@@ -50,19 +50,7 @@ type Result = { key: string; status: "live" | "dormant" | "dead" | "error"; jobs
 async function main() {
   const merged = JSON.parse(readFileSync(join(here, "out", "merged.json"), "utf8")) as { boards: Board[] };
   // What's known per board, from every process's results (checks.jsonl and checks-*.jsonl).
-  const known = new Map<string, CheckRow>();
-  for (const f of readdirSync(OUT_DIR).filter((n) => /^checks(-.+)?\.jsonl$/.test(n))) {
-    for (const line of readFileSync(join(OUT_DIR, f), "utf8").split("\n")) {
-      if (!line) continue;
-      let r: CheckRow;
-      try {
-        r = JSON.parse(line) as CheckRow;
-      } catch {
-        continue; // a line cut off by a kill
-      }
-      known.set(r.key, mergeCheck(known.get(r.key), r));
-    }
-  }
+  const known = readChecks(OUT_DIR);
   const done = new Set([...known.values()].filter((r) => isCurrent(r, RECHECK_DAYS)).map((r) => r.key));
   const todo = merged.boards.filter((b) => !done.has(b.key) && (!ONLY || ONLY.has(b.ats))).map((b): Board => ({ ...b, due: dueKind(known.get(b.key)) }));
   const dueCount = (d: Due) => todo.filter((b) => b.due === d).length;

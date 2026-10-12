@@ -178,7 +178,7 @@ pnpm catalog:refresh
 
 A company missing? Add it with **Add by link** (shared with the directory if sharing is on), or add it to `scripts/catalog/seeds/industries.json` in a pull request. Links people share are checked and added every few hours.
 
-Source attribution: see `scripts/curate/sources/NOTICE.md` and the source list in `scripts/catalog/merge.ts`. Running your own directory: [docs/shared-directory.md](docs/shared-directory.md) and [docs/self-hosting.md](docs/self-hosting.md).
+Source attribution: see `scripts/catalog/seeds/NOTICE.md` and the source list in `scripts/catalog/merge.ts`. Running your own directory: [docs/shared-directory.md](docs/shared-directory.md) and [docs/self-hosting.md](docs/self-hosting.md).
 
 ## How scoring works
 

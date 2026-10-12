@@ -65,12 +65,20 @@ export function salaryBreaker(pay: Pay | undefined, floor: NonNullable<Profile["
   return `Pay below your floor: up to ${pay.currency} ${short(inFloorPeriod)} vs your ${short(floor.amount)}${per}`;
 }
 
+/** termRegex as a global pattern, made once per phrase: this runs for every job and every avoided phrase. */
+const globalTerms = new Map<string, RegExp>();
+function globalTermRegex(phrase: string): RegExp {
+  let re = globalTerms.get(phrase);
+  if (!re) globalTerms.set(phrase, (re = new RegExp(termRegex(phrase).source, "giu")));
+  return re;
+}
+
 /** Does the role itself look like one you avoid? In the title, or said again and again (or early and again) in the description. */
 export function avoidHit(job: Pick<Checkable, "title" | "description">, phrase: string): boolean {
   if (matchesTitle(job.title, [phrase])) return true;
   const d = job.description ?? "";
   if (!d) return false;
-  const at = [...d.matchAll(new RegExp(termRegex(phrase).source, "giu"))].map((m) => m.index ?? 0);
+  const at = [...d.matchAll(globalTermRegex(phrase))].map((m) => m.index ?? 0);
   return at.length >= AVOID_MENTIONS || (at.length >= 2 && at[0]! < AVOID_OPENING);
 }
 

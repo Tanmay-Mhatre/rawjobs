@@ -178,7 +178,13 @@ async function pending(env: Env): Promise<Response> {
   const items = await Promise.all(
     list.keys.map(async (k) => {
       const value = await env.INBOX.get(k.name);
-      return value ? { id: k.name, ...(JSON.parse(value) as { boards: Board[]; received_at: string }) } : null;
+      if (!value) return null;
+      try {
+        return { id: k.name, ...(JSON.parse(value) as { boards: Board[]; received_at: string }) };
+      } catch {
+        // A damaged record mustn't fail the whole list: hand it over empty, so it's acknowledged and removed.
+        return { id: k.name, boards: [], received_at: "" };
+      }
     }),
   );
   return json({ items: items.filter(Boolean), more: !list.list_complete });

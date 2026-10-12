@@ -1,3 +1,6 @@
+import { readdirSync, readFileSync } from "node:fs";
+import { join } from "node:path";
+
 /** One board's latest check, as check.ts, build.ts and compact.ts read it. */
 export type CheckRow = {
   key: string;
@@ -55,3 +58,27 @@ export function isCurrent(r: CheckRow, recheckDays: number, now = Date.now()): b
 /** Why a board is due, in the order a run checks them: never checked, monthly recheck, retry of an error. */
 export type Due = "new" | "recheck" | "retry";
 export const dueKind = (r: CheckRow | undefined): Due => (!r ? "new" : r.errors || r.status === "error" ? "retry" : "recheck");
+
+/**
+ * Every board's latest check, from all of `dir`'s checks.jsonl and checks-*.jsonl (each check
+ * process writes its own), folded with mergeCheck. A line cut off by a kill (capped.sh sends KILL a
+ * minute after TERM) is skipped, not fatal. `settle` adjusts each row before it's folded in.
+ */
+export function readChecks(dir: string, settle: (row: CheckRow) => CheckRow = (row) => row): Map<string, CheckRow> {
+  const rows: CheckRow[] = [];
+  for (const f of readdirSync(dir).filter((n) => /^checks(-.+)?\.jsonl$/.test(n))) {
+    for (const line of readFileSync(join(dir, f), "utf8").split("\n")) {
+      if (!line) continue;
+      try {
+        rows.push(settle(JSON.parse(line) as CheckRow));
+      } catch {
+        // half a line
+      }
+    }
+  }
+  // In time order across all the files, so "latest" means the latest check, not the last file read.
+  rows.sort((a, b) => (a.checked_at < b.checked_at ? -1 : a.checked_at > b.checked_at ? 1 : 0));
+  const known = new Map<string, CheckRow>();
+  for (const row of rows) known.set(row.key, mergeCheck(known.get(row.key), row));
+  return known;
+}
