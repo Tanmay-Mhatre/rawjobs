@@ -1,4 +1,4 @@
-import { ArrowRight, Building2, Keyboard, KanbanSquare, Radar as RadarIcon, RefreshCw, Settings as SettingsIcon, TriangleAlert, X } from "lucide-react";
+import { ArrowRight, Keyboard, RefreshCw, TriangleAlert, X } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { CompaniesTab } from "./components/CompaniesTab";
 import { Dialog } from "./components/Dialog";
@@ -10,21 +10,20 @@ import { NotForMeProvider, useNotForMeApi } from "./components/NotForMe";
 import { Pipeline } from "./components/Pipeline";
 import { FeedSkeleton } from "./components/radar/FeedSkeleton";
 import { RadarPage } from "./components/radar/RadarPage";
-import { NotifyBell, NotifyFailed, notifyLine, telegramReady } from "./components/NotifyWhenDone";
+import { NotifyBell, NotifyFailed, notifyLine } from "./components/NotifyWhenDone";
 import { ServerNotices } from "./components/Updates";
 import { ScanButton, ScanChooser } from "./components/ScanButton";
 import { Settings } from "./components/Settings";
-import { toast, Toaster } from "./components/Toast";
+import { Toaster } from "./components/Toast";
 import { Button, Card, cx, IconButton, Kbd } from "./components/ui";
-import { FAILING_HASH, jobCompanyKey, keyOf, refOfJob, toRow } from "./lib/companies";
-import { telegramStatus, type TelegramStatus } from "./lib/automation";
+import { keyOf } from "./lib/companies";
 import { canRunLocally, useData, useOtherJobs, type Job } from "./lib/data";
 import { newSinceLastVisit } from "./lib/newSince";
 import { usePrefs } from "./lib/prefs";
 import { scanPrefs, useScan } from "./lib/scan";
 import { useResume } from "./lib/resume";
 import { profileFromPicks, type FilterPicks } from "./lib/profileSync";
-import { checkNow, draftFromConfig, draftToConfig, emptyDraft, rebaseDraft, resetSetup, saveConfig, setupProgress, STEP, STEP_COUNT, useSetupStatus, type Draft } from "./lib/setup";
+import { draftToConfig, emptyDraft, resetSetup, saveConfig, setupProgress, STEP, useSetupStatus } from "./lib/setup";
 import { buildSuggestions } from "./lib/suggest";
 import { load, save } from "./lib/storage";
 import { timeAgo } from "./lib/format";
@@ -35,28 +34,13 @@ import { useUserState, type Status } from "./lib/userState";
 import wordmarkInk from "./design/logos/rawjobs-wordmark-ink.svg";
 import wordmarkPaper from "./design/logos/rawjobs-wordmark-paper.svg";
 import { Wizard } from "./setup/Wizard";
+import { TABS, type Tab, useHashRoute } from "./app/route";
+import { useCompanyActions } from "./app/useCompanyActions";
+import { useScanAnnouncement } from "./app/useScanAnnouncement";
+import { useScanNotify } from "./app/useScanNotify";
+import { DRAFT_KEY, useSetupDraft, WELCOME_SEEN_KEY } from "./app/useSetupDraft";
 
-const TABS = [
-  { id: "radar", label: "Radar", icon: RadarIcon },
-  { id: "pipeline", label: "Pipeline", icon: KanbanSquare },
-  { id: "companies", label: "Companies", icon: Building2 },
-  { id: "settings", label: "Settings", icon: SettingsIcon },
-] as const;
-type Tab = (typeof TABS)[number]["id"];
-type Route = { tab: Tab } | { setup: number };
-
-function parseHash(): Route {
-  // "#radar?posted=7…" carries the Radar's filters after the tab name.
-  const h = location.hash.slice(1).split("?")[0]!;
-  const m = h.match(/^setup(?:\/(\d))?$/);
-  if (m) return { setup: Math.min(STEP_COUNT, Number(m[1] ?? 0)) };
-  return { tab: (TABS.some((t) => t.id === h) ? h : "radar") as Tab };
-}
-
-const DRAFT_KEY = "rawjobs.setupDraft.v1";
-/** The first-visit Welcome has been answered (Start or Skip); never auto-open it again. */
-const WELCOME_SEEN_KEY = "rawjobs.welcomeSeen";
-const sameConfig = (a: Draft, b: Draft) => JSON.stringify(draftToConfig(a)) === JSON.stringify(draftToConfig(b));
+const NO_JOBS: Job[] = [];
 
 export function App() {
   const { state, reload } = useData();
@@ -65,7 +49,7 @@ export function App() {
   const prefs = usePrefs();
   /** The job whose apply page was just opened, to ask "Did you apply?" on return. */
   const [applying, setApplying] = useState<Job | null>(null);
-  const [route, setRoute] = useState<Route>(parseHash);
+  const { route, go, goStep, goFailing } = useHashRoute();
   const [openId, setOpenId] = useState<string | null>(null);
   // Keeps data-theme in step with the system while Settings > Appearance is on System.
   useTheme();
@@ -78,35 +62,7 @@ export function App() {
   const setupState = status === null ? "configured" : !status ? "loading" : !status.isPersonal ? "none" : !status.valid ? "invalid" : "configured";
   const notSetUp = setupState === "none";
 
-  // ----- the saved setup, and the working copy the wizard / Settings edit -----
-  const saved = useMemo<Draft>(() => {
-    if (status?.config) return draftFromConfig(status.config);
-    if (status?.raw) return draftFromConfig(status.raw);
-    if (status === null && meta) return draftFromConfig({ profile: meta.profile, companies: meta.companies });
-    return emptyDraft();
-  }, [status, meta]);
-  const [draft, setDraft] = useState<Draft>(emptyDraft);
-  const appliedRef = useRef<string>("");
-  /** The saved setup the draft was last based on, so a newer save can be merged under unsaved edits. */
-  const baseRef = useRef<Draft | null>(null);
-  useEffect(() => {
-    if (status === undefined) return;
-    const key = JSON.stringify(draftToConfig(saved));
-    if (key === appliedRef.current) return;
-    appliedRef.current = key;
-    const base = baseRef.current;
-    baseRef.current = saved;
-    // The config was saved from elsewhere (the Companies page saves itself): keep unsaved edits.
-    if (personal && base) return setDraft((d) => rebaseDraft(d, base, saved));
-    // First-time setup resumes an unfinished draft from this browser.
-    const stored = !personal && status !== null ? load<Draft | null>(DRAFT_KEY, null) : null;
-    setDraft(stored ? { ...emptyDraft(), ...stored } : saved);
-  }, [saved, status, personal]);
-  useEffect(() => {
-    if (status && !status.isPersonal) save(DRAFT_KEY, draft);
-  }, [draft, status]);
-  const update = useCallback((patch: Partial<Draft>) => setDraft((d) => ({ ...d, ...patch })), []);
-  const dirty = !sameConfig(draft, saved);
+  const { saved, draft, setDraft, update, dirty, forgetBase } = useSetupDraft(status, meta);
   const { resume, saveResume, removeResume } = useResume();
   const progress = setupProgress(draft, !!resume.text);
   const suggest = useMemo(() => buildSuggestions(resume.text, draft.aiProfile), [resume.text, draft.aiProfile]);
@@ -126,51 +82,9 @@ export function App() {
   const closeChooser = useCallback(() => setChoosing(false), []);
   const scanning = scan.phase === "running";
 
-  // ----- Telegram: with it connected, every scan started here sends a message when it finishes -----
-  /** undefined: not asked yet (or can't run scans here) · null: couldn't tell. */
-  const [tg, setTg] = useState<TelegramStatus | null | undefined>(undefined);
-  const refreshTg = useCallback(async () => setTg(await telegramStatus().catch(() => null)), []);
-  // Checked again as each scan starts: it may have been set up in Settings since.
-  // biome-ignore lint/correctness/useExhaustiveDependencies: rechecks Telegram when a scan starts (or before the first check); a new `tg` value must not trigger it
-  useEffect(() => {
-    if (canRunLocally && (scanning || tg === undefined)) void refreshTg();
-  }, [scanning, refreshTg]);
-  const [notifyFailed, setNotifyFailed] = useState(false);
-  const notifyAsked = useRef(false);
-  useEffect(() => {
-    if (!scanning) {
-      notifyAsked.current = false;
-      return;
-    }
-    // After the "start" event: the scan clears any earlier request just before it starts.
-    if (notifyAsked.current || scan.notify?.asked || !scan.total || !telegramReady(tg)) return;
-    notifyAsked.current = true;
-    setNotifyFailed(false);
-    void notifyScan().then((ok) => setNotifyFailed(!ok));
-  }, [scanning, scan.total, scan.notify, tg, notifyScan]);
-  // A message that went out is a toast; one that didn't stays on the page (NotifyFailed).
-  // biome-ignore lint/correctness/useExhaustiveDependencies: fires when the notify result arrives; `tg` is only read for the bot's name
-  useEffect(() => {
-    if (!scanning && scan.notify?.result === "sent") toast({ message: <>Sent the results to Telegram{tg?.bot ? <> ({tg.bot})</> : null}.</> });
-  }, [scanning, scan.notify?.result]);
+  const { tg, notifyFailed, notifyNow } = useScanNotify(scan, notifyScan);
   /** Setup just saved and started the first scan: say how it went when it ends. */
-  const announceScan = useRef(false);
-  useEffect(() => {
-    if (!announceScan.current || (scan.phase !== "done" && scan.phase !== "error")) return;
-    announceScan.current = false;
-    // A failed scan is explained inline by the scan progress bar; a toast only confirms what worked.
-    if (scan.phase === "error") return;
-    const m = scan.summary?.matches ?? 0;
-    toast({
-      message: m ? (
-        <>
-          Scan done: <b>{m.toLocaleString()}</b> matching {m === 1 ? "job" : "jobs"}.
-        </>
-      ) : (
-        "Scan done. No matches yet: see why below."
-      ),
-    });
-  }, [scan.phase, scan.summary]);
+  const announceScan = useScanAnnouncement(scan);
 
   /** Radar "Save to my profile": its place and industry picks become your profile, then a rescan. */
   const saveProfileFromRadar = useCallback(
@@ -189,68 +103,16 @@ export function App() {
 
   // ----- your companies, from the Radar: add, remove, mute, check now -----
   const canSave = canRunLocally && personal && setupState === "configured";
-  /** Your companies' keys: from your config, or (hosted build) from the last scan. */
-  const yourKeys = useMemo(() => new Set((status?.config?.companies ?? meta?.companies ?? []).map(keyOf)), [status, meta]);
-  const isYours = useCallback((j: Job) => yourKeys.has(jobCompanyKey(j)), [yourKeys]);
-  const saveCompanies = useCallback(
-    async (patch: (d: Draft) => Partial<Draft>): Promise<string | null> => {
-      const res = await saveConfig(draftToConfig({ ...saved, ...patch(saved) }));
-      if (!res.ok) return res.errors;
-      await setup.refresh();
-      return null;
-    },
-    [saved, setup],
-  );
-  const trackJob = useCallback(
-    (job: Job, on: boolean) => {
-      const ref = refOfJob(job);
-      const key = keyOf(ref);
-      return saveCompanies((d) => ({
-        companies: on ? (d.companies.some((r) => keyOf(r) === key) ? d.companies : [...d.companies, toRow(ref)]) : d.companies.filter((r) => keyOf(r) !== key),
-        muted: d.muted.filter((k) => k !== key),
-      }));
-    },
-    [saveCompanies],
-  );
-  /** Hide a company's jobs here, and (local app) stop scans from checking it: mute it in your config. */
-  const hideCompany = useCallback(
-    (company: string, hidden: boolean) => {
-      prefs.setCompanyHidden(company, hidden);
-      const job = state.kind === "ready" ? state.jobs.find((j) => j.company === company) : undefined;
-      if (!canSave || !job) return;
-      const key = jobCompanyKey(job);
-      void saveCompanies((d) => ({ muted: hidden ? [...new Set([...d.muted, key])] : d.muted.filter((k) => k !== key) }));
-    },
-    [prefs, state, canSave, saveCompanies],
-  );
-  const checkJob = useCallback(
-    async (job: Job): Promise<string | null> => {
-      const e = await checkNow([jobCompanyKey(job)]);
-      if (e.type === "error") return e.message;
-      await reload();
-      return null;
-    },
-    [reload],
-  );
-
-  // ----- routing -----
-  useEffect(() => {
-    const onHash = () => setRoute(parseHash());
-    window.addEventListener("hashchange", onHash);
-    return () => window.removeEventListener("hashchange", onHash);
-  }, []);
-  const go = useCallback((r: Route) => {
-    location.hash = "tab" in r ? r.tab : r.setup ? `setup/${r.setup}` : "setup";
-    setRoute(r);
-    window.scrollTo({ top: 0 });
-  }, []);
-  const goStep = useCallback((n: number) => go(n > 0 ? { setup: n } : { setup: 0 }), [go]);
-  /** "1 failing" and the failing banner: My companies, sorted by Needs attention. */
-  const goFailing = useCallback(() => {
-    location.hash = FAILING_HASH;
-    setRoute({ tab: "companies" });
-    window.scrollTo({ top: 0 });
-  }, []);
+  const { yourKeys, isYours, trackJob, hideCompany, checkJob } = useCompanyActions({
+    saved,
+    canSave,
+    configCompanies: status?.config?.companies,
+    scannedCompanies: meta?.companies,
+    jobs: state.kind === "ready" ? state.jobs : NO_JOBS,
+    setCompanyHidden: prefs.setCompanyHidden,
+    refreshSetup: setup.refresh,
+    reload,
+  });
 
   // Only the very first visit opens the Welcome; after Start or Skip, setup is reached through CTAs.
   // biome-ignore lint/correctness/useExhaustiveDependencies: decides once, when setup status first loads; later route changes mustn't reopen the Welcome
@@ -271,12 +133,12 @@ export function App() {
     if (!res.ok) return res.errors;
     save(DRAFT_KEY, null);
     save(WELCOME_SEEN_KEY, null);
-    baseRef.current = null;
+    forgetBase();
     await setup.refresh();
     setDraft(emptyDraft());
     go({ setup: 0 });
     return null;
-  }, [setup, go]);
+  }, [setup, go, forgetBase, setDraft]);
   const exitSetup = useCallback(() => {
     save(WELCOME_SEEN_KEY, true);
     go({ tab: "radar" });
@@ -291,13 +153,14 @@ export function App() {
   // Not interested, with an optional reason: X (row button or key) asks why in a toast; the drawer asks inline.
   const notForMe = useNotForMeApi({ user: user.state, update: user.update, prefs: prefs.prefs, setRule: prefs.setRule, hideCompany, jobs });
   const { askWhy } = notForMe;
+  const { statusOf, toggleStatus } = user;
   const onStatus = useCallback(
     (job: Job, s: Status) => {
-      const prev = user.state[job.id]?.status;
-      user.toggleStatus(job, s);
+      const prev = statusOf(job.id);
+      toggleStatus(job, s);
       if (s === "dismissed" && prev !== "dismissed") askWhy(job, prev);
     },
-    [user, askWhy],
+    [statusOf, toggleStatus, askWhy],
   );
   const onOpen = useCallback((job: Job) => setOpenId(job.id), []);
   const onApply = useCallback((job: Job) => setApplying(job), []);
@@ -418,20 +281,7 @@ export function App() {
                       onChoose={() => setChoosing(true)}
                       onStop={() => void stopScan()}
                       notifyLine={notifyLine(tg, scan, notifyFailed)}
-                      notify={(openDetails) => (
-                        <NotifyBell
-                          tg={tg}
-                          scan={scan}
-                          failed={notifyFailed}
-                          onDetails={openDetails}
-                          onSaved={() => setup.refresh()}
-                          onConnected={() => {
-                            void refreshTg();
-                            void notifyScan().then((ok) => setNotifyFailed(!ok));
-                            notifyAsked.current = true;
-                          }}
-                        />
-                      )}
+                      notify={(openDetails) => <NotifyBell tg={tg} scan={scan} failed={notifyFailed} onDetails={openDetails} onSaved={() => setup.refresh()} onConnected={notifyNow} />}
                     />
                   )}
                   <span className="hidden sm:contents">

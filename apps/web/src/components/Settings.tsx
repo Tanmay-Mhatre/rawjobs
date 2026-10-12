@@ -508,7 +508,8 @@ function TrackingData({ user, prefs, onImport, onRemoveRule }: { user: UserState
 
   const apply = (next: Awaited<ReturnType<typeof readStateFile>>) => {
     onImport(next.state, next.prefs);
-    setMsg({ tone: "ok", text: `Imported ${Object.keys(next.state).length} tracked jobs.` });
+    const skipped = next.skipped ? ` Left out ${next.skipped} that couldn't be read.` : "";
+    setMsg({ tone: "ok", text: `Imported ${Object.keys(next.state).length} tracked jobs.${skipped}` });
   };
 
   const onFile = async (f: File | undefined) => {
