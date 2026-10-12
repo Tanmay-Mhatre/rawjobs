@@ -21,7 +21,6 @@ import {
   type JobGroup,
   type Sort,
 } from "../../lib/filters";
-import { offerWhat, type HideRule } from "../../lib/notForMe";
 import type { Prefs, SavedView } from "../../lib/prefs";
 import type { FilterPicks } from "../../lib/profileSync";
 import { postedOrSeen, timeAgo } from "../../lib/format";
@@ -62,8 +61,6 @@ type Props = {
   /** Undo a delete: put the view back at its old position. */
   onRestoreView: (view: SavedView, index: number) => void;
   onHideCompany: (company: string, hidden: boolean) => void;
-  /** Turn a Not interested rule ("Senior roles") off, or back on (Undo). */
-  onSetRule: (rule: HideRule, on: boolean) => void;
   /** Is this job at one of your companies? Starred, nudged up in Best match, and in a strip on top. */
   isYours: (j: Job) => boolean;
   /** How many companies you've added. */
@@ -304,10 +301,6 @@ export function RadarPage(p: Props) {
         onAction: () => p.onHideCompany(company, false),
       });
   };
-  const removeRule = (rule: HideRule) => {
-    p.onSetRule(rule, false);
-    toast({ message: <>Showing {offerWhat({ kind: "rule", rule })} again.</>, actionLabel: "Undo", onAction: () => p.onSetRule(rule, true) });
-  };
   const deleteView = (view: SavedView) => {
     const index = p.prefs.views.findIndex((v) => v.id === view.id);
     p.onDeleteView(view.id);
@@ -501,10 +494,8 @@ export function RadarPage(p: Props) {
                 ats={facet("ats")}
                 olderCount={olderCount}
                 maxAgeDays={maxAgeDays}
-                hiddenCompanies={p.prefs.hiddenCompanies}
-                onUnhide={(c) => p.onHideCompany(c, false)}
-                hideRules={p.prefs.hideRules}
-                onRemoveRule={removeRule}
+                hiddenCompanies={p.prefs.hiddenCompanies.length}
+                hideRules={p.prefs.hideRules.length}
               />
               <Button variant="ghost" size="sm" aria-expanded={moreFacets} onClick={() => setMoreFacets((o) => !o)}>
                 {moreFacets ? "Fewer filters" : "More filters"}

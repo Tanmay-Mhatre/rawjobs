@@ -10,7 +10,7 @@ vi.mock("../src/lib/setup", async (orig) => ({ ...(await orig<typeof import("../
 // The cards that talk to the local server on their own aren't what this is about.
 vi.mock("../src/components/ScheduledScans", () => ({ ScheduledScans: () => null }));
 vi.mock("../src/components/TelegramAlerts", () => ({ TelegramAlerts: () => null }));
-vi.mock("../src/components/Updates", () => ({ AboutRawJobs: () => null, UpdatesSettings: () => null }));
+vi.mock("../src/components/Updates", () => ({ AboutRawJobs: () => null, UpdatesSettings: () => null, UpdateTelegramSetting: () => null }));
 vi.mock("../src/components/WhatsNew", () => ({ ReleaseNotes: () => null }));
 vi.mock("../src/lib/update", () => ({ useUpdateStatus: () => ({ status: null, setStatus: () => {} }) }));
 vi.mock("../src/lib/data", async (orig) => ({ ...(await orig<typeof import("../src/lib/data")>()), canRunLocally: true, useDirectorySize: () => 51000 }));
@@ -90,5 +90,18 @@ describe("Settings saving", () => {
     await userEvent.click(screen.getByRole("checkbox", { name: /share companies i add/i }));
     expect(props.update).toHaveBeenCalled();
     expect(saveConfig).not.toHaveBeenCalled();
+  });
+});
+
+describe("Settings › Notifications", () => {
+  it("“only jobs I haven't been sent” saves at once, on top of the saved alerts", async () => {
+    const { props } = renderSettings({ draft: { ...saved, include: ["designer"] }, dirty: true });
+    await go("#settings/notifications");
+    await userEvent.click(screen.getByRole("checkbox", { name: /only jobs i haven't been sent before/i }));
+    await waitFor(() => expect(saveConfig).toHaveBeenCalledOnce());
+    const config = saveConfig.mock.calls[0]![0] as { profile: { titles: { include: string[] } }; alerts: { only_new: boolean } };
+    expect(config.alerts.only_new).toBe(false);
+    expect(config.profile.titles.include).toEqual(["product manager"]);
+    expect(props.update).toHaveBeenCalledWith({ alerts: { ...saved.alerts, only_new: false } });
   });
 });

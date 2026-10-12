@@ -20,7 +20,11 @@ import { TelegramAlerts } from "./TelegramAlerts";
 import { Button, Card, cx, IconButton, Segmented, Toggle } from "./ui";
 import { useUpdateStatus } from "../lib/update";
 import { DesktopShortcutSettings } from "./DesktopShortcut";
-import { AboutRawJobs, UpdatesSettings } from "./Updates";
+import { AboutRawJobs, UpdatesSettings, UpdateTelegramSetting } from "./Updates";
+import { ShortcutList } from "./ShortcutList";
+import { DISMISS_KEY as CHECKLIST_DISMISSED_KEY } from "./Guidance";
+import { DISMISSED_KEY as GO_BACK_DISMISSED_KEY } from "./companies/ForYou";
+import { save } from "../lib/storage";
 import { ReleaseNotes } from "./WhatsNew";
 import { parseSettingsHash, SETTINGS_GROUPS, SETTINGS_PAGES, SETTINGS_SECTIONS, settingsHash, type SettingsPageId } from "./settings/registry";
 import { searchSettings, type SettingsHit } from "./settings/search";
@@ -51,6 +55,8 @@ type Props = {
   toCompanies: () => void;
   /** Clear the saved setup and open the wizard again; an error message, or null. Only on a saved local setup. */
   onStartOver?: () => Promise<string | null>;
+  /** R scans now (for the shortcut list). */
+  canScan?: boolean;
 };
 
 /** "a, b, c +2", or "" when empty. */
@@ -88,34 +94,39 @@ export function Settings({
   removeResume,
   toCompanies,
   onStartOver,
+  canScan = false,
 }: Props) {
   const [status, setStatus] = useState<{ tone: "ok" | "bad"; text: string; detail?: string; retry?: boolean } | null>(null);
   const [saving, setSaving] = useState(false);
   const lastSave = useRef(false);
   const blockers = saveBlockers(draft).map((b) => b.message);
-  // Once setup is saved, the directory switches save on their own, so only Profile and Matching edits wait for Save.
+  // Once setup is saved, the switches outside Profile and Matching save on their own, so only those two pages' edits wait for Save.
   const instant = canRunLocally && setupSaved;
   const same = (a: Draft, b: Draft) => JSON.stringify(draftToConfig(a)) === JSON.stringify(draftToConfig(b));
-  const dirty = anyDirty && (!instant || !same({ ...draft, directory: saved.directory }, saved));
+  /** The draft without the edits that save on their own. */
+  const waiting = { ...draft, directory: saved.directory, alerts: { ...draft.alerts, only_new: saved.alerts.only_new } };
+  const dirty = anyDirty && (!instant || !same(waiting, saved));
   /** The page holding the unsaved edits: Matching when only the threshold changed. */
-  const dirtyPage: SettingsPageId = same({ ...draft, directory: saved.directory, minScore: saved.minScore }, saved) ? "matching" : "profile";
+  const dirtyPage: SettingsPageId = same({ ...waiting, minScore: saved.minScore }, saved) ? "matching" : "profile";
   /** Until setup is saved, the Save bar shows on every page: the directory switches wait for it too. */
   const saveHere = (page: SettingsPageId) => !instant || page === "profile" || page === "matching";
-  const [directorySave, setDirectorySave] = useState<Partial<Record<keyof Draft["directory"], FieldSave>>>({});
-  /** Save one directory switch now: written on top of the saved setup, leaving Profile edits unsaved. */
-  const saveDirectory = async (key: keyof Draft["directory"], on: boolean) => {
-    const directory = { ...draft.directory, [key]: on };
-    update({ directory });
+  const [switchSave, setSwitchSave] = useState<Partial<Record<InstantSwitch, FieldSave>>>({});
+  /** Save one switch now: written on top of the saved setup, leaving Profile and Matching edits unsaved. */
+  const saveSwitch = async (key: InstantSwitch, on: boolean) => {
+    // Both directory switches may be saving at once, so each save carries the other's latest value.
+    const patch: Partial<Draft> = key === "only_new" ? { alerts: { ...draft.alerts, only_new: on } } : { directory: { ...draft.directory, [key]: on } };
+    update(patch);
     if (!instant) return;
-    const note = (state: FieldSave) => setDirectorySave((s) => ({ ...s, [key]: state }));
+    const note = (state: FieldSave) => setSwitchSave((s) => ({ ...s, [key]: state }));
     note({ kind: "saving" });
     try {
-      const res = await saveConfig(draftToConfig({ ...saved, directory }));
-      if (!res.ok) return note({ kind: "error", retry: () => void saveDirectory(key, on) });
+      const next = key === "only_new" ? { ...saved, alerts: { ...saved.alerts, only_new: on } } : { ...saved, directory: patch.directory! };
+      const res = await saveConfig(draftToConfig(next));
+      if (!res.ok) return note({ kind: "error", retry: () => void saveSwitch(key, on) });
       await onSaved();
       note({ kind: "saved" });
     } catch {
-      note({ kind: "error", retry: () => void saveDirectory(key, on) });
+      note({ kind: "error", retry: () => void saveSwitch(key, on) });
     }
   };
   const directorySize = useDirectorySize();
@@ -321,11 +332,26 @@ export function Settings({
 
         {page(
           "companies",
-          <Section id="companies" title="My companies" hint="Companies you'd love to work at: scanned every time, starred on your Radar, and their newest jobs shown on top.">
+          <Section
+            id="companies"
+            title="My companies"
+            hint="Companies you'd love to work at: scanned every time, starred on your Radar, and their newest jobs shown on top. Hidden companies and past employers are on the Companies tab too."
+          >
             <div className="flex flex-wrap items-center gap-3">
               <p className="type-small">
                 You've picked <b className="tabular">{draft.companies.length}</b> compan{draft.companies.length === 1 ? "y" : "ies"}
-                {draft.muted.length > 0 && <> and hidden {draft.muted.length}</>}.
+                {draft.muted.length > 0 && (
+                  <>
+                    , hidden <b className="tabular">{draft.muted.length}</b>
+                  </>
+                )}
+                {draft.pastEmployers.length > 0 && (
+                  <>
+                    {" "}
+                    and listed <b className="tabular">{draft.pastEmployers.length}</b> past employer{draft.pastEmployers.length === 1 ? "" : "s"}
+                  </>
+                )}
+                .
               </p>
               <Button size="sm" onClick={toCompanies}>
                 Manage in Companies tab <ArrowRight className="size-3.5" />
@@ -375,10 +401,10 @@ export function Settings({
               <div className="space-y-2">
                 <p className="type-small text-muted">Every scan first updates the directory, so new companies and moved careers pages are picked up.</p>
                 <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
-                  <Toggle checked={draft.directory.auto_update} onChange={(v) => void saveDirectory("auto_update", v)}>
+                  <Toggle checked={draft.directory.auto_update} onChange={(v) => void saveSwitch("auto_update", v)}>
                     Also update it in the background when the app starts
                   </Toggle>
-                  <SaveNote state={directorySave.auto_update} />
+                  <SaveNote state={switchSave.auto_update} />
                 </div>
               </div>
             </Section>
@@ -388,13 +414,36 @@ export function Settings({
         {page(
           "notifications",
           shown.alerts && (
-            <Section id="alerts" title="Telegram alerts" hint="Get new jobs from scheduled scans on your phone. Saved right away.">
-              <TelegramAlerts onChanged={onSaved} />
-            </Section>
+            <>
+              <Section id="alerts" title="Telegram alerts" hint="Get new jobs from scheduled scans on your phone. Saved right away.">
+                <TelegramAlerts onChanged={onSaved} />
+              </Section>
+              <Section id="send" title="What to send" hint="Which Telegram messages you get once it's connected. Saved right away.">
+                <div className="space-y-4">
+                  <div>
+                    <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+                      <Toggle checked={draft.alerts.only_new} onChange={(v) => void saveSwitch("only_new", v)}>
+                        After a scheduled scan, only jobs I haven't been sent before
+                      </Toggle>
+                      <SaveNote state={switchSave.only_new} />
+                    </div>
+                    <p className="mt-1 type-small text-muted">Turn off to get every strong match after each scheduled scan, even ones you've had.</p>
+                  </div>
+                  <UpdateTelegramSetting />
+                </div>
+              </Section>
+            </>
           ),
         )}
 
         {page("appearance", <AppearanceSection />)}
+
+        {page(
+          "keyboard",
+          <Section id="shortcuts" title="Keyboard shortcuts" hint="Single keys work anywhere except while you type in a field. Press ? to see them at any time.">
+            <ShortcutList canScan={canScan} className="max-w-md space-y-2 type-small" />
+          </Section>,
+        )}
 
         {page(
           "data",
@@ -403,10 +452,10 @@ export function Settings({
             <Section id="sharing" title="Sharing" hint="Help everyone find more companies. On by default; turn it off here. Saved right away.">
               <div className="space-y-2">
                 <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
-                  <Toggle checked={draft.directory.share_additions} onChange={(v) => void saveDirectory("share_additions", v)}>
+                  <Toggle checked={draft.directory.share_additions} onChange={(v) => void saveSwitch("share_additions", v)}>
                     Share companies I add by link with everyone
                   </Toggle>
-                  <SaveNote state={directorySave.share_additions} />
+                  <SaveNote state={switchSave.share_additions} />
                 </div>
                 <p className="type-small text-muted">
                   Only the careers link is shared: the company's name, its hiring system and its board name. Never your profile, resume, searches or which jobs you look at.{" "}
@@ -421,14 +470,20 @@ export function Settings({
                 </p>
               </div>
             </Section>
+            <Section id="tips" title="Tips you've closed" hint="The setup checklist on the Radar and the suggestions to go back to past employers.">
+              <ShowTipsAgain />
+            </Section>
             {onStartOver && (
-              <Section
-                id="reset"
-                title="Start setup over"
-                hint="Clears your setup answers: profile, roles, places, keywords and companies. Your tracked jobs, notes, saved views, resume and Telegram alerts stay."
-              >
-                <StartOver onStartOver={onStartOver} />
-              </Section>
+              <div className="space-y-2 pt-4">
+                <h3 className="type-label text-danger-text">Danger zone</h3>
+                <Section
+                  id="reset"
+                  title="Start setup over"
+                  hint="Clears your setup answers: profile, roles, places, keywords and companies. Your tracked jobs, notes, saved views, resume and Telegram alerts stay."
+                >
+                  <StartOver onStartOver={onStartOver} />
+                </Section>
+              </div>
             )}
           </>,
         )}
@@ -514,6 +569,32 @@ export function Settings({
 }
 
 type FieldSave = { kind: "idle" | "saving" | "saved" } | { kind: "error"; retry: () => void };
+/** The switches outside Profile and Matching that are kept in the config file. */
+type InstantSwitch = "auto_update" | "share_additions" | "only_new";
+
+/** Bring back the tips you've closed; each shows again where it applies. */
+function ShowTipsAgain() {
+  const [done, setDone] = useState(false);
+  return (
+    <div className="flex flex-wrap items-center gap-3">
+      <Button
+        size="sm"
+        onClick={() => {
+          save(CHECKLIST_DISMISSED_KEY, false);
+          save(GO_BACK_DISMISSED_KEY, []);
+          setDone(true);
+        }}
+      >
+        Show them again
+      </Button>
+      {done && (
+        <span role="status" className="inline-flex items-center gap-1 type-small text-muted">
+          <Check className="size-3.5 text-success-text" aria-hidden="true" /> Done. They show again where they apply.
+        </span>
+      )}
+    </div>
+  );
+}
 
 /** Next to a switch that saves on its own: "Saving…", "Saved", or what went wrong with Try again. */
 function SaveNote({ state }: { state?: FieldSave }) {
@@ -556,7 +637,9 @@ function goToPage(e: MouseEvent, id: SettingsPageId) {
 function SettingsNav({ pages, current, onList, searching, children }: { pages: readonly NavPage[]; current: SettingsPageId; onList: boolean; searching: boolean; children: ReactNode }) {
   return (
     <nav aria-label="Settings pages" className={cx("mb-6 md:sticky md:top-20 md:mb-0", !onList && !searching && "max-md:hidden")}>
-      <h1 className="mb-3 type-subheading md:hidden">Settings</h1>
+      <p className="mb-3 type-subheading md:hidden" aria-hidden="true">
+        Settings
+      </p>
       {children}
       {/* While searching on a phone, the results take the list's place. */}
       <div className={cx(searching && "max-md:hidden")}>

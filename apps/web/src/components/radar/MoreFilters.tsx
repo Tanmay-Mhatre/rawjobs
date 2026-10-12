@@ -1,6 +1,5 @@
 import { type FacetOption, type Filters, INDEX_MAX_AGE_DAYS } from "../../lib/filters";
-import { type HideRule, offerWhat, ruleKey, ruleLabel } from "../../lib/notForMe";
-import { Button } from "../ui";
+import { settingsHash } from "../settings/registry";
 import { FacetMenu } from "./FacetMenu";
 
 /** "3 months", "1 month", "60 days". */
@@ -35,19 +34,16 @@ export function MoreMenu({
   olderCount,
   maxAgeDays,
   hiddenCompanies,
-  onUnhide,
   hideRules,
-  onRemoveRule,
 }: {
   filters: Filters;
   setFilters: (p: Partial<Filters>) => void;
   ats: FacetOption[];
   olderCount: number;
   maxAgeDays: number;
-  hiddenCompanies: string[];
-  onUnhide: (company: string) => void;
-  hideRules: HideRule[];
-  onRemoveRule: (rule: HideRule) => void;
+  /** How many companies and Not interested rules hide jobs; each links to where they're managed. */
+  hiddenCompanies: number;
+  hideRules: number;
 }) {
   const extra =
     [filters.salaryOnly, filters.hideEvergreen, filters.showOld, filters.showFailed, filters.showClosed, filters.showHidden, filters.olderIndex].filter(Boolean).length + filters.ats.length;
@@ -61,34 +57,24 @@ export function MoreMenu({
       footer={
         <div className="mt-1 border-t border-line pt-1">
           <MoreToggles filters={filters} setFilters={setFilters} olderCount={olderCount} maxAgeDays={maxAgeDays} />
-          {hiddenCompanies.length > 0 && (
-            <div className="mt-1 border-t border-line px-2 pt-2">
-              <p className="mb-1 type-label">Hidden companies</p>
-              <ul className="space-y-0.5">
-                {hiddenCompanies.map((c) => (
-                  <li key={c} className="flex items-center justify-between type-small">
-                    <span className="truncate">{c}</span>
-                    <Button size="sm" variant="ghost" onClick={() => onUnhide(c)} aria-label={`Show ${c} again`}>
-                      Show
-                    </Button>
-                  </li>
-                ))}
-              </ul>
-            </div>
-          )}
-          {hideRules.length > 0 && (
-            <div className="mt-1 border-t border-line px-2 pt-2">
-              <p className="mb-1 type-label">Hidden by your Not interested rules</p>
-              <ul className="space-y-0.5">
-                {hideRules.map((r) => (
-                  <li key={ruleKey(r)} className="flex items-center justify-between gap-2 type-small">
-                    <span className="min-w-0 truncate">{ruleLabel(r)}</span>
-                    <Button size="sm" variant="ghost" onClick={() => onRemoveRule(r)} aria-label={`Show ${offerWhat({ kind: "rule", rule: r })} again`}>
-                      Show
-                    </Button>
-                  </li>
-                ))}
-              </ul>
+          {(hiddenCompanies > 0 || hideRules > 0) && (
+            <div className="mt-1 space-y-1 border-t border-line px-2 py-2 type-small">
+              {hiddenCompanies > 0 && (
+                <a href="#companies" className="flex items-center justify-between gap-2 text-muted hover:text-ink">
+                  <span>
+                    Hidden companies <span className="tabular">({hiddenCompanies})</span>
+                  </span>
+                  <span className="font-medium text-ink underline underline-offset-2">Manage</span>
+                </a>
+              )}
+              {hideRules > 0 && (
+                <a href={`#${settingsHash("rules")}`} className="flex items-center justify-between gap-2 text-muted hover:text-ink">
+                  <span>
+                    Not interested rules <span className="tabular">({hideRules})</span>
+                  </span>
+                  <span className="font-medium text-ink underline underline-offset-2">Manage</span>
+                </a>
+              )}
             </div>
           )}
         </div>

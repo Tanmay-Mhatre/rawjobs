@@ -23,6 +23,7 @@ import { Button, Card, Toggle } from "./ui";
 import { Anchor, ChangeRows, Head, Points, sortedItems, VersionLine } from "./UpdateParts";
 import { WhatsNewDialog } from "./WhatsNew";
 import { Dialog } from "./Dialog";
+import { settingsHash } from "./settings/registry";
 
 function CopyInstallLine() {
   const line = installLine();
@@ -177,7 +178,7 @@ function UpdatingCover({ from, to }: { from: string; to: string }) {
   );
 }
 
-/** Settings → About: whether to hear about new versions, and which ones. */
+/** Settings › Updates: whether to look for new versions, and which ones. */
 export function UpdatesSettings() {
   const { status, setStatus } = useUpdateStatus();
   if (!status?.installed) return null;
@@ -194,13 +195,31 @@ export function UpdatesSettings() {
         Every few minutes RawJobs looks whether a new version is out. When one is, it's downloaded in the background and checked against RawJobs' signing key, then an Update button appears at the top.
         It only installs when you click it. A required fix asks until you update.
       </p>
-      <Toggle checked={status.settings.telegram !== false} onChange={(on) => void saveUpdateSettings({ telegram: on }).then(apply)}>
-        Tell me on Telegram when an update is ready
-      </Toggle>
-      <p className="type-small text-muted">Only if Telegram alerts are set up and on (Scans and alerts). One message per version.</p>
       <Toggle checked={status.settings.channel === "beta"} onChange={(on) => void saveUpdateSettings({ channel: on ? "beta" : "stable" }).then(apply)}>
         Get test versions early (beta: newer, and more likely to have problems)
       </Toggle>
+    </div>
+  );
+}
+
+/** Settings › Notifications: a Telegram message when a new version is ready. Installed copies only. */
+export function UpdateTelegramSetting() {
+  const { status, setStatus } = useUpdateStatus();
+  if (!status?.installed) return null;
+  return (
+    <div>
+      <Toggle
+        checked={status.settings.telegram !== false}
+        onChange={(on) =>
+          void saveUpdateSettings({ telegram: on }).then((s) => {
+            if (s) setStatus(s);
+            announceUpdateStatus();
+          })
+        }
+      >
+        A new version of RawJobs is ready
+      </Toggle>
+      <p className="mt-1 type-small text-muted">One message per version, while Telegram alerts are on.</p>
     </div>
   );
 }
@@ -312,7 +331,7 @@ function LatestVersion({ status, busy, onUpdate }: { status: UpdateStatus; busy:
       {top.length > 0 && <ChangeRows items={top} />}
       <div className="flex flex-wrap items-center gap-2">
         <UpdateButton status={status} onClick={onUpdate} busy={busy} label={`Update to ${a.version}`} />
-        <a href="#settings?section=release-notes" className="type-small text-muted underline underline-offset-2 hover:text-ink">
+        <a href={`#${settingsHash("whats-new")}`} className="type-small text-muted underline underline-offset-2 hover:text-ink">
           See all changes
         </a>
       </div>

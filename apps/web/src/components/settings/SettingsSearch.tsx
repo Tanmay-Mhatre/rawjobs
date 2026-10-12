@@ -12,7 +12,7 @@ const optionId = (i: number) => `settings-hit-${i}`;
 export function useSearchShortcut() {
   useEffect(() => {
     const onKey = (e: globalThis.KeyboardEvent) => {
-      if (e.key !== "/" || ignoreShortcut(e) || document.querySelector("[role=dialog]")) return;
+      if (e.key !== "/" || ignoreShortcut(e) || document.querySelector("dialog[open]")) return;
       const input = document.getElementById(SEARCH_ID);
       if (!input?.offsetParent) return;
       e.preventDefault();
