@@ -4,6 +4,7 @@ import { join } from "node:path";
 import { brotliCompressSync, brotliDecompressSync, constants, gunzipSync } from "node:zlib";
 import { applyFeedDiff, feedStateHash, JOB_FEED_SCHEMA_V2, type FeedDiff, type FeedManifestV2, type FeedSnapshot, type FeedState } from "./job-feed-diff";
 import { envSetting } from "./env";
+import { isSafeName, safeJoin } from "./safe-name";
 import { passesLocationGate, passesTitleGate } from "./score";
 import type { Profile, Workplace } from "./schema";
 
@@ -82,14 +83,16 @@ export async function syncJobFeed(dataDir: string, opts: { fetchImpl?: typeof fe
     const local = readJson<JobFeedManifest>(join(dir, "manifest.json"));
     mkdirSync(dir, { recursive: true });
     let fetched = 0;
+    const unsafe = Object.entries(manifest.shards).find(([ats, shard]) => !isSafeName(ats) || !isSafeName(shard.file));
+    if (unsafe) return { updated: false, ageDays: stale(), message: "The job feed's manifest names an unsafe file; scanning every company live." };
     for (const [ats, shard] of Object.entries(manifest.shards)) {
       if (local?.shards[ats]?.sha256 === shard.sha256 && existsSync(join(dir, `${ats}.json`))) continue;
       const r = await get(`${jobFeedUrl()}/${shard.file}`, { redirect: "follow" });
       if (!r.ok) return { updated: fetched > 0, ageDays: stale(), message: `Job feed download of ${shard.file} failed (HTTP ${r.status}).` };
       const gz = Buffer.from(await r.arrayBuffer());
       if (createHash("sha256").update(gz).digest("hex") !== shard.sha256) return { updated: fetched > 0, ageDays: stale(), message: `${shard.file} didn't match its checksum; kept the old copy.` };
-      writeFileSync(join(dir, `${ats}.json.tmp`), gunzipSync(gz));
-      renameSync(join(dir, `${ats}.json.tmp`), join(dir, `${ats}.json`));
+      writeFileSync(safeJoin(dir, `${ats}.json.tmp`), gunzipSync(gz));
+      renameSync(safeJoin(dir, `${ats}.json.tmp`), safeJoin(dir, `${ats}.json`));
       fetched++;
     }
     writeFileSync(join(dir, "manifest.json"), JSON.stringify(manifest, null, 2));
@@ -132,6 +135,7 @@ const readState = (dir: string): FeedState | undefined => {
 };
 
 async function download(get: typeof fetch, file: string, sha256: string): Promise<Buffer> {
+  if (!isSafeName(file)) throw new Error(`the manifest names an unsafe file (${JSON.stringify(file)})`);
   const r = await get(`${jobFeedUrl()}/${file}`, { redirect: "follow" });
   if (!r.ok) throw new Error(`download of ${file} failed (HTTP ${r.status})`);
   const buf = Buffer.from(await r.arrayBuffer());
@@ -292,6 +296,7 @@ export function feedMatches(dataDir: string, profile: Profile, now = Date.now(),
   const cache: MatchCache = { version: MATCHING_VERSION, profile: key, shards: {} };
   const passes = rowMatcher(profile);
   for (const [ats, meta] of Object.entries(manifest.shards)) {
+    if (!isSafeName(ats)) continue;
     const known = old?.version === MATCHING_VERSION && old.profile === key && old.shards[ats]?.sha256 === meta.sha256 ? old.shards[ats] : undefined;
     let rows = known?.companies;
     if (!rows) {

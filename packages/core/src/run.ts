@@ -2,6 +2,7 @@ import { companyOfJobId, getConnector, jobCompanyKey } from "./connectors";
 import { HttpClient, HttpError } from "./http";
 import type { CompanyHealth, CompanyRef, Config, Job } from "./schema";
 import { scoreJob } from "./score";
+import { safeUrl } from "./text";
 
 export type RunResult = {
   startedAt: string;
@@ -107,6 +108,7 @@ export async function runRadar(config: Config, opts: RunOptions = {}): Promise<R
       let described = 0;
       for (const raw of raws) {
         const base = connector.normalize(raw, company);
+        base.url = safeUrl(base.url) ?? "";
         const prev = previous.get(base.id);
         const firstSeen = prev?.firstSeen ?? nowIso;
         let { score, why } = scoreJob(base, config.profile, fit);

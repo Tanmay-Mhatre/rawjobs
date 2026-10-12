@@ -88,7 +88,19 @@ export function createUpdater(o: { home: string; isBusy: () => boolean; exit: ()
     }
   }
 
+  let applying = false;
   async function apply(): Promise<void> {
+    // A second click while one is under way would share (and delete) its download folder.
+    if (applying || state === "updating") return;
+    applying = true;
+    try {
+      await applyOnce();
+    } finally {
+      applying = false;
+    }
+  }
+
+  async function applyOnce(): Promise<void> {
     if (o.isBusy()) {
       error = "A scan is running. RawJobs updates when it's done.";
       return;
