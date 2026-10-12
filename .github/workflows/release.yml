@@ -1,14 +1,25 @@
 name: Release
 
-# Push a tag like v0.3.0 (the version in package.json) to publish a release: build the bundle, sign
-# latest.json with the release key, install it on Windows, macOS and Linux, then publish.
-# The tag's message becomes the "what's new" note shown in the dashboard.
+# Push a tag like v0.5.1 to publish a release: build the bundle (as that version), sign latest.json
+# with the release key, install it on Windows, macOS and Linux, then publish. The weekly release
+# (weekly-release.yml) tags and calls this too.
+# The tag's message becomes the "what's new" note shown in the dashboard. A line "Update: mandatory"
+# in it makes it a required update; "Min-version: 0.5.0" makes older versions reinstall instead.
 on:
   push:
     tags: ["v*"]
+  workflow_call:
+    inputs:
+      tag:
+        description: The tag to release (already pushed), e.g. v0.5.1
+        type: string
+        required: true
 
 permissions:
   contents: read
+
+env:
+  TAG: ${{ inputs.tag || github.ref_name }}
 
 jobs:
   build:
@@ -18,23 +29,24 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
+          ref: refs/tags/${{ env.TAG }}
       - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: 24
           cache: pnpm
       - run: pnpm install --frozen-lockfile
-      - name: The tag matches package.json
+      - name: The tag is a version
         run: |
-          v="$(node -p 'require("./package.json").version')"
-          [ "$GITHUB_REF_NAME" = "v$v" ] || { echo "::error::Tag $GITHUB_REF_NAME doesn't match package.json version $v"; exit 1; }
+          echo "$TAG" | grep -Eq '^v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.]+)?$' || { echo "::error::$TAG isn't a version tag like v0.5.1"; exit 1; }
       - run: pnpm check
-      - run: pnpm bundle
+      # The tag names the version: no version bump needed in package.json for each release.
+      - run: pnpm bundle --version "${TAG#v}"
       # Unsigned here: this job ran `pnpm install`, so the key never comes near it (see sign).
       - name: Release files
         run: |
-          git tag -l --format='%(contents)' "$GITHUB_REF_NAME" > "$RUNNER_TEMP/notes.md"
-          pnpm release:files --unsigned --notes-file "$RUNNER_TEMP/notes.md"
+          git tag -l --format='%(contents)' "$TAG" > "$RUNNER_TEMP/notes.md"
+          pnpm release:files --unsigned --version "${TAG#v}" --notes-file "$RUNNER_TEMP/notes.md"
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: release-unsigned
@@ -94,7 +106,8 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           pre=""
-          case "$GITHUB_REF_NAME" in *-*) pre="--prerelease" ;; esac
+          case "$TAG" in *-*) pre="--prerelease" ;; esac
           # The tag's message (also in latest.json, for the dashboard), then GitHub's list of changes.
           jq -r .notes release/latest.json > "$RUNNER_TEMP/notes.md"
-          gh release create "$GITHUB_REF_NAME" release/* --repo "$GITHUB_REPOSITORY" --title "RawJobs ${GITHUB_REF_NAME#v}" --notes-file "$RUNNER_TEMP/notes.md" --generate-notes $pre
+          if [ "$(jq -r .critical release/latest.json)" = true ]; then printf '\n\n**Required update.**\n' >> "$RUNNER_TEMP/notes.md"; fi
+          gh release create "$TAG" release/* --repo "$GITHUB_REPOSITORY" --title "RawJobs ${TAG#v}" --notes-file "$RUNNER_TEMP/notes.md" --generate-notes $pre

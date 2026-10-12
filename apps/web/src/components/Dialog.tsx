@@ -15,6 +15,7 @@ export function Dialog({
   placement = "center",
   className,
   initialFocus,
+  persistent = false,
   children,
 }: {
   open: boolean;
@@ -26,6 +27,11 @@ export function Dialog({
   className?: string;
   /** CSS selector inside the dialog to focus first; defaults to the first focusable element. */
   initialFocus?: string;
+  /**
+   * Only `open` closes it: not Escape, the backdrop, or the browser (Chrome closes a modal on Escape
+   * by itself when there's been no click since it opened). A required update uses this.
+   */
+  persistent?: boolean;
   children: ReactNode;
 }) {
   const ref = useRef<HTMLDialogElement>(null);
@@ -72,11 +78,14 @@ export function Dialog({
       // Escape fires "cancel"; let React state drive the close so parents stay in sync.
       onCancel={(e) => {
         e.preventDefault();
-        close.current();
+        if (!persistent) close.current();
+      }}
+      onClose={(e) => {
+        if (persistent && !e.currentTarget.open) e.currentTarget.showModal();
       }}
       onMouseDown={(e) => {
         // A press on the <dialog> element itself (not its content) is a press on the backdrop.
-        if (e.target === e.currentTarget) close.current();
+        if (e.target === e.currentTarget && !persistent) close.current();
       }}
     >
       {children}

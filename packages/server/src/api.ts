@@ -17,7 +17,7 @@ export type ApiOptions = {
   /** Reported by /api/health. Default: this copy's version. */
   version?: string;
   /** Answers /api/update (an installed copy's updates); without it, it says this copy doesn't update itself. */
-  updater?: Pick<Updater, "route">;
+  updater?: Pick<Updater, "route" | "updating">;
 };
 
 /** One line of the scan's NDJSON progress. */
@@ -250,6 +250,15 @@ Stopped after ${Math.round(timeoutMs / 1000)} s without finishing.`.trim(),
       } catch (err) {
         json(res, { ok: false, errors: (err as Error).message }, 500);
       }
+      return;
+    }
+    // In the few seconds RawJobs restarts into a new version, nothing new starts.
+    if (opts.updater?.updating() && ((url === "/api/run" && req.method === "POST") || url === "/api/check" || url === "/api/schedule/run")) {
+      const message = "RawJobs is updating; try again in a few seconds.";
+      if (url !== "/api/run") return json(res, { ok: false, type: "error", errors: message, message }, 503);
+      res.setHeader("content-type", "application/x-ndjson");
+      res.end(`${JSON.stringify({ type: "error", message })}
+`);
       return;
     }
     if (url === "/api/check" && req.method === "POST") {

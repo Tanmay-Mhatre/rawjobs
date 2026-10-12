@@ -6,8 +6,9 @@
 #   1. Downloads the latest RawJobs and the Node it runs on (from nodejs.org) into your user folder,
 #      %LOCALAPPDATA%\RawJobs, and checks both against the release's signed checksums.
 #   2. Starts RawJobs now and every time you log in, hidden, and restarts it if it stops.
-#   3. Adds RawJobs to the Start menu and opens the dashboard: http://127.0.0.1:4317
-# Running it again updates or repairs RawJobs. Your profile, tracking and scan data are never touched.
+#   3. Adds RawJobs to the Start menu and the Desktop, and opens the dashboard: http://127.0.0.1:4317
+# Running it again updates or repairs RawJobs. Your profile, tracking and scan data are never touched
+# (and are backed up first, to backups\); a scan that's running gets time to finish.
 # Uninstall: & "$env:LOCALAPPDATA\RawJobs\bin\rawjobs.cmd" uninstall
 #
 # Settings (environment variables, all optional):
@@ -106,7 +107,41 @@
     $NewApp = Join-Path $Temp 'app'
     Unpack $BundleFile $NewApp 1
 
-    # 5. Stop the running copy (if any), then put the new one in place.
+    # 5. Let a running scan finish (or stop it so it can carry on later), back up your data, stop the
+    #    running copy (if any), then put the new one in place.
+    $DataDir = Join-Path $Dir 'data'
+    $Lock = Join-Path $DataDir 'scan.lock'
+    $LockPid = 0
+    if ((Test-Path $Lock) -and [int]::TryParse((Get-Content -Raw $Lock).Trim(), [ref]$LockPid) -and (Get-Process -Id $LockPid -ErrorAction SilentlyContinue)) {
+      Say 'A scan is running: waiting up to 10 minutes for it to finish'
+      for ($i = 0; $i -lt 120 -and (Get-Process -Id $LockPid -ErrorAction SilentlyContinue); $i++) { Start-Sleep -Seconds 5 }
+      if (Get-Process -Id $LockPid -ErrorAction SilentlyContinue) {
+        # It saves its progress and stops; the next scan carries on from there.
+        Say 'Stopping the scan (the next scan carries on where it stopped)'
+        New-Item -ItemType File -Force -Path (Join-Path $DataDir 'scan-stop') | Out-Null
+        for ($i = 0; $i -lt 12 -and (Get-Process -Id $LockPid -ErrorAction SilentlyContinue); $i++) { Start-Sleep -Seconds 5 }
+      }
+    }
+    if (Test-Path (Join-Path $Dir 'app\current.txt')) {
+      Say 'Backing up your data'
+      $Backups = Join-Path $Dir 'backups'
+      $B = Join-Path $Backups ((Get-Date).ToUniversalTime().ToString('yyyy-MM-ddTHH-mm-ss-fffZ') + "-before-$Version")
+      New-Item -ItemType Directory -Force -Path $B | Out-Null
+      foreach ($f in 'rawjobs.config.local.yaml', 'rawjobs.config.local.backup.yaml', 'profile') {
+        $p = Join-Path $Dir $f
+        if (Test-Path $p) { Copy-Item -Recurse -Force $p $B }
+      }
+      if (Test-Path $DataDir) {
+        # Not what downloads again (caches, the company directory), nor a scan's own flags.
+        New-Item -ItemType Directory -Force -Path (Join-Path $B 'data') | Out-Null
+        Get-ChildItem $DataDir | Where-Object { $_.Name -notin 'cache', 'catalog', 'scan.lock', 'scan-stop', 'scan-notify' } | Copy-Item -Recurse -Force -Destination (Join-Path $B 'data')
+        $Additions = Join-Path $DataDir 'catalog\additions.json'
+        if (Test-Path $Additions) { New-Item -ItemType Directory -Force -Path (Join-Path $B 'data\catalog') | Out-Null; Copy-Item $Additions (Join-Path $B 'data\catalog') }
+      }
+      # The last three backups are kept.
+      Get-ChildItem $Backups -Directory | Sort-Object Name | Select-Object -SkipLast 3 | Remove-Item -Recurse -Force -ErrorAction SilentlyContinue
+    }
+
     Unregister-ScheduledTask -TaskName $TaskName -Confirm:$false -ErrorAction SilentlyContinue
     $prefix = (Join-Path $Dir 'runtime') + '\'
     Get-CimInstance Win32_Process -Filter "Name='node.exe'" -ErrorAction SilentlyContinue |
@@ -166,14 +201,10 @@
       Start-Process -FilePath (Join-Path $env:SystemRoot 'System32\conhost.exe') -ArgumentList $Hidden -WorkingDirectory $Dir -WindowStyle Hidden
     }
 
-    # 7. The Start menu shortcut: opens the dashboard (and starts RawJobs if it isn't running).
-    $ws = New-Object -ComObject WScript.Shell
-    $lnk = $ws.CreateShortcut((Join-Path ([Environment]::GetFolderPath('Programs')) 'RawJobs.lnk'))
-    $lnk.TargetPath = Join-Path $env:SystemRoot 'System32\conhost.exe'
-    $lnk.Arguments = "--headless `"$Launcher`" open"
-    $lnk.WorkingDirectory = $Dir
-    $lnk.Description = 'Open the RawJobs dashboard'
-    $lnk.Save()
+    # 7. The shortcuts, in the Start menu and on the Desktop, with RawJobs' icon: they open the
+    #    dashboard on whatever port it's on (and start RawJobs if it isn't running).
+    & $Launcher shortcuts --desktop | Out-Null
+    if ($LASTEXITCODE -ne 0) { Say "(Couldn't add the RawJobs shortcuts; open http://127.0.0.1:4317 instead.)" }
 
     # 8. Wait for it to answer, then open the dashboard.
     $Url = $null
@@ -192,7 +223,7 @@
     Write-Host ''
     Write-Host "RawJobs $Version is running at $Url" -ForegroundColor Green
     Say "Installed in $Dir"
-    Say 'It starts by itself when you log in. Open it any time from the Start menu: RawJobs.'
+    Say 'It starts by itself when you log in. Open it any time: RawJobs, on the Desktop or in the Start menu.'
     Say 'To update or repair it, run the same line again.'
     Say "To uninstall: & `"$Launcher`" uninstall"
     Write-Host ''

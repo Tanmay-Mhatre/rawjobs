@@ -141,6 +141,7 @@ Usage:
   rawjobs open                Open the dashboard (starting it if it isn't running)
   rawjobs update [--check] [--to <version>]   Install the newest version now (an installed copy)
   rawjobs uninstall [--keep-data|--delete-data]   Remove an installed copy (your data is kept unless you say)
+  rawjobs shortcuts [--desktop]   Make or repair the RawJobs shortcut (--desktop: also on the Desktop)
   rawjobs scan [options]      Sync the directory, fetch your companies (and more, by scope) live, score them
   rawjobs schedule <status|install|remove>   Scan on a schedule on this computer (--time 08:00 [--time 20:00] [--scope mine|all], default mine)
   rawjobs alerts telegram <status|token|connect|test|on|off|forget>   Telegram alerts
@@ -204,6 +205,8 @@ async function main(argv: string[]): Promise<number> {
       return (await import("@rawjobs/server/desktop")).uninstall(rest);
     case "update":
       return (await import("@rawjobs/server/desktop")).updateCommand(rest);
+    case "shortcuts":
+      return (await import("@rawjobs/server/desktop")).shortcutsCommand(rest);
     case undefined:
     case "help":
     case "-h":

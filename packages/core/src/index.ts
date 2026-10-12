@@ -22,6 +22,7 @@ export * from "./resume";
 export * from "./suggest";
 export * from "./discover";
 export * from "./scan";
+export * from "./migrate";
 export * from "./resume-parse";
 export * from "./catalog/roles";
 export * from "./catalog/places";

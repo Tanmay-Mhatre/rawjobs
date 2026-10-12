@@ -7,8 +7,10 @@ import { parseArgs } from "node:util";
 import { defaultDataDir, rawjobsHome } from "@rawjobs/core";
 import { APP_VERSION, BUNDLED, CODE_ROOT, cliCommand } from "@rawjobs/core";
 import { removeSchedule } from "@rawjobs/core";
+import { scanLockHeld } from "@rawjobs/core";
 import { compareVersions } from "@rawjobs/core/release";
 import { AUTOSTART, fetchManifest, finishPendingUpdate, installedVersions, judge, readLastUpdate, readUpdateFile, releaseBase, releaseBaseFor, startUpdate } from "@rawjobs/core/update";
+import { makeShortcuts, removeShortcuts } from "./shortcuts";
 
 /**
  * The parts of an installed copy that live outside the code: the server's state file, its log, how
@@ -139,22 +141,24 @@ export async function uninstall(args: string[]): Promise<number> {
 
   const state = readServerState(home);
   if (process.platform === "win32") {
-    const ps = [
+    quiet("powershell.exe", [
+      "-NoProfile",
+      "-NonInteractive",
+      "-ExecutionPolicy",
+      "Bypass",
+      "-Command",
       `Unregister-ScheduledTask -TaskName '${AUTOSTART.windowsTask}' -Confirm:$false -ErrorAction SilentlyContinue`,
-      `Remove-Item -Force -ErrorAction SilentlyContinue (Join-Path ([Environment]::GetFolderPath('Programs')) 'RawJobs.lnk'), (Join-Path ([Environment]::GetFolderPath('Startup')) 'RawJobs.lnk')`,
-    ].join("; ");
-    quiet("powershell.exe", ["-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-Command", ps]);
+    ]);
   } else if (process.platform === "darwin") {
     const uid = process.getuid?.() ?? 501;
     quiet("launchctl", ["bootout", `gui/${uid}/${AUTOSTART.macLabel}`]);
     rmSync(join(homedir(), "Library/LaunchAgents", `${AUTOSTART.macLabel}.plist`), { force: true });
-    rmSync(join(homedir(), "Applications/RawJobs.app"), { recursive: true, force: true });
   } else {
     quiet("systemctl", ["--user", "disable", "--now", AUTOSTART.linuxUnit]);
     rmSync(join(homedir(), ".config/systemd/user", AUTOSTART.linuxUnit), { force: true });
     quiet("systemctl", ["--user", "daemon-reload"]);
-    rmSync(join(homedir(), ".local/share/applications/rawjobs.desktop"), { force: true });
   }
+  removeShortcuts(home);
   if (state && state.pid !== process.pid) {
     try {
       process.kill(state.pid);
@@ -163,7 +167,7 @@ export async function uninstall(args: string[]): Promise<number> {
     }
   }
 
-  const program = ["app", "runtime", "bin", "logs", "state.json", "updates.json"];
+  const program = ["app", "runtime", "bin", "logs", "icons", "state.json", "updates.json", "shortcuts.json"];
   const data = ["rawjobs.config.local.yaml", "rawjobs.config.local.backup.yaml", "profile", "data", "backups"];
   const targets = (deleteData ? [...program, ...data] : program).map((p) => join(home, p));
   if (process.platform === "win32") {
@@ -182,8 +186,8 @@ export async function uninstall(args: string[]): Promise<number> {
 }
 
 /**
- * `rawjobs update`: install the newest version now (an installed copy; the dashboard does the same,
- * and with updates on Automatic it happens by itself).
+ * `rawjobs update`: install the newest version now (an installed copy; the dashboard's Update now
+ * does the same). Nothing installs without you asking.
  *   --check      only say whether a newer version is out
  *   --to <v>     install this version, also an older one
  *   --finish     (used by an update itself) start the new version, and go back if it doesn't answer
@@ -225,6 +229,10 @@ export async function updateCommand(args: string[]): Promise<number> {
     return 1;
   }
 
+  if (scanLockHeld(defaultDataDir(home))) {
+    console.error("A scan is running. Update when it's done (it can also be stopped, and resumed later).");
+    return 1;
+  }
   const state = readServerState(home);
   let serverPid: number | undefined;
   if (state && (await healthy(`http://127.0.0.1:${state.port}`))) {
@@ -262,4 +270,25 @@ export async function updateCommand(args: string[]): Promise<number> {
   }
   console.error(`The update is taking longer than expected. See ${join(home, "logs/update.log")}.`);
   return 1;
+}
+
+/**
+ * `rawjobs shortcuts`: make (or repair) the RawJobs shortcut in the Start menu / Applications / app
+ * menu, with its icon. They open the dashboard on whatever port it's on.
+ *   --desktop    also put one on the Desktop
+ */
+export function shortcutsCommand(args: string[]): number {
+  const { values } = parseArgs({ args, options: { desktop: { type: "boolean", default: false } } });
+  const launcher = process.env.RAWJOBS_LAUNCHER;
+  if (!BUNDLED || !launcher) {
+    console.error("Shortcuts are for an installed copy of RawJobs (from the install line).");
+    return 2;
+  }
+  const r = makeShortcuts(rawjobsHome(), launcher, { desktop: values.desktop, version: APP_VERSION });
+  if (!r.ok) {
+    console.error(`Couldn't make the RawJobs shortcuts: ${r.error}`);
+    return 1;
+  }
+  for (const p of [r.menu, r.desktop]) if (p) console.log(`Shortcut: ${p}`);
+  return 0;
 }

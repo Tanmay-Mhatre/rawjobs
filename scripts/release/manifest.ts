@@ -3,7 +3,7 @@ import { createHash, createPrivateKey, sign } from "node:crypto";
 import { copyFileSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { parseArgs } from "node:util";
-import { NODE_PLATFORMS, nodeArchive, verifyRelease, type ReleaseManifest } from "@rawjobs/core/release";
+import { NODE_PLATFORMS, nodeArchive, parseReleaseNotes, verifyRelease, type ReleaseManifest } from "@rawjobs/core/release";
 
 /**
  * Turn a built bundle (pnpm bundle) into the files a release publishes, in dist/release/:
@@ -16,12 +16,14 @@ import { NODE_PLATFORMS, nodeArchive, verifyRelease, type ReleaseManifest } from
  * latest.json.sig out: the release workflow signs in a job of its own, with no dependencies
  * installed (scripts/catalog/sign.mjs), so no package can reach the key.
  * Without --node it uses the newest Node 24 LTS on nodejs.org.
+ * The notes (the tag's message) can carry "Update: mandatory" and "Min-version: x.y.z" lines: they
+ * set --critical and --min-version and are left out of the notes (parseReleaseNotes).
  */
 const root = resolve(import.meta.dirname, "../..");
 const { values } = parseArgs({
   options: {
     node: { type: "string" },
-    "min-version": { type: "string", default: "0.0.0" },
+    "min-version": { type: "string" },
     critical: { type: "boolean", default: false },
     "notes-file": { type: "string" },
     key: { type: "string" },
@@ -62,6 +64,7 @@ for (const platform of Object.keys(NODE_PLATFORMS)) {
   nodeSha256[platform] = line.split(/\s+/)[0]!;
 }
 
+const parsed = parseReleaseNotes(values["notes-file"] ? readFileSync(values["notes-file"], "utf8") : "");
 const manifest: ReleaseManifest = {
   app: "rawjobs",
   version,
@@ -70,9 +73,9 @@ const manifest: ReleaseManifest = {
   bundleSha256: sha256(readFileSync(join(out, bundleFile))),
   nodeVersion,
   nodeSha256,
-  minVersion: values["min-version"],
-  critical: values.critical,
-  notes: values["notes-file"] ? readFileSync(values["notes-file"], "utf8").trim() : "",
+  minVersion: values["min-version"] ?? parsed.minVersion ?? "0.0.0",
+  critical: values.critical || parsed.critical,
+  notes: parsed.notes,
 };
 // One key per line: install.sh picks values out with sed.
 const body = `${JSON.stringify(manifest, null, 2)}\n`;
@@ -84,7 +87,9 @@ if (pem && !values.unsigned) {
 }
 for (const f of ["install.sh", "install.ps1"]) copyFileSync(join(root, "packaging", f), join(out, f));
 
-console.log(`Release files for RawJobs ${version} (Node ${nodeVersion}) in ${out}`);
+console.log(
+  `Release files for RawJobs ${version} (Node ${nodeVersion}${manifest.critical ? ", required update" : ""}${manifest.minVersion !== "0.0.0" ? `, min version ${manifest.minVersion}` : ""}) in ${out}`,
+);
 
 async function newestNode24(): Promise<string> {
   const list = JSON.parse(await text("https://nodejs.org/dist/index.json")) as { version: string; lts: string | false }[];
