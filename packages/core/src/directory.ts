@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { gunzipSync } from "node:zlib";
+import { fetchSignedJson } from "./data-signing";
 import { envSetting } from "./env";
 import { isSafeName, safeJoin } from "./safe-name";
 
@@ -72,9 +73,13 @@ export type UpdateResult = { updated: boolean; version?: string; companies?: num
 export async function updateDirectory(dataDir: string, opts: { force?: boolean; fetchImpl?: typeof fetch } = {}): Promise<UpdateResult> {
   const get = opts.fetchImpl ?? fetch;
   const base = directoryUrl();
-  const res = await get(`${base}/manifest.json`, { headers: { accept: "application/json" }, redirect: "follow" });
-  if (!res.ok) return { updated: false, message: `Couldn't reach the shared directory (HTTP ${res.status}).` };
-  const manifest = (await res.json()) as DirectoryManifest;
+  const signed = await fetchSignedJson<DirectoryManifest>(get, `${base}/manifest.json`);
+  if (!signed.ok)
+    return {
+      updated: false,
+      message: signed.status ? `Couldn't reach the shared directory (HTTP ${signed.status}).` : "The shared directory's signature isn't valid; kept your current directory.",
+    };
+  const manifest = signed.value;
   const current = directoryStatus(dataDir).local;
   if (!opts.force && current?.version === manifest.version) return { updated: false, version: manifest.version, companies: manifest.companies, message: "Already up to date." };
 

@@ -165,6 +165,9 @@ filtering is instant. The first format is still published next to it while insta
    - `INBOX_TOKEN`: the same string as step 4
    - `DATA_REPO_TOKEN`: a fine-grained token with *Contents: read and write* on the directory repo only, expiring in 90 days
      (rotation steps: [self-hosting.md](self-hosting.md#tokens))
+   - `RAWJOBS_DATA_SIGNING_KEY`: the private data signing key (PEM). Apps accept `manifest.json`,
+     `jobs-manifest.json` and `jobs-v2-manifest.json` only with a valid `.sig` made with it
+     (`packages/core/src/data-signing.ts`; making the key: [self-hosting.md](self-hosting.md#run-your-own-directory))
 6. **Point apps at the inbox**: set `DEFAULT_CONTRIBUTE_URL` in `packages/core/src/directory.ts` to the Worker URL.
 
 ## Cost

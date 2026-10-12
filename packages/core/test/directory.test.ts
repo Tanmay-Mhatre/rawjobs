@@ -3,8 +3,12 @@ import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { gzipSync } from "node:zlib";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterAll, afterEach, beforeEach, describe, expect, it } from "vitest";
 import { contributeUrl, directoryStatus, directoryUrl, queueContributions, sendContributions, updateDirectory } from "../src/directory";
+import { testDataKey } from "./helpers";
+
+const key = testDataKey();
+afterAll(key.restore);
 
 let dir: string;
 beforeEach(() => {
@@ -46,6 +50,7 @@ const manifest = (version: string, badSum = false) => ({
 const server = (m: object) =>
   (async (url: string) => {
     if (url.endsWith("manifest.json")) return new Response(JSON.stringify(m));
+    if (url.endsWith("manifest.json.sig")) return new Response(key.sign(JSON.stringify(m)));
     if (url.endsWith("directory.json.gz")) return new Response(directory);
     if (url.endsWith("index.json.gz")) return new Response(index);
     return new Response("", { status: 404 });
@@ -74,12 +79,38 @@ describe("updateDirectory with a tampered manifest", () => {
     const evil = { ...manifest("v3"), files: { "../../bin/rawjobs.gz": { sha256: sha(directory), bytes: directory.length } } };
     const fetchImpl = (async (url: string) => {
       calls.push(url);
+      if (url.endsWith("manifest.json.sig")) return new Response(key.sign(JSON.stringify(evil)));
       return url.endsWith("manifest.json") ? new Response(JSON.stringify(evil)) : new Response(directory);
     }) as unknown as typeof fetch;
     const r = await updateDirectory(dir, { fetchImpl });
     expect(r).toMatchObject({ updated: false, message: expect.stringMatching(/unsafe file/) });
-    expect(calls).toEqual(["https://example.test/latest/manifest.json"]);
+    expect(calls.sort()).toEqual(["https://example.test/latest/manifest.json", "https://example.test/latest/manifest.json.sig"]);
     expect(existsSync(join(dir, "bin"))).toBe(false);
+  });
+});
+
+describe("updateDirectory signatures", () => {
+  const serve = (sig: (body: string) => Response) =>
+    (async (url: string) => {
+      const body = JSON.stringify(manifest("v4"));
+      if (url.endsWith("manifest.json")) return new Response(body);
+      if (url.endsWith("manifest.json.sig")) return sig(body);
+      return new Response(url.endsWith("directory.json.gz") ? directory : index);
+    }) as unknown as typeof fetch;
+
+  it("refuses a manifest without a signature", async () => {
+    const r = await updateDirectory(dir, { fetchImpl: serve(() => new Response("", { status: 404 })) });
+    expect(r).toMatchObject({ updated: false, message: expect.stringMatching(/signature isn't valid/) });
+    expect(existsSync(join(dir, "catalog", "directory.json"))).toBe(false);
+  });
+
+  it("refuses a manifest signed by another key, or changed after signing", async () => {
+    const other = testDataKey();
+    const forged = other.sign(JSON.stringify(manifest("v4")));
+    other.restore();
+    expect((await updateDirectory(dir, { fetchImpl: serve(() => new Response(forged)) })).updated).toBe(false);
+    expect((await updateDirectory(dir, { fetchImpl: serve((b) => new Response(key.sign(b.replace("v4", "v5")))) })).updated).toBe(false);
+    expect(existsSync(join(dir, "catalog", "directory.json"))).toBe(false);
   });
 });
 

@@ -3,6 +3,7 @@ import { existsSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync, w
 import { join } from "node:path";
 import { brotliCompressSync, brotliDecompressSync, constants, gunzipSync } from "node:zlib";
 import { applyFeedDiff, feedStateHash, JOB_FEED_SCHEMA_V2, type FeedDiff, type FeedManifestV2, type FeedSnapshot, type FeedState } from "./job-feed-diff";
+import { fetchSignedJson } from "./data-signing";
 import { envSetting } from "./env";
 import { isSafeName, safeJoin } from "./safe-name";
 import { passesLocationGate, passesTitleGate } from "./score";
@@ -71,14 +72,14 @@ export async function syncJobFeed(dataDir: string, opts: { fetchImpl?: typeof fe
   const stale = () => jobFeedStatus(dataDir, opts.now).ageDays;
   try {
     // The second format first (a full copy once, then a small change file a day); older feeds only have the first.
-    const v2 = await get(`${jobFeedUrl()}/${V2_MANIFEST}`, { headers: { accept: "application/json" }, redirect: "follow" });
-    if (v2.ok) {
-      const manifest = (await v2.json()) as FeedManifestV2;
-      if (manifest.schema === JOB_FEED_SCHEMA_V2) return { ...(await syncV2(dir, manifest, get)), ageDays: stale() };
-    }
-    const res = await get(`${jobFeedUrl()}/jobs-manifest.json`, { headers: { accept: "application/json" }, redirect: "follow" });
-    if (!res.ok) return { updated: false, ageDays: stale(), message: `Job feed unavailable (HTTP ${res.status}); scanning every company live.` };
-    const manifest = (await res.json()) as JobFeedManifest;
+    // A badly signed manifest stops here: falling back to the other format would let a tamperer pick.
+    const badSignature = { updated: false, ageDays: stale(), message: "The job feed's signature isn't valid; scanning every company live." };
+    const v2 = await fetchSignedJson<FeedManifestV2>(get, `${jobFeedUrl()}/${V2_MANIFEST}`);
+    if (v2.ok && v2.value.schema === JOB_FEED_SCHEMA_V2) return { ...(await syncV2(dir, v2.value, get)), ageDays: stale() };
+    if (!v2.ok && v2.status === null) return badSignature;
+    const res = await fetchSignedJson<JobFeedManifest>(get, `${jobFeedUrl()}/jobs-manifest.json`);
+    if (!res.ok) return res.status ? { updated: false, ageDays: stale(), message: `Job feed unavailable (HTTP ${res.status}); scanning every company live.` } : badSignature;
+    const manifest = res.value;
     if (manifest.schema !== JOB_FEED_SCHEMA) return { updated: false, ageDays: stale(), message: "The job feed has a newer format than this app; update the app to use it." };
     const local = readJson<JobFeedManifest>(join(dir, "manifest.json"));
     mkdirSync(dir, { recursive: true });

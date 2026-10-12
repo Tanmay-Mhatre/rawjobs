@@ -1,12 +1,15 @@
 import { mkdtempSync, readFileSync, readdirSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterAll, afterEach, describe, expect, it } from "vitest";
 import { stateOf, writeFeedV2 } from "../../../scripts/catalog/lib/feed-v2";
 import { parseConfig } from "../src/config";
 import { feedMatches, jobFeedStatus, syncJobFeed, type FeedRow } from "../src/job-feed";
 import { applyFeedDiff, diffFeedStates, feedStateHash, type FeedState } from "../src/job-feed-diff";
-import { json } from "./helpers";
+import { json, testDataKey } from "./helpers";
+
+const key = testDataKey();
+afterAll(key.restore);
 
 const profile = parseConfig(`
 profile:
@@ -89,8 +92,9 @@ function feedRelease() {
   const calls: string[] = [];
   const fetchImpl = (async (url: string) => {
     const name = url.split("/").pop()!;
-    calls.push(name);
+    if (!name.endsWith(".sig")) calls.push(name);
     if (name === "jobs-v2-manifest.json") return json(JSON.parse(files.get(name)!.toString("utf8")));
+    if (name === "jobs-v2-manifest.json.sig") return new Response(key.sign(JSON.stringify(JSON.parse(files.get("jobs-v2-manifest.json")!.toString("utf8")))));
     const body = files.get(name);
     return body ? new Response(body) : new Response("", { status: 404 });
   }) as unknown as typeof fetch;

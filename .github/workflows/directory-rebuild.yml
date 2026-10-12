@@ -263,6 +263,16 @@ jobs:
           ALLOW_SHRINK: ${{ inputs.allow_shrink && '1' || '' }}
         run: bash scripts/catalog/gate.sh
 
+      - name: Sign the manifest
+        if: ${{ !inputs.smoke }}
+        timeout-minutes: 2
+        env:
+          RAWJOBS_DATA_SIGNING_KEY: ${{ secrets.RAWJOBS_DATA_SIGNING_KEY }}
+        # Apps accept the data only with a valid signature (packages/core/src/data-signing.ts).
+        run: |
+          export RAWJOBS_DATA_PUBLIC_KEY="$(grep -o 'DATA_PUBLIC_KEY = "[^"]*"' packages/core/src/data-signing.ts | cut -d'"' -f2)"
+          node scripts/catalog/sign.mjs dist/manifest.json
+
       - name: Publish the release
         id: publish
         if: ${{ !inputs.smoke }}
