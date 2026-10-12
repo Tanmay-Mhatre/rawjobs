@@ -49,7 +49,7 @@
     "catalog:refresh": "tsx scripts/catalog/sources.ts && tsx scripts/catalog/resolve.ts && tsx scripts/catalog/merge.ts && tsx scripts/catalog/check.ts --recheck-days 30 && tsx scripts/catalog/build.ts && tsx scripts/catalog/index.ts --max-age-days 7 && tsx scripts/catalog/publish.ts && tsx scripts/catalog/coverage.ts"
   },
   "devDependencies": {
-    "@types/node": "^24.0.0",
+    "@types/node": "^26.6.4",
     "axe-core": "^4.14.0",
     "esbuild": "0.28.2",
     "playwright-core": "^1.64.0",
