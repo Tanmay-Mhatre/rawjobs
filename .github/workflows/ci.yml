@@ -4,6 +4,8 @@ on:
   pull_request:
   push:
     branches: [main]
+  # The merge train starts CI this way after it brings a PR up to date with main.
+  workflow_dispatch:
 
 permissions:
   contents: read

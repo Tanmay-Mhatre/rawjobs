@@ -1,0 +1,97 @@
+name: Merge train
+
+# Pull requests join the train by turning on auto-merge (gh pr merge N --auto --merge). They merge
+# one at a time, in the order auto-merge was turned on. main requires branches to be up to date, so
+# this brings the front PR up to date with main, reruns its CI, and leaves the merge to auto-merge.
+# The others wait their turn. A PR that conflicts with main gets the merge-conflict label and a
+# comment, and steps aside until its author fixes it; a PR whose CI fails steps aside too.
+on:
+  push:
+    branches: [main]
+  pull_request_target:
+    types: [auto_merge_enabled, synchronize]
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
+  schedule:
+    - cron: "*/20 * * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+  issues: write
+  actions: write
+
+concurrency:
+  group: merge-train
+  cancel-in-progress: false
+
+jobs:
+  advance:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      # No checkout: this never runs code from a pull request.
+      - name: Move the front PR along
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          owner="${GH_REPO%/*}"; name="${GH_REPO#*/}"
+          query='query($owner:String!,$name:String!){repository(owner:$owner,name:$name){pullRequests(states:OPEN,first:50){nodes{
+            number headRefName isDraft isCrossRepository mergeable mergeStateStatus
+            autoMergeRequest{enabledAt} labels(first:20){nodes{name}}
+            commits(last:1){nodes{commit{statusCheckRollup{state}}}}}}}}'
+
+          # GitHub works out mergeability lazily, so it can read UNKNOWN just after main moves.
+          for attempt in 1 2 3 4 5 6; do
+            queue="$(gh api graphql -f query="$query" -f owner="$owner" -f name="$name" --jq '
+              [.data.repository.pullRequests.nodes[]
+                | select(.autoMergeRequest != null and (.isDraft | not) and (.isCrossRepository | not))]
+              | sort_by(.autoMergeRequest.enabledAt)[]
+              | [.number, .headRefName, .mergeable, .mergeStateStatus,
+                 (.commits.nodes[0].commit.statusCheckRollup.state // "NONE"),
+                 ([.labels.nodes[].name] | index("merge-conflict") != null)]
+              | @tsv')"
+            grep -q UNKNOWN <<<"$queue" || break
+            sleep 10
+          done
+          [ -n "$queue" ] || { echo "No PRs waiting to merge."; exit 0; }
+          echo "Queue (oldest first):"; echo "$queue"
+
+          gh label create merge-conflict --color B60205 \
+            --description "Conflicts with main; out of the merge train until fixed" 2>/dev/null || true
+
+          while IFS=$'\t' read -r pr branch mergeable state checks labelled; do
+            if [ "$mergeable" = CONFLICTING ]; then
+              if [ "$labelled" != true ]; then
+                gh pr edit "$pr" --add-label merge-conflict
+                gh pr comment "$pr" --body "This PR conflicts with \`main\`, so it has stepped out of the merge train and the PRs behind it go first.
+
+          To rejoin: merge \`main\` into \`$branch\`, resolve the conflicts, run \`pnpm check\` and push. Auto-merge stays on, so it rejoins the train in its old place and merges once CI is green."
+              fi
+              echo "#$pr conflicts with main: skipped."; continue
+            fi
+            [ "$labelled" = true ] && gh pr edit "$pr" --remove-label merge-conflict
+
+            case "$state" in
+              BEHIND)
+                echo "#$pr is behind main: updating it and rerunning CI."
+                gh api -X PUT "repos/$GH_REPO/pulls/$pr/update-branch" --silent
+                # An update made with this workflow's token doesn't start CI on its own.
+                sleep 5
+                gh workflow run ci.yml --ref "$branch"
+                exit 0 ;;
+              BLOCKED)
+                case "$checks" in
+                  FAILURE|ERROR) echo "#$pr has failing CI: skipped until it's fixed."; continue ;;
+                  NONE) echo "#$pr has no CI run yet: starting one."; gh workflow run ci.yml --ref "$branch"; exit 0 ;;
+                  *) echo "#$pr is up to date and its CI is running: waiting."; exit 0 ;;
+                esac ;;
+              UNKNOWN) echo "#$pr mergeability not known yet: trying again on the next run."; exit 0 ;;
+              *) echo "#$pr is ready ($state): auto-merge merges it."; exit 0 ;;
+            esac
+          done <<<"$queue"
+          echo "Every PR in the queue is waiting on a fix by its author."
