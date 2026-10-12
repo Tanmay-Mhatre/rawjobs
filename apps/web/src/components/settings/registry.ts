@@ -8,13 +8,13 @@ export const SETTINGS_GROUPS = ["Your search", "Automation", "Preferences", "Sys
 export type SettingsGroup = (typeof SETTINGS_GROUPS)[number];
 
 export const SETTINGS_PAGES = [
-  { id: "profile", label: "Profile", group: "Your search", hint: "Who you're looking for. Changes apply after you save." },
+  { id: "profile", label: "Profile", group: "Your search", hint: "Who you're looking for. Changes wait for Save; Save & scan uses them right away." },
   { id: "matching", label: "Matching", group: "Your search", hint: "How jobs are ranked, and which are hidden." },
   { id: "companies", label: "Companies", group: "Your search", hint: "Companies you'd love to work at." },
-  { id: "scans", label: "Scans", group: "Automation", hint: "What RawJobs scans, and when." },
-  { id: "notifications", label: "Notifications", group: "Automation", hint: "Where RawJobs tells you about new jobs." },
+  { id: "scans", label: "Scans", group: "Automation", hint: "What RawJobs scans, and when. Changes save right away." },
+  { id: "notifications", label: "Notifications", group: "Automation", hint: "Where RawJobs tells you about new jobs. Changes save right away." },
   { id: "appearance", label: "Appearance", group: "Preferences", hint: "How RawJobs looks in this browser." },
-  { id: "data", label: "Data & privacy", group: "System", hint: "What leaves your computer, backups, and starting over." },
+  { id: "data", label: "Data & privacy", group: "System", hint: "What leaves your computer, backups, and starting over. Changes save right away." },
   { id: "updates", label: "Updates", group: "System", hint: "Which version you have, what's newer, and the desktop shortcut." },
   { id: "whats-new", label: "What's new", group: "System", hint: "What changed in each version." },
 ] as const satisfies readonly { id: string; label: string; group: SettingsGroup; hint: string }[];
@@ -35,8 +35,9 @@ export const SETTINGS_SECTIONS: readonly SettingsSection[] = [
   { id: "max-age", page: "matching", title: "Hide jobs older than", words: "old stale age posted date fresh months" },
   { id: "rules", page: "matching", title: "Not interested rules", words: "hide hidden not for me filter mute dismiss" },
   { id: "companies", page: "companies", title: "My companies", words: "favourite favorite starred dream target employers hidden muted" },
-  { id: "directory", page: "scans", title: "How scans work", words: "what to scan scope all companies ask every time scan now directory catalog background update startup" },
+  { id: "scope", page: "scans", title: "What to scan", words: "scope all companies my companies industries ask every time scan now how long" },
   { id: "schedule", page: "scans", title: "Scheduled scans", words: "automatic daily time times timer cron run now" },
+  { id: "directory", page: "scans", title: "Company directory", words: "catalog background update startup list" },
   { id: "alerts", page: "notifications", title: "Telegram alerts", words: "phone push mobile bot message notify notification test" },
   { id: "theme", page: "appearance", title: "Theme", words: "dark mode light night colour color contrast accessibility" },
   { id: "density", page: "appearance", title: "Job list", words: "density compact comfortable spacing rows" },

@@ -1,6 +1,6 @@
 import { INDUSTRY_BY_ID } from "@rawjobs/core/catalog/industries";
 import { groupPlaces } from "@rawjobs/core/catalog/places";
-import { ArrowRight, ChevronLeft, ChevronRight, Download, RefreshCw, RotateCcw, Save, Upload, X } from "lucide-react";
+import { ArrowRight, Check, ChevronLeft, ChevronRight, Download, RefreshCw, RotateCcw, Save, Upload, X } from "lucide-react";
 import { Fragment, useEffect, useRef, useState, type MouseEvent, type ReactNode } from "react";
 import { canRunLocally, useDirectorySize } from "../lib/data";
 import { DealbreakersStep } from "./Dealbreakers";
@@ -32,6 +32,10 @@ type Props = {
   /** Throw away unsaved edits (reload from the saved config). */
   revert: () => void;
   dirty: boolean;
+  /** The setup as saved, for settings that save on their own (written on top of it). */
+  saved: Draft;
+  /** A finished setup is saved on this computer; until then every change waits for Save. */
+  setupSaved: boolean;
   onSaved: () => Promise<void>;
   onScan: () => void;
   scanning: boolean;
@@ -68,7 +72,9 @@ export function Settings({
   draft,
   update,
   revert,
-  dirty,
+  dirty: anyDirty,
+  saved,
+  setupSaved,
   onSaved,
   onScan,
   scanning,
@@ -87,6 +93,31 @@ export function Settings({
   const [saving, setSaving] = useState(false);
   const lastSave = useRef(false);
   const blockers = saveBlockers(draft).map((b) => b.message);
+  // Once setup is saved, the directory switches save on their own, so only Profile and Matching edits wait for Save.
+  const instant = canRunLocally && setupSaved;
+  const same = (a: Draft, b: Draft) => JSON.stringify(draftToConfig(a)) === JSON.stringify(draftToConfig(b));
+  const dirty = anyDirty && (!instant || !same({ ...draft, directory: saved.directory }, saved));
+  /** The page holding the unsaved edits: Matching when only the threshold changed. */
+  const dirtyPage: SettingsPageId = same({ ...draft, directory: saved.directory, minScore: saved.minScore }, saved) ? "matching" : "profile";
+  /** Until setup is saved, the Save bar shows on every page: the directory switches wait for it too. */
+  const saveHere = (page: SettingsPageId) => !instant || page === "profile" || page === "matching";
+  const [directorySave, setDirectorySave] = useState<Partial<Record<keyof Draft["directory"], FieldSave>>>({});
+  /** Save one directory switch now: written on top of the saved setup, leaving Profile edits unsaved. */
+  const saveDirectory = async (key: keyof Draft["directory"], on: boolean) => {
+    const directory = { ...draft.directory, [key]: on };
+    update({ directory });
+    if (!instant) return;
+    const note = (state: FieldSave) => setDirectorySave((s) => ({ ...s, [key]: state }));
+    note({ kind: "saving" });
+    try {
+      const res = await saveConfig(draftToConfig({ ...saved, directory }));
+      if (!res.ok) return note({ kind: "error", retry: () => void saveDirectory(key, on) });
+      await onSaved();
+      note({ kind: "saved" });
+    } catch {
+      note({ kind: "error", retry: () => void saveDirectory(key, on) });
+    }
+  };
   const directorySize = useDirectorySize();
   const updates = useUpdateStatus();
 
@@ -141,6 +172,8 @@ export function Settings({
   const [query, setQuery] = useState("");
   const [active, setActive] = useState(0);
   const searching = !!query.trim();
+  /** Profile and Matching collect edits for Save; every other page saves each change at once. */
+  const onDraftPage = !searching && saveHere(current);
   const hits = searching ? searchSettings(query, { unavailable, values }) : [];
   useSearchShortcut();
   /** The card a search result opened: outlined for a moment once it's on screen. */
@@ -272,7 +305,7 @@ export function Settings({
         {page(
           "matching",
           <>
-            <Section id="threshold" title="Strong match threshold" hint="Strong matches get a highlighted score on your Radar and are sent in Telegram alerts.">
+            <Section id="threshold" title="Strong match threshold" hint="Strong matches get a highlighted score on your Radar and are sent in Telegram alerts. Applies when you save.">
               <ThresholdPicker draft={draft} update={update} />
             </Section>
             <MaxAgeSection />
@@ -304,34 +337,29 @@ export function Settings({
         {page(
           "scans",
           <>
-            <Section
-              id="directory"
-              title="How scans work"
-              hint={`The shared company directory lists ${directorySize ? roughCount(directorySize) : "~47,000"} companies and where each one posts jobs. Jobs are always fetched live by your own scans; nothing about you is sent.`}
-            >
+            <Section id="scope" title="What to scan" hint="What Scan now does. Saved in this browser, right away.">
               <div className="space-y-3">
-                <ul className="space-y-1.5 type-small">
-                  <li>
-                    <b>{draft.industries.length ? "My companies + my industries" : "My companies"}</b>
-                    <span className="text-muted">
-                      {draft.industries.length
-                        ? ": My companies, plus every company in the directory tagged with your industries. A few minutes."
-                        : ": the companies you've added. Add industries under Profile to scan more. A few minutes."}
-                    </span>
-                  </li>
-                  <li>
-                    <b>All companies</b>
-                    <span className="text-muted">
-                      : every company in the directory that RawJobs can scan. The daily job feed skips companies with nothing for you, so usually minutes; up to 2 hours without it. Stop any time and
-                      it carries on later.
-                    </span>
-                  </li>
-                </ul>
-                <p className="type-small text-muted">Every scan first updates the company directory, so new companies and moved careers pages are picked up.</p>
                 <ScanPrefsPicker />
-                <Toggle checked={draft.directory.auto_update} onChange={(v) => update({ directory: { ...draft.directory, auto_update: v } })}>
-                  Also update the company directory in the background when the app starts
-                </Toggle>
+                <details className="type-small">
+                  <summary className="cursor-pointer font-medium text-ink">How long each one takes</summary>
+                  <ul className="mt-2 space-y-1.5">
+                    <li>
+                      <b>{draft.industries.length ? "My companies + my industries" : "My companies"}</b>
+                      <span className="text-muted">
+                        {draft.industries.length
+                          ? ": My companies, plus every company in the directory tagged with your industries. A few minutes."
+                          : ": the companies you've added. Add industries under Profile to scan more. A few minutes."}
+                      </span>
+                    </li>
+                    <li>
+                      <b>All companies</b>
+                      <span className="text-muted">
+                        : every company in the directory that RawJobs can scan. The daily job feed skips companies with nothing for you, so usually minutes; up to 2 hours without it. Stop any time and
+                        it carries on later.
+                      </span>
+                    </li>
+                  </ul>
+                </details>
               </div>
             </Section>
             {shown.schedule && (
@@ -339,6 +367,21 @@ export function Settings({
                 <ScheduledScans />
               </Section>
             )}
+            <Section
+              id="directory"
+              title="Company directory"
+              hint={`The shared directory lists ${directorySize ? roughCount(directorySize) : "~47,000"} companies and where each one posts jobs. Jobs are always fetched live by your own scans; nothing about you is sent.`}
+            >
+              <div className="space-y-2">
+                <p className="type-small text-muted">Every scan first updates the directory, so new companies and moved careers pages are picked up.</p>
+                <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+                  <Toggle checked={draft.directory.auto_update} onChange={(v) => void saveDirectory("auto_update", v)}>
+                    Also update it in the background when the app starts
+                  </Toggle>
+                  <SaveNote state={directorySave.auto_update} />
+                </div>
+              </div>
+            </Section>
           </>,
         )}
 
@@ -357,11 +400,14 @@ export function Settings({
           "data",
           <>
             <TrackingData user={user} prefs={prefs} onImport={onImport} />
-            <Section id="sharing" title="Sharing" hint="Help everyone find more companies. On by default; turn it off here.">
+            <Section id="sharing" title="Sharing" hint="Help everyone find more companies. On by default; turn it off here. Saved right away.">
               <div className="space-y-2">
-                <Toggle checked={draft.directory.share_additions} onChange={(v) => update({ directory: { ...draft.directory, share_additions: v } })}>
-                  Share companies I add by link with everyone
-                </Toggle>
+                <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+                  <Toggle checked={draft.directory.share_additions} onChange={(v) => void saveDirectory("share_additions", v)}>
+                    Share companies I add by link with everyone
+                  </Toggle>
+                  <SaveNote state={directorySave.share_additions} />
+                </div>
                 <p className="type-small text-muted">
                   Only the careers link is shared: the company's name, its hiring system and its board name. Never your profile, resume, searches or which jobs you look at.{" "}
                   <a
@@ -417,7 +463,18 @@ export function Settings({
           ),
         )}
 
-        {canRunLocally && (dirty || status) && (
+        {!canRunLocally && dirty && onDraftPage && (
+          <p className="mt-6 rounded-md border border-line bg-raised p-3 type-small text-muted">This online copy doesn't save changes. To keep your setup, run RawJobs on your computer.</p>
+        )}
+        {canRunLocally && dirty && !onDraftPage && (
+          <div className="sticky bottom-16 z-10 mt-6 flex flex-wrap items-center gap-2 rounded-md border border-line bg-raised/95 p-3 shadow-l2 backdrop-blur md:bottom-4">
+            <span className="mr-auto type-small text-muted">You have unsaved changes on {dirtyPage === "matching" ? "Matching" : "Profile"}.</span>
+            <Button size="sm" onClick={() => (location.hash = settingsHash(dirtyPage))}>
+              Review and save <ArrowRight className="size-3.5" />
+            </Button>
+          </div>
+        )}
+        {canRunLocally && ((dirty && onDraftPage) || status) && (
           <div className="sticky bottom-16 z-10 mt-6 rounded-md border border-line bg-raised/95 p-3 shadow-l2 backdrop-blur md:bottom-4">
             {status && (
               <div role={status.tone === "bad" ? "alert" : "status"} className="mb-2 type-small">
@@ -435,7 +492,7 @@ export function Settings({
                 )}
               </div>
             )}
-            {dirty && (
+            {dirty && onDraftPage && (
               <div className="flex flex-wrap items-center gap-2">
                 <span className="mr-auto type-small text-muted">{blockers[0] ?? "You have unsaved changes."}</span>
                 <Button variant="ghost" onClick={revert} disabled={saving}>
@@ -453,6 +510,33 @@ export function Settings({
         )}
       </div>
     </div>
+  );
+}
+
+type FieldSave = { kind: "idle" | "saving" | "saved" } | { kind: "error"; retry: () => void };
+
+/** Next to a switch that saves on its own: "Saving…", "Saved", or what went wrong with Try again. */
+function SaveNote({ state }: { state?: FieldSave }) {
+  if (!state || state.kind === "idle") return null;
+  if (state.kind === "error")
+    return (
+      <span role="alert" className="inline-flex items-center gap-1.5 type-small text-danger-text">
+        Couldn't save. Make sure RawJobs is still running.
+        <button type="button" className="min-h-6 font-medium underline" onClick={state.retry}>
+          Try again
+        </button>
+      </span>
+    );
+  return (
+    <span role="status" className="inline-flex items-center gap-1 type-small text-muted">
+      {state.kind === "saving" ? (
+        "Saving…"
+      ) : (
+        <>
+          <Check className="size-3.5 text-success-text" aria-hidden="true" /> Saved
+        </>
+      )}
+    </span>
   );
 }
 
