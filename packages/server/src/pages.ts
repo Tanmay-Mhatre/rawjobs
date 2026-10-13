@@ -299,11 +299,23 @@ const OFFLINE_CSS = `
 [data-state="starting"] .start,[data-state="back"] .start{pointer-events:none;opacity:.85}
 `;
 
+/** The ports RawJobs tries, in order, when the one before is taken (serve.ts). */
+export const PORTS = Array.from({ length: 10 }, (_, i) => 4317 + i);
+
+/**
+ * findElsewhere(done): RawJobs on another of its ports on this computer (it moved to the next port
+ * when this one was taken). Calls done with that address ("http://127.0.0.1:4318"), or null. Plain
+ * JavaScript, for the offline page; the dashboard does the same (lib/update.ts).
+ */
+const FIND_ELSEWHERE = `function findElsewhere(done){var ports=${JSON.stringify(PORTS)}.filter(function(p){return String(p)!==location.port}),left=ports.length,found=null;
+ports.forEach(function(p){var o=location.protocol+"//"+location.hostname+":"+p,c=new AbortController();setTimeout(function(){c.abort()},1500);
+fetch(o+"/api/health",{cache:"no-store",signal:c.signal}).then(function(r){return r.json()}).then(function(h){if(h&&h.ok&&!found)found=o}).catch(function(){}).then(function(){if(--left===0)done(found)})})}`;
+
 /**
  * "RawJobs isn't running", for when you open the dashboard's address while the server is stopped.
  * The browser's service worker (SERVICE_WORKER) keeps this page and shows it instead of "This site
  * can't be reached". It checks /api/health every few seconds and opens the dashboard when RawJobs
- * answers. One way back at a time: with the Start link (rawjobs://open) installed, the Start button;
+ * answers, here or on another of its ports (then it goes there). One way back at a time: with the Start link (rawjobs://open) installed, the Start button;
  * the Desktop shortcut only when the button didn't bring it back. Without the link, the shortcut.
  */
 export function offlinePage(o: { startLink: boolean; platform: Platform }): string {
@@ -326,7 +338,11 @@ ${how}
 <script>(function(){
 var page=document.getElementById("page"),art=document.getElementById("art"),start=document.getElementById("start"),label=document.getElementById("label"),hint=document.getElementById("hint");
 var fast=false,stuck=null;
-function up(){fetch("/api/health",{cache:"no-store"}).then(function(r){return r.json()}).then(function(h){if(h&&h.ok){page.dataset.state="back";art.dataset.p="awake";if(label)label.textContent="RawJobs is back";setTimeout(function(){if(location.pathname==="/offline.html")location.replace("/");else location.reload()},700)}else later()}).catch(later)}
+function back(go){page.dataset.state="back";art.dataset.p="awake";if(label)label.textContent="RawJobs is back";setTimeout(go,700)}
+function here(){if(location.pathname==="/offline.html")location.replace("/");else location.reload()}
+function up(){fetch("/api/health",{cache:"no-store"}).then(function(r){return r.json()}).then(function(h){if(h&&h.ok)back(here);else elsewhere()}).catch(elsewhere)}
+${FIND_ELSEWHERE}
+function elsewhere(){findElsewhere(function(origin){if(!origin)return later();back(function(){location.replace(origin+(location.pathname==="/offline.html"?"/":location.pathname)+location.search+location.hash)})})}
 function later(){setTimeout(up,fast?1000:4000)}
 if(start)start.addEventListener("click",function(){
   page.dataset.state="starting";fast=true;label.textContent="Starting…";hint.hidden=false;

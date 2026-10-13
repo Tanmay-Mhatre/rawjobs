@@ -5,7 +5,7 @@ import { defaultDataDir, rawjobsHome } from "@rawjobs/core";
 import { APP_VERSION, BUNDLED, migrateData, scanLockHeld, WEB_DIR } from "@rawjobs/core";
 import { createApi } from "./api";
 import { createUpdater } from "./updater";
-import { DEFAULT_PORT, healthy, logTo, openBrowser, readServerState, writeServerState } from "./desktop";
+import { DEFAULT_PORT, logTo, openBrowser, readServerState, serverRunning, writeServerState } from "./desktop";
 import { ensureShortcuts, startLinkInstalled } from "./shortcuts";
 import { servePages, serveStatic } from "./static";
 
@@ -33,9 +33,9 @@ export async function serve(args: string[]): Promise<number> {
 
   // One server per RawJobs folder: starting it again (at login, from the shortcut) finds the running one.
   const running = readServerState(home);
-  if (!values.port && running && (await healthy(`http://127.0.0.1:${running.port}`))) {
-    console.log(`RawJobs is already running at http://127.0.0.1:${running.port}`);
-    if (values.open) openBrowser(`http://127.0.0.1:${running.port}`);
+  if (!values.port && (await serverRunning(running))) {
+    console.log(`RawJobs is already running at http://127.0.0.1:${running!.port}`);
+    if (values.open) openBrowser(`http://127.0.0.1:${running!.port}`);
     return 0;
   }
 
