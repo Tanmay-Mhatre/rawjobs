@@ -43,6 +43,8 @@ case "$SET" in
       raw/freehire/*.yml
       raw/conorscode/*.json
       raw/lastround/*.csv
+      # Visa sponsor registers, as normalised names (visa.ts): a failed download keeps last week's.
+      raw/visa/*.json
     )
     ;;
   jobs)

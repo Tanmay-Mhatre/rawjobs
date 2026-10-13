@@ -280,6 +280,16 @@ describe("your companies and directory jobs", () => {
     expect(applyFilters([pool, real], f({ hideEvergreen: true }), ctx).map((j) => j.id)).toEqual(["real"]);
   });
 
+  it("keeps only companies that sponsor visas in the job's country, when asked", () => {
+    const uk = job({ id: "uk", countries: ["United Kingdom"], visa: { GB: "2026-10-09" } });
+    const elsewhere = job({ id: "de", countries: ["Germany"], visa: { GB: "2026-10-09" } });
+    const none = job({ id: "none", countries: ["United Kingdom"] });
+    expect(applyFilters([uk, elsewhere, none], f(), ctx)).toHaveLength(3);
+    expect(applyFilters([uk, elsewhere, none], f({ visaOnly: true }), ctx).map((j) => j.id)).toEqual(["uk"]);
+    expect(activeChips(f({ visaOnly: true }), ctx)).toEqual([{ key: "visa", label: "Sponsors visas", remove: { visaOnly: false } }]);
+    expect(fromQuery(toQuery(f({ visaOnly: true }), "best"))!.filters.visaOnly).toBe(true);
+  });
+
   it("ranks jobs that may be stale lower, and No talent pools or stale jobs hides them", () => {
     const stale = job({ id: "stale", score: 85, repostedAt: daysAgo(3), repostCount: 2 });
     const real = job({ id: "real", score: 80 });

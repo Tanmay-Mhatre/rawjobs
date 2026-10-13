@@ -104,4 +104,10 @@ describe("toIndexJobs", () => {
     expect(toIndexJobs(candidates, { live: new Set(), muted: new Set(), indexGeneratedAt: now.toISOString() }).map((j) => j.id)).toContain(jobs[0]!.id);
     expect(toIndexJobs(candidates, { live: new Set(), muted: new Set(), indexGeneratedAt: now.toISOString(), limit: 1 })).toHaveLength(1);
   });
+
+  it("carries the company's visa sponsor lists", () => {
+    const sponsor = { ...co("lever:sponsor", [pm("Dubai")]), visa: { GB: "2026-10-09" } };
+    const jobs = toIndexJobs(findCandidates(profile(), index([sponsor, co("lever:plain", [pm("Dubai")])]), now), { live: new Set(), muted: new Set(), indexGeneratedAt: now.toISOString() });
+    expect(Object.fromEntries(jobs.map((j) => [j.companyKey, j.visa]))).toEqual({ "lever:sponsor": { GB: "2026-10-09" }, "lever:plain": undefined });
+  });
 });

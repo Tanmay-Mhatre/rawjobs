@@ -18,6 +18,7 @@
     "./catalog/places": "./src/catalog/places.ts",
     "./catalog/industries": "./src/catalog/industries.ts",
     "./catalog/seniority": "./src/catalog/seniority.ts",
+    "./catalog/visa": "./src/catalog/visa.ts",
     "./dashboard": "./src/dashboard.ts",
     "./score": "./src/score.ts",
     "./protocol": "./src/protocol.ts",

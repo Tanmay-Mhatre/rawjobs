@@ -1,3 +1,4 @@
+import type { VisaInfo } from "./catalog/visa";
 import { z } from "zod";
 
 export const ATS_TYPES = [
@@ -212,6 +213,8 @@ export type DashboardJob = Omit<Job, "description" | "missedRuns"> & {
   companyKey?: string;
   /** Industry ids the company directory puts the job's company in. */
   industries?: string[];
+  /** Visa sponsor registers the job's company is on (country code -> list), from the company directory. */
+  visa?: VisaInfo;
 };
 
 /** data/jobs.json (jobs that pass your filters) and data/jobs-other.json (the rest). */

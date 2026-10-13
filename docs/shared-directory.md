@@ -41,6 +41,7 @@ user is ever uploaded.
 | Daily Common Crawl | `.github/workflows/directory-commoncrawl.yml` | 45 minutes a day of the Common Crawl URL index (the 12 newest crawls), on top of the rebuild's 35 minutes a week. Resumes per query; stops when the index keeps failing. The boards it finds are merged and checked by the next contributions run or rebuild. |
 | Release gate | `scripts/catalog/guard.ts`, `gate.sh` | Runs before every upload, in the rebuild and the contributions workflow. Refuses a directory under 90% of the live release's companies or 85% of its indexed ones, under 20,000 / 10,000, with broken rows, or with broken or more than 50 new moves. A deliberate shrink: `gh workflow run directory-rebuild.yml -f allow_shrink=true`. |
 | Finding more companies | `scripts/catalog/` | See [Coverage](#coverage) below. |
+| Visa sponsors | `scripts/catalog/visa.ts`, `lib/visa.ts`, `packages/core/src/catalog/visa.ts` | Government lists of employers that may sponsor work visas, matched to directory companies by name. See [Visa sponsors](#visa-sponsors). |
 | Public directory repo | `Tanmay-Mhatre/rawjobs-directory` | Releases (the files apps download), `contributions.json`, `coverage.md`, attribution. |
 
 Overrides: `RAWJOBS_DIRECTORY_URL` (download base) and `RAWJOBS_CONTRIBUTE_URL` (inbox) point an install at your own copies (the older `JOBHUNTER_` names still work). See [self-hosting.md](self-hosting.md).
@@ -64,6 +65,49 @@ The goal is to hold at least 90% of the companies on each hiring system the dire
 - A **hold-one-out** table shows how many live boards only one source lists.
 
 Restricted lists (share-alike or no licence) are only counted, never published. yc-oss/api was left out because it has no licence.
+
+## Visa sponsors
+
+Governments publish lists of employers allowed to sponsor work visas. The weekly rebuild downloads
+them (`pnpm catalog:visa`, before the build), keeps each as normalised names in
+`scripts/catalog/raw/visa/<country>.json` (in the saved state, so a failed download uses last week's
+copy, and the contributions publishes keep the field), and `publish.ts` tags each company it finds:
+
+```json
+{ "key": "greenhouse:acme", "name": "Acme", "visa": { "GB": "2026-10-13", "US": "FY2026", "CA": "2026Q1", "NL": "2026-10-05" } }
+```
+
+Country code → the list the company was on: a date (UK, Netherlands), a US fiscal year, or a
+quarter (Canada). The same field is on `index.json` companies. It's optional and new: older apps
+read directory files with a plain JSON parse and only the fields they know, so they ignore it.
+
+Sources (each with its own terms; the app names the source on every job it shows the badge on):
+
+| Country | Register | Terms | What's used |
+|---|---|---|---|
+| GB | Home Office, [Register of licensed sponsors: workers](https://www.gov.uk/government/publications/register-of-licensed-sponsors-workers) | Open Government Licence v3.0 | Work routes: Skilled Worker, Global Business Mobility (Senior or Specialist, Graduate Trainee, UK Expansion), Scale-up |
+| US | USCIS, [H-1B Employer Data Hub](https://www.uscis.gov/tools/reports-and-studies/h-1b-employer-data-hub) | US government work, public domain | Last two fiscal years with data; employers with at least one new-employment or continuation approval |
+| CA | ESDC, [Positive LMIA employers list](https://open.canada.ca/data/en/dataset/90fed587-1364-4f33-a9ee-208181dc0b97) | Open Government Licence – Canada | Last four quarters, every stream except primary agriculture |
+| NL | IND, [Public register of recognised sponsors](https://ind.nl/en/public-register-recognised-sponsors/public-register-work) (work) | "Reuse of content is allowed, if you mention the source" ([proclaimer](https://ind.nl/en/proclaimer)) | The whole work register |
+
+**Matching** (`scripts/catalog/lib/visa.ts`) is by name only, since no register lists websites, and
+prefers missing a sponsor to tagging the wrong company. Names are lower-cased, stripped of accents,
+punctuation, a leading "The" and trailing legal forms and fillers (Ltd, Limited, LLC, Inc, Corp, PLC,
+GmbH, LLP, B.V., & Co, UK, USA, Group, Holdings…); a trading name ("t/a", "DBA") counts as a second
+name. A directory name is never matched when it is:
+- shorter than 4 letters, only digits, or on the stoplist (`VISA_STOPLIST`: "Digital", "Solutions"…);
+- shared by several directory companies;
+- common on the registers (other employers use it: "Passion" is in "Passion Foods", "Passion
+  Care"…): from 3 such names only for a company with 25+ open jobs or on the curated list, from 10
+  never ("Nationwide", "Ideal").
+
+The run log prints matches per country and how many names were skipped. To check matches by eye:
+`pnpm catalog:visa --match` (against `out/directory.json`).
+
+**In the app:** a job whose company is on the register for the job's country (any of a role's
+places) shows "Sponsors visas", with the register, the list's date and its source on the job page,
+and Radar › More › "Only companies that sponsor visas" keeps only those. It's a filter only: it
+doesn't change scores or order. A company on the list can sponsor; that doesn't mean a given role will.
 
 ## Industry tags
 

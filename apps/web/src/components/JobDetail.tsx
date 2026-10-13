@@ -1,6 +1,7 @@
 import { displayName } from "@rawjobs/core/display-name";
 import { INDUSTRY_BY_ID } from "@rawjobs/core/catalog/industries";
 import { SENIORITY_LEVELS } from "@rawjobs/core/catalog/seniority";
+import { sponsorOf, sponsorSentence, sponsorTitle, VISA_REGISTERS } from "@rawjobs/core/catalog/visa";
 import { matchesTitle, safeUrl } from "@rawjobs/core/text";
 import { ArrowLeft, Bookmark, Check, ChevronDown, ChevronUp, CircleCheck, Copy, ExternalLink, Info, LoaderCircle, Maximize2, Plus, RefreshCw, Star, StickyNote, X } from "lucide-react";
 import { Fragment, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
@@ -127,6 +128,8 @@ export function JobDetail(p: JobDetailProps) {
   const age = timeAgo(postedOrSeen(job)).replace(/ ago$/, "");
   const workplace = WORKPLACE_LABEL[job.workplace];
   const evergreen = evergreenReason(job);
+  // On a government list of visa sponsors for the job's country (any of the role's places).
+  const sponsor = sponsorOf(postings ?? [job]);
   // The loaded description counts too, for data written before descriptionLength existed.
   const staleCtx = { descriptionLength: description ? description.trim().length : undefined };
   const stale = isStale(job, staleCtx) ? staleReasons(job, staleCtx) : null;
@@ -146,6 +149,13 @@ export function JobDetail(p: JobDetailProps) {
       `First seen ${formatDate(job.firstSeen)}`
     ),
     ...(salary ? [salary] : []),
+    ...(sponsor
+      ? [
+          <span key="visa" className="text-success-text" title={sponsorTitle(sponsor)}>
+            Sponsors visas
+          </span>,
+        ]
+      : []),
     ...(evergreen === "pool"
       ? [
           <span key="pool" className="text-warning-text" title="A talent pool or open application: it collects applications rather than filling one role">
@@ -243,6 +253,14 @@ export function JobDetail(p: JobDetailProps) {
           <WhyItMatches job={job} profile={profile} yours={!!p.yours} />
 
           {job.estimated && <NotCheckedYet indexGeneratedAt={p.indexGeneratedAt} onCheck={p.onCheck} />}
+
+          {sponsor && (
+            <section className="rj-drawer__section">
+              <h3 className="rj-h text-success-text">Sponsors visas</h3>
+              <p className="type-small">{sponsorSentence(displayName(job.company), sponsor)}</p>
+              <p className="type-small text-muted">That means it can sponsor, not that this role will. Source: {VISA_REGISTERS[sponsor.country].source}.</p>
+            </section>
+          )}
 
           <section className="rj-drawer__section">
             <h3 className="rj-h">Your status</h3>

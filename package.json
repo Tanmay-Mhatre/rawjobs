@@ -44,6 +44,7 @@
     "catalog:index": "tsx scripts/catalog/index.ts",
     "catalog:publish": "tsx scripts/catalog/publish.ts",
     "catalog:sources": "tsx scripts/catalog/sources.ts",
+    "catalog:visa": "tsx scripts/catalog/visa.ts",
     "catalog:resolve": "tsx scripts/catalog/resolve.ts",
     "catalog:compact": "tsx scripts/catalog/compact.ts",
     "catalog:release": "tsx scripts/catalog/release.ts",

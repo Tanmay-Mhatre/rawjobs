@@ -1,4 +1,5 @@
 import { companyIndustries, INDUSTRY_BY_ID } from "./catalog/industries";
+import type { VisaInfo } from "./catalog/visa";
 import { COUNTRIES, countriesIn, countryTerms, groupPlaces } from "./catalog/places";
 import { connectors } from "./connectors";
 import type { Profile } from "./schema";
@@ -41,6 +42,8 @@ export type IndexedCompany = BoardPlace & {
   tags?: string[];
   /** Industry ids only the company's job titles point to: what it hires for, not necessarily what it is. */
   title_tags?: string[];
+  /** Government visa sponsor registers it's on: country code -> list (catalog/visa.ts). */
+  visa?: VisaInfo;
 };
 
 /** A directory company without job rows: no openings right now, or not indexed yet. */

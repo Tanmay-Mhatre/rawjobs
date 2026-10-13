@@ -34,6 +34,7 @@ import type { Resolved, Seed } from "./resolve";
 import type { BulkSeed } from "./seeds-bulk";
 import { type DirectoryMove, dirKeyOf } from "./lib/moves";
 import { catalogDir, dataDir } from "./lib/paths";
+import { matchVisa, type RegisterFile } from "./lib/visa";
 import { readCheckTitles, readFeedTitles, TagBook, TITLES_SOURCE, WIKIDATA_SOURCE } from "./lib/tags";
 import { boardMatchesWebsite, industriesForWikidata, plainName } from "./lib/wikidata";
 
@@ -226,6 +227,24 @@ const slim = [
   ...unverified,
 ];
 
+// ---- visa sponsors: companies on a government register of visa sponsors (visa.ts downloads them) ----
+// `visa` is new in directory.json and index.json: { GB: "2026-10-13", US: "FY2026" }. Older apps ignore it.
+const visaDir = join(catalogDir, "raw", "visa");
+const registers = existsSync(visaDir)
+  ? readdirSync(visaDir)
+      .filter((f) => /^[A-Z]{2}\.json$/.test(f))
+      .map((f) => JSON.parse(readFileSync(join(visaDir, f), "utf8")) as RegisterFile)
+  : [];
+const sponsors = matchVisa(slim, registers);
+for (const c of slim as { key: string; visa?: unknown }[]) {
+  const v = sponsors.visa.get(c.key);
+  if (v) c.visa = v;
+}
+for (const c of indexed) {
+  const v = sponsors.visa.get(c.key);
+  if (v) c.visa = v;
+}
+
 /** Live companies we can scan per industry (list or title tags): the pickers flag industries with few. */
 const industries = industryCounts(slim.filter((c) => c.status === "live" && supported.has(c.ats)));
 
@@ -247,6 +266,11 @@ console.log(
 );
 console.log(
   `Tagged ${slim.filter((c) => c.tags?.length).length} companies by industry (+${slim.filter((c) => !c.tags?.length && c.title_tags?.length).length} from job titles only):\n  ${perIndustry.join("\n  ")}`,
+);
+console.log(
+  registers.length
+    ? `Visa sponsors: ${sponsors.stats.map((s) => `${s.country} ${s.matched} (list ${s.period}; ${s.skippedAmbiguous} names shared by several companies and ${s.skippedCommon} common ones skipped)`).join(", ")}.`
+    : "Visa sponsors: no registers downloaded (pnpm catalog:visa), so no company is tagged.",
 );
 {
   // Live companies by the surest source of any of their tags, and where the job titles came from.

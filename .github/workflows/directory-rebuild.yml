@@ -16,7 +16,7 @@
 #   Common Crawl       35    45     crossprobe       20    25
 #   Wayback            45    70     check 2          15    20
 #   industry resolve   10    15     index            60    70
-#   bulk resolve       45    57     publish job       –   ~35 besides index (setup, sources, merge, build, package, gate, release)
+#   bulk resolve       45    57     publish job       –   ~35 besides index (setup, sources, visa registers ≤10, merge, build, package, gate, release)
 #   check 1            60    70
 #
 # Set from the first full run (11 Oct 2026: collect 2h02, publish 1 min). Collect's hard caps add
@@ -241,6 +241,13 @@ jobs:
         run: |
           [ -f directory-repo/contributions.json ] || echo '{"companies":[]}' > directory-repo/contributions.json
           pnpm catalog:sources
+
+      # Government lists of employers that may sponsor work visas (UK, US, Canada, Netherlands): the
+      # directory's `visa` field. A register that fails keeps last week's copy (in the saved state).
+      - name: Download the visa sponsor registers
+        continue-on-error: true
+        timeout-minutes: 10
+        run: pnpm catalog:visa
 
       - name: Merge
         timeout-minutes: 5
