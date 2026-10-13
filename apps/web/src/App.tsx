@@ -25,6 +25,8 @@ import { canRunLocally, useData, useOtherJobs, type Job } from "./lib/data";
 import { newSinceLastVisit } from "./lib/newSince";
 import { usePrefs } from "./lib/prefs";
 import { scanPrefs, useScan } from "./lib/scan";
+import { useBackgroundScan } from "./lib/backgroundScan";
+import { announceBackgroundScan } from "./app/announceBackgroundScan";
 import { useResume } from "./lib/resume";
 import { profileFromPicks, type FilterPicks } from "./lib/profileSync";
 import { draftToConfig, emptyDraft, resetSetup, saveConfig, setupProgress, STEP, useSetupStatus } from "./lib/setup";
@@ -75,6 +77,10 @@ export function App() {
     await Promise.all([reload(), setup.refresh()]);
   }, [reload, setup.refresh]);
   const { scan, start: startScan, stop: stopScan, notify: notifyScan } = useScan(afterScan);
+  const afterBackgroundScan = useCallback(async () => {
+    const [m] = await Promise.all([reload(), setup.refresh()]);
+    return m;
+  }, [reload, setup.refresh]);
   /** The "which scan?" pop-up. */
   const [choosing, setChoosing] = useState(false);
   /** A "Scan now" click: ask which scan, or run your default if you said not to ask. */
@@ -85,6 +91,13 @@ export function App() {
   }, [startScan]);
   const closeChooser = useCallback(() => setChoosing(false), []);
   const scanning = scan.phase === "running";
+  /** A scheduled scan: shown in the header while it runs; its results replace the ones on screen when it ends. */
+  const background = useBackgroundScan({
+    loaded: state.kind === "ready" ? state.meta.generatedAt : state.kind === "empty" ? null : undefined,
+    paused: scanning,
+    reload: afterBackgroundScan,
+    onFinished: announceBackgroundScan,
+  });
 
   const { tg, notifyFailed, notifyNow } = useScanNotify(scan, notifyScan);
   /** Setup just saved and started the first scan: say how it went when it ends. */
@@ -186,7 +199,7 @@ export function App() {
   // Global keys: Esc closes, ? shows shortcuts, R scans now, 1-4 switch sections (the Radar uses 1-6 for
   // its views instead), and "g" then r/p/c/s goes to a section from anywhere. Dialogs close themselves on
   // Escape too.
-  const canScanNow = canRunLocally && setupState === "configured" && !scanning;
+  const canScanNow = canRunLocally && setupState === "configured" && !scanning && !background.running;
   const onPage = !openId && !showKeys && !inSetup;
   useGoToKeys(
     (section) => go({ tab: section }),
@@ -285,6 +298,7 @@ export function App() {
                   {canRunLocally && setupState === "configured" && (
                     <ScanButton
                       scan={scan}
+                      background={background.running}
                       onRequest={requestScan}
                       onChoose={() => setChoosing(true)}
                       onStop={() => void stopScan()}

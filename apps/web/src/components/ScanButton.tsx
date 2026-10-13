@@ -20,6 +20,7 @@ const SCOPE_HINT: Record<ScanScope, string> = {
  */
 export function ScanButton({
   scan,
+  background,
   onRequest,
   onChoose,
   onStop,
@@ -27,6 +28,8 @@ export function ScanButton({
   notifyLine,
 }: {
   scan: ScanState;
+  /** A scheduled scan (one this page didn't start) is running: no second scan until it ends. */
+  background?: boolean;
   onRequest: () => void;
   onChoose: () => void;
   onStop: () => void;
@@ -37,6 +40,13 @@ export function ScanButton({
 }) {
   const prefs = useScanPrefs();
   if (scan.phase === "running") return <ScanStatus scan={scan} onStop={onStop} notify={notify} notifyLine={notifyLine} />;
+  if (background) {
+    return (
+      <Button size="sm" disabled title="A scheduled scan is running. Its new jobs show up here by themselves when it's done.">
+        <LoaderCircle className="size-3.5 animate-spin" aria-hidden /> Scheduled scan running…
+      </Button>
+    );
+  }
   return (
     <div className="inline-flex">
       <Button size="sm" className="rounded-r-0" onClick={onRequest} title={prefs.ask ? "Scan now: choose which scan" : `Scan now: ${SCOPE_LABEL[prefs.scope]}`}>
