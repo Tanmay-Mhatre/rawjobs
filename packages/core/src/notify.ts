@@ -89,19 +89,21 @@ export async function sendTelegram(text: string, secrets: TelegramSecrets, fetch
   await call(secrets.token, "sendMessage", { chat_id: secrets.chatId, text, parse_mode: "HTML", disable_web_page_preview: true }, fetchImpl);
 }
 
-const plural = (n: number, one: string, many: string) => `${n.toLocaleString()} ${n === 1 ? one : many}`;
+/** "<b>12</b> new jobs": the number in bold. */
+const plural = (n: number, one: string, many: string) => `<b>${n.toLocaleString()}</b> ${n === 1 ? one : many}`;
 
 /**
- * Every message has the same three lines: a bold header naming what it's about, one line of facts,
- * then what to do. No job lists, scores or links: the details are in the app.
+ * Every message has the same three parts, a blank line apart: a bold header naming what it's about,
+ * the facts, then what to do (👉, in italics). No job lists, scores or links: the details are in the app.
  */
-const message = (header: string, facts: string, action: string) => `${header}\n${facts}\n${action}`;
+export const telegramMessage = (header: string, facts: string, action: string) => `${header}\n\n${facts}\n\n👉 <i>${action}</i>`;
+const message = telegramMessage;
 
-/** "12 new jobs, 3 strong fits." (never a 0: "no strong fits"). Undefined when nothing is new. */
+/** "12 new jobs · 3 strong fits" (never a 0: "no strong fits"). Undefined when nothing is new. */
 function newJobsLine(jobs: readonly Job[], minScore: number): string | undefined {
   if (!jobs.length) return undefined;
   const strong = jobs.filter((j) => j.score >= minScore).length;
-  return `${plural(jobs.length, "new job", "new jobs")}, ${strong ? plural(strong, "strong fit", "strong fits") : "no strong fits"}.`;
+  return `${plural(jobs.length, "new job", "new jobs")} · ${strong ? plural(strong, "strong fit", "strong fits") : "no strong fits"}`;
 }
 
 const seeThem = (n: number) => `Open RawJobs on your computer to see ${n === 1 ? "it" : "them"}.`;
@@ -118,7 +120,7 @@ export const testMessage = () => message("👋 <b>Test alert</b>", "Alerts from 
  */
 export function digest(jobs: readonly Job[], opts: { minScore: number; onlyNew?: boolean }): string | undefined {
   if (!jobs.length) return undefined;
-  if (opts.onlyNew === false) return message("💼 <b>Strong fits</b>", `${plural(jobs.length, "strong fit", "strong fits")}.`, seeThem(jobs.length));
+  if (opts.onlyNew === false) return message("💼 <b>Strong fits</b>", plural(jobs.length, "strong fit", "strong fits"), seeThem(jobs.length));
   return message("💼 <b>New jobs</b>", newJobsLine(jobs, opts.minScore)!, seeThem(jobs.length));
 }
 
@@ -129,8 +131,8 @@ export function finishedMessage(o: { newJobs: readonly Job[]; minScore: number; 
   if (o.stopped)
     return message(
       "⏸ <b>Scan stopped</b>",
-      facts ?? "No new jobs yet.",
+      facts ?? "No new jobs yet",
       n ? `Open RawJobs on your computer to see ${n === 1 ? "it" : "them"} and finish the scan.` : "Open RawJobs on your computer to finish the scan.",
     );
-  return message("✅ <b>Scan finished</b>", facts ?? "No new jobs.", n ? seeThem(n) : "Open RawJobs on your computer to see your matches.");
+  return message("✅ <b>Scan finished</b>", facts ?? "No new jobs", n ? seeThem(n) : "Open RawJobs on your computer to see your matches.");
 }

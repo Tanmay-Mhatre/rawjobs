@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs";
 import type { IncomingMessage, ServerResponse } from "node:http";
 import { join } from "node:path";
-import { APP_VERSION, BUNDLED, CODE_ROOT, loadConfig, sendTelegram, telegramSecrets } from "@rawjobs/core";
+import { APP_VERSION, BUNDLED, CODE_ROOT, loadConfig, sendTelegram, telegramMessage, telegramSecrets } from "@rawjobs/core";
 import { type ChangelogEntry, compareVersions, type ReleaseChange } from "@rawjobs/core/release";
 import {
   beaconVersion,
@@ -379,7 +379,8 @@ const esc = (t: string) => t.replace(/&/g, "&amp;").replace(/</g, "&lt;").replac
 
 /** The Telegram message for a downloaded update (HTML, as sendTelegram sends it). What changed is in the app. */
 export function updateMessage(version: string, critical: boolean): string {
+  const ready = `RawJobs <b>${esc(version)}</b> is ready to install.`;
   return critical
-    ? `⚠️ <b>Update required</b>\nRawJobs ${esc(version)} is ready to install.\nOpen RawJobs on your computer and click Update.`
-    : `⬆️ <b>Update ready</b>\nRawJobs ${esc(version)} is ready to install. Nothing changes until you do.\nOpen RawJobs on your computer and click Update.`;
+    ? telegramMessage("⚠️ <b>Update required</b>", ready, "Open RawJobs on your computer and click Update.")
+    : telegramMessage("⬆️ <b>Update ready</b>", `${ready}\nNothing changes until you do.`, "Open RawJobs on your computer and click Update.");
 }

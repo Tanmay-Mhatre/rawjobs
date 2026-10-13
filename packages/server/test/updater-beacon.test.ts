@@ -60,7 +60,7 @@ describe("watching the beacon", () => {
     expect(u.updateHint()).toEqual({ version: "99.0.0", critical: false });
     expect(u.status().available).toMatchObject({ version: "99.0.0", ready: true, changes: [{ type: "fixed" }] });
     expect(fake.sendTelegram).toHaveBeenCalledOnce();
-    expect(fake.sendTelegram.mock.calls[0]![0]).toMatch(/Update ready<\/b>\nRawJobs 99\.0\.0 is ready to install/);
+    expect(fake.sendTelegram.mock.calls[0]![0]).toMatch(/Update ready<\/b>\n\nRawJobs <b>99\.0\.0<\/b> is ready to install/);
     // The beacon hasn't changed: no GitHub, no download, no second message.
     await u.look();
     expect(fake.fetchManifest).toHaveBeenCalledOnce();
@@ -107,7 +107,9 @@ describe("watching the beacon", () => {
 
 describe("the Telegram message", () => {
   it("names the version, and says a required one is required", () => {
-    expect(updateMessage("0.6.1<b>", false)).toBe("⬆️ <b>Update ready</b>\nRawJobs 0.6.1&lt;b&gt; is ready to install. Nothing changes until you do.\nOpen RawJobs on your computer and click Update.");
-    expect(updateMessage("0.6.2", true)).toBe("⚠️ <b>Update required</b>\nRawJobs 0.6.2 is ready to install.\nOpen RawJobs on your computer and click Update.");
+    expect(updateMessage("0.6.1<b>", false)).toBe(
+      "⬆️ <b>Update ready</b>\n\nRawJobs <b>0.6.1&lt;b&gt;</b> is ready to install.\nNothing changes until you do.\n\n👉 <i>Open RawJobs on your computer and click Update.</i>",
+    );
+    expect(updateMessage("0.6.2", true)).toBe("⚠️ <b>Update required</b>\n\nRawJobs <b>0.6.2</b> is ready to install.\n\n👉 <i>Open RawJobs on your computer and click Update.</i>");
   });
 });
