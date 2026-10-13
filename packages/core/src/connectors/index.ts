@@ -16,6 +16,15 @@ import { careerplug } from "./careerplug";
 import { dayforce } from "./dayforce";
 import { adp } from "./adp";
 import { applicantpro } from "./applicantpro";
+import { paycor } from "./paycor";
+import { hiringthing } from "./hiringthing";
+import { manatal } from "./manatal";
+import { trakstar } from "./trakstar";
+import { factorial } from "./factorial";
+import { gem } from "./gem";
+import { hrmdirect } from "./hrmdirect";
+import { softgarden } from "./softgarden";
+import { cornerstone } from "./cornerstone";
 import { greenhouse } from "./greenhouse";
 import { hibob } from "./hibob";
 import { icims } from "./icims";
@@ -79,6 +88,15 @@ export const connectors: Partial<Record<AtsType, Connector<any>>> = {
   dayforce,
   adp,
   applicantpro,
+  paycor,
+  hiringthing,
+  manatal,
+  trakstar,
+  factorial,
+  gem,
+  hrmdirect,
+  softgarden,
+  cornerstone,
   // Job boards (JOB_BOARDS), last so a company's own board is always recognised first.
   hackernews,
   remotive,
@@ -213,6 +231,24 @@ export function careersUrl(c: DetectedCompany): string {
       return c.site ? `https://workforcenow.adp.com/mascsr/default/mdf/recruitment/recruitment.html?cid=${c.slug}&ccId=${c.site}` : "";
     case "applicantpro":
       return `https://${c.slug}.${c.shard === "isolvedhire.com" ? "isolvedhire.com" : "applicantpro.com"}/jobs/`;
+    case "paycor":
+      return `https://recruitingbypaycor.com/career/CareerHome.action?clientId=${c.slug}`;
+    case "hiringthing":
+      return `https://${c.slug}/`;
+    case "manatal":
+      return `https://www.careers-page.com/${c.slug}`;
+    case "trakstar":
+      return `https://${c.slug}.hire.trakstar.com/`;
+    case "factorial":
+      return `https://${c.slug}/`;
+    case "gem":
+      return `https://jobs.gem.com/${c.slug}`;
+    case "hrmdirect":
+      return `https://${c.slug}.hrmdirect.com/employment/`;
+    case "softgarden":
+      return `https://${c.slug}.career.softgarden.de/`;
+    case "cornerstone":
+      return `https://${c.slug}.csod.com/ux/ats/careersite/1/home?c=${c.slug}`;
     default:
       return "";
   }
