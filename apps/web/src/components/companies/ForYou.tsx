@@ -11,11 +11,10 @@ import { settingsHash } from "../settings/registry";
 import { AddAll, AddButton } from "../CompanyButtons";
 import { buttonClass, Chip } from "../primitives";
 import { Button, Card, cx } from "../ui";
-import { CardSkeleton, Monogram, SuggestionCard } from "./SuggestionCard";
+import { Monogram, SuggestionCard } from "./SuggestionCard";
+import { type Lens, MatchingStatus, openingLens, SuggestSkeleton } from "./SuggestSkeleton";
 import { TabList, TabPanel, useTabIds } from "./Tabs";
 import { packLabel, type PackActions } from "./Tray";
-
-type Lens = "hiring" | "like" | "watching" | "packs" | "soon";
 
 type Props = {
   state: SuggestState;
@@ -41,6 +40,8 @@ type Props = {
   industries?: number;
   /** How Starter packs add and remove (the Companies page's tray records them); else straight to the list. */
   packActions?: PackActions;
+  /** How many companies a match checks, for the loading line; left out while unknown. */
+  poolSize?: number | null;
 };
 
 export const DISMISSED_KEY = "rawjobs.goBackDismissed";
@@ -60,7 +61,24 @@ const real = <T extends CompanySuggestion>(list: readonly T[], skip: ReadonlySet
  * watching, one pack per industry, and ones RawJobs can't scan yet. Rule-based and local: nothing
  * about you leaves this computer.
  */
-export function ForYou({ state, watched, muted, pastEmployers, onPastEmployers, onAddMany, onRemoveMany, onMute, onUnmute, onShowHidden, compact, offHint, onRetry, industries, packActions }: Props) {
+export function ForYou({
+  state,
+  watched,
+  muted,
+  pastEmployers,
+  onPastEmployers,
+  onAddMany,
+  onRemoveMany,
+  onMute,
+  onUnmute,
+  onShowHidden,
+  compact,
+  offHint,
+  onRetry,
+  industries,
+  packActions,
+  poolSize,
+}: Props) {
   const ids = useTabIds("suggest");
   // "Off" only counts once it has lasted a moment: the first render and profile changes pass through it.
   const [offSettled, setOffSettled] = useState(!canRunLocally);
@@ -197,19 +215,16 @@ export function ForYou({ state, watched, muted, pastEmployers, onPastEmployers, 
           </details>
         </div>
       ) : !lists ? (
-        <div className="mt-4 space-y-3">
-          <p role="status" className="flex items-center gap-2 type-small text-muted">
-            <LoaderCircle className="size-4 animate-spin" /> Matching thousands of companies to your profile… (the first time takes about 10 seconds)
-          </p>
-          <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
-            {Array.from({ length: compact ? 2 : 3 }, (_, i) => (
-              // biome-ignore lint/suspicious/noArrayIndexKey: a fixed list rebuilt from the same input, never reordered: the index is a stable key
-              <CardSkeleton key={i} />
-            ))}
-          </div>
-        </div>
+        <SuggestSkeleton
+          lens={lens ?? openingLens(industries, watched.size)}
+          industries={industries}
+          compact={compact}
+          status={<MatchingStatus companies={poolSize} />}
+          needIndustries={industries === 0 && (lens ?? "packs") === "packs" && <NeedIndustries />}
+        />
       ) : (
-        <div className={cx("mt-4 space-y-4", state.kind === "loading" && "opacity-60 transition-opacity")} aria-busy={state.kind === "loading"}>
+        // A new answer on its way: the one on screen stays readable and usable until it's replaced in place.
+        <div className="mt-4 space-y-4" aria-busy={state.kind === "loading"}>
           <TabList
             tabs={tabs}
             value={current}
@@ -217,7 +232,17 @@ export function ForYou({ state, watched, muted, pastEmployers, onPastEmployers, 
             label="Kinds of suggestions"
             wrap
             ids={ids}
-            after={state.kind === "loading" && <LoaderCircle className="ml-1 size-4 shrink-0 animate-spin text-muted" aria-label="Updating suggestions" />}
+            after={
+              <span role="status" className="inline-flex shrink-0 items-center gap-1.5 whitespace-nowrap type-meta text-muted">
+                {state.kind === "loading" && (
+                  <>
+                    <LoaderCircle className="size-3.5 shrink-0 motion-safe:animate-spin" aria-hidden />
+                    {/* On a phone the spinner alone, so the tabs keep their lines; screen readers hear the words. */}
+                    <span className="max-sm:sr-only">Updating suggestions</span>
+                  </>
+                )}
+              </span>
+            }
           />
 
           <TabPanel id={current} ids={ids} className="space-y-4">

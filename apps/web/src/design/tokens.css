@@ -148,7 +148,7 @@
   --progress-track: var(--bg-active);
   --progress-fill: var(--text-primary);
   --skeleton-bg: var(--bg-inset);
-  --skeleton-shine: var(--bg-hover);
+  --skeleton-shine: var(--bg-raised);
   --toast-bg: var(--text-primary);
   --toast-fg: var(--bg-raised);
   --menu-bg: var(--bg-overlay);
@@ -253,6 +253,7 @@
   --danger-text: var(--red-11);
   --danger-subtle: var(--red-3);
   --scrim: rgba(0, 0, 0, 0.6);
+  --skeleton-shine: var(--bg-hover);
   --shadow-l1: inset 0 1px 0 rgba(255, 255, 255, 0.04);
   --shadow-l2: inset 0 1px 0 rgba(255, 255, 255, 0.06), 0 4px 12px rgba(0, 0, 0, 0.32);
   --shadow-l3: inset 0 1px 0 rgba(255, 255, 255, 0.06), 0 12px 32px rgba(0, 0, 0, 0.4);
@@ -351,6 +352,7 @@
   --danger-text: var(--red-11);
   --danger-subtle: var(--red-3);
   --scrim: rgba(10, 9, 7, 0.5);
+  --skeleton-shine: var(--bg-raised);
   --shadow-l1: none;
   --shadow-l2: none;
   --shadow-l3: none;
@@ -449,6 +451,7 @@
   --danger-text: var(--red-11);
   --danger-subtle: var(--red-3);
   --scrim: rgba(0, 0, 0, 0.72);
+  --skeleton-shine: var(--bg-hover);
   --shadow-l1: none;
   --shadow-l2: none;
   --shadow-l3: none;
