@@ -259,6 +259,18 @@ describe("feed connectors (XML and embedded data)", () => {
     const { jobs } = await run("zoho", { slug: "acme" }, () => text(`<input type="hidden" value="${data}" id="jobs">`));
     expect(jobs[0]).toMatchObject({ title: "Senior Accountant", location: "Surat, India", description: "GST & TDS", url: "https://acme.zohorecruit.com/jobs/Careers/56/Senior-Accountant" });
   });
+
+  it("zoho: a board on another data centre is read from that domain", async () => {
+    const data = JSON.stringify([{ id: "7", Posting_Title: "Analyst", Publish: true }]).replace(/"/g, "&#34;");
+    const { jobs, calls } = await run("zoho", { slug: "acme", shard: "in" }, () => text(`<input type="hidden" value="${data}" id="jobs">`));
+    expect(calls[0]).toBe("https://acme.zohorecruit.in/jobs/Careers");
+    expect(jobs[0]?.url).toBe("https://acme.zohorecruit.in/jobs/Careers/7/Analyst");
+  });
+
+  it("zoho: an unknown data centre falls back to .com", async () => {
+    const { calls } = await run("zoho", { slug: "acme", shard: "evil.example" }, () => text(`<input type="hidden" value="[]" id="jobs">`));
+    expect(calls[0]).toBe("https://acme.zohorecruit.com/jobs/Careers");
+  });
 });
 
 describe("page connectors", () => {

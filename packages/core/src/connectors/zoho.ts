@@ -1,5 +1,6 @@
 import type { NormalizedJob } from "../schema";
 import { decodeEntities, htmlToText, inferWorkplace } from "../text";
+import { ZOHO_HOST } from "./detect-known";
 import { detectAs, isoDate, joinParts } from "./parse";
 import { jobId, type Connector } from "./types";
 
@@ -17,6 +18,9 @@ export type ZohoJob = {
   Date_Opened?: string;
   Publish?: boolean;
 };
+
+/** The board's host: its data centre's domain (`shard`, e.g. "in", "eu"), .com when unset. */
+export const zohoHost = (ref: { slug: string; shard?: string }) => `https://${ref.slug}.zohorecruit.${ref.shard && ZOHO_HOST.test(`.zohorecruit.${ref.shard}`) ? ref.shard : "com"}`;
 
 /** The careers page name from its URL (/jobs/{page}); "Careers" is Zoho's default. */
 const pageOf = (ref: { site?: string }) => ref.site || "Careers";
@@ -42,7 +46,7 @@ export const zoho: Connector<ZohoJob> = {
   detect: detectAs("zoho"),
 
   async fetch(ref, { http }) {
-    const html = await http.getText(`https://${ref.slug}.zohorecruit.com/jobs/${encodeURIComponent(pageOf(ref))}`);
+    const html = await http.getText(`${zohoHost(ref)}/jobs/${encodeURIComponent(pageOf(ref))}`);
     const jobs = parseZohoPage(html);
     if (!jobs) throw new Error(`Zoho Recruit careers page "${pageOf(ref)}" not found for ${ref.slug}`);
     return jobs.filter((j) => j.Publish !== false);
@@ -60,7 +64,7 @@ export const zoho: Connector<ZohoJob> = {
       country: raw.Country || undefined,
       workplace: raw.Remote_Job ? "remote" : inferWorkplace(location),
       postedAt: isoDate(raw.Date_Opened),
-      url: `https://${ref.slug}.zohorecruit.com/jobs/${pageOf(ref)}/${raw.id}/${titleSlug(title)}`,
+      url: `${zohoHost(ref)}/jobs/${pageOf(ref)}/${raw.id}/${titleSlug(title)}`,
       description: htmlToText(raw.Job_Description),
     };
   },
