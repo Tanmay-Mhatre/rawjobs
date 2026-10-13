@@ -702,7 +702,7 @@ function SettingsPage({ id, current, onList, children }: { id: SettingsPageId; c
   );
 }
 
-/** Theme and contrast: saved in this browser and applied at once, so they're not part of Save. */
+/** Theme, contrast and density: saved on this computer (profile/tracking.json) and applied at once, so they're not part of Save. */
 function AppearanceSection() {
   const { theme, contrast, setTheme, setContrast } = useTheme();
   const density = useDensity();
@@ -746,11 +746,11 @@ function AppearanceSection() {
   );
 }
 
-/** The Radar's age limit: saved in this browser and applied at once. */
+/** The Radar's age limit: saved with the appearance choices and applied at once. */
 function MaxAgeSection() {
   const maxAge = useMaxAge();
   return (
-    <Section id="max-age" title="Hide jobs older than" hint="Saved in this browser, right away.">
+    <Section id="max-age" title="Hide jobs older than" hint={canRunLocally ? "Saved on this computer, right away." : "Saved in this browser, right away."}>
       <Segmented<MaxAge>
         label="Hide jobs older than"
         value={maxAge}

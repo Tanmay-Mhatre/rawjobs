@@ -3,14 +3,14 @@ import { canRunLocally } from "./data";
 import { load, onSave } from "./storage";
 
 /**
- * Your tracking (statuses, notes), Radar preferences and what the dashboard remembers between visits
- * (KEPT_ON_DISK below) are saved on this computer
+ * Your tracking (statuses, notes), Radar preferences, appearance (theme, contrast, density, age limit)
+ * and what the dashboard remembers between visits (KEPT_ON_DISK below) are saved on this computer
  * (profile/tracking.json, through the local API) as well as in this browser. The browser copy shows
  * the page instantly; the file is what counts, so opening the dashboard at another address, or in
  * another browser, still finds them. The first page opened with this version uploads what its browser
  * had, so nothing saved before is lost.
  */
-export type TrackingPart = "state" | "prefs" | "browser";
+export type TrackingPart = "state" | "prefs" | "appearance" | "browser";
 type Remote = Partial<Record<TrackingPart, unknown>>;
 
 const SAVE_DELAY = 400;

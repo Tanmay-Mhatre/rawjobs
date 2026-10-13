@@ -3,6 +3,7 @@ import { act, cleanup, renderHook, waitFor } from "@testing-library/react";
 import { useState } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { save } from "../src/lib/storage";
+import { setThemeChoice, useSavedAppearance } from "../src/lib/theme";
 import { resetTrackingSync, restoreFromDisk, useSavedOnDisk } from "../src/lib/tracking";
 
 type Call = { method: string; body?: unknown };
@@ -91,6 +92,42 @@ describe("useSavedOnDisk", () => {
       await vi.advanceTimersByTimeAsync(500);
     });
     expect(vi.mocked(fetch).mock.calls.filter(([, init]) => init?.method === "PUT")).toEqual([]);
+  });
+});
+
+describe("useSavedAppearance", () => {
+  const flushSaves = () =>
+    act(async () => {
+      await vi.advanceTimersByTimeAsync(500);
+    });
+
+  it("brings back the theme saved in your RawJobs folder, at a new address with nothing in this browser", async () => {
+    fakeApi({ appearance: { theme: "dark", density: "compact", maxAge: 180 } });
+    renderHook(() => useSavedAppearance());
+    await waitFor(() => expect(document.documentElement.dataset.theme).toMatch(/^dark/));
+    expect(localStorage.getItem("rawjobs.theme")).toBe("dark");
+    expect(localStorage.getItem("rawjobs.density")).toBe("compact");
+    expect(localStorage.getItem("rawjobs.maxAge")).toBe("180");
+  });
+
+  it("uploads this browser's choices when the file has none yet", async () => {
+    localStorage.setItem("rawjobs.theme", "light");
+    const api = fakeApi({ state: {} });
+    renderHook(() => useSavedAppearance());
+    await flushSaves();
+    expect(api.file()).toMatchObject({ appearance: { theme: "light" } });
+  });
+
+  it("saves a theme picked in Settings, and System as no choice", async () => {
+    const api = fakeApi({ appearance: {} });
+    renderHook(() => useSavedAppearance());
+    await waitFor(() => expect(api.calls.length).toBe(1));
+    act(() => setThemeChoice("dark"));
+    await flushSaves();
+    expect(api.file()).toMatchObject({ appearance: { theme: "dark" } });
+    act(() => setThemeChoice("system"));
+    await flushSaves();
+    expect(api.file()).toMatchObject({ appearance: {} });
   });
 });
 
