@@ -8,7 +8,7 @@ export const ageLimit = (days: number) => (days % 30 === 0 ? (days === 30 ? "1 m
 export function MoreToggles({ filters, setFilters, olderCount, maxAgeDays }: { filters: Filters; setFilters: (p: Partial<Filters>) => void; olderCount: number; maxAgeDays: number }) {
   const rows: [keyof Filters, string][] = [
     ["salaryOnly", "Salary listed"],
-    ["hideEvergreen", "No talent pools or reposts"],
+    ["hideEvergreen", "No talent pools or stale jobs"],
     ...(maxAgeDays ? [["showOld", `Show older jobs${olderCount ? ` (${olderCount})` : ""}: posted over ${ageLimit(maxAgeDays)} ago`] as [keyof Filters, string]] : []),
     ["showFailed", "Include jobs that failed your filters"],
     ["showClosed", "Include closed jobs"],

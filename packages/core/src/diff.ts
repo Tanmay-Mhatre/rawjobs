@@ -56,7 +56,9 @@ export function mergeHistory(previous: readonly Job[], run: RunResult, companies
         gone.delete(repostKey(j));
         reposted.add(old.id);
         const posted = [old.postedAt ?? old.firstSeen, j.postedAt].filter((d): d is string => !!d).sort()[0];
-        j = { ...j, firstSeen: old.firstSeen, postedAt: posted, repostedAt: run.startedAt };
+        // Older saves have repostedAt without a count: that was one repost.
+        const repostCount = (old.repostCount ?? (old.repostedAt ? 1 : 0)) + 1;
+        j = { ...j, firstSeen: old.firstSeen, postedAt: posted, repostedAt: run.startedAt, repostCount };
       } else newIds.add(j.id);
     }
     jobs.push(j);

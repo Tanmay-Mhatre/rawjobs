@@ -16,6 +16,7 @@ export function toDashboardJob(job: Job): DashboardJob {
     seniority: seniorityOf(job.title),
     group: groupKey(job.company, job.title),
     hasDescription: !!description,
+    ...(description ? { descriptionLength: description.trim().length } : {}),
   };
 }
 

@@ -144,7 +144,14 @@ export async function runRadar(config: Config, opts: RunOptions = {}): Promise<R
           ({ score, why } = scoreJob(base, config.profile, fit));
         }
         // Your companies keep every job (the Radar can show the rest); extra checks only matches.
-        if (!extra || !why.gate) kept.push({ ...base, postedAt: earliestPosted(base.postedAt, prev), firstSeen, lastSeen: nowIso, status: "open", score, why });
+        if (!extra || !why.gate) {
+          const postedAt = earliestPosted(base.postedAt, prev);
+          // The board's own date, kept when it's later: a board that refreshes it (see staleReasons in the dashboard).
+          const boardPostedAt = base.postedAt && postedAt && Date.parse(base.postedAt) > Date.parse(postedAt) ? base.postedAt : undefined;
+          // A repost's history (set in mergeHistory) carries over while the job stays listed.
+          const reposts = prev?.repostedAt ? { repostedAt: prev.repostedAt, ...(prev.repostCount ? { repostCount: prev.repostCount } : {}) } : {};
+          kept.push({ ...base, ...reposts, postedAt, ...(boardPostedAt ? { boardPostedAt } : {}), firstSeen, lastSeen: nowIso, status: "open", score, why });
+        }
         if (!why.gate) h.matches++;
       }
       h.jobsFound = recent?.length ?? raws.length - (h.skipped ?? 0);
