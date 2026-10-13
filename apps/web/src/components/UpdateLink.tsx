@@ -23,8 +23,14 @@ export function UpdateLink({
   yours,
   onUse,
   onClose,
+  initialUrl,
+  note,
 }: {
   id: string;
+  /** A suggested new page: filled in and checked as soon as the panel opens. */
+  initialUrl?: string;
+  /** Where the suggestion came from, shown above the field. */
+  note?: string;
   name: string;
   oldKey: string;
   oldUrl?: string;
@@ -35,15 +41,12 @@ export function UpdateLink({
 }) {
   const inputId = useId();
   const input = useRef<HTMLInputElement>(null);
-  const [text, setText] = useState("");
+  const [text, setText] = useState(initialUrl ?? "");
   const [checking, setChecking] = useState(false);
   const [failed, setFailed] = useState(false);
   const [verdict, setVerdict] = useState<LinkVerdict | null>(null);
 
-  useEffect(() => input.current?.focus(), []);
-
-  const check = async () => {
-    const url = text.trim();
+  const check = async (url = text.trim()) => {
     if (!url) return;
     setChecking(true);
     setFailed(false);
@@ -57,6 +60,12 @@ export function UpdateLink({
       setChecking(false);
     }
   };
+
+  // biome-ignore lint/correctness/useExhaustiveDependencies: once, when the panel opens
+  useEffect(() => {
+    input.current?.focus();
+    if (initialUrl) void check(initialUrl);
+  }, []);
 
   return (
     // biome-ignore lint/a11y/noStaticElementInteractions: Escape closes the panel from any field inside it
@@ -80,6 +89,7 @@ export function UpdateLink({
             void check();
           }}
         >
+          {note && <p className="text-muted">{note}</p>}
           <label htmlFor={inputId} className="block font-semibold">
             New careers link for {name}
           </label>

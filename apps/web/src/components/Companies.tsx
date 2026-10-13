@@ -120,8 +120,9 @@ export function MyCompanies({
   onScan,
   scanning,
   onPasteLink,
-  onUseLink,
   onUpdateLink,
+  dismissedMoves,
+  onDismissMove,
   hidden = [],
   onShowAgain,
   attention = 0,
@@ -148,9 +149,12 @@ export function MyCompanies({
   /** Opens Add by link: "Paste new link" on a company whose careers page wasn't found. */
   onPasteLink?: () => void;
   /** "Use this link" on a company whose careers page wasn't found, for the board the last scan suggested. */
-  onUseLink?: (key: string, to: BoardMove["to"]) => void;
   /** "Update link": the new board you checked and chose for a company whose careers page stopped working. */
   onUpdateLink?: (key: string, to: CompanyRef, opts: { otherName?: string }) => void;
+  /** Suggested new pages you said aren't the company's ("old key>new key"), not offered again. */
+  dismissedMoves?: ReadonlySet<string>;
+  /** "Not this one" on a suggested new page (the caller remembers it and offers Undo). */
+  onDismissMove?: (move: BoardMove) => void;
   hidden?: HiddenCompany[];
   onShowAgain?: (h: HiddenCompany) => void;
   /** Above 0 when a "failing" link was followed; each new value shows Needs attention. */
@@ -168,7 +172,7 @@ export function MyCompanies({
   const [removed, setRemoved] = useState<CompanyRow[] | null>(null);
   const ids = useId();
   /** The row whose "Update link" panel is open (one at a time). */
-  const [editing, setEditing] = useState<string | null>(null);
+  const [editing, setEditing] = useState<{ id: string; url?: string; note?: string } | null>(null);
   /** Rows just given a new link: they stay in view, saying so, until the filter changes. */
   const [updated, setUpdated] = useState<ReadonlySet<string>>(new Set());
   /** The "Update link" button that opened the panel, where focus goes back on Cancel or Escape. */
@@ -205,12 +209,12 @@ export function MyCompanies({
         radar,
         bars: barsOf(meta?.runs ?? [], (health) => health.find((x) => keyOf(x) === key)),
         problem,
-        moved: problem?.kind === "notFound" ? moves.find((m) => keyOf(m.from) === key && !keys.has(keyOf(m.to))) : undefined,
+        moved: needsAttention(problem) ? moves.find((m) => keyOf(m.from) === key && !keys.has(keyOf(m.to)) && !dismissedMoves?.has(moveKey(m))) : undefined,
         quiet,
         isQuiet: isQuiet(quiet),
       };
     });
-  }, [list, savedKeys, meta, jobNames]);
+  }, [list, savedKeys, meta, jobNames, dismissedMoves]);
   const facts = rows.map((x) => ({ problem: x.problem, quiet: x.isQuiet }));
   const counts = filterCounts(facts);
   const quiet = rows.filter((x) => x.isQuiet);
@@ -244,12 +248,12 @@ export function MyCompanies({
       <button
         type="button"
         className={linkClass}
-        aria-expanded={editing === x.r.id}
+        aria-expanded={editing?.id === x.r.id && !editing.url}
         aria-controls={panelId(x)}
         aria-label={`Update ${companyLabel(x.r)}'s careers link`}
         onClick={(e) => {
           opener.current = e.currentTarget;
-          setEditing((v) => (v === x.r.id ? null : x.r.id));
+          setEditing((v) => (v?.id === x.r.id && !v.url ? null : { id: x.r.id }));
         }}
       >
         Update link
@@ -268,22 +272,54 @@ export function MyCompanies({
         <span className="text-muted">Checked on your next scan</span>
       </span>
     ) : (
-      <Status
-        problem={x.problem}
-        quiet={x.isQuiet ? x.quiet : undefined}
-        onScan={onScan}
-        scanning={scanning}
-        fixLink={fixLink(x)}
-        name={companyLabel(x.r)}
-        moved={x.moved}
-        onUseLink={onUseLink && ((to) => onUseLink(x.key, to))}
-      />
+      <Status problem={x.problem} quiet={x.isQuiet ? x.quiet : undefined} onScan={onScan} scanning={scanning} fixLink={fixLink(x)} suggestion={suggestion(x)} />
     );
+  /**
+   * A page the last scan found for a company whose careers page fails. "Review" opens the Update link
+   * panel with it filled in and checked; nothing changes until "Use this link" there. A same-name guess
+   * can be turned down ("Not this one"); a move RawJobs checked for everyone says so.
+   */
+  const suggestion = (x: Row) => {
+    const m = x.moved;
+    if (!m || !onUpdateLink) return undefined;
+    const name = companyLabel(x.r);
+    const url = m.to.careers_url || careersUrl(m.to as never);
+    const note = m.checked_at
+      ? `Checked by RawJobs on ${shortDate(m.checked_at)}: the old page is gone and this one works. Still make sure it's ${name}.`
+      : `Suggested because this ${atsLabel(m.to.ats)} page has the same name. Check it's really ${name} before you use it.`;
+    const open = editing?.id === x.r.id && !!editing.url;
+    return (
+      <>
+        <span className="text-muted">{m.checked_at ? `Moved to ${atsLabel(m.to.ats)}, checked by RawJobs` : `May have moved to ${atsLabel(m.to.ats)}`}</span>
+        <button
+          type="button"
+          className={linkClass}
+          aria-expanded={open}
+          aria-controls={panelId(x)}
+          aria-label={`Review ${name}'s possible new careers page`}
+          onClick={(e) => {
+            opener.current = e.currentTarget;
+            setEditing(open ? null : { id: x.r.id, url, note });
+          }}
+        >
+          Review
+        </button>
+        {!m.checked_at && onDismissMove && (
+          <button type="button" className={linkClass} aria-label={`Not ${name}'s new careers page`} onClick={() => onDismissMove(m)}>
+            Not this one
+          </button>
+        )}
+      </>
+    );
+  };
   const yours = new Map(rows.map((x) => [x.key, companyLabel(x.r)]));
   const updatePanel = (x: Row) =>
-    editing === x.r.id &&
+    editing?.id === x.r.id &&
     onUpdateLink && (
       <UpdateLink
+        key={editing.url ?? "blank"}
+        initialUrl={editing.url}
+        note={editing.note}
         id={panelId(x)}
         name={companyLabel(x.r)}
         oldKey={x.key}
@@ -442,7 +478,7 @@ export function MyCompanies({
                 <tbody>
                   {items.map((x) => (
                     <Fragment key={x.r.id}>
-                      <tr className={cx("border-b border-line last:border-b-0", x.isNew && "bg-inset", md && editing === x.r.id && "border-b-0")}>
+                      <tr className={cx("border-b border-line last:border-b-0", x.isNew && "bg-inset", md && editing?.id === x.r.id && "border-b-0")}>
                         <td className="px-4 py-2.5">
                           <NameCell x={x} />
                         </td>
@@ -452,7 +488,7 @@ export function MyCompanies({
                         <td className="px-3 py-2.5">{status(x)}</td>
                         <td className="px-2 py-2.5 text-right">{remove(x)}</td>
                       </tr>
-                      {md && editing === x.r.id && (
+                      {md && editing?.id === x.r.id && (
                         <tr className="border-b border-line last:border-b-0">
                           <td colSpan={4} className="px-4 pb-3">
                             {updatePanel(x)}
@@ -531,9 +567,7 @@ function Status({
   onScan,
   scanning,
   fixLink,
-  name,
-  moved,
-  onUseLink,
+  suggestion,
 }: {
   problem: Problem;
   quiet?: Quiet;
@@ -541,9 +575,8 @@ function Status({
   scanning?: boolean;
   /** "Update link" (or "Paste new link"): shown when the careers page is gone, or hasn't answered for a few scans. */
   fixLink?: ReactNode;
-  name?: string;
-  moved?: BoardMove;
-  onUseLink?: (to: BoardMove["to"]) => void;
+  /** A page the last scan found that may be the new one, with Review (and Not this one). */
+  suggestion?: ReactNode;
 }) {
   const line = (word: string, detail?: string, action?: ReactNode, tone: "danger" | "muted" = "muted") => (
     <span className="flex flex-wrap items-center gap-x-2 gap-y-0.5">
@@ -554,44 +587,16 @@ function Status({
   );
   if (!problem) return quiet ? <span className="text-muted">Nothing for you in the last {quiet.scans} scans</span> : null;
   switch (problem.kind) {
-    case "notFound": {
-      const paste = fixLink;
-      // Same name isn't proof (anyone can open a board called "Acme"): the board opens to check, and only your click switches.
-      const to = moved && onUseLink ? moved.to : undefined;
-      const href = to && safeUrl(to.careers_url || careersUrl(to as never));
+    case "notFound":
       return line(
         "Careers page not found",
         `since ${shortDate(problem.since)}`,
-        to ? (
-          <>
-            <span className="text-muted">
-              Maybe moved to{" "}
-              {href ? (
-                <a href={href} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 text-ink underline underline-offset-2 hover:text-muted">
-                  this {atsLabel(to.ats)} page <ExternalLink className="size-3" aria-hidden />
-                  <span className="sr-only"> (opens in a new tab)</span>
-                </a>
-              ) : (
-                `a ${atsLabel(to.ats)} page`
-              )}
-            </span>
-            <button
-              type="button"
-              className={linkClass}
-              onClick={() => onUseLink?.(to)}
-              aria-label={`Use this ${atsLabel(to.ats)} page for ${name ?? "this company"}`}
-              title="Check it's the same company first"
-            >
-              Use this link
-            </button>
-            {paste}
-          </>
-        ) : (
-          paste
-        ),
+        <>
+          {suggestion}
+          {fixLink}
+        </>,
         "danger",
       );
-    }
     case "notAnswering":
       return line(
         "Not answering",
@@ -602,6 +607,7 @@ function Status({
               <RefreshCw className="size-3" /> Check again
             </button>
           )}
+          {suggestion}
           {/* One timeout usually passes; after a few failed scans the link may be the problem. */}
           {problem.scans > 1 && fixLink}
         </>,
@@ -677,3 +683,6 @@ function useMedia(query: string): boolean {
     () => typeof matchMedia !== "function" || matchMedia(query).matches,
   );
 }
+
+/** A suggested move as "old key>new key", what "Not this one" remembers. */
+export const moveKey = (m: Pick<BoardMove, "from" | "to">) => `${keyOf(m.from)}>${keyOf(m.to)}`;
