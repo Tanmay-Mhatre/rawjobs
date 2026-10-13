@@ -1,12 +1,11 @@
 import { chmodSync, existsSync, mkdirSync, readFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import type { Job } from "./schema";
-import { rankScore } from "./score";
 import { rawjobsHome } from "./paths";
 import { writeFileAtomic } from "./atomic";
 
 /**
- * Telegram alerts: one message per scan with the new matches. The bot is the user's own (made with
+ * Telegram alerts: one short message per scan with how many new matches. The bot is the user's own (made with
  * @BotFather); its token and the chat id live in profile/secrets.json (gitignored, never in the
  * config) or, on a server, in TELEGRAM_BOT_TOKEN / TELEGRAM_CHAT_ID.
  */
@@ -90,86 +89,48 @@ export async function sendTelegram(text: string, secrets: TelegramSecrets, fetch
   await call(secrets.token, "sendMessage", { chat_id: secrets.chatId, text, parse_mode: "HTML", disable_web_page_preview: true }, fetchImpl);
 }
 
-const esc = (s: string) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
-const MAX_LINES = 10;
+const plural = (n: number, one: string, many: string) => `${n.toLocaleString()} ${n === 1 ? one : many}`;
 
 /**
- * One message for a scan: the jobs to tell the user about, best first, up to 10 with links and
- * "+n more". Undefined when there's nothing to say (no message beats an empty one).
+ * Every message has the same three lines: a bold header naming what it's about, one line of facts,
+ * then what to do. No job lists, scores or links: the details are in the app.
  */
-export function digest(
-  jobs: readonly Job[],
-  opts: { minScore: number; scopeLabel?: string; dashboardHint?: boolean; now?: number /** Companies in the user's config, as lowercase "ats:slug". */; yours?: ReadonlySet<string> },
-): string | undefined {
+const message = (header: string, facts: string, action: string) => `${header}\n${facts}\n${action}`;
+
+/** "12 new jobs, 3 strong fits." (never a 0: "no strong fits"). Undefined when nothing is new. */
+function newJobsLine(jobs: readonly Job[], minScore: number): string | undefined {
   if (!jobs.length) return undefined;
-  const strong = jobs.filter((j) => j.score >= opts.minScore).length;
-  const head = `<b>${jobs.length} new job${jobs.length === 1 ? "" : "s"} for you</b>${strong ? ` · ${strong} strong` : ""}${opts.scopeLabel ? `\n<i>${esc(opts.scopeLabel)}</i>` : ""}`;
-  const more = jobs.length > MAX_LINES ? `\n…and ${jobs.length - MAX_LINES} more on your Radar.` : opts.dashboardHint ? "\nSee them all on your Radar." : "";
-  return `${head}\n\n${jobLines(jobs, opts.minScore, opts.now, opts.yours)}${more}`;
+  const strong = jobs.filter((j) => j.score >= minScore).length;
+  return `${plural(jobs.length, "new job", "new jobs")}, ${strong ? plural(strong, "strong fit", "strong fits") : "no strong fits"}.`;
 }
 
+const seeThem = (n: number) => `Open RawJobs on your computer to see ${n === 1 ? "it" : "them"}.`;
+
+/** The connect confirmation: what the bot will send, and where to choose. */
+export const connectedMessage = () =>
+  message("🔔 <b>Connected</b>", "RawJobs will message you here when a scan finds new jobs or an update is ready.", "Choose which alerts you get in RawJobs settings.");
+
+export const testMessage = () => message("👋 <b>Test alert</b>", "Alerts from RawJobs are working.", "Go back to RawJobs on your computer.");
+
 /**
- * The first 10 jobs, best first, one link each. As on the Radar, ⭐ marks your companies; a strong fit
- * says so after its score, and a job that breaks a dealbreaker (never a strong fit) says which.
+ * One message for a scan: how many new jobs and strong fits (with only_new off, `jobs` are every
+ * strong fit, new or not). Undefined when there's nothing to say (no message beats an empty one).
  */
-function jobLines(jobs: readonly Job[], minScore: number, now = Date.now(), yours?: ReadonlySet<string>): string {
-  // The Radar's best-match order (fit plus freshness), so an alert lists jobs the way the Radar shows them.
-  const rank = new Map(jobs.map((j) => [j, rankScore(j.score, j.postedAt ?? j.firstSeen, now)]));
-  const sorted = [...jobs].sort((a, b) => rank.get(b)! - rank.get(a)! || (b.postedAt ?? b.firstSeen).localeCompare(a.postedAt ?? a.firstSeen));
-  return sorted
-    .slice(0, MAX_LINES)
-    .map((j) => {
-      const star = yours?.has(companyKey(j)) ? "⭐ " : "";
-      const broken = j.why.dealbreakers?.[0];
-      const strong = broken ? ` · ${esc(broken)}` : j.score >= minScore ? " · strong fit" : "";
-      const where = j.location ? ` · ${esc(j.location.split(/[;|]/)[0]!.trim())}` : "";
-      // The score sits after the company, labelled: before the title it read as part of it ("63 Staff Product Manager").
-      return `${star}<a href="${esc(j.url)}">${esc(j.title)}</a>\n${esc(j.company)}${where} · score ${j.score}/100${strong}`;
-    })
-    .join("\n\n");
+export function digest(jobs: readonly Job[], opts: { minScore: number; onlyNew?: boolean }): string | undefined {
+  if (!jobs.length) return undefined;
+  if (opts.onlyNew === false) return message("💼 <b>Strong fits</b>", `${plural(jobs.length, "strong fit", "strong fits")}.`, seeThem(jobs.length));
+  return message("💼 <b>New jobs</b>", newJobsLine(jobs, opts.minScore)!, seeThem(jobs.length));
 }
 
-/** Where the dashboard runs (apps/web/vite.config.ts): on the user's own computer, not reachable from the phone. */
-export const DASHBOARD_URL = "http://127.0.0.1:5173";
-
-/** "greenhouse:acme" from a job id ("{ats}:{slug}:{atsJobId}"): matches a company in the config. */
-const companyKey = (j: Job) => j.id.split(":", 2).join(":").toLowerCase();
-
-/**
- * The message for "tell me when this scan is done": always sent. Says the scan is complete, then
- * splits the new jobs three ways that add up (your companies, strong fits elsewhere, the rest),
- * lists them, and points to the dashboard on the user's computer.
- */
-export function finishedMessage(o: {
-  scopeLabel: string;
-  matches: number;
-  newJobs: readonly Job[];
-  minScore: number;
-  /** Companies in the user's config, as lowercase "ats:slug". */
-  yours?: ReadonlySet<string>;
-  stopped?: boolean;
-  done?: number;
-  total?: number;
-  now?: number;
-}): string {
-  const head = o.stopped
-    ? `⏸ <b>Scan stopped</b> · ${esc(o.scopeLabel)}\n${o.done && o.total ? `Got to ${o.done.toLocaleString()} of ${o.total.toLocaleString()} companies. ` : ""}Start it again to carry on where it stopped.`
-    : `✅ <b>Scan complete</b> · ${esc(o.scopeLabel)}${o.total ? `\n${o.total.toLocaleString()} companies checked.` : ""}`;
-  const plural = (n: number, one: string, many: string) => `${n.toLocaleString()} ${n === 1 ? one : many}`;
-  const totals = `${plural(o.matches, "job matches", "jobs match")} you.`;
-  const footer = `💻 Open RawJobs on your laptop to see every job: ${DASHBOARD_URL}`;
-  if (!o.newJobs.length) return `${head}\n${totals}\n\nNo new jobs this time.\n\n${footer}`;
-
-  const isYours = (j: Job) => !!o.yours?.has(companyKey(j));
-  const yours = o.newJobs.filter(isYours);
-  const yoursStrong = yours.filter((j) => j.score >= o.minScore).length;
-  const strong = o.newJobs.filter((j) => !isYours(j) && j.score >= o.minScore).length;
-  const rest = o.newJobs.length - yours.length - strong;
-  const breakdown = [
-    `⭐ ${yours.length.toLocaleString()} from your companies${yoursStrong ? ` (${yoursStrong} strong fit)` : ""}`,
-    `🎯 ${plural(strong, "strong fit", "strong fits")} (score ${o.minScore}+) from other companies`,
-    `• ${plural(rest, "other match", "other matches")}`,
-  ].join("\n");
-  const more = o.newJobs.length > MAX_LINES ? `\n…and ${o.newJobs.length - MAX_LINES} more.` : "";
-  return `${head}\n${totals}\n\n<b>${plural(o.newJobs.length, "new job", "new jobs")}</b>\n${breakdown}\n\n${jobLines(o.newJobs, o.minScore, o.now, o.yours)}${more}\n\n${footer}`;
+/** The message for "tell me when this scan is done": always sent, finished or stopped, new jobs or not. */
+export function finishedMessage(o: { newJobs: readonly Job[]; minScore: number; stopped?: boolean }): string {
+  const facts = newJobsLine(o.newJobs, o.minScore);
+  const n = o.newJobs.length;
+  if (o.stopped)
+    return message(
+      "⏸ <b>Scan stopped</b>",
+      facts ?? "No new jobs yet.",
+      n ? `Open RawJobs on your computer to see ${n === 1 ? "it" : "them"} and finish the scan.` : "Open RawJobs on your computer to finish the scan.",
+    );
+  return message("✅ <b>Scan finished</b>", facts ?? "No new jobs.", n ? seeThem(n) : "Open RawJobs on your computer to see your matches.");
 }

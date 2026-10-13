@@ -279,7 +279,7 @@ export function createUpdater(o: {
     const secrets = telegramSecrets(home);
     if (!on || !secrets.token || !secrets.chatId) return;
     try {
-      await sendTelegram(updateMessage(l.version, l.critical, l.changes ?? []), secrets);
+      await sendTelegram(updateMessage(l.version, l.critical), secrets);
       writeUpdateFile(home, { notified: l.version });
     } catch (err) {
       // Tried again at the next look.
@@ -375,14 +375,11 @@ export function createUpdater(o: {
 
 export type Updater = ReturnType<typeof createUpdater>;
 
-const LABEL: Record<ReleaseChange["type"], string> = { new: "New", improved: "Improved", fixed: "Fixed" };
 const esc = (t: string) => t.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 
-/** The Telegram message for a downloaded update (HTML, as sendTelegram sends it). */
-export function updateMessage(version: string, critical: boolean, changes: ReleaseChange[]): string {
-  const lines = [critical ? `<b>RawJobs ${esc(version)} is a required update.</b> It's downloaded and ready.` : `<b>RawJobs ${esc(version)} is downloaded and ready.</b>`];
-  for (const c of changes.slice(0, 5)) lines.push(`${LABEL[c.type]}: ${esc(c.text)}`);
-  if (changes.length > 5) lines.push(`and ${changes.length - 5} more`);
-  lines.push("", "Open RawJobs and click Update. Nothing changes until you do.");
-  return lines.join("\n");
+/** The Telegram message for a downloaded update (HTML, as sendTelegram sends it). What changed is in the app. */
+export function updateMessage(version: string, critical: boolean): string {
+  return critical
+    ? `⚠️ <b>Update required</b>\nRawJobs ${esc(version)} is ready to install.\nOpen RawJobs on your computer and click Update.`
+    : `⬆️ <b>Update ready</b>\nRawJobs ${esc(version)} is ready to install. Nothing changes until you do.\nOpen RawJobs on your computer and click Update.`;
 }

@@ -204,7 +204,7 @@ export function TelegramAlerts({
         </div>
       )}
       <p className="type-small text-muted">
-        {footnote ?? "One message per scheduled scan, only when there are new jobs for you (best first, up to 10). Scans you start yourself don't send one."} Your bot token is kept on this computer
+        {footnote ?? "One message per scheduled scan, only when there are new jobs, saying how many. Scans you start yourself don't send one."} Your bot token is kept on this computer
         only.
       </p>
 
