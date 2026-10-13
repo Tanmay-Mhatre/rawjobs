@@ -102,6 +102,11 @@ const QUERIES: { url: string; matchType: "prefix" | "domain" }[] = [
   { url: "applicantpro.com", matchType: "domain" },
   { url: "isolvedhire.com", matchType: "domain" },
   { url: "recruitingbypaycor.com/career/", matchType: "prefix" },
+  { url: "hiringthing.com", matchType: "domain" },
+  { url: "prismhr-hire.com", matchType: "domain" },
+  { url: "oasisrecruit.com", matchType: "domain" },
+  { url: "www.careers-page.com/", matchType: "prefix" },
+  { url: "hire.trakstar.com", matchType: "domain" },
 ];
 
 type Progress = { pages?: number; next: number };

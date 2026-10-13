@@ -39,6 +39,8 @@ export const BOARD_URL: Record<string, (b: string) => string | undefined> = {
   greenhouse: (b) => `https://job-boards.greenhouse.io/${enc(b)}`,
   // The tenant slug of careers.hireology.com/{slug}
   hireology: (b) => (plain(b) && !b.includes(".") ? `https://careers.hireology.com/${b}` : undefined),
+  // The careers site host ({tenant}.hiringthing.com or a reseller domain)
+  hiringthing: (b) => (plain(b) && b.includes(".") ? `https://${b}/` : undefined),
   hibob: (b) => (plain(b) ? `https://${b}.careers.hibob.com` : undefined),
   // A bare id is the careers-{id}.icims.com portal; full hosts are companies' own domains (not detectable yet).
   icims: (b) => (plain(b) && !b.includes(".") ? `https://careers-${b}.icims.com/jobs` : undefined),
@@ -46,6 +48,8 @@ export const BOARD_URL: Record<string, (b: string) => string | undefined> = {
   jobvite: (b) => `https://jobs.jobvite.com/${enc(b)}`,
   lever: (b) => `https://jobs.lever.co/${enc(b)}`,
   // "{host}/{siteNumber}"
+  // The careers page name of www.careers-page.com/{slug}
+  manatal: (b) => (plain(b) && !b.includes(".") ? `https://www.careers-page.com/${b}` : undefined),
   oracle: (b) => {
     const [host, site] = b.split("/");
     return host && site && plain(host) ? `https://${host}/hcmUI/CandidateExperience/en/sites/${enc(site)}` : undefined;
@@ -67,6 +71,8 @@ export const BOARD_URL: Record<string, (b: string) => string | undefined> = {
   successfactors: (b) => (plain(b) ? `https://${b}` : undefined),
   // The career-site host: {x}.teamtailor.com, or the company's own domain (handled in freehireBoards).
   teamtailor: (b) => (plain(b) ? `https://${b}` : undefined),
+  // The account subdomain of {account}.hire.trakstar.com
+  trakstar: (b) => (plain(b) && !b.includes(".") ? `https://${b}.hire.trakstar.com/` : undefined),
   // "{host}/{company code}/{board GUID}" of UKG Pro Recruiting
   ukg: (b) => {
     const [host, code, guid] = b.split("/");
