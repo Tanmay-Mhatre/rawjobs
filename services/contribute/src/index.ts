@@ -88,6 +88,7 @@ export const SCANNABLE = new Set([
   "paycom",
   "hireology",
   "ukg",
+  "eightfold",
 ]);
 const SLUG = /^[A-Za-z0-9][A-Za-z0-9._-]{0,99}$/;
 /** What `shard` may look like per system (the rest have none). */
@@ -99,6 +100,8 @@ const SHARD: Record<string, RegExp> = {
   join: /^\d{1,10}$/,
   // UKG Pro Recruiting's host (recruiting2.ultipro.com, acme.rec.pro.ukg.net).
   ukg: /^[a-z0-9-]{1,60}\.(ultipro\.com|rec\.pro\.ukg\.net)$/,
+  // Eightfold's tenant domain (netflix.com), needed by its API.
+  eightfold: /^[a-z0-9-]+(\.[a-z0-9-]+)+$/,
   // Zoho Recruit's data centre, when it isn't .com.
   zoho: /^(eu|in|com\.au|jp|ca|sa|uk|com\.cn)$/,
 };

@@ -1,7 +1,7 @@
 import { createServer, request, type IncomingMessage, type Server } from "node:http";
 import type { AddressInfo } from "node:net";
 import { afterEach, describe, expect, it } from "vitest";
-import { appPlace, desktopScene, notFoundPage, offlinePage, sectionRedirect } from "../src/pages";
+import { appPlace, desktopScene, notFoundPage, offlinePage, PORTS, sectionRedirect } from "../src/pages";
 import { servePages } from "../src/static";
 
 describe("sectionRedirect", () => {
@@ -38,6 +38,15 @@ describe("the pages", () => {
     expect(without).not.toContain('id="start"');
     expect(without).toContain("Double-click RawJobs on your Desktop");
     expect(without).toContain("rjd-desk mac");
+  });
+
+  it("looks for RawJobs on its other ports too, from the offline page", () => {
+    const page = offlinePage({ startLink: true, platform: "win32" });
+    expect(page).toContain(JSON.stringify(PORTS));
+    expect(PORTS[0]).toBe(4317);
+    // The script is valid JavaScript.
+    const script = page.slice(page.lastIndexOf("<script>") + 8, page.lastIndexOf("</script>"));
+    expect(() => new Function(script)).not.toThrow();
   });
 
   it("says where apps are in the computer's own words", () => {

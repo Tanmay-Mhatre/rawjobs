@@ -20,6 +20,7 @@ export function UpdateLink({
   name,
   oldKey,
   oldUrl,
+  oldState = "Not found",
   yours,
   onUse,
   onClose,
@@ -34,6 +35,8 @@ export function UpdateLink({
   name: string;
   oldKey: string;
   oldUrl?: string;
+  /** What the last scan said about the old page: "Not found" (404) or "Not answering". */
+  oldState?: string;
   /** Your other companies, key → name, to catch a link that's already one of them. */
   yours: ReadonlyMap<string, string>;
   onUse: (to: CompanyRef, opts: { otherName?: string }) => void;
@@ -115,7 +118,7 @@ export function UpdateLink({
 
       <div role="status" className="space-y-2">
         {failed && <p className="text-danger-text">Couldn't check this link. Check your connection and try again.</p>}
-        {verdict && <Result verdict={verdict} name={name} oldUrl={oldUrl} />}
+        {verdict && <Result verdict={verdict} name={name} oldUrl={oldUrl} oldState={oldState} />}
       </div>
 
       <div className="flex flex-wrap items-center gap-2">
@@ -133,7 +136,7 @@ export function UpdateLink({
   );
 }
 
-function Result({ verdict: v, name, oldUrl }: { verdict: LinkVerdict; name: string; oldUrl?: string }) {
+function Result({ verdict: v, name, oldUrl, oldState }: { verdict: LinkVerdict; name: string; oldUrl?: string; oldState: string }) {
   switch (v.kind) {
     case "same":
       return <Problem>That's the link that stopped working. Paste the company's new careers link.</Problem>;
@@ -161,7 +164,7 @@ function Result({ verdict: v, name, oldUrl }: { verdict: LinkVerdict; name: stri
           <dl className="grid grid-cols-[auto_minmax(0,1fr)] gap-x-3 gap-y-1">
             <dt className="text-muted">Old</dt>
             <dd className="min-w-0 text-muted">
-              {oldUrl && <span className="break-all font-mono line-through">{short(oldUrl)}</span>} <span className="text-danger-text">Not found</span>
+              {oldUrl && <span className="break-all font-mono line-through">{short(oldUrl)}</span>} <span className="text-danger-text">{oldState}</span>
             </dd>
             <dt className="text-muted">New</dt>
             <dd className="min-w-0">

@@ -1,8 +1,9 @@
+import { spawn } from "node:child_process";
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-import { AUTOSTART, readServerState, writeServerState } from "../src/desktop";
+import { AUTOSTART, readServerState, serverRunning, writeServerState } from "../src/desktop";
 import { iconIcns, iconIco, iconPng, markPixels } from "../src/icon";
 import { portOrder } from "../src/serve";
 import { markShortcutNoticeSeen, shortcutState } from "../src/shortcuts";
@@ -23,6 +24,25 @@ describe("an installed copy's server", () => {
     writeServerState(4318, home);
     expect(readServerState(home)).toMatchObject({ port: 4318, pid: process.pid });
   });
+
+  it("waits for a busy server that's slow to answer, instead of starting a second one", async () => {
+    // Its first answer takes 2 s (longer than the quick check waits); its process is there all along.
+    const slow = spawn(
+      process.execPath,
+      ["-e", `let n=0;require("http").createServer((q,s)=>setTimeout(()=>s.end('{"ok":true}'),n++?0:2000)).listen(0,"127.0.0.1",function(){console.log(this.address().port)})`],
+      { stdio: ["ignore", "pipe", "ignore"] },
+    );
+    try {
+      const port = await new Promise<number>((done) => slow.stdout!.once("data", (d) => done(Number(String(d).trim()))));
+      const state = { port, pid: slow.pid!, version: "0.1.0", startedAt: "" };
+      expect(await serverRunning(state, { pauseMs: 10 })).toBe(true);
+    } finally {
+      slow.kill();
+    }
+    // Nothing there, and its process is gone: start a new one.
+    expect(await serverRunning({ port: 1, pid: 999_999_99, version: "0.1.0", startedAt: "" }, { pauseMs: 10 })).toBe(false);
+    expect(await serverRunning(null)).toBe(false);
+  }, 20_000);
 
   it("is registered by the installers under the names uninstall removes", () => {
     const ps1 = readFileSync(join(root, "packaging/install.ps1"), "utf8");

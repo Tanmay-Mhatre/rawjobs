@@ -164,8 +164,14 @@ withFile(raw("latmay", "ats_career_page_urls.csv"), (p) => {
 for (const f of existsSync(raw("kalil0321")) ? readdirSync(raw("kalil0321")).filter((n) => n.endsWith(".csv")) : []) {
   const p = raw("kalil0321", f);
   const rows = csvRows(p);
-  for (const [name, , url] of rows) {
+  for (const [name, , url, extra] of rows) {
     if (!url) continue;
+    // Its Eightfold list adds the tenant domain the API needs.
+    if (f === "eightfold.csv") {
+      const d = detectCompany(url);
+      if (d?.ats === "eightfold") add("kalil", { ...d, ...(extra && /^[a-z0-9-]+(\.[a-z0-9-]+)+$/i.test(extra) ? { shard: extra.toLowerCase() } : {}), name });
+      continue;
+    }
     // Its SuccessFactors list holds career sites on companies' own domains, which no URL rule reveals.
     if (f === "successfactors.csv" && !detectCompany(url)) addCareerSite("kalil", url, name);
     else fromUrl("kalil", url, name);
@@ -184,6 +190,8 @@ for (const f of existsSync(raw("kalil0321")) ? readdirSync(raw("kalil0321")).fil
     oracle: (e) => e.host && e.site && `https://${e.host}/hcmUI/CandidateExperience/en/sites/${enc(e.site)}`,
     recruitee: (e) => e.slug && `https://${e.slug}.recruitee.com`,
     rippling: (e) => e.board_slug && `https://ats.rippling.com/${enc(e.board_slug)}/jobs`,
+    // Eightfold: tenant + its registered domain (kept in shard).
+    eightfold: () => undefined,
     // JOIN: the slug, plus the numeric company id its API needs (kept in shard).
     join: () => undefined,
     smartrecruiters: (e) => e.company_identifier && `https://jobs.smartrecruiters.com/${enc(e.company_identifier)}`,
@@ -203,6 +211,11 @@ for (const f of existsSync(raw("kalil0321")) ? readdirSync(raw("kalil0321")).fil
         if (e.slug && !/^[a-z0-9_-]+$/i.test(e.slug)) continue;
         // Career sites (SuccessFactors) and Teamtailor sites on companies' own domains: the list names
         // the vendor, the URL can't.
+        if (provider === "eightfold") {
+          if (e.tenant && /^[a-z0-9-]+$/i.test(e.tenant) && e.domain && /^[a-z0-9-]+(\.[a-z0-9-]+)+$/i.test(e.domain))
+            add("openingsmcp", { ats: "eightfold", slug: `${e.tenant.toLowerCase()}.eightfold.ai`, shard: e.domain.toLowerCase(), name: e.company });
+          continue;
+        }
         if (provider === "join") {
           if (e.slug) add("openingsmcp", { ats: "join", slug: e.slug.toLowerCase(), ...(/^\d+$/.test(String(e.company_id)) ? { shard: String(e.company_id) } : {}), name: e.company });
           continue;
