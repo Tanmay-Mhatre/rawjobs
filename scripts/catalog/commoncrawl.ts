@@ -97,6 +97,7 @@ const QUERIES: { url: string; matchType?: "domain" }[] = [
   { url: "ultipro.com", matchType: "domain" },
   { url: "rec.pro.ukg.net", matchType: "domain" },
   { url: "eightfold.ai", matchType: "domain" },
+  { url: "careerplug.com", matchType: "domain" },
 ];
 
 /**

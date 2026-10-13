@@ -57,6 +57,7 @@ const SYSTEMS = [
   "UKG Pro (UltiPro)",
   "Eightfold AI",
   "Phenom",
+  "CareerPlug",
   "Comeet",
   "Oracle Recruiting",
   "SAP SuccessFactors",

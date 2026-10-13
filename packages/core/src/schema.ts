@@ -32,6 +32,7 @@ export const ATS_TYPES = [
   "ukg",
   "eightfold",
   "phenom",
+  "careerplug",
 ] as const;
 
 /**
