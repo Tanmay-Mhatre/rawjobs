@@ -36,6 +36,13 @@ describe("drafting a release", () => {
     expect(releaseNoteLines("## What and why\nNo section")).toBeNull();
   });
 
+  it("leaves out the footer a PR's tool adds at the end of the body", () => {
+    const footer = "\n\n🤖 Generated with [Claude Code](https://claude.com/claude-code)\n\nCo-Authored-By: Claude <noreply@anthropic.com>";
+    expect(releaseNoteLines(body(`Fixed: Theme resets${footer}`))).toEqual(["Fixed: Theme resets"]);
+    expect(releaseNoteLines(body(`none${footer}`))).toEqual([]);
+    expect(releaseNoteLines(body("Fixed: Ports\n\n---\nSomething after a rule"))).toEqual(["Fixed: Ports"]);
+  });
+
   it("picks the next version: the patch + 1, or package.json's when newer", () => {
     expect(nextVersion("v0.5.3", "0.5.0")).toBe("0.5.4");
     expect(nextVersion("v0.5.3", "0.6.0")).toBe("0.6.0");

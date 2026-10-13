@@ -10,6 +10,8 @@ export type MergedPr = { number: number; title: string; body: string; author: st
 export type Draft = { last: string | null; next: string; prs: { pr: MergedPr; lines: string[]; from: "note" | "title" | "none" | "skip" }[]; message: string };
 
 const TYPED = /^(new|added|improved|changed|fixed)\s*:\s*\S/i;
+/** Lines tools add at the end of a PR body ("🤖 Generated with …", "Co-Authored-By: …"). */
+const FOOTER = /^(?:\S+\s+)?Generated with \[|^Co-Authored-By:/i;
 
 /**
  * A PR body's "Release note" lines: "New: …", "Improved: …", "Fixed: …". Null when the PR has no
@@ -19,10 +21,12 @@ export function releaseNoteLines(body: string): string[] | null {
   const text = body.replace(/<!--[\s\S]*?-->/g, "");
   const m = text.match(/^#{2,3}\s*Release notes?\s*$([\s\S]*?)(?=^#{1,3}\s|(?![\s\S]))/im);
   if (!m) return null;
+  // The section ends at a rule; a footer the PR's tool adds below it isn't a release note.
   const lines = m[1]!
+    .split(/^\s*(?:-{3,}|\*{3,}|_{3,})\s*$/m)[0]!
     .split(/\r?\n/)
     .map((l) => l.trim().replace(/^[-*]\s+/, ""))
-    .filter(Boolean);
+    .filter((l) => l && !FOOTER.test(l));
   if (!lines.length || lines.every((l) => /^(none|n\/a|-)\.?$/i.test(l))) return [];
   // A line without a type is still a change worth telling: call it an improvement.
   return lines.filter((l) => !/^(none|n\/a)\.?$/i.test(l)).map((l) => (TYPED.test(l) ? l : `Improved: ${l}`));
