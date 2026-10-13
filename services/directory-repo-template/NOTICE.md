@@ -39,7 +39,7 @@ under the Creative Commons Attribution 4.0 International licence. Credit: LastRo
 ## Never redistributed
 
 RawJobs can also read public job boards a user adds: Hacker News "Who is hiring" (through Algolia's
-HN API), Remotive, Arbeitnow and Remote OK. Their data is fetched on each user's own computer, shown
+HN API), Remotive, Arbeitnow, Remote OK and Himalayas. Their data is fetched on each user's own computer, shown
 with credit to the source and linked back to it, and **never** included in this directory, the index,
 the job feed or any release.
 
