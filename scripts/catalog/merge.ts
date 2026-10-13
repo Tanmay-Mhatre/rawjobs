@@ -164,23 +164,31 @@ withFile(raw("latmay", "ats_career_page_urls.csv"), (p) => {
 });
 for (const f of existsSync(raw("kalil0321")) ? readdirSync(raw("kalil0321")).filter((n) => n.endsWith(".csv")) : []) {
   const p = raw("kalil0321", f);
+  // Files differ in their columns (name,slug,url / name,url / url,name,… / …,domain): read them by header.
+  const header = (readFileSync(p, "utf8").replace(/^﻿/, "").split(/\r?\n/, 1)[0] ?? "").split(",").map((h) => h.trim().toLowerCase());
+  const col = (row: string[], name: string) => {
+    const i = header.indexOf(name);
+    return i >= 0 ? row[i]?.trim() || undefined : undefined;
+  };
   const rows = csvRows(p);
-  for (const [name, , url, extra] of rows) {
-    // Its Phenom list puts the careers site first: url,name,…; the vendor is named, the URL can't show it.
+  for (const row of rows) {
+    const url = col(row, "url");
+    const name = col(row, "name");
+    if (!url) continue;
+    // Its Phenom list holds careers sites on companies' own domains: the vendor is named, the URL can't show it.
     if (f === "phenom.csv") {
-      const [site, company] = [name, url];
-      const host = site
-        ?.replace(/^https?:\/\//i, "")
+      const host = url
+        .replace(/^https?:\/\//i, "")
         .split("/")[0]
         ?.toLowerCase();
-      if (host && /^[a-z0-9-]+(\.[a-z0-9-]+)+$/i.test(host)) add("kalil", { ats: "phenom", slug: host, name: company });
+      if (host && /^[a-z0-9-]+(\.[a-z0-9-]+)+$/i.test(host)) add("kalil", { ats: "phenom", slug: host, name });
       continue;
     }
-    if (!url) continue;
     // Its Eightfold list adds the tenant domain the API needs.
     if (f === "eightfold.csv") {
       const d = detectCompany(url);
-      if (d?.ats === "eightfold") add("kalil", { ...d, ...(extra && /^[a-z0-9-]+(\.[a-z0-9-]+)+$/i.test(extra) ? { shard: extra.toLowerCase() } : {}), name });
+      const domain = col(row, "domain");
+      if (d?.ats === "eightfold") add("kalil", { ...d, ...(domain && /^[a-z0-9-]+(\.[a-z0-9-]+)+$/i.test(domain) ? { shard: domain.toLowerCase() } : {}), name });
       continue;
     }
     // Its SuccessFactors list holds career sites on companies' own domains, which no URL rule reveals.

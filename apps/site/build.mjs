@@ -70,6 +70,7 @@ const SYSTEMS = [
   "HRMDirect (ClearCompany)",
   "softgarden",
   "Cornerstone OnDemand",
+  "Keka",
   "Comeet",
   "Oracle Recruiting",
   "SAP SuccessFactors",

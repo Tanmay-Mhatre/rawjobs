@@ -45,6 +45,7 @@ export const ATS_TYPES = [
   "hrmdirect",
   "softgarden",
   "cornerstone",
+  "keka",
 ] as const;
 
 /**
