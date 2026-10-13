@@ -160,10 +160,14 @@ export async function checkCompanies(inputs: readonly string[], opts: CheckOptio
       const jobs = await connector.fetch(company, { http, now });
       if (!jobs.length) {
         // Greenhouse, Lever and Ashby answer 404 for a wrong name, so an empty board is real.
-        // SmartRecruiters answers 200 + nothing for any made-up id, so we can't tell.
+        // SmartRecruiters and Gem answer 200 + nothing for any made-up id, so we can't tell.
         out.push(
-          ref.ats === "smartrecruiters"
-            ? { ...base, status: "error", error: "No open jobs on this board. Check the link: SmartRecruiters shows an empty board for a wrong company name." }
+          ref.ats === "smartrecruiters" || ref.ats === "gem"
+            ? {
+                ...base,
+                status: "error",
+                error: `No open jobs on this board. Check the link: ${ref.ats === "gem" ? "Gem" : "SmartRecruiters"} shows an empty board for a wrong company name.`,
+              }
             : { ...base, status: "dormant", open_jobs: 0, top_locations: [], sample_titles: [], ...(opts.profile ? { matches: 0, match_examples: [] } : {}) },
         );
         continue;

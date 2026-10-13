@@ -38,6 +38,8 @@ export const BOARD_URL: Record<string, (b: string) => string | undefined> = {
   // The careers site host ({tenant}.factorial.es, .factorialhr.com…)
   factorial: (b) => (plain(b) && b.includes(".") ? `https://${b}/` : undefined),
   freshteam: (b) => (plain(b) ? `https://${b}.freshteam.com/jobs` : undefined),
+  // The board name of jobs.gem.com/{board}
+  gem: (b) => (plain(b) && !b.includes(".") ? `https://jobs.gem.com/${b}` : undefined),
   greenhouse: (b) => `https://job-boards.greenhouse.io/${enc(b)}`,
   // The tenant slug of careers.hireology.com/{slug}
   hireology: (b) => (plain(b) && !b.includes(".") ? `https://careers.hireology.com/${b}` : undefined),

@@ -21,6 +21,7 @@ import { hiringthing } from "./hiringthing";
 import { manatal } from "./manatal";
 import { trakstar } from "./trakstar";
 import { factorial } from "./factorial";
+import { gem } from "./gem";
 import { greenhouse } from "./greenhouse";
 import { hibob } from "./hibob";
 import { icims } from "./icims";
@@ -88,6 +89,7 @@ export const connectors: Partial<Record<AtsType, Connector<any>>> = {
   manatal,
   trakstar,
   factorial,
+  gem,
   // Job boards (JOB_BOARDS), last so a company's own board is always recognised first.
   hackernews,
   remotive,
@@ -231,6 +233,8 @@ export function careersUrl(c: DetectedCompany): string {
       return `https://${c.slug}.hire.trakstar.com/`;
     case "factorial":
       return `https://${c.slug}/`;
+    case "gem":
+      return `https://jobs.gem.com/${c.slug}`;
     default:
       return "";
   }

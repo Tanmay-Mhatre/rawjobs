@@ -41,6 +41,7 @@ export const ATS_TYPES = [
   "manatal",
   "trakstar",
   "factorial",
+  "gem",
 ] as const;
 
 /**

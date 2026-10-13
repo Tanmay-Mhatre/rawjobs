@@ -1,6 +1,6 @@
 import type { NormalizedJob, Salary, Workplace } from "../schema";
 import { htmlToText, inferWorkplace } from "../text";
-import { countryName, jobPostingLd, joinParts } from "./parse";
+import { iso3Country, jobPostingLd, joinParts } from "./parse";
 import { jobId, type Connector, type Ctx } from "./types";
 
 /**
@@ -26,8 +26,6 @@ export type ApplicantProJob = {
   jobUrl?: string;
 };
 
-/** ApplicantPro's ISO-3 country codes, for the countries its sites post in. */
-const ISO3: Record<string, string> = { USA: "US", CAN: "CA", MEX: "MX", PRI: "PR", GBR: "GB", IRL: "IE", AUS: "AU", NZL: "NZ", IND: "IN", PHL: "PH" };
 const DOMAINS = new Set(["applicantpro.com", "isolvedhire.com"]);
 const ACCOUNT = /^[a-z0-9][a-z0-9-]*$/i;
 const WORKPLACE: Record<string, Workplace> = { onsite: "onsite", "on-site": "onsite", remote: "remote", hybrid: "hybrid" };
@@ -76,7 +74,7 @@ export const applicantpro: Connector<ApplicantProJob> = {
   },
 
   normalize(raw, ref): NormalizedJob {
-    const country = raw.iso3 ? countryName(ISO3[raw.iso3] ?? raw.iso3) : undefined;
+    const country = iso3Country(raw.iso3);
     const workplace = WORKPLACE[(raw.workplaceType ?? "").toLowerCase()];
     const location = joinParts(joinParts(raw.city, raw.abbreviation), raw.iso3 && raw.iso3 !== "USA" ? country : undefined, workplace === "remote" ? "Remote" : undefined);
     const min = amount(raw.minSalary);
