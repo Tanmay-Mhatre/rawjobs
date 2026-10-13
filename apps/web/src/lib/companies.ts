@@ -43,6 +43,7 @@ export const ATS_LABEL: Record<string, string> = {
   trakstar: "Trakstar Hire",
   factorial: "Factorial",
   gem: "Gem",
+  hrmdirect: "HRMDirect",
   // Job boards: credited by name (Remote OK's terms ask for it), linked back on every job.
   hackernews: "Hacker News",
   remotive: "Remotive",
