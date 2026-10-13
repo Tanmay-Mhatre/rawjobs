@@ -63,6 +63,7 @@ const SYSTEMS = [
   "ApplicantPro / iSolved Hire",
   "Paycor Recruiting",
   "HiringThing",
+  "Manatal",
   "Comeet",
   "Oracle Recruiting",
   "SAP SuccessFactors",

@@ -39,6 +39,7 @@ export const ATS_LABEL: Record<string, string> = {
   applicantpro: "ApplicantPro",
   paycor: "Paycor",
   hiringthing: "HiringThing",
+  manatal: "Manatal",
   // Job boards: credited by name (Remote OK's terms ask for it), linked back on every job.
   hackernews: "Hacker News",
   remotive: "Remotive",

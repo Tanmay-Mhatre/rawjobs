@@ -48,6 +48,8 @@ export const BOARD_URL: Record<string, (b: string) => string | undefined> = {
   jobvite: (b) => `https://jobs.jobvite.com/${enc(b)}`,
   lever: (b) => `https://jobs.lever.co/${enc(b)}`,
   // "{host}/{siteNumber}"
+  // The careers page name of www.careers-page.com/{slug}
+  manatal: (b) => (plain(b) && !b.includes(".") ? `https://www.careers-page.com/${b}` : undefined),
   oracle: (b) => {
     const [host, site] = b.split("/");
     return host && site && plain(host) ? `https://${host}/hcmUI/CandidateExperience/en/sites/${enc(site)}` : undefined;
