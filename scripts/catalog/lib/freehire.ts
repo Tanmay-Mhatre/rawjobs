@@ -39,6 +39,8 @@ export const BOARD_URL: Record<string, (b: string) => string | undefined> = {
   paycom: (b) => (/^[0-9a-f]{32}$/i.test(b) ? `https://www.paycomonline.net/v4/ats/web.php/portal/${b}/career-page` : undefined),
   // The company GUID of recruiting.paylocity.com/Recruiting/Jobs/All/{guid}
   paylocity: (b) => (/^[0-9a-f-]{36}$/i.test(b) ? `https://recruiting.paylocity.com/Recruiting/Jobs/All/${b}` : undefined),
+  // The careers site's host; kept as a board directly in freehireBoards.
+  phenom: () => undefined,
   personio: (b) => (plain(b) ? `https://${b}.jobs.personio.com` : undefined),
   pinpoint: (b) => (plain(b) ? `https://${b}.pinpointhq.com` : undefined),
   recruitee: (b) => (plain(b) ? `https://${b}.recruitee.com` : undefined),
@@ -76,6 +78,10 @@ export function freehireBoards(provider: string, entries: { company?: unknown; b
     const name = typeof e.company === "string" ? e.company.trim() : "";
     const board = e.board.trim();
     // A Teamtailor site on the company's own domain: the list names the vendor, the URL can't.
+    if (provider === "phenom") {
+      if (/^[a-z0-9-]+(\.[a-z0-9-]+)+$/i.test(board)) out.push({ ats: "phenom", slug: board.toLowerCase(), ...(name ? { name } : {}) });
+      continue;
+    }
     if (provider === "eightfold") {
       const [host, domain] = board.split("/");
       if (host && domain && /^[a-z0-9-]+(\.[a-z0-9-]+)+$/i.test(host) && /^[a-z0-9-]+(\.[a-z0-9-]+)+$/i.test(domain))
