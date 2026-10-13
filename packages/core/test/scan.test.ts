@@ -212,6 +212,17 @@ describe("scan", () => {
     expect(meta.runs[0]!.moves?.map((m) => `${m.from.slug}>${m.to.slug}`)).toEqual(["oldco>leverco2"]);
   });
 
+  it("offers a move RawJobs accepted for everyone, marked as checked, even when the old board only times out", async () => {
+    const dir = setup([...DIRECTORY, entry("lever:newco", { name: "Something Else" })]);
+    const file = join(dir, "catalog", "directory.json");
+    const d = JSON.parse(readFileSync(file, "utf8"));
+    writeFileSync(file, JSON.stringify({ ...d, moves: [{ from: "ashby:oldco||", to: "lever:newco||", name: "Old Co", accepted_at: "2026-10-01T00:00:00Z" }] }));
+    const cfg = config(`  - { name: "Old Co", ats: ashby, slug: "oldco" }`);
+    const timeout = (url: string) => (url.includes("oldco") ? json({ error: "busy" }, 503) : routes(url));
+    const r = await scan(cfg, { dataDir: dir, http: fakeHttp(timeout).http, now, scope: "mine" });
+    expect(r.moves.map((m) => [`${m.from.slug}>${m.to.slug}`, m.to.name, m.checked_at])).toEqual([["oldco>newco", "Old Co", "2026-10-01T00:00:00Z"]]);
+  });
+
   it("works without companies of your own", async () => {
     const dir = setup();
     const cfg = parseConfig(`

@@ -164,6 +164,49 @@ console.log(JSON.stringify({ type: "done", scope: args[args.indexOf("--scope") +
     expect((await call(port, "PUT", "/api/tracking", JSON.stringify({ state: [] }))).status).toBe(400);
   });
 
+  it("queues a confirmed careers-link move to share later, and checks it first", async () => {
+    const { port, home, dataDir } = await start();
+    const from = { ats: "lever", slug: "acme" };
+    const to = { ats: "ashby", slug: "acme-inc" };
+    const post = async (body: string) => {
+      const r = await call(port, "POST", "/api/directory/moves", body);
+      return { status: r.status, body: JSON.parse(r.text) };
+    };
+    const outbox = () => JSON.parse(readFileSync(join(dataDir, "catalog/moves-outbox.json"), "utf8")).moves;
+
+    expect(await post(JSON.stringify({ name: "Acme", from, to }))).toEqual({ status: 200, body: { queued: true } });
+    expect(await post(JSON.stringify({ name: "Acme", from, to }))).toEqual({ status: 200, body: { queued: true } });
+    expect(outbox()).toHaveLength(1);
+    expect(outbox()[0]).toMatchObject({ name: "Acme", from, to });
+
+    // Not a move: bad JSON, no name, a board we couldn't scan, a URL for a slug, the same board twice.
+    for (const bad of [
+      "{ nope",
+      JSON.stringify({ from, to }),
+      JSON.stringify({ name: "Acme", from: { ats: "kenexa", slug: "acme" }, to }),
+      JSON.stringify({ name: "Acme", from, to: { ats: "lever", slug: "https://evil.example/x" } }),
+      JSON.stringify({ name: "Acme", from, to: { ats: "workday", slug: "acme" } }),
+      JSON.stringify({ name: "Acme", from, to: { ats: "lever", slug: "ACME" } }),
+      JSON.stringify({ name: "Acme", from, to: from }),
+    ]) {
+      const r = await post(bad);
+      expect(r.status, bad).toBe(400);
+      expect(r.body.ok, bad).toBe(false);
+    }
+    expect(outbox()).toHaveLength(1);
+
+    // Sharing off in your settings: nothing is queued.
+    writeFileSync(
+      join(home, "rawjobs.config.local.yaml"),
+      'profile:\n  titles: { include: ["engineer"] }\n  locations: { include: ["dubai"] }\ncompanies:\n  - { name: "Acme", ats: lever, slug: "acme" }\ndirectory:\n  share_additions: false\n',
+    );
+    expect(await post(JSON.stringify({ name: "Beta", from: { ats: "lever", slug: "beta" }, to }))).toEqual({
+      status: 200,
+      body: { queued: false, reason: "Sharing is off in your settings." },
+    });
+    expect(outbox()).toHaveLength(1);
+  });
+
   it("refuses a POST from another site", async () => {
     const { port } = await start();
     const r = await new Promise<number>((done) => {

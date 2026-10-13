@@ -70,6 +70,25 @@ directory workflow has processed it, and after 30 days at most.
 Boards that pass a live check are then published in `contributions.json` in the public directory
 repo, as a hiring system, a board name and a company name. They aren't linked to you.
 
+### Sharing a company's new careers link (same setting)
+When a company's careers page moves and you confirm its new link, the app can report the move
+so others following that company get the new link too, after the project's own checks. This
+follows the same Sharing setting as above.
+
+What is sent:
+- the company's name;
+- its old board and its new board (hiring system and board name, plus the Workday shard and site,
+  or the EU region, when needed);
+- the app name (`rawjobs`), optionally with a version number.
+
+A move report names a company you follow, and the board you were following it on, which sharing
+an added company doesn't reveal. To make it harder to tie to you, it isn't sent when you click:
+it waits in `data/catalog/moves-outbox.json` and goes with the next regular directory update. The
+inbox handles it like added boards (rate limit, nothing about you stored, deleted once processed
+and after 30 days at most). With the report it keeps a short code made from your IP address and
+the old board (a keyed hash, not the address itself, deleted with the report), only to count how
+many different people reported the same move.
+
 ### Telegram alerts (only if you set them up)
 Alerts are sent through Telegram's API (`api.telegram.org`) with your own bot. They contain job
 titles, companies and links. Once it's set up, scheduled scans and every scan you start from the dashboard send one
@@ -99,7 +118,7 @@ no personal data, counts of visits only. The app itself has none (see "No teleme
 ## Turning sharing off
 
 Either:
-- **Settings → Your data → Sharing**: switch off "Share companies I add by link with everyone"; or
+- **Settings → Your data → Sharing**: switch off "Share companies I add or update by link"; or
 - in your config file:
 
   ```yaml
@@ -107,9 +126,10 @@ Either:
     share_additions: false
   ```
 
-Boards already waiting to be sent (`data/catalog/outbox.json`, shown in the directory bar as
-"waiting to be shared") can still be sent at the next directory update. Delete that file to
-drop them.
+Anything still waiting to be sent when sharing is off (added boards in `data/catalog/outbox.json`,
+shown in the directory bar as "waiting to be shared", and careers-link moves in
+`data/catalog/moves-outbox.json`) is dropped at the next directory update, never sent. While
+sharing is off, confirming a new careers link doesn't queue a move at all.
 
 ## Your company in the directory
 

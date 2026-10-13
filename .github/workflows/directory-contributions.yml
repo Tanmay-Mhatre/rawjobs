@@ -2,6 +2,7 @@
 # the public directory repo's contributions.json, and publish an updated directory right away.
 # With nothing in the inbox, spend up to 30 minutes on the board-check backlog instead, so it
 # drains between weekly rebuilds (the results ship with the next release).
+# Then review moved careers pages users reported (record-only: scripts/catalog/moves.ts).
 # Setup: docs/shared-directory.md
 name: Directory · contributions
 
@@ -93,6 +94,8 @@ jobs:
         env:
           CONTRIBUTIONS_FILE: ${{ github.workspace }}/directory-repo/contributions.json
           DENYLIST_FILE: ${{ github.workspace }}/directory-repo/denylist.json
+          # Approved moves: the directory's `moves` list (build.ts).
+          MOVES_FILE: ${{ github.workspace }}/directory-repo/moves.json
         run: |
           pnpm catalog:sources
           pnpm exec tsx scripts/catalog/merge.ts
@@ -182,6 +185,122 @@ jobs:
           jq -c '.processed | _nwise(1000) | {ids: .}' "$RUNNER_TEMP/summary.json" | while read -r batch; do
             curl -fsS -X POST -H "Authorization: Bearer $INBOX_TOKEN" -H "content-type: application/json" --data "$batch" "$INBOX_URL/v1/ack"
           done
+
+      # ---- Moved careers pages (record-only: checked and recorded; a maintainer approves on the
+      # issue, .github/workflows/directory-move-approval.yml). None of these steps can stop the rest.
+      - name: Check the move inbox
+        id: moves_inbox
+        continue-on-error: true
+        timeout-minutes: 5
+        env:
+          INBOX_URL: ${{ secrets.INBOX_URL }}
+          INBOX_TOKEN: ${{ secrets.INBOX_TOKEN }}
+        # An inbox without /v1/moves (404) has no move reports yet: skip quietly. 500 a page, 4 pages a run.
+        run: |
+          echo '[]' > "$RUNNER_TEMP/move-items.json"
+          cursor=""
+          pages=0
+          for page in 1 2 3 4; do
+            code=$(curl -sS -G -o "$RUNNER_TEMP/move-page.json" -w '%{http_code}' -H "Authorization: Bearer $INBOX_TOKEN" ${cursor:+--data-urlencode "cursor=$cursor"} "$INBOX_URL/v1/moves/pending")
+            if [ "$code" = 404 ] && [ "$page" = 1 ]; then
+              echo "The inbox has no move reports endpoint yet: skipping moves."
+              echo "available=false" >> "$GITHUB_OUTPUT"
+              exit 0
+            fi
+            [ "$code" = 200 ] || { echo "::error::GET /v1/moves/pending answered $code"; exit 1; }
+            pages=$page
+            jq -s '.[0] + (.[1].items // [])' "$RUNNER_TEMP/move-items.json" "$RUNNER_TEMP/move-page.json" > "$RUNNER_TEMP/move-merged.json"
+            mv "$RUNNER_TEMP/move-merged.json" "$RUNNER_TEMP/move-items.json"
+            cursor=$(jq -r '.cursor // ""' "$RUNNER_TEMP/move-page.json")
+            [ -n "$cursor" ] || break
+          done
+          jq '{items: unique_by(.id)}' "$RUNNER_TEMP/move-items.json" > "$RUNNER_TEMP/move-inbox.json"
+          echo "available=true" >> "$GITHUB_OUTPUT"
+          echo "count=$(jq '.items | length' "$RUNNER_TEMP/move-inbox.json")" >> "$GITHUB_OUTPUT"
+          # Four full pages and still a cursor: more reports than a run takes.
+          if [ "$pages" = 4 ] && [ -n "$cursor" ]; then echo "full=true" >> "$GITHUB_OUTPUT"; else echo "full=false" >> "$GITHUB_OUTPUT"; fi
+
+      - if: steps.moves_inbox.outputs.available == 'true'
+        name: Review move reports
+        id: moves
+        continue-on-error: true
+        timeout-minutes: 15
+        env:
+          GH_TOKEN: ${{ secrets.DATA_REPO_TOKEN }}
+          ISSUES_TOKEN: ${{ github.token }}
+          DENYLIST_FILE: ${{ github.workspace }}/directory-repo/denylist.json
+          # Placeholder, off: auto-accept isn't built yet (scripts/catalog/lib/moves.ts autoAcceptEnabled).
+          AUTO_ACCEPT: ${{ vars.MOVES_AUTO_ACCEPT || '' }}
+        # The gates need the current directory: the live release's (merged.json isn't kept between runs).
+        run: |
+          gh release download -R "$DATA_REPO" -p directory.json.gz -O "$RUNNER_TEMP/live-directory.json.gz" --clobber
+          gunzip -c "$RUNNER_TEMP/live-directory.json.gz" > "$RUNNER_TEMP/live-directory.json"
+          GH_TOKEN="$ISSUES_TOKEN" pnpm exec tsx scripts/catalog/moves.ts --items "$RUNNER_TEMP/move-inbox.json" --dir directory-repo \
+            --directory "$RUNNER_TEMP/live-directory.json" --issues --max-minutes 10 > "$RUNNER_TEMP/moves-summary.json"
+          jq -c 'del(.processed)' "$RUNNER_TEMP/moves-summary.json"
+          echo "done=true" >> "$GITHUB_OUTPUT"
+
+      - if: steps.moves.outputs.done == 'true'
+        name: Commit moves-pending.json
+        id: moves_commit
+        continue-on-error: true
+        working-directory: directory-repo
+        # The approval workflow may have pushed moves.json since the checkout: rebase onto it.
+        run: |
+          git config user.name "rawjobs-bot"
+          git config user.email "rawjobs-bot@users.noreply.github.com"
+          git add moves-pending.json
+          [ -f moves.json ] && git add moves.json
+          if git diff --cached --quiet; then echo "Nothing changed."; exit 0; fi
+          git commit -m "Move reports: $(jq -r '"\(.inbox) new, \(.passed) passing, \(.held) held, \(.rejected) rejected"' "$RUNNER_TEMP/moves-summary.json")"
+          for try in 1 2 3; do
+            git pull --rebase --quiet && git push && exit 0
+            sleep $((try * 5))
+          done
+          exit 1
+
+      - if: steps.moves_commit.outcome == 'success'
+        name: Acknowledge move reports
+        continue-on-error: true
+        env:
+          INBOX_URL: ${{ secrets.INBOX_URL }}
+          INBOX_TOKEN: ${{ secrets.INBOX_TOKEN }}
+        # Only once they're safely in moves-pending.json.
+        run: |
+          jq -c '.processed | _nwise(1000) | {ids: .}' "$RUNNER_TEMP/moves-summary.json" | while read -r batch; do
+            curl -fsS -X POST -H "Authorization: Bearer $INBOX_TOKEN" -H "content-type: application/json" --data "$batch" "$INBOX_URL/v1/moves/ack"
+          done
+
+      - if: always() && steps.moves_inbox.outputs.available == 'true'
+        name: Move reports summary
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          INBOX_FULL: ${{ steps.moves_inbox.outputs.full }}
+          REVIEW_OUTCOME: ${{ steps.moves.outcome }}
+        # One alert issue, de-duplicated: many held or rejected reports at once, or more than a run can take.
+        run: |
+          s="$RUNNER_TEMP/moves-summary.json"
+          if [ ! -s "$s" ]; then
+            echo "### Move reports: the review step didn't finish ($REVIEW_OUTCOME)" >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+          {
+            echo "### Move reports (record-only)"
+            echo
+            echo "| New reports | Passing (review issue) | Held | Rejected | Removals | Expired | Accepted | Issues opened |"
+            echo "|---|---|---|---|---|---|---|---|"
+            jq -r '"| \(.inbox) | \(.passed) | \(.held) | \(.rejected) | \(.removals) | \(.expired) | \(.accepted) | \(.issues_opened) |"' "$s"
+            jq -r 'if .cap_hit then "\nThe check cap (50 a run) was hit: the rest wait for the next run." else empty end' "$s"
+          } >> "$GITHUB_STEP_SUMMARY"
+          spike=$(jq '(.held + .rejected) > 100 or (.rejected > 50)' "$s")
+          if [ "$spike" != true ] && [ "$INBOX_FULL" != true ] && [ "$(jq .cap_hit "$s")" != true ]; then exit 0; fi
+          title="Move reports need a look"
+          body=$(printf 'Unusual move reports in this run: %s\n\nA spike of held or rejected reports can mean someone is flooding the inbox; a full inbox or a hit check cap means reports wait longer. Nothing is accepted without a maintainer.\n\nRun: %s' "$(jq -c 'del(.processed, .rejections)' "$s")" "$RUN_URL")
+          open=$(gh issue list -R "$REPO" --state open --search "\"$title\" in:title" --json number -q '.[0].number')
+          if [ -n "$open" ]; then gh issue comment "$open" -R "$REPO" --body "$body"; else gh issue create -R "$REPO" --title "$title" --body "$body"; fi
 
       - if: always() && steps.gate.outcome == 'failure'
         name: Report a refused release

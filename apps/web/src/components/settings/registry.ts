@@ -45,7 +45,7 @@ export const SETTINGS_SECTIONS: readonly SettingsSection[] = [
   { id: "density", page: "appearance", title: "Job list", words: "density compact comfortable spacing rows" },
   { id: "shortcuts", page: "keyboard", title: "Keyboard shortcuts", words: "hotkeys keys keybindings shortcut" },
   { id: "tracking", page: "data", title: "Your tracking data", words: "backup export import move device transfer json notes statuses saved views" },
-  { id: "sharing", page: "data", title: "Sharing", words: "privacy share send directory contribute companies added by link" },
+  { id: "sharing", page: "data", title: "Sharing", words: "privacy share send directory contribute companies added by link update careers link moved" },
   { id: "tips", page: "data", title: "Tips you've closed", words: "dismissed notices checklist hints show again reset" },
   { id: "reset", page: "data", title: "Start setup over", words: "reset wizard clear restart onboarding danger zone" },
   { id: "version", page: "updates", title: "RawJobs", words: "version about check for updates install upgrade" },

@@ -67,6 +67,24 @@ describe("release gate", () => {
     ).toEqual([expect.stringMatching(/^1 indexed companies not in the directory/)]);
   });
 
+  it("refuses moves to a board that isn't listed, moved-away boards still listed, and too many new moves", () => {
+    const withMoves = (moves: { from: string; to: string }[]) => {
+      const c = candidate(30_000, 12_000);
+      c.directory.moves = moves;
+      return c;
+    };
+    // c0..c29999 are listed; "gone" isn't.
+    expect(gate(null, withMoves([{ from: "lever:gone||", to: "greenhouse:c1||" }])).ok).toBe(true);
+    expect(gate(null, withMoves([{ from: "lever:gone||", to: "greenhouse:nothere||" }])).reasons).toEqual([expect.stringMatching(/^1 moves whose new board isn't in the directory/)]);
+    expect(gate(null, withMoves([{ from: "greenhouse:c2||", to: "greenhouse:c1||" }])).reasons).toEqual([expect.stringMatching(/^1 moved-away boards still in the directory/)]);
+    const many = Array.from({ length: 51 }, (_, i) => ({ from: `lever:gone${i}||`, to: `greenhouse:c${i}||` }));
+    expect(gate(null, withMoves(many)).reasons).toEqual(["51 new moves (at most 50 per release)"]);
+    expect(gate(null, withMoves(many.slice(0, 50))).ok).toBe(true);
+    // Moves already in the live release don't count as new, and allow_shrink doesn't lift the cap.
+    expect(gate(null, withMoves(many), false, ["lever:gone0||>greenhouse:c0||"]).ok).toBe(true);
+    expect(gate(null, withMoves(many), true).ok).toBe(false);
+  });
+
   it("warns about a few rows without a careers_url and refuses many", () => {
     const few = gate(
       null,
