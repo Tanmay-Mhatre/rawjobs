@@ -34,11 +34,12 @@ user is ever uploaded.
 | Moves outbox | `packages/core/src/directory.ts` (`queueMove`, `sendMoves`), `POST /api/directory/moves` | When you confirm a company's new careers link, the local server queues `{ name, from, to }` (boards checked like additions, from ≠ to) in `data/catalog/moves-outbox.json`, once per from+to. `rawjobs directory update` (and `share`) sends them to the inbox's `POST /v1/moves`, 10 a request, never at the moment of the click. 2xx or 400: dropped. 404 (an inbox from before moves), 429 (full or rate-limited), 503 (not open yet), other errors, offline: kept. Same switch as additions; with it off, nothing is queued and anything waiting is dropped unsent. The directory bar's "waiting to be shared" counts added boards only (`outbox`); `GET /api/directory` reports waiting moves separately as `moves`. |
 | Directory download | `packages/core/src/directory.ts`, `rawjobs directory update` | Reads `manifest.json`, downloads newer files, checks SHA-256, swaps them in. The dev server runs it weekly in the background (`directory.auto_update`). |
 | Contribution inbox | `services/contribute` | Cloudflare Worker. `POST /v1/contributions` (public, rate-limited, shape-checked, capped at `DAILY_CAP` boards a day for everyone, repeats within 7 days skipped); `GET /v1/pending` (500 a page, `?cursor=` for the next) and `POST /v1/ack` (up to 1,000 ids) for the workflow (token). Move reports ("this careers page moved"): `POST /v1/moves` (public, same rate limiter, up to 10 moves, each two boards and a company name; at most `MOVES_DAILY_CAP` new ones a day; distinct reporters counted with a keyed hash of IP + old board, made with `REPORTER_SECRET`, 503 without it); `GET /v1/moves/pending` (reporter count only, never the hashes) and `POST /v1/moves/ack` for the workflow (token). Moves are kept under `m:` keys, which `/v1/pending` never lists. |
-| Contributions workflow | `.github/workflows/directory-contributions.yml` | Every 3 hours: accept, publish incrementally, commit `contributions.json`, acknowledge. |
+| Contributions workflow | `.github/workflows/directory-contributions.yml` | Every 3 hours: accept, publish incrementally, commit `contributions.json`, acknowledge. Then review move reports (below). |
+| Move review | `scripts/catalog/moves.ts`, `moves-approve.ts`, `lib/moves.ts`, `.github/workflows/directory-move-approval.yml` | Moved careers pages users report: checked and recorded every 3 hours by the contributions workflow, approved by a maintainer on a GitHub issue. Record-only: nothing is accepted automatically. See [Moved careers pages](#moved-careers-pages). |
 | Weekly rebuild | `.github/workflows/directory-rebuild.yml` | Full rebuild and a dated release, in two jobs: `collect` gathers and checks boards, `publish` builds, gates and releases, and runs even if `collect` failed or ran out of time. The working state is saved as the `state` release, so the next run skips recently checked boards. Each collector runs under its own time cap (`scripts/catalog/capped.sh`) and may stop early without stopping the rebuild, so build and publish always get their turn. A run that doesn't publish opens a "Directory rebuild did not publish" issue. GitHub's schedules are best effort, so Monday has backup times (03:07, 05:37, 09:41, and Tuesday 03:13); each runs only if no rebuild has published in the last 5 days. The contributions, Common Crawl and job-feed workflows also start it when it's overdue (`scripts/catalog/watchdog.sh`: nothing for 8 days, or none yet this week by Monday 12:00 UTC), at most once a day and not while a "did not publish" issue is open; they also keep the scheduled workflows from being switched off after 60 quiet days. The directory runs share one concurrency group with `queue: max`, so a waiting run is never cancelled by a newer one. A published rebuild starts the site deploy. To test the workflow without publishing: `gh workflow run directory-rebuild.yml -f smoke=true` (about 25 minutes). |
 | Releases | `rawjobs-directory` releases | Every publish is a new dated release, so earlier ones stay: `directory-YYYY-MM-DD` from the weekly rebuild, `directory-YYYY-MM-DD-HHMM-shared` when users' companies are added in between. Apps read the one marked latest. **Roll back:** `gh release edit <tag> -R Tanmay-Mhatre/rawjobs-directory --latest`. |
 | Daily Common Crawl | `.github/workflows/directory-commoncrawl.yml` | 45 minutes a day of the Common Crawl URL index (the 12 newest crawls), on top of the rebuild's 35 minutes a week. Resumes per query; stops when the index keeps failing. The boards it finds are merged and checked by the next contributions run or rebuild. |
-| Release gate | `scripts/catalog/guard.ts`, `gate.sh` | Runs before every upload, in the rebuild and the contributions workflow. Refuses a directory under 90% of the live release's companies or 85% of its indexed ones, under 20,000 / 10,000, or with broken rows. A deliberate shrink: `gh workflow run directory-rebuild.yml -f allow_shrink=true`. |
+| Release gate | `scripts/catalog/guard.ts`, `gate.sh` | Runs before every upload, in the rebuild and the contributions workflow. Refuses a directory under 90% of the live release's companies or 85% of its indexed ones, under 20,000 / 10,000, with broken rows, or with broken or more than 50 new moves. A deliberate shrink: `gh workflow run directory-rebuild.yml -f allow_shrink=true`. |
 | Finding more companies | `scripts/catalog/` | See [Coverage](#coverage) below. |
 | Public directory repo | `Tanmay-Mhatre/rawjobs-directory` | Releases (the files apps download), `contributions.json`, `coverage.md`, attribution. |
 
@@ -108,6 +109,75 @@ How it's applied (`scripts/catalog/lib/denylist.ts`, read from `DENYLIST_FILE`):
 - every workflow reads `denylist.json` from the directory repo; a missing file means nothing is
   removed, and an unreadable one fails the run (never publish without it);
 - apps need no change: a removed company disappears with the next download.
+
+## Moved careers pages
+
+When a company's board stops working and a user finds its new one, the app can report the move
+(`POST /v1/moves` on the inbox; plan: `docs/plans/update-careers-link-plan.md`, PR 3). Moves are
+**record-only** for now: every report is checked and recorded, and a maintainer approves the good
+ones. Nothing is accepted automatically.
+
+**Files in the directory repo** (written by the workflows, next to `denylist.json`):
+- `moves-pending.json`: reports waiting, keyed by the old board (`ats:slug|shard|site`), each with its
+  candidate new boards, reporter counts, the old board's checks, each candidate's gate results and its
+  review issue. Holds expire 30 days after the first report.
+- `moves.json`: accepted moves (`by: "review"`), and later reverts (`reverted: true`, `reverted_at`).
+
+**Every 3 hours** (`directory-contributions.yml`, after the contributions): `scripts/catalog/moves.ts`
+pulls `GET /v1/moves/pending` (an inbox without it answers 404 and the steps are skipped), copies the
+reports into `moves-pending.json`, commits it, then acknowledges them. It checks up to 50 old boards a
+run (10 minutes at most, the usual HttpClient and user agent; an old board at most every 6 hours) and
+runs the gates, cheapest first:
+
+1. Denylist: neither board, nor the name.
+2. The old board is in the directory under that name (the live release's `directory.json`), or was
+   when it was first checked (the build drops dead boards).
+3. The old board is gone: a 404/410 on two checks at least 24 hours apart with no 200 in between, on
+   Greenhouse, Lever or Ashby. Anything else that doesn't answer for 24 hours (SmartRecruiters' 0
+   jobs, a page read's "not found", Workday, timeouts) is *not proven*: it still goes to review, marked
+   so. Until then the report is held; an old board that answers again is held too.
+4. The new board is live with open jobs.
+5. The new board isn't a different company in the directory (the same name is fine), and wasn't
+   first contributed less than 30 days ago.
+6. No chains or cycles: the new board isn't itself reported or accepted as moved, the old board
+   hasn't moved already, and nothing moved to the old board.
+7. If the company has another live board, it's recorded as a removal, not a move.
+
+For every old board with a candidate that passes, it opens **one** issue, "Move review: <old board>",
+labelled `move-review`, and keeps it up to date. Names and slugs are only inside a code block (no `@`,
+no backticks); the only links are careers URLs computed from the checked board shape. A closed issue
+is never reopened. The run summary counts new, passing, held, rejected, removed and expired reports,
+and one "Move reports need a look" issue opens on a spike or when a run can't take everything.
+
+**Approving** (`directory-move-approval.yml`): add the `move-approved` label to the issue. If more than
+one candidate passes, first tick exactly one box in the issue (each box names a candidate by an id
+computed from `moves-pending.json`). The workflow then:
+- ignores the label unless whoever added it has **maintain or admin** access (asked of the API);
+- reads the move from `moves-pending.json` by the issue number, never from the issue's text;
+- runs every gate again with fresh checks;
+- appends it to `moves.json`, comments and closes the issue; or comments why not and removes the label.
+
+To refuse, close the issue. Only one candidate per old board can be approved.
+
+**Build and release:** `build.ts` reads `moves.json` (`MOVES_FILE`) and adds a `moves` list to
+`directory.json`: `[{ from, to, name, accepted_at }]` (board keys), accepted and not reverted, and
+only when the new board is in the directory. They aren't counted as companies. A moved-away board is
+left out of the directory, so it's never scanned or indexed again (a warning if it answers again).
+The release gate refuses a directory whose moves point at a board it doesn't list, that still lists a
+moved-away board, or that adds more than 50 moves since the live release. Older apps read only
+`companies` and ignore `moves`. An approval reaches apps with the next release (the next
+contributions publish or the weekly rebuild).
+
+**Auto-accept** isn't built. `AUTO_ACCEPT` (the `MOVES_AUTO_ACCEPT` repo variable) is a placeholder
+that changes nothing yet; the TODO in `scripts/catalog/lib/moves.ts` lists the company-owned evidence
+it will need (a redirect from the old careers URL, or the company's own site linking the new board).
+
+**Setup** (once): create the two labels in the code repo, then deploy the inbox Worker with `/v1/moves`:
+
+```bash
+gh label create move-review -R Tanmay-Mhatre/rawjobs --color FBCA04 --description "A reported careers page move to review"
+gh label create move-approved -R Tanmay-Mhatre/rawjobs --color 0E8A16 --description "Maintainer approval of a move (maintain/admin only)"
+```
 
 ## Job feed
 

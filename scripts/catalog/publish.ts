@@ -29,6 +29,7 @@ import {
   type IndexRow,
 } from "@rawjobs/core";
 import type { Resolved, Seed } from "./resolve";
+import { type DirectoryMove, dirKeyOf } from "./lib/moves";
 import { catalogDir, dataDir } from "./lib/paths";
 
 const dataArg = process.argv.indexOf("--data");
@@ -55,7 +56,11 @@ type Addition = Pick<Dir, "key" | "name" | "ats" | "slug" | "region" | "shard" |
 const readJson = <T>(path: string, fallback: T): T => (existsSync(path) ? (JSON.parse(readFileSync(path, "utf8")) as T) : fallback);
 
 // Sandbox/training/test boards stay out (build.ts drops them too; this covers older builds).
-const dir = readJson<{ companies: Dir[] }>(join(catalogDir, "out", "directory.json"), { companies: [] }).companies.filter((d) => !isPlaceholderBoard(d.name));
+const built = readJson<{ companies: Dir[]; moves?: DirectoryMove[] }>(join(catalogDir, "out", "directory.json"), { companies: [] });
+const dir = built.companies.filter((d) => !isPlaceholderBoard(d.name));
+/** Accepted moves (build.ts): passed on to apps, and their old boards stay out from every source. */
+const moves = built.moves ?? [];
+const movedAway = new Set(moves.flatMap((m) => dirKeyOf(m.from) ?? []));
 const byKey = new Map(dir.map((d) => [d.key, d]));
 
 // ---- job rows ----
@@ -143,13 +148,13 @@ const tagsOf = (key: string) => {
 };
 
 // ---- user additions (Add by link) ----
-const additions = readJson<{ companies: Addition[] }>(join(OUT, "additions.json"), { companies: [] }).companies.filter((a) => !byKey.has(a.key));
+const additions = readJson<{ companies: Addition[] }>(join(OUT, "additions.json"), { companies: [] }).companies.filter((a) => !byKey.has(a.key) && !movedAway.has(a.key));
 
 // ---- seed companies on hiring systems we can't scan yet ----
 const supported = new Set(Object.keys(connectors));
 const known = new Set([...byKey.keys(), ...additions.map((a) => a.key)]);
 const unverified = resolved
-  .filter((r) => r.board && !r.board.supported && !known.has(r.board.key))
+  .filter((r) => r.board && !r.board.supported && !known.has(r.board.key) && !movedAway.has(r.board.key))
   .map((r) => {
     const b = r.board!;
     return {
@@ -218,7 +223,8 @@ const industries = industryCounts(slim.filter((c) => c.status === "live" && supp
 
 mkdirSync(OUT, { recursive: true });
 const generated_at = new Date().toISOString();
-writeFileSync(join(OUT, "directory.json"), JSON.stringify({ generated_at, count: slim.length, industries, companies: slim }));
+// `moves` is new in directory.json: older apps read only `companies` (and `industries`) and ignore it.
+writeFileSync(join(OUT, "directory.json"), JSON.stringify({ generated_at, count: slim.length, industries, companies: slim, moves }));
 writeFileSync(join(OUT, "index.json"), JSON.stringify({ generated_at, count: indexed.length, companies: indexed }));
 writeFileSync(join(catalogDir, "out", "tags.json"), JSON.stringify(Object.fromEntries([...tags].map(([k, m]) => [k, Object.fromEntries([...m].map(([id, src]) => [id, [...src]]))])), null, 1));
 

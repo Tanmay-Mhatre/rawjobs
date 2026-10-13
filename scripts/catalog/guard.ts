@@ -5,12 +5,14 @@
  * Compares the candidate (dist/manifest.json plus the files publish.ts wrote) with the live
  * release's manifest. A run that times out or loses a source must fail here, not ship.
  *
- *   pnpm exec tsx scripts/catalog/guard.ts --prev prev-manifest.json [--dist dist] [--data dist-data]
+ *   pnpm exec tsx scripts/catalog/guard.ts --prev prev-manifest.json [--prev-moves prev-moves.json] [--dist dist] [--data dist-data]
  *   ALLOW_SHRINK=1 lifts the two shrink rules (a deliberate purge), never the others.
+ *   --prev-moves: the live release's `moves` as ["from>to", …] (gate.sh), to count the new ones.
  */
 import { appendFileSync, existsSync, readFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { dirKeyOf } from "./lib/moves";
 import type { DirectoryManifest } from "./release";
 
 /** A candidate below these shares of the live release is refused (unless shrinking is allowed). */
@@ -21,13 +23,18 @@ export const MIN_COMPANIES = 20_000;
 export const MIN_INDEXED = 10_000;
 /** A few boards without a careers link are known (successfactors:flocorpprd); many means a broken build. */
 export const MAX_NO_CAREERS_URL_SHARE = 0.01;
+/** Accepted moves new in one release, at most (more means a broken or abused review). */
+export const MAX_NEW_MOVES = 50;
 
 export type Counts = Pick<DirectoryManifest, "companies" | "indexed">;
 export type Row = { key?: string; ats?: string; slug?: string; name?: string; careers_url?: string };
-export type Candidate = { manifest: Counts; directory: { count: number; companies: Row[] }; index: { count: number; companies: { key?: string }[] } };
+export type MoveRow = { from?: string; to?: string };
+export type Candidate = { manifest: Counts; directory: { count: number; companies: Row[]; moves?: MoveRow[] }; index: { count: number; companies: { key?: string }[] } };
+const moveId = (m: MoveRow) => `${m.from}>${m.to}`;
 export type Verdict = { ok: boolean; reasons: string[]; warnings: string[] };
 
-export function gate(prev: Counts | null, next: Candidate, allowShrink = false): Verdict {
+/** `prevMoves`: the live release's moves as "from>to" (null: none known, so every move counts as new). */
+export function gate(prev: Counts | null, next: Candidate, allowShrink = false, prevMoves: readonly string[] | null = null): Verdict {
   const reasons: string[] = [];
   const warnings: string[] = [];
   const { manifest, directory, index } = next;
@@ -76,6 +83,16 @@ export function gate(prev: Counts | null, next: Candidate, allowShrink = false):
         .join(", ")}`,
     );
 
+  // Moves: every new board is listed, no old board is, and only so many new ones per release.
+  const moves = next.directory.moves ?? [];
+  const badTo = moves.filter((m) => !m.from || !m.to || !keys.has(dirKeyOf(m.to) ?? ""));
+  if (badTo.length) reasons.push(`${badTo.length} moves whose new board isn't in the directory, e.g. ${badTo.slice(0, 3).map(moveId).join(", ")}`);
+  const listedFrom = moves.filter((m) => m.from && keys.has(dirKeyOf(m.from) ?? ""));
+  if (listedFrom.length) reasons.push(`${listedFrom.length} moved-away boards still in the directory, e.g. ${listedFrom.slice(0, 3).map(moveId).join(", ")}`);
+  const before = new Set(prevMoves ?? []);
+  const added = moves.filter((m) => !before.has(moveId(m))).length;
+  if (added > MAX_NEW_MOVES) reasons.push(`${added} new moves (at most ${MAX_NEW_MOVES} per release)`);
+
   return { ok: reasons.length === 0, reasons, warnings };
 }
 
@@ -90,6 +107,9 @@ function main() {
   const data = resolve(arg("--data", "dist-data")!);
   const prevText = existsSync(prevFile) ? readFileSync(prevFile, "utf8").trim() : "";
   const prev = prevText ? (JSON.parse(prevText) as Counts) : null;
+  const prevMovesFile = arg("--prev-moves");
+  const prevMovesText = prevMovesFile && existsSync(prevMovesFile) ? readFileSync(prevMovesFile, "utf8").trim() : "";
+  const prevMoves = prevMovesText ? (JSON.parse(prevMovesText) as string[]) : null;
   const read = <T>(path: string) => JSON.parse(readFileSync(path, "utf8")) as T;
   const candidate: Candidate = {
     manifest: read<Counts>(join(dist, "manifest.json")),
@@ -97,7 +117,7 @@ function main() {
     index: read(join(data, "catalog", "index.json")),
   };
   const allowShrink = process.env.ALLOW_SHRINK === "1" || process.env.ALLOW_SHRINK === "true";
-  const v = gate(prev, candidate, allowShrink);
+  const v = gate(prev, candidate, allowShrink, prevMoves);
 
   for (const w of v.warnings) console.log(`::warning::${w}`);
   for (const r of v.reasons) console.log(`::error::${r}`);
@@ -109,6 +129,7 @@ function main() {
     "|---|---|---|",
     row("Companies", prev?.companies, candidate.manifest.companies),
     row("Indexed", prev?.indexed, candidate.manifest.indexed),
+    `| Moves | ${prevMoves?.length ?? "–"} | ${candidate.directory.moves?.length ?? 0} |`,
     "",
     ...v.reasons.map((r) => `- **Refused:** ${r}`),
     ...v.warnings.map((w) => `- Warning: ${w}`),

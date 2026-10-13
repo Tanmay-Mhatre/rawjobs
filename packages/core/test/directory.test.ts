@@ -5,7 +5,7 @@ import { join } from "node:path";
 import { gzipSync } from "node:zlib";
 import { afterAll, afterEach, beforeEach, describe, expect, it } from "vitest";
 import { cleanMove, contributeUrl, directoryStatus, directoryUrl, queueContributions, queueMove, sendContributions, sendMoves, updateDirectory } from "../src/directory";
-import { suggestPoolSize } from "../src/scope";
+import { readDirectory, suggestPoolSize } from "../src/scope";
 import { testDataKey } from "./helpers";
 
 const key = testDataKey();
@@ -258,6 +258,13 @@ describe("suggestPoolSize", () => {
     write("directory.json", { count: 4, companies: [entry("a", true), entry("b", true), entry("c"), entry("d")] });
     write("additions.json", { companies: [entry("e"), entry("c")] });
     expect(suggestPoolSize(dir)).toBe(3 + 3);
+  });
+
+  it("ignores the `moves` list newer directories carry (moves aren't companies)", () => {
+    write("index.json", { generated_at: "2026-10-07T09:55:42.522Z", count: 1, companies: [{}] });
+    write("directory.json", { count: 2, companies: [entry("a", true), entry("b")], moves: [{ from: "lever:old||", to: "greenhouse:b||", name: "B", accepted_at: "2026-10-12T00:00:00Z" }] });
+    expect(readDirectory(dir).map((c) => c.key)).toEqual(["greenhouse:a", "greenhouse:b"]);
+    expect(suggestPoolSize(dir)).toBe(1 + 1);
   });
 
   it("is null without an index, or when its head doesn't say how many", () => {
