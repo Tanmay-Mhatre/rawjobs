@@ -2,13 +2,13 @@ import { useEffect, useRef } from "react";
 import { canRunLocally } from "./data";
 
 /**
- * Your tracking (statuses, notes) and Radar preferences are saved on this computer
+ * Your tracking (statuses, notes), Radar preferences and appearance (theme, contrast, density, age limit) are saved on this computer
  * (profile/tracking.json, through the local API) as well as in this browser. The browser copy shows
  * the page instantly; the file is what counts, so opening the dashboard at another address, or in
  * another browser, still finds them. The first page opened with this version uploads what its browser
  * had, so nothing saved before is lost.
  */
-export type TrackingPart = "state" | "prefs";
+export type TrackingPart = "state" | "prefs" | "appearance";
 type Remote = Partial<Record<TrackingPart, unknown>>;
 
 const SAVE_DELAY = 400;
