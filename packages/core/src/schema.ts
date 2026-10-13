@@ -31,6 +31,7 @@ export const ATS_TYPES = [
   "hireology",
   "ukg",
   "eightfold",
+  "phenom",
 ] as const;
 
 /**

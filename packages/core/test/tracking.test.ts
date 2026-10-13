@@ -44,17 +44,20 @@ describe("tracking", () => {
     const t = readTracking(h)!;
     expect(t.state).toEqual({ a: { status: "saved" } });
     expect(t.prefs).toEqual({ views: [] });
+    expect(saveTracking({ appearance: { theme: "dark" } }, h).ok).toBe(true);
+    expect(readTracking(h)).toMatchObject({ state: { a: { status: "saved" } }, prefs: { views: [] }, appearance: { theme: "dark" } });
     expect(t.updatedAt).toMatch(/^\d{4}-/);
     // Written whole, never half: no temporary file is left behind.
     expect(readdirSync(join(h, "profile"))).toEqual(["tracking.json"]);
   });
 
-  it("refuses anything that isn't { state?, prefs? } objects, and leaves the file alone", () => {
+  it("refuses anything that isn't { state?, prefs?, appearance? } objects, and leaves the file alone", () => {
     const h = home();
     saveTracking({ state: { a: {} } }, h);
     expect(saveTracking([], h).ok).toBe(false);
     expect(saveTracking({ state: [] }, h).ok).toBe(false);
     expect(saveTracking({ prefs: "x" }, h).ok).toBe(false);
+    expect(saveTracking({ appearance: "dark" }, h).ok).toBe(false);
     expect(readTracking(h)!.state).toEqual({ a: {} });
   });
 

@@ -165,6 +165,16 @@ for (const f of existsSync(raw("kalil0321")) ? readdirSync(raw("kalil0321")).fil
   const p = raw("kalil0321", f);
   const rows = csvRows(p);
   for (const [name, , url, extra] of rows) {
+    // Its Phenom list puts the careers site first: url,name,…; the vendor is named, the URL can't show it.
+    if (f === "phenom.csv") {
+      const [site, company] = [name, url];
+      const host = site
+        ?.replace(/^https?:\/\//i, "")
+        .split("/")[0]
+        ?.toLowerCase();
+      if (host && /^[a-z0-9-]+(\.[a-z0-9-]+)+$/i.test(host)) add("kalil", { ats: "phenom", slug: host, name: company });
+      continue;
+    }
     if (!url) continue;
     // Its Eightfold list adds the tenant domain the API needs.
     if (f === "eightfold.csv") {
