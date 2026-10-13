@@ -34,6 +34,7 @@ export const ATS_TYPES = [
   "phenom",
   "careerplug",
   "dayforce",
+  "adp",
 ] as const;
 
 /**

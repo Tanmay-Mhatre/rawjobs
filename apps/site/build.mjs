@@ -59,6 +59,7 @@ const SYSTEMS = [
   "Phenom",
   "CareerPlug",
   "Dayforce",
+  "ADP Workforce Now",
   "Comeet",
   "Oracle Recruiting",
   "SAP SuccessFactors",

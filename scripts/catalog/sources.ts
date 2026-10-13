@@ -15,6 +15,7 @@ const GH = "https://raw.githubusercontent.com";
 
 /** ats-scrapers files for the systems we have connectors for (its other files are systems we don't read yet). */
 const KALIL = [
+  "adp",
   "ashby",
   "bamboohr",
   "breezy",
