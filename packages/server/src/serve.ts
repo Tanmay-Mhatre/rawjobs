@@ -44,8 +44,11 @@ export async function serve(args: string[]): Promise<number> {
     console.error(`Not a port: ${values.port ?? process.env.RAWJOBS_PORT}`);
     return 2;
   }
-  // The port it had last time comes first, so a bookmark keeps working when 4317 was taken back then.
+  // 4317 (or the port asked for) whenever it's free: the browser keeps your page's state per address,
+  // so moving for good to 4318 after one busy start would lose it. When it's taken, the port it had
+  // last time comes next, so the address doesn't wander between starts.
   const sticky = !values.port && !process.env.RAWJOBS_PORT && running?.port && running.port !== first ? running.port : null;
+  const order = portOrder(first, sticky);
 
   // After an update, the data is converted to this version's format (backed up just before).
   migrateData(home, dataDir);
@@ -65,13 +68,14 @@ export async function serve(args: string[]): Promise<number> {
   });
 
   let port = 0;
-  if (sticky) port = await listen(server, sticky).catch(() => 0);
-  for (let p = first; p < first + TRIES && !port; p++) {
+  for (const [i, p] of order.entries()) {
     try {
       port = await listen(server, p);
+      break;
     } catch (err) {
-      if ((err as NodeJS.ErrnoException).code !== "EADDRINUSE") throw err;
-      console.log(`Port ${p} is in use, trying ${p + 1}…`);
+      // The port from last time may be gone (or refused) for other reasons: just move on.
+      if ((err as NodeJS.ErrnoException).code !== "EADDRINUSE" && p !== sticky) throw err;
+      if (i + 1 < order.length) console.log(`Port ${p} is in use, trying ${order[i + 1]}…`);
     }
   }
   if (!port) {
@@ -101,6 +105,12 @@ export async function serve(args: string[]): Promise<number> {
     };
     for (const signal of ["SIGINT", "SIGTERM"] as const) process.once(signal, () => shutdown());
   });
+}
+
+/** The ports to try, in order: the first choice, then last time's (if different), then the next few. */
+export function portOrder(first: number, last: number | null): number[] {
+  const next = Array.from({ length: TRIES - 1 }, (_, i) => first + 1 + i).filter((p) => p !== last);
+  return [first, ...(last && last !== first ? [last] : []), ...next];
 }
 
 function listen(srv: Server, port: number): Promise<number> {

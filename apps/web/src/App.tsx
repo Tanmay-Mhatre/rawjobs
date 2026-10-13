@@ -35,7 +35,7 @@ import { load, save } from "./lib/storage";
 import { timeAgo } from "./lib/format";
 import { hasNewTag } from "./lib/filters";
 import { ignoreShortcut, useGoToKeys } from "./lib/keys";
-import { useTheme } from "./lib/theme";
+import { useSavedAppearance, useTheme } from "./lib/theme";
 import { useUserState, type Status } from "./lib/userState";
 import wordmarkInk from "./design/logos/rawjobs-wordmark-ink.svg";
 import wordmarkPaper from "./design/logos/rawjobs-wordmark-paper.svg";
@@ -59,6 +59,8 @@ export function App() {
   const [openId, setOpenId] = useState<string | null>(null);
   // Keeps data-theme in step with the system while Settings > Appearance is on System.
   useTheme();
+  // Theme, contrast, density and age limit are saved in your RawJobs folder, not just this browser.
+  useSavedAppearance();
   const [showKeys, setShowKeys] = useState(false);
 
   const status = setup.status;

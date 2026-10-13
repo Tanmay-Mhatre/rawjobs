@@ -4,11 +4,19 @@ import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { AUTOSTART, readServerState, writeServerState } from "../src/desktop";
 import { iconIcns, iconIco, iconPng, markPixels } from "../src/icon";
+import { portOrder } from "../src/serve";
 import { markShortcutNoticeSeen, shortcutState } from "../src/shortcuts";
 
 const root = join(import.meta.dirname, "../../..");
 
 describe("an installed copy's server", () => {
+  it("goes back to 4317 when it's free, after a start that had to use 4318", () => {
+    expect(portOrder(4317, 4318)).toEqual([4317, 4318, 4319, 4320, 4321, 4322, 4323, 4324, 4325, 4326]);
+    expect(portOrder(4317, null)).toEqual([4317, 4318, 4319, 4320, 4321, 4322, 4323, 4324, 4325, 4326]);
+    expect(portOrder(4317, 4321)).toEqual([4317, 4321, 4318, 4319, 4320, 4322, 4323, 4324, 4325, 4326]);
+    expect(portOrder(4317, 4317)).toEqual([4317, 4318, 4319, 4320, 4321, 4322, 4323, 4324, 4325, 4326]);
+  });
+
   it("records where it runs, for the shortcut", () => {
     const home = mkdtempSync(join(tmpdir(), "rj-state-"));
     expect(readServerState(home)).toBeNull();

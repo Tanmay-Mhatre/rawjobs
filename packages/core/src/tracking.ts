@@ -3,15 +3,17 @@ import { dirname, resolve } from "node:path";
 import { rawjobsHome } from "./paths";
 
 /**
- * Your own tracking from the dashboard: each job's status and note ("state"), and Radar preferences
- * like saved views, hidden companies and hide rules ("prefs"). Kept on this computer next to your
+ * Your own tracking from the dashboard: each job's status and note ("state"), Radar preferences
+ * like saved views, hidden companies and hide rules ("prefs"), and how the dashboard looks: theme,
+ * contrast, feed density and age limit ("appearance"). Kept on this computer next to your
  * resume (profile/ is gitignored), so it no longer depends on which address the dashboard was opened at.
  * The dashboard owns the shape of both parts; this file only stores them.
  */
 export const TRACKING_PATH = "profile/tracking.json";
 const MAX_BYTES = 20_000_000;
 
-export type TrackingParts = { state?: Record<string, unknown>; prefs?: Record<string, unknown> };
+export type TrackingParts = { state?: Record<string, unknown>; prefs?: Record<string, unknown>; appearance?: Record<string, unknown> };
+const PARTS = ["state", "prefs", "appearance"] as const;
 export type TrackingFile = TrackingParts & { app: "rawjobs"; version: 1; updatedAt: string };
 
 const isRecord = (v: unknown): v is Record<string, unknown> => typeof v === "object" && v !== null && !Array.isArray(v);
@@ -27,8 +29,7 @@ export function readTracking(home = rawjobsHome()): TrackingFile | null {
       app: "rawjobs",
       version: 1,
       updatedAt: typeof raw.updatedAt === "string" ? raw.updatedAt : "",
-      ...(isRecord(raw.state) ? { state: raw.state } : {}),
-      ...(isRecord(raw.prefs) ? { prefs: raw.prefs } : {}),
+      ...Object.fromEntries(PARTS.filter((part) => isRecord(raw[part])).map((part) => [part, raw[part]])),
     };
   } catch {
     return null;
@@ -40,9 +41,9 @@ export function readTracking(home = rawjobsHome()): TrackingFile | null {
  * into place, so a crash halfway never leaves a broken file.
  */
 export function saveTracking(input: unknown, home = rawjobsHome()): { ok: true; tracking: TrackingFile } | { ok: false; error: string } {
-  if (!isRecord(input)) return { ok: false, error: "Expected { state?, prefs? }." };
+  if (!isRecord(input)) return { ok: false, error: "Expected { state?, prefs?, appearance? }." };
   const patch: TrackingParts = {};
-  for (const part of ["state", "prefs"] as const) {
+  for (const part of PARTS) {
     if (input[part] === undefined) continue;
     if (!isRecord(input[part])) return { ok: false, error: `"${part}" must be an object.` };
     patch[part] = input[part];
