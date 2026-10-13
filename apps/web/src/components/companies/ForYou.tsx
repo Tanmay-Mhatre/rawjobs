@@ -29,6 +29,8 @@ type Props = {
   onRemoveMany: (keys: string[]) => void;
   onMute: (key: string) => void;
   onUnmute: (key: string) => void;
+  /** Opens your hidden companies (My companies, Hidden panel): the link after hiding a suggestion. */
+  onShowHidden?: () => void;
   /** Fewer cards, for the setup wizard. */
   compact?: boolean;
   /** Shown when there is nothing to suggest from (no roles yet). */
@@ -58,7 +60,7 @@ const real = <T extends CompanySuggestion>(list: readonly T[], skip: ReadonlySet
  * watching, one pack per industry, and ones RawJobs can't scan yet. Rule-based and local: nothing
  * about you leaves this computer.
  */
-export function ForYou({ state, watched, muted, pastEmployers, onPastEmployers, onAddMany, onRemoveMany, onMute, onUnmute, compact, offHint, onRetry, industries, packActions }: Props) {
+export function ForYou({ state, watched, muted, pastEmployers, onPastEmployers, onAddMany, onRemoveMany, onMute, onUnmute, onShowHidden, compact, offHint, onRetry, industries, packActions }: Props) {
   const ids = useTabIds("suggest");
   // "Off" only counts once it has lasted a moment: the first render and profile changes pass through it.
   const [offSettled, setOffSettled] = useState(!canRunLocally);
@@ -246,6 +248,11 @@ export function ForYou({ state, watched, muted, pastEmployers, onPastEmployers, 
                 >
                   <Undo2 className="size-3.5" /> Undo
                 </button>
+                {onShowHidden && (
+                  <button type="button" className="type-label text-ink underline underline-offset-2 hover:text-muted" onClick={onShowHidden}>
+                    See hidden companies
+                  </button>
+                )}
               </p>
             )}
 

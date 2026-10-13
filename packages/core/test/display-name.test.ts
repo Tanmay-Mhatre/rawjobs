@@ -20,6 +20,26 @@ describe("displayName", () => {
     for (const n of ["yearn.finance", "Ramp.Network", "Safe.Global", "Q.Institute"]) expect(displayName(n)).toBe(n);
   });
 
+  it("drops legal forms, keeping words that are often the brand's own", () => {
+    expect(displayName("Gusto, Inc.")).toBe("Gusto");
+    expect(displayName("Apera AI Inc")).toBe("Apera AI");
+    expect(displayName("Meshy LLC")).toBe("Meshy");
+    expect(displayName("Farallon Capital Management, L.L.C.")).toBe("Farallon Capital Management");
+    expect(displayName("HiveMQ GmbH")).toBe("HiveMQ");
+    expect(displayName("Prophet Tech Pty Ltd")).toBe("Prophet Tech");
+    expect(displayName("SingFuels Pte Ltd")).toBe("SingFuels");
+    expect(displayName("Razorpay Software Private Limited")).toBe("Razorpay Software");
+    expect(displayName("T-Systems ICT India Pvt. Ltd.")).toBe("T-Systems ICT India");
+    expect(displayName("MariaDB plc")).toBe("MariaDB");
+    expect(displayName("Wingtra AG")).toBe("Wingtra");
+    expect(displayName("Techland S.A.")).toBe("Techland");
+    expect(displayName("Korton Software B.V.")).toBe("Korton Software");
+    expect(displayName("ZoomInfo Technologies LLC")).toBe("ZoomInfo");
+    expect(displayName("Weee! Inc")).toBe("Weee!");
+    // Brand words and lower-case look-alikes stay, and so does a name that is only its form.
+    for (const n of ["Betsson Group", "Palantir Technologies", "Brain Corp", "Levi Strauss & Co", "Appian Corporation", "Sensei Ag", "Inc", "Ltd"]) expect(displayName(n)).toBe(n);
+  });
+
   it("prefers the board slug when the domain has a prefix", () => {
     expect(displayName("Getrecharge.Com", "recharge")).toBe("Recharge");
     // Without the slug it can't tell, so it only drops the ending.

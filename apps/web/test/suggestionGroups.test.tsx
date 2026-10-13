@@ -1,7 +1,7 @@
 // @vitest-environment happy-dom
 import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import { useMemo, useState } from "react";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { ForYou } from "../src/components/companies/ForYou";
 import { packActions, Tray, useVisit } from "../src/components/companies/Tray";
 import { addCompanies, keyOf, type CompanyRef } from "../src/lib/companies";
@@ -106,7 +106,7 @@ const data = (patch: Partial<CompanySuggestions> = {}): CompanySuggestions => ({
 });
 
 /** The Companies page's wiring (CompaniesTab), on a list held in memory. */
-function Page({ d, pastEmployers = [] }: { d: CompanySuggestions; pastEmployers?: string[] }) {
+function Page({ d, pastEmployers = [], onShowHidden }: { d: CompanySuggestions; pastEmployers?: string[]; onShowHidden?: () => void }) {
   const [companies, setCompanies] = useState<CompanyRow[]>([]);
   const [muted, setMuted] = useState<string[]>([]);
   const [past, setPast] = useState(pastEmployers);
@@ -132,6 +132,7 @@ function Page({ d, pastEmployers = [] }: { d: CompanySuggestions; pastEmployers?
         onRemoveMany={removeMany}
         onMute={(k) => setMuted((m) => [...m, k])}
         onUnmute={(k) => setMuted((m) => m.filter((x) => x !== k))}
+        onShowHidden={onShowHidden}
         industries={2}
         packActions={actions}
       />
@@ -201,6 +202,15 @@ describe("Hiring for you now", () => {
     expect(screen.getByText(/It won't be suggested/)).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: /Undo/ }));
     expect(screen.getByRole("button", { name: "Hide Crypto 1" })).toBeTruthy();
+  });
+
+  it("links from the hide note to your hidden companies", () => {
+    const onShowHidden = vi.fn();
+    render(<Page d={d} onShowHidden={onShowHidden} />);
+    fireEvent.click(screen.getByRole("tab", { name: /Hiring for you now/ }));
+    fireEvent.click(screen.getByRole("button", { name: "Hide Crypto 1" }));
+    fireEvent.click(screen.getByRole("button", { name: "See hidden companies" }));
+    expect(onShowHidden).toHaveBeenCalledOnce();
   });
 });
 

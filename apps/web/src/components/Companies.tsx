@@ -118,6 +118,7 @@ export function MyCompanies({
   hidden = [],
   onShowAgain,
   attention = 0,
+  showHidden = 0,
   empty,
 }: {
   rows: CompanyRow[];
@@ -143,19 +144,24 @@ export function MyCompanies({
   onShowAgain?: (h: HiddenCompany) => void;
   /** Above 0 when a "failing" link was followed; each new value shows Needs attention. */
   attention?: number;
+  /** Above 0 when "See hidden companies" was followed; each new value opens the Hidden panel. */
+  showHidden?: number;
   /** Shown instead of the list when there are no companies (what your scan covers without them). */
   empty?: ReactNode;
 }) {
   const [filter, setFilter] = useState<Filter>(attention ? "attention" : "all");
   const [sort, setSort] = useState<Sort>("attention");
   const [page, setPage] = useState(1);
-  const [panel, setPanel] = useState<"runs" | "hidden" | null>(null);
+  const [panel, setPanel] = useState<"runs" | "hidden" | null>(showHidden ? "hidden" : null);
   /** The quiet companies the banner just removed, until Undo or the next change of list. */
   const [removed, setRemoved] = useState<CompanyRow[] | null>(null);
   const ids = useId();
   useEffect(() => {
     if (attention) setFilter("attention");
   }, [attention]);
+  useEffect(() => {
+    if (showHidden) setPanel("hidden");
+  }, [showHidden]);
   // A new filter, sort or search starts at page 1.
   // biome-ignore lint/correctness/useExhaustiveDependencies: these are the triggers
   useEffect(() => setPage(1), [filter, sort, query]);
