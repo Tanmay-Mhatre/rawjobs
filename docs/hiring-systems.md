@@ -1,6 +1,6 @@
 # Hiring systems
 
-RawJobs reads jobs from 23 hiring systems (applicant tracking systems, or ATS) and 4 public job
+RawJobs reads jobs from 44 hiring systems (applicant tracking systems, or ATS) and 7 public job
 boards. Paste a company's careers link into **Companies → Add by link** in the dashboard, or into
 `rawjobs detect`, and RawJobs works out which system it is.
 
@@ -29,8 +29,29 @@ boards. Paste a company's careers link into **Companies → Add by link** in the
 | Jobvite | `jobs.jobvite.com/{slug}` | careers search pages |
 | JazzHR | `{slug}.applytojob.com/apply` | careers page |
 | Zoho Recruit | `{slug}.zohorecruit.com/jobs/{page}` | data embedded in the careers page |
+| JOIN | `join.com/companies/{slug}` | data embedded in the careers page |
+| Paylocity | `recruiting.paylocity.com/Recruiting/Jobs/All/{id}` | data embedded in the careers page |
+| Paycom | `www.paycomonline.net/v4/ats/web.php/portal/{key}/career-page` | careers-portal API |
+| Hireology | `careers.hireology.com/{slug}` | careers API |
+| UKG Pro Recruiting | `recruiting.ultipro.com/{code}/JobBoard/{board}` | job-board search API |
+| Eightfold AI | `{company}.eightfold.ai/careers` (or the company's own domain) | careers-site API |
+| Phenom | the company's own careers site, e.g. `careers.{company}.com` | careers-site search API |
+| CareerPlug | `{slug}.careerplug.com/jobs` | careers page |
+| Dayforce | `jobs.dayforcehcm.com/{lang}/{client}/{board}` | careers-site API |
+| ADP Workforce Now | `workforcenow.adp.com/mascsr/default/mdf/recruitment/recruitment.html?cid={id}` | career-center API |
+| ApplicantPro / iSolved Hire | `{slug}.applicantpro.com/jobs` or `{slug}.isolvedhire.com/jobs` | careers-site API |
+| Paycor Recruiting | `recruitingbypaycor.com/career/CareerHome.action?clientId={id}` | careers page |
+| HiringThing | `{slug}.hiringthing.com` (and its resellers' domains) | careers page |
+| Manatal | `www.careers-page.com/{slug}` | open API |
+| Trakstar Hire | `{slug}.hire.trakstar.com` | job feed |
+| Factorial | `{slug}.factorialhr.com` (or `.factorial.es`, `.factorial.it`, …) | careers page |
+| Gem | `jobs.gem.com/{board}` | board GraphQL API |
+| HRMDirect (ClearCompany) | `{slug}.hrmdirect.com/employment/` | openings page |
+| softgarden | `{slug}.career.softgarden.de` | JSON job feed |
+| Cornerstone OnDemand | `{tenant}.csod.com/ux/ats/careersite/{n}/home` | careers-site API |
+| Keka | `{slug}.keka.com/careers` | careers API |
 
-iCIMS, Jobvite and JazzHR have no keyless feed, so their connectors read the public careers pages. If a company changes its page template, that connector may need an update.
+iCIMS, Jobvite, JazzHR and several smaller systems (CareerPlug, Paycor, HiringThing, Factorial, HRMDirect) have no keyless feed, so their connectors read the public careers pages. If a company changes its page template, that connector may need an update.
 
 Public job boards: Hacker News "Who is hiring", Remotive, Arbeitnow, Remote OK, Himalayas, Jobicy and We Work Remotely, added the same way,
 by pasting their link.
