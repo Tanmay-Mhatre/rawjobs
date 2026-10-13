@@ -43,6 +43,7 @@ export const ATS_TYPES = [
   "factorial",
   "gem",
   "hrmdirect",
+  "softgarden",
 ] as const;
 
 /**

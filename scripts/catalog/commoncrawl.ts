@@ -112,6 +112,7 @@ const QUERIES: { url: string; matchType?: "domain" }[] = [
   { url: "factorial.es", matchType: "domain" },
   { url: "jobs.gem.com/*" },
   { url: "hrmdirect.com", matchType: "domain" },
+  { url: "career.softgarden.de", matchType: "domain" },
 ];
 
 /**

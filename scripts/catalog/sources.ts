@@ -37,6 +37,7 @@ const KALIL = [
   "recruitee",
   "rippling",
   "smartrecruiters",
+  "softgarden",
   "successfactors",
   "taleo",
   "teamtailor",
