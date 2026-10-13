@@ -35,13 +35,14 @@ const daysAgo = (d: number) => iso(NOW.getTime() - d * DAY);
 
 // ---------- config: the public example, with fictional companies ----------
 
-type DemoCompany = { name: string; ats: AtsType; slug: string; industries: string[] };
+/** `visa`: on a government visa sponsor register (the directory's field): its UK jobs show "Sponsors visas". */
+type DemoCompany = { name: string; ats: AtsType; slug: string; industries: string[]; visa?: Record<string, string> };
 
 /** Your companies (the demo config's watchlist). */
 export const MY_COMPANIES: DemoCompany[] = [
-  { name: "Northwind Payments", ats: "greenhouse", slug: "northwindpay", industries: ["payments", "fintech"] },
+  { name: "Northwind Payments", ats: "greenhouse", slug: "northwindpay", industries: ["payments", "fintech"], visa: { GB: "2026-06-08" } },
   { name: "TideWave", ats: "lever", slug: "tidewave", industries: ["fintech", "digital-bank"] },
-  { name: "Acme Ledger", ats: "ashby", slug: "acmeledger", industries: ["payments"] },
+  { name: "Acme Ledger", ats: "ashby", slug: "acmeledger", industries: ["payments"], visa: { GB: "2026-06-08", US: "FY2026" } },
   { name: "Brightpath Bank", ats: "greenhouse", slug: "brightpathbank", industries: ["digital-bank", "lending"] },
   /** Dormant: scanned fine every day, never anything for you (the "remove?" flag). */
   { name: "Quillfeather", ats: "workable", slug: "quillfeather", industries: ["fintech"] },
@@ -251,7 +252,10 @@ function fullJob(s: Spec, n: number): Job {
 }
 
 const liveFull = LIVE.map(fullJob);
-const liveDash = liveFull.map(toDashboardJob);
+const liveDash = liveFull.map((j) => {
+  const visa = companyOf(j.company).visa;
+  return { ...toDashboardJob(j), ...(visa ? { visa } : {}) };
+});
 /** Jobs that pass your filters (jobs.json), and the rest (jobs-other.json). */
 const passing = liveDash.filter((j) => !j.why.gate);
 const failing = liveDash.filter((j) => j.why.gate);

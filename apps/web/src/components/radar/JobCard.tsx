@@ -1,3 +1,4 @@
+import { sponsorOf, sponsorTitle } from "@rawjobs/core/catalog/visa";
 import { displayName } from "@rawjobs/core/display-name";
 import { Bookmark, Star, X } from "lucide-react";
 import { forwardRef, type ReactNode } from "react";
@@ -62,6 +63,14 @@ export const JobCard = forwardRef<HTMLLIElement, Props>(function JobCard({ group
 
   const meta: ReactNode[] = [displayName(job.company), placeLine(group)];
   if (WORKPLACE[job.workplace]) meta.push(WORKPLACE[job.workplace]);
+  // Before the salary: a long salary would cut it off the line.
+  const sponsor = sponsorOf(group.jobs);
+  if (sponsor)
+    meta.push(
+      <span className="text-success-text" title={sponsorTitle(sponsor)}>
+        Sponsors visas
+      </span>,
+    );
   if (salary) meta.push(salary);
   if (status && status !== "dismissed") meta.push(<span className="text-ink">{STATUS_LABEL[status]}</span>);
   const evergreen = evergreenReason(job);

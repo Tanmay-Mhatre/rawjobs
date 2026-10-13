@@ -2,6 +2,7 @@ import { displayName } from "@rawjobs/core/display-name";
 import { INDUSTRY_BY_ID } from "@rawjobs/core/catalog/industries";
 import { citiesIn, placeOwner } from "@rawjobs/core/catalog/places";
 import { SENIORITY_LEVELS, type Seniority } from "@rawjobs/core/catalog/seniority";
+import { sponsorOf } from "@rawjobs/core/catalog/visa";
 import { groupKey } from "@rawjobs/core/dashboard";
 import { rankScore } from "@rawjobs/core/score";
 import { ATS_LABEL } from "./companies";
@@ -33,6 +34,8 @@ export type Filters = {
   salaryOnly: boolean;
   /** Leave out talent pools, open applications and reposts (evergreenReason). */
   hideEvergreen: boolean;
+  /** Only jobs whose company is on a visa sponsor register for the job's country (sponsorOf). */
+  visaOnly: boolean;
   status: StatusView;
   showFailed: boolean;
   showClosed: boolean;
@@ -92,6 +95,7 @@ export const DEFAULT_FILTERS: Filters = {
   match: "all",
   salaryOnly: false,
   hideEvergreen: false,
+  visaOnly: false,
   status: "",
   showFailed: false,
   showClosed: false,
@@ -167,6 +171,7 @@ function passes(j: Job, f: Filters, ctx: Ctx, terms: string[], skip?: FacetKey):
   if (f.status === "applied" && !(entry?.status && APPLIED_STAGES.includes(entry.status))) return false;
   if (f.salaryOnly && !j.salary) return false;
   if (f.hideEvergreen && evergreenReason(j)) return false;
+  if (f.visaOnly && !sponsorOf([j])) return false;
   if (skip !== "match" && f.match !== "all" && j.score < (f.match === "strong" ? ctx.min : Math.max(0, ctx.min - 20))) return false;
   if (skip !== "posted" && f.posted && ageDays(postedOrSeen(j), ctx.now) > f.posted) return false;
   if (skip !== "countries" && f.countries.length && !countriesOf(j).some((c) => f.countries.includes(c))) return false;
@@ -387,6 +392,7 @@ function chipsOf(f: Filters, ctx: Pick<Ctx, "min">): { key: string; label: strin
   if (f.match !== "all") chips.push({ key: "match", label: f.match === "strong" ? `Strong matches (${ctx.min}+)` : `Good matches (${Math.max(0, ctx.min - 20)}+)`, remove: { match: "all" } });
   if (f.salaryOnly) chips.push({ key: "salary", label: "Salary listed", remove: { salaryOnly: false } });
   if (f.hideEvergreen) chips.push({ key: "evergreen", label: "No talent pools or reposts", remove: { hideEvergreen: false } });
+  if (f.visaOnly) chips.push({ key: "visa", label: "Sponsors visas", remove: { visaOnly: false } });
   if (f.showFailed) chips.push({ key: "failed", label: "Including jobs that failed your filters", remove: { showFailed: false } });
   if (f.showClosed) chips.push({ key: "closed", label: "Including closed", remove: { showClosed: false } });
   if (f.showHidden) chips.push({ key: "hidden", label: "Including hidden", remove: { showHidden: false } });

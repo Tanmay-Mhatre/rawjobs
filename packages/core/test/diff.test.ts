@@ -165,7 +165,7 @@ companies:
   it("splits dashboard files: matches, the rest, descriptions; and tags companies with industries", () => {
     dir = mkdtempSync(join(tmpdir(), "rawjobs-"));
     mkdirSync(join(dir, "catalog"));
-    writeFileSync(join(dir, "catalog", "directory.json"), JSON.stringify({ companies: [{ key: "greenhouse:acme", tags: ["crypto"] }] }));
+    writeFileSync(join(dir, "catalog", "directory.json"), JSON.stringify({ companies: [{ key: "greenhouse:acme", tags: ["crypto"], visa: { GB: "2026-10-09", XX: "?" } }] }));
     const config = parseConfig(`
 profile:
   titles: { include: ["product manager"] }
@@ -182,6 +182,8 @@ companies:
     expect(matches.jobs.map((j: { id: string }) => j.id)).toEqual(["greenhouse:acme:1"]);
     expect(matches.jobs[0]).toMatchObject({ countries: ["United Arab Emirates"], seniority: "senior", hasDescription: true, group: "Acme|senior product manager" });
     expect(matches.jobs[0].description).toBeUndefined();
+    // The directory's visa sponsor lists ride along (unknown countries dropped).
+    expect(matches.jobs[0].visa).toEqual({ GB: "2026-10-09" });
     expect(read("jobs-other.json").jobs.map((j: { id: string }) => j.id)).toEqual(["greenhouse:acme:2"]);
     expect(read("descriptions.json")).toEqual({ "greenhouse:acme:1": "payments" });
     expect(readMeta(dir)!.companies[0]!.industries).toEqual(["crypto"]);

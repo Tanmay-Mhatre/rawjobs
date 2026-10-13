@@ -4,6 +4,7 @@ import { toDashboardJob } from "./dashboard";
 import { companyKey, connectors } from "./connectors";
 import type { CompanyRef, DashboardJob, Profile, ScoreBreakdown, Workplace } from "./schema";
 import { companyIndustries } from "./catalog/industries";
+import { cleanVisa } from "./catalog/visa";
 import { gateOf, rankScore, scoreJob } from "./score";
 import { rowPostedAt, type IndexedCompany } from "./suggest";
 
@@ -197,6 +198,7 @@ export function toIndexJobs(candidates: readonly Candidate[], opts: { live: Read
       estimated: true,
       companyKey: key,
       ...(c.company.tags?.length ? { industries: c.company.tags } : {}),
+      ...(cleanVisa(c.company.visa) ? { visa: cleanVisa(c.company.visa) } : {}),
     });
   }
   return out;

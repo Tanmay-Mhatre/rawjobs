@@ -9,6 +9,7 @@ export function MoreToggles({ filters, setFilters, olderCount, maxAgeDays }: { f
   const rows: [keyof Filters, string][] = [
     ["salaryOnly", "Salary listed"],
     ["hideEvergreen", "No talent pools or reposts"],
+    ["visaOnly", "Only companies that sponsor visas"],
     ...(maxAgeDays ? [["showOld", `Show older jobs${olderCount ? ` (${olderCount})` : ""}: posted over ${ageLimit(maxAgeDays)} ago`] as [keyof Filters, string]] : []),
     ["showFailed", "Include jobs that failed your filters"],
     ["showClosed", "Include closed jobs"],
@@ -46,7 +47,8 @@ export function MoreMenu({
   hideRules: number;
 }) {
   const extra =
-    [filters.salaryOnly, filters.hideEvergreen, filters.showOld, filters.showFailed, filters.showClosed, filters.showHidden, filters.olderIndex].filter(Boolean).length + filters.ats.length;
+    [filters.salaryOnly, filters.hideEvergreen, filters.visaOnly, filters.showOld, filters.showFailed, filters.showClosed, filters.showHidden, filters.olderIndex].filter(Boolean).length +
+    filters.ats.length;
   return (
     <FacetMenu
       label={extra ? `More · ${extra}` : "More"}

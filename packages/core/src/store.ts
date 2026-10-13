@@ -1,6 +1,7 @@
 import { mkdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { companyIndustries } from "./catalog/industries";
+import { cleanVisa } from "./catalog/visa";
 import { companyKey, companyOfJobId, jobCompanyKey } from "./connectors";
 import { toDashboardJob } from "./dashboard";
 import type { MergeResult } from "./diff";
@@ -44,7 +45,7 @@ export function summarize(run: RunResult, merged: MergeResult): RunSummary {
   };
 }
 
-type DirectoryRow = { key: string; ats: string; slug: string; site?: string; tags?: string[]; title_tags?: string[] };
+type DirectoryRow = { key: string; ats: string; slug: string; site?: string; tags?: string[]; title_tags?: string[]; visa?: unknown };
 
 /** The published directory's companies (data/catalog/directory.json), if built. */
 const directoryCompanies = (dir: string): DirectoryRow[] => {
@@ -85,13 +86,20 @@ export function saveRun(
 
   const directory = directoryCompanies(dir);
   const industries = directoryIndustries(directory);
+  const visas = new Map(
+    directory.flatMap((c) => {
+      const v = cleanVisa(c.visa);
+      return v ? [[c.key, v] as const] : [];
+    }),
+  );
   // Job ids carry jobCompanyKey(), which differs from the directory key for Workday and Taleo:
   // map one to the other so the Radar can match jobs to your companies and their industries.
   const keyOfJob = new Map([...directory.map((c) => [jobCompanyKey(c), c.key] as const), ...config.companies.map((c) => [jobCompanyKey(c), companyKey(c)] as const)]);
   const dashboard = jobs.map((j) => {
     const key = keyOfJob.get(companyOfJobId(j.id)) ?? companyOfJobId(j.id);
     const tags = industries.get(key);
-    return { ...toDashboardJob(j), companyKey: key, ...(tags ? { industries: tags } : {}) };
+    const visa = visas.get(key);
+    return { ...toDashboardJob(j), companyKey: key, ...(tags ? { industries: tags } : {}), ...(visa ? { visa } : {}) };
   });
   const file = (list: DashboardJob[]): DashboardJobsFile => ({ version: 2, generatedAt, jobs: list });
   writeFileAtomic(join(dir, "jobs.json"), JSON.stringify(file(dashboard.filter((j) => !j.why.gate))));

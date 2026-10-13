@@ -280,6 +280,16 @@ describe("your companies and directory jobs", () => {
     expect(applyFilters([pool, real], f({ hideEvergreen: true }), ctx).map((j) => j.id)).toEqual(["real"]);
   });
 
+  it("keeps only companies that sponsor visas in the job's country, when asked", () => {
+    const uk = job({ id: "uk", countries: ["United Kingdom"], visa: { GB: "2026-10-09" } });
+    const elsewhere = job({ id: "de", countries: ["Germany"], visa: { GB: "2026-10-09" } });
+    const none = job({ id: "none", countries: ["United Kingdom"] });
+    expect(applyFilters([uk, elsewhere, none], f(), ctx)).toHaveLength(3);
+    expect(applyFilters([uk, elsewhere, none], f({ visaOnly: true }), ctx).map((j) => j.id)).toEqual(["uk"]);
+    expect(activeChips(f({ visaOnly: true }), ctx)).toEqual([{ key: "visa", label: "Sponsors visas", remove: { visaOnly: false } }]);
+    expect(fromQuery(toQuery(f({ visaOnly: true }), "best"))!.filters.visaOnly).toBe(true);
+  });
+
   it("marks postings over two months old", () => {
     expect(isOlder(job({ postedAt: daysAgo(61) }), NOW)).toBe(true);
     expect(isOlder(job({ postedAt: daysAgo(59) }), NOW)).toBe(false);
