@@ -262,7 +262,7 @@ export function ScanChooser({ open, onClose, onStart }: { open: boolean; onClose
   );
 }
 
-/** Settings: what "Scan now" does. Saved right away (in this browser). */
+/** Settings: what "Scan now" does. Saved right away (on this computer too: KEPT_ON_DISK in lib/tracking.ts). */
 export function ScanPrefsPicker() {
   const prefs = useScanPrefs();
   const options: { id: string; label: string; hint: string; on: boolean; pick: () => void }[] = [

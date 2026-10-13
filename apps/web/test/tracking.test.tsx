@@ -2,8 +2,9 @@
 import { act, cleanup, renderHook, waitFor } from "@testing-library/react";
 import { useState } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { save } from "../src/lib/storage";
 import { setThemeChoice, useSavedAppearance } from "../src/lib/theme";
-import { resetTrackingSync, useSavedOnDisk } from "../src/lib/tracking";
+import { resetTrackingSync, restoreFromDisk, useSavedOnDisk } from "../src/lib/tracking";
 
 type Call = { method: string; body?: unknown };
 
@@ -127,5 +128,66 @@ describe("useSavedAppearance", () => {
     act(() => setThemeChoice("system"));
     await flushSaves();
     expect(api.file()).toMatchObject({ appearance: {} });
+  });
+});
+
+describe("restoreFromDisk", () => {
+  const flushSaves = () => vi.advanceTimersByTimeAsync(500);
+  const puts = (api: { calls: Call[] }) => api.calls.filter((c) => c.method === "PUT");
+
+  it("puts what your RawJobs folder remembers in this browser, before the page draws", async () => {
+    localStorage.setItem("rawjobs.checklist.dismissed", "true");
+    localStorage.setItem("rawjobs.companiesTab", '"mine"');
+    fakeApi({ browser: { "rawjobs.radar.seen": { latest: "2026-10-13T06:00:00Z" }, "rawjobs.scanScope": "all" } });
+    await restoreFromDisk();
+    expect(JSON.parse(localStorage.getItem("rawjobs.radar.seen")!)).toEqual({ latest: "2026-10-13T06:00:00Z" });
+    expect(localStorage.getItem("rawjobs.scanScope")).toBe('"all"');
+    // Kept keys the file doesn't have are cleared; keys that only live in the browser are left alone.
+    expect(localStorage.getItem("rawjobs.checklist.dismissed")).toBeNull();
+    expect(localStorage.getItem("rawjobs.companiesTab")).toBe('"mine"');
+  });
+
+  it("uploads this browser's copy when the file has none yet", async () => {
+    localStorage.setItem("rawjobs.scanAsk", "false");
+    localStorage.setItem("rawjobs.whyOpen", "true");
+    const api = fakeApi({ state: {} });
+    await restoreFromDisk();
+    await flushSaves();
+    expect(api.file()).toMatchObject({ browser: { "rawjobs.scanAsk": false } });
+    expect((api.file() as { browser: object }).browser).not.toHaveProperty("rawjobs.whyOpen");
+  });
+
+  it("saves a change to a kept key, and nothing for the others", async () => {
+    const api = fakeApi({ browser: {} });
+    await restoreFromDisk();
+    save("rawjobs.companiesTab", "mine");
+    await flushSaves();
+    expect(puts(api)).toEqual([]);
+    save("rawjobs.notThisOne", ["acme"]);
+    save("rawjobs.welcomeSeen", true);
+    await flushSaves();
+    expect(puts(api)).toEqual([{ method: "PUT", body: { browser: { "rawjobs.notThisOne": ["acme"], "rawjobs.welcomeSeen": true } } }]);
+  });
+
+  it("saves nothing while the local API can't be reached, so an old copy never overwrites the file", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => new Response("", { status: 500 })),
+    );
+    await restoreFromDisk();
+    save("rawjobs.scanScope", "all");
+    await flushSaves();
+    expect(vi.mocked(fetch).mock.calls.filter(([, init]) => init?.method === "PUT")).toEqual([]);
+  });
+
+  it("doesn't hold the page up for a slow server", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(() => new Promise<Response>(() => {})),
+    );
+    let done = false;
+    void restoreFromDisk(1000).then(() => (done = true));
+    await vi.advanceTimersByTimeAsync(1100);
+    expect(done).toBe(true);
   });
 });

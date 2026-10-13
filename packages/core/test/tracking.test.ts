@@ -46,6 +46,8 @@ describe("tracking", () => {
     expect(t.prefs).toEqual({ views: [] });
     expect(saveTracking({ appearance: { theme: "dark" } }, h).ok).toBe(true);
     expect(readTracking(h)).toMatchObject({ state: { a: { status: "saved" } }, prefs: { views: [] }, appearance: { theme: "dark" } });
+    expect(saveTracking({ browser: { "rawjobs.scanAsk": false } }, h).ok).toBe(true);
+    expect(readTracking(h)).toMatchObject({ state: { a: { status: "saved" } }, prefs: { views: [] }, browser: { "rawjobs.scanAsk": false } });
     expect(t.updatedAt).toMatch(/^\d{4}-/);
     // Written whole, never half: no temporary file is left behind.
     expect(readdirSync(join(h, "profile"))).toEqual(["tracking.json"]);
@@ -58,6 +60,7 @@ describe("tracking", () => {
     expect(saveTracking({ state: [] }, h).ok).toBe(false);
     expect(saveTracking({ prefs: "x" }, h).ok).toBe(false);
     expect(saveTracking({ appearance: "dark" }, h).ok).toBe(false);
+    expect(saveTracking({ browser: [] }, h).ok).toBe(false);
     expect(readTracking(h)!.state).toEqual({ a: {} });
   });
 
