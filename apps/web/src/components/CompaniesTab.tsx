@@ -427,6 +427,8 @@ export function CompaniesTab({ configured, meta, jobs, draft, loaded, saved, upd
             industries={saved.industries.length}
             packActions={packs}
             poolSize={poolSize}
+            onSeeMine={() => setTab("mine")}
+            onBrowse={() => setTab("browse")}
             offHint="Suggestions aren't available in this version of the app. Search the directory or add a company by link instead."
           />
         </TabPanel>

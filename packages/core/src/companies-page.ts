@@ -7,7 +7,7 @@ import type { CompanyCheck } from "./protocol";
 import { readResume } from "./resume";
 import { ATS_TYPES, type Profile } from "./schema";
 import type { DirectoryEntry } from "./scope";
-import type { IndexedCompany, SuggestResult } from "./suggest";
+import type { CompanySuggestion, IndexedCompany, SuggestResult } from "./suggest";
 
 /**
  * The Companies page's data beyond the suggestion lists: boards added here (kept until the shared
@@ -65,18 +65,10 @@ export function companyExtras(
   const source = (key: string) => rowsByKey.get(key) ?? dirByKey.get(key);
   const shapes = new Map<string, CompanyShape>();
 
-  // Past employers: the confirmed list, or (until there is one) what the resume says.
-  const roles = rolesFromResume(resumeText);
-  const names = profile.past_employers.length ? profile.past_employers : roles.map((r) => r.company);
-  const matched = matchEmployers(names, directory);
-  const roleOf = (name: string) => roles.find((r) => companyWords(r.company).join(" ") === companyWords(name).join(" "));
-  const lookalikeRows = matched
-    .map(({ name, match }) => {
-      const role = roleOf(name);
-      const seed = match ? { ...(rowsByKey.get(match.key) ?? match), name } : role ? seedFromRole(role) : undefined;
-      return seed ? { seed: name, in_directory: !!match, items: lookalikes(seed, candidates, source, shapes, { limit: 6 }) } : undefined;
-    })
-    .filter((r): r is NonNullable<typeof r> => !!r && r.items.length > 0)
+  const { matched, seeds } = employerSeeds(profile, directory, rowsByKey, resumeText);
+  const lookalikeRows = seeds
+    .map(({ name, seed, in_directory }) => ({ seed: name, in_directory, items: lookalikes(seed, candidates, source, shapes, { limit: 6 }) }))
+    .filter((r) => r.items.length > 0)
     .slice(0, 3);
   const pastEmployers = matched.map(({ name, match }) => ({
     name,
@@ -102,10 +94,7 @@ export function companyExtras(
   const wanted = new Set(profile.industries);
   // The best 8 per industry, and the next few ("more") the page shows one pick at a time.
   const packs = profile.industries.map((id) => {
-    const ranked = candidates
-      .filter((c) => c.industries.includes(id) && connectors[c.ats as keyof typeof connectors])
-      .sort((a, b) => b.score - a.score)
-      .slice(0, PACK_SIZE + PACK_MORE);
+    const ranked = packRanked(candidates, id);
     return { industry: id, items: ranked.slice(0, PACK_SIZE), more: ranked.slice(PACK_SIZE) };
   });
   const inIndustries = directory.filter((c) => c.tags?.some((t) => wanted.has(t)));
@@ -114,4 +103,52 @@ export function companyExtras(
     trackable: new Set(inIndustries.filter((c) => c.status === "live" && connectors[c.ats as keyof typeof connectors]).map((c) => companyWords(c.name).join(" "))).size,
   };
   return { pastEmployers, lookalikes: lookalikeRows, packs: packs.filter((p) => p.items.length), coverage };
+}
+
+/** A pack's companies: the best in one industry that RawJobs can scan, the 8 shown and the extras. */
+const packRanked = (candidates: readonly CompanySuggestion[], industry: string) =>
+  candidates
+    .filter((c) => c.industries.includes(industry) && connectors[c.ats as keyof typeof connectors])
+    .sort((a, b) => b.score - a.score)
+    .slice(0, PACK_SIZE + PACK_MORE);
+
+/** Your past employers (the confirmed list, or until there is one what the resume says) and the seeds lookalikes start from. */
+function employerSeeds(profile: Profile, directory: readonly DirectoryEntry[], rowsByKey: ReadonlyMap<string, IndexedCompany>, resumeText: string) {
+  const roles = rolesFromResume(resumeText);
+  const names = profile.past_employers.length ? profile.past_employers : roles.map((r) => r.company);
+  const matched = matchEmployers(names, directory);
+  const roleOf = (name: string) => roles.find((r) => companyWords(r.company).join(" ") === companyWords(name).join(" "));
+  const seeds = matched.flatMap(({ name, match }) => {
+    const role = roleOf(name);
+    const seed = match ? { ...(rowsByKey.get(match.key) ?? match), name } : role ? seedFromRole(role) : undefined;
+    return seed ? [{ name, seed, in_directory: !!match }] : [];
+  });
+  return { matched, seeds };
+}
+
+/**
+ * What each list left out because it's in My companies, so the page can tell "you've added them
+ * all" from "nothing found": how many per list and per past employer, and per pack the companies
+ * themselves (a finished pack offers Remove pack). `mine` is suggestCompanies run on your companies
+ * alone; each list is picked the way the page's lists are.
+ */
+export type AddedCounts = { hiring: number; watching: number; soon: number; like: Record<string, number>; packs: Record<string, string[]> };
+
+export function addedCounts(profile: Profile, mine: SuggestResult, indexed: readonly IndexedCompany[], directory: readonly DirectoryEntry[], resumeText = readResume().text ?? ""): AddedCounts {
+  const candidates = [...mine.hiringNow, ...mine.worthWatching];
+  const rowsByKey = new Map(indexed.map((c) => [c.key, c]));
+  const dirByKey = new Map(directory.map((c) => [c.key, c]));
+  const source = (key: string) => rowsByKey.get(key) ?? dirByKey.get(key);
+  const shapes = new Map<string, CompanyShape>();
+  const like: Record<string, number> = {};
+  for (const { name, seed } of employerSeeds(profile, directory, rowsByKey, resumeText).seeds) {
+    const n = lookalikes(seed, candidates, source, shapes, { limit: 6 }).length;
+    if (n) like[name] = n;
+  }
+  const packs: Record<string, string[]> = {};
+  for (const id of profile.industries) {
+    const keys = packRanked(candidates, id).map((c) => c.key);
+    if (keys.length) packs[id] = keys;
+  }
+  return { hiring: mine.hiringNow.length, watching: mine.worthWatching.length, soon: mine.notScannable.length, like, packs };
 }

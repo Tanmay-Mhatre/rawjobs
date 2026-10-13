@@ -24,6 +24,11 @@ export type CompanySuggestions = {
   packs: { industry: string; items: CompanySuggestion[]; more?: CompanySuggestion[] }[];
   /** Companies in your industries in the directory, and how many we can check. */
   coverage: { in_industries: number; trackable: number };
+  /**
+   * What each list left out because it's in My companies (so "all added" isn't "nothing found"): how
+   * many per list and per past employer, and each pack's companies by key. Older answers don't say: 0.
+   */
+  added?: { hiring: number; watching: number; soon: number; like: Record<string, number>; packs: Record<string, string[]> };
   index_generated_at: string;
   error?: string;
 };

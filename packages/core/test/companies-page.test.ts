@@ -2,7 +2,7 @@ import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
-import { companyExtras, PACK_MORE, PACK_SIZE, recordAdditions } from "../src/companies-page";
+import { addedCounts, companyExtras, PACK_MORE, PACK_SIZE, recordAdditions } from "../src/companies-page";
 import { suggestCompanies, type IndexedCompany } from "../src/suggest";
 import { profile } from "./helpers";
 import type { CompanyCheck } from "../src/protocol";
@@ -61,5 +61,41 @@ describe("companyExtras packs", () => {
     expect(packs[0]!.more.map((s) => s.name)).toEqual(["C9", "C10", "C11", "C12"]);
     expect(packs[0]!.more).toHaveLength(PACK_MORE);
     expect(packs[0]!.items[0]!.hires_in).toEqual({ remote: false, countries: ["United Arab Emirates"] });
+  });
+});
+
+describe("addedCounts", () => {
+  const now = new Date("2026-10-04T12:00:00Z");
+  const fintech = (i: number): IndexedCompany => ({
+    key: `lever:c${i}`,
+    name: `C${i}`,
+    ats: "lever",
+    slug: `c${i}`,
+    careers_url: `https://jobs.lever.co/c${i}`,
+    open_jobs: 20 - i,
+    rows: [["Senior Product Manager", "Dubai", "onsite", 2, 20 - i]],
+    tags: ["fintech"],
+  });
+
+  it("counts your companies the way each list and pack picks them, and per past employer", () => {
+    const indexed = Array.from({ length: 14 }, (_, i) => fintech(i + 1));
+    // Your past employer, in the directory: its lookalikes are the fintech companies hiring PMs.
+    const seed = { ...fintech(99), name: "Seedco", key: "lever:seedco", slug: "seedco" };
+    const p = profile({ industries: ["fintech"], past_employers: ["Seedco"] });
+    const mine = suggestCompanies(p, indexed, { now, limit: indexed.length });
+    const added = addedCounts(p, mine, [...indexed, seed], [seed], "");
+    expect(added.hiring).toBe(14);
+    expect(added.watching).toBe(0);
+    expect(added.soon).toBe(0);
+    // A pack holds the best 8 and the next 4.
+    expect(added.packs.fintech).toHaveLength(PACK_SIZE + PACK_MORE);
+    expect(added.packs.fintech![0]).toBe("lever:c1");
+    expect(added.like).toEqual({ Seedco: 6 });
+  });
+
+  it("is all zeros with no companies", () => {
+    const p = profile({ industries: ["fintech"] });
+    const mine = suggestCompanies(p, [], { now, limit: 0 });
+    expect(addedCounts(p, mine, [], [], "")).toEqual({ hiring: 0, watching: 0, soon: 0, like: {}, packs: {} });
   });
 });
