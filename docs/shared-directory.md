@@ -77,7 +77,7 @@ address only for rate limiting and stores none; for move reports it keeps a keye
 board (30 days) to count distinct reporters. Full details for users: [PRIVACY.md](../PRIVACY.md).
 
 The published data is CC BY 4.0 (`LICENSE-DATA` in the directory repo); sources and credits are
-in its `NOTICE.md`. Public job boards (Hacker News, Remotive, Arbeitnow, Remote OK, Himalayas) are
+in its `NOTICE.md`. Public job boards (Hacker News, Remotive, Arbeitnow, Remote OK, Himalayas, Jobicy, We Work Remotely) are
 never published.
 
 ## Denylist

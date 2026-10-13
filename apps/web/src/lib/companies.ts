@@ -53,6 +53,8 @@ export const ATS_LABEL: Record<string, string> = {
   arbeitnow: "Arbeitnow",
   remoteok: "Remote OK",
   himalayas: "Himalayas",
+  jobicy: "Jobicy",
+  weworkremotely: "We Work Remotely",
 };
 
 /** Hiring systems we can scan (every one we recognise). Anything else is kept as "not supported yet". */
