@@ -25,6 +25,7 @@ import { gem } from "./gem";
 import { hrmdirect } from "./hrmdirect";
 import { softgarden } from "./softgarden";
 import { cornerstone } from "./cornerstone";
+import { keka } from "./keka";
 import { greenhouse } from "./greenhouse";
 import { hibob } from "./hibob";
 import { icims } from "./icims";
@@ -95,6 +96,7 @@ export const connectors: Partial<Record<AtsType, Connector<any>>> = {
   hrmdirect,
   softgarden,
   cornerstone,
+  keka,
   // Job boards (JOB_BOARDS), last so a company's own board is always recognised first.
   hackernews,
   remotive,
@@ -245,6 +247,8 @@ export function careersUrl(c: DetectedCompany): string {
       return `https://${c.slug}.career.softgarden.de/`;
     case "cornerstone":
       return `https://${c.slug}.csod.com/ux/ats/careersite/1/home?c=${c.slug}`;
+    case "keka":
+      return `https://${c.slug}.keka.com/careers`;
     default:
       return "";
   }

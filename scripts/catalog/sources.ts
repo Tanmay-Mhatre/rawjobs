@@ -28,6 +28,7 @@ const KALIL = [
   "jazzhr",
   "jobvite",
   "join_com",
+  "keka",
   "lever",
   "oracle",
   "paycom",
