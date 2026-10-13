@@ -72,7 +72,7 @@ const keyOf = (ats: string, slug: string, shard?: string, site?: string) => comp
 function add(src: SourceId, b: { ats: string; slug: string; region?: string; shard?: string; site?: string; name?: string }) {
   if (!TRACKED.has(b.ats) || !b.slug) return;
   if ((b.ats === "workday" || b.ats === "ukg") && (!b.shard || !b.site)) return;
-  if (b.ats === "dayforce" && !b.site) return;
+  if ((b.ats === "dayforce" || b.ats === "adp") && !b.site) return;
   if ((b.ats === "taleo" && !b.site) || (b.ats === "oracle" && !b.shard)) return;
   const key = keyOf(b.ats, b.slug, b.shard, b.site);
   const prev = boards.get(key);

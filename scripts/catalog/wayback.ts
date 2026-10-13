@@ -98,6 +98,7 @@ const QUERIES: { url: string; matchType: "prefix" | "domain" }[] = [
   { url: "eightfold.ai", matchType: "domain" },
   { url: "careerplug.com", matchType: "domain" },
   { url: "jobs.dayforcehcm.com/", matchType: "prefix" },
+  { url: "workforcenow.adp.com/mascsr/default/mdf/recruitment/", matchType: "prefix" },
 ];
 
 type Progress = { pages?: number; next: number };
