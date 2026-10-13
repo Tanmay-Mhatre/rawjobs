@@ -1,14 +1,16 @@
 import { useEffect, useRef } from "react";
 import { canRunLocally } from "./data";
+import { load, onSave } from "./storage";
 
 /**
- * Your tracking (statuses, notes) and Radar preferences are saved on this computer
+ * Your tracking (statuses, notes), Radar preferences and what the dashboard remembers between visits
+ * (KEPT_ON_DISK below) are saved on this computer
  * (profile/tracking.json, through the local API) as well as in this browser. The browser copy shows
  * the page instantly; the file is what counts, so opening the dashboard at another address, or in
  * another browser, still finds them. The first page opened with this version uploads what its browser
  * had, so nothing saved before is lost.
  */
-export type TrackingPart = "state" | "prefs";
+export type TrackingPart = "state" | "prefs" | "browser";
 type Remote = Partial<Record<TrackingPart, unknown>>;
 
 const SAVE_DELAY = 400;
@@ -101,9 +103,86 @@ export function useSavedOnDisk<T>(part: TrackingPart, value: T, apply: (v: T) =>
   }, [part, value]);
 }
 
+/**
+ * What the dashboard remembers between visits that isn't tracking or preferences: the New line, what
+ * Scan now does, the Radar's own filters, what you dismissed, an unfinished setup. Each screen keeps
+ * reading and writing its key in this browser (storage.ts); a copy of these keys is the "browser"
+ * part of the file, so they come back at another address too. Anything else stays in the browser.
+ */
+export const KEPT_ON_DISK: readonly string[] = [
+  "rawjobs.radar.seen",
+  "rawjobs.scanScope",
+  "rawjobs.scanAsk",
+  "rawjobs.radar.v2",
+  "rawjobs.radar.everywhere",
+  "rawjobs.checklist.dismissed",
+  "rawjobs.goBackDismissed",
+  "rawjobs.notThisOne",
+  "rawjobs.setupDraft.v1",
+  "rawjobs.welcomeSeen",
+];
+
+/** This browser's copy of the kept keys (a cleared key, saved as null, is left out). */
+function browserCopy(): Record<string, unknown> {
+  const copy: Record<string, unknown> = {};
+  for (const key of KEPT_ON_DISK) {
+    const value = load<unknown>(key, null);
+    if (value !== null) copy[key] = value;
+  }
+  return copy;
+}
+
+/** Put the file's copy in this browser: what it has, and nothing it doesn't. */
+function restoreBrowser(saved: Record<string, unknown>) {
+  for (const key of KEPT_ON_DISK) {
+    try {
+      if (saved[key] == null) localStorage.removeItem(key);
+      else localStorage.setItem(key, JSON.stringify(saved[key]));
+    } catch {
+      // storage blocked: this visit uses the defaults
+    }
+  }
+}
+
+/** Set once the file's copy has been read: until then a save could overwrite newer ones there. */
+let browserReady = false;
+
+function takeBrowser(remote: Remote | null | undefined, initial: boolean) {
+  if (remote === undefined) return;
+  const saved = remote?.browser;
+  if (saved && typeof saved === "object" && !Array.isArray(saved)) restoreBrowser(saved as Record<string, unknown>);
+  // No copy yet: this browser's becomes the saved one.
+  else if (initial) queue("browser", browserCopy());
+  browserReady = true;
+}
+
+onSave((key) => {
+  if (browserReady && KEPT_ON_DISK.includes(key)) queue("browser", browserCopy());
+});
+
+/**
+ * Before the first render: bring this browser up to date with the file, so every screen starts from
+ * what you had, whichever address the dashboard is at. Waits at most `timeoutMs` for the local API;
+ * a slower answer is still taken when it comes. Does nothing on a hosted copy.
+ */
+export async function restoreFromDisk(timeoutMs = 1000): Promise<void> {
+  if (!canRunLocally) return;
+  const read = loadOnce().then((r) => takeBrowser(r, true));
+  await Promise.race([read, new Promise((done) => setTimeout(done, timeoutMs))]);
+}
+
+if (typeof document !== "undefined") {
+  // Back in this tab: pick up what another tab or address saved, for the screens you open next.
+  document.addEventListener("visibilitychange", () => {
+    if (!canRunLocally || document.visibilityState !== "visible" || !browserReady || pending.browser !== undefined) return;
+    void fetchTracking().then((r) => takeBrowser(r, false));
+  });
+}
+
 /** Tests: forget the page's first read and anything waiting to be saved. */
 export function resetTrackingSync() {
   first = null;
+  browserReady = false;
   clearTimeout(timer);
   timer = undefined;
   for (const k of Object.keys(pending) as TrackingPart[]) delete pending[k];

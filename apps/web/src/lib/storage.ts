@@ -14,6 +14,14 @@ export function save(key: string, value: unknown): void {
   } catch {
     // storage full or blocked: the session still works, it just won't persist
   }
+  onSaved?.(key);
+}
+
+let onSaved: ((key: string) => void) | undefined;
+
+/** Hear about every save (tracking.ts copies some keys to your RawJobs folder). */
+export function onSave(listener: (key: string) => void): void {
+  onSaved = listener;
 }
 
 const MIGRATED_KEY = "rawjobs.migrated.v1";
