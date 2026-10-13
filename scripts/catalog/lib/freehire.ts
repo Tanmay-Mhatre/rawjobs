@@ -20,6 +20,11 @@ export const BOARD_URL: Record<string, (b: string) => string | undefined> = {
   // The account subdomain of {account}.careerplug.com
   careerplug: (b) => (plain(b) && !b.includes(".") ? `https://${b}.careerplug.com/jobs` : undefined),
   comeet: (b) => (b.includes("/") ? `https://www.comeet.com/jobs/${b.split("/").map(enc).join("/")}` : undefined),
+  // "{cid}:{ccId}" of an ADP Workforce Now career center
+  adp: (b) => {
+    const [cid, ccId] = b.split(":");
+    return cid && ccId && plain(cid) && plain(ccId) ? `https://workforcenow.adp.com/mascsr/default/mdf/recruitment/recruitment.html?cid=${cid}&ccId=${ccId}` : undefined;
+  },
   // "{tenant}/{site}[/{culture}]" on jobs.dayforcehcm.com
   dayforce: (b) => {
     const [tenant, site, culture] = b.split("/");
