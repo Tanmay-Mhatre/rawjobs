@@ -9,6 +9,7 @@ import { join } from "node:path";
 import { careersUrl, guessName, isPlaceholderBoard, type DetectedCompany } from "@rawjobs/core";
 import { readChecks, type CheckRow } from "./lib/checks";
 import { readDenylist } from "./lib/denylist";
+import { directoryMoves, emptyMoves, type MovesFile } from "./lib/moves";
 import { catalogDir } from "./lib/paths";
 
 type Merged = { key: string; ats: string; slug: string; region?: string; shard?: string; site?: string; name?: string; families: string[]; confidence: "high" | "single" };
@@ -65,8 +66,20 @@ const rows = merged.map((b) => {
 // sandbox/training/test boards, which post fake or years-old jobs.
 // Companies removed on request never reach the directory (docs/shared-directory.md, "Denylist").
 const denied = readDenylist();
-const directory = rows.filter((r) => (r.status === "live" || r.status === "dormant") && !isPlaceholderBoard(r.name) && !denied(r));
-writeFileSync(join(catalogDir, "out", "directory.json"), JSON.stringify({ generated_at: new Date().toISOString(), count: directory.length, companies: directory }));
+const listed = rows.filter((r) => (r.status === "live" || r.status === "dormant") && !isPlaceholderBoard(r.name) && !denied(r));
+// Accepted moves (the directory repo's moves.json, MOVES_FILE): a moved-away board is never listed,
+// scanned or indexed again, and apps get the `moves` list. Moves aren't companies: they're kept out
+// of `count`, so the release gate's shrink checks still work.
+const movesFile = process.env.MOVES_FILE;
+const movesData = movesFile && existsSync(movesFile) ? (JSON.parse(readFileSync(movesFile, "utf8")) as MovesFile) : emptyMoves();
+const { movedAway } = directoryMoves(movesData, new Set());
+for (const r of listed)
+  if (movedAway.has(r.key) && r.status === "live") console.warn(`::warning::${r.key} moved away but answers again: left out (never trusted again; revert the move to bring it back).`);
+const directory = listed.filter((r) => !movedAway.has(r.key));
+// Only moves whose new board is in this directory (not itself moved away, not dropped as dead).
+const { moves, missingTo } = directoryMoves(movesData, new Set(directory.map((r) => r.key)));
+for (const to of missingTo) console.warn(`::warning::An accepted move's new board ${to} isn't in this directory: the move is left out.`);
+writeFileSync(join(catalogDir, "out", "directory.json"), JSON.stringify({ generated_at: new Date().toISOString(), count: directory.length, companies: directory, moves }));
 
 // ---- summary ----
 const STATUSES = ["live", "dormant", "dead", "unreachable", "error", "unchecked"] as const;
