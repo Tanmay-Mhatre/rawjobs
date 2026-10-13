@@ -323,6 +323,7 @@ export function MyCompanies({
         id={panelId(x)}
         name={companyLabel(x.r)}
         oldKey={x.key}
+        oldState={x.problem?.kind === "notAnswering" ? "Not answering" : "Not found"}
         oldUrl={/^https?:\/\//.test(x.r.input) ? x.r.input : careersUrl(x.r as never) || undefined}
         yours={new Map([...yours].filter(([k]) => k !== x.key))}
         onClose={() => {
@@ -608,8 +609,7 @@ function Status({
             </button>
           )}
           {suggestion}
-          {/* One timeout usually passes; after a few failed scans the link may be the problem. */}
-          {problem.scans > 1 && fixLink}
+          {fixLink}
         </>,
         "danger",
       );
