@@ -86,6 +86,7 @@ export const SCANNABLE = new Set([
   "join",
   "paylocity",
   "paycom",
+  "hireology",
 ]);
 const SLUG = /^[A-Za-z0-9][A-Za-z0-9._-]{0,99}$/;
 /** What `shard` may look like per system (the rest have none). */
