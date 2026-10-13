@@ -1,7 +1,7 @@
 import { existsSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { parseArgs } from "node:util";
-import { defaultDataDir, companyKey, loadConfig, companyExtras, suggestCompanies, readDirectory, ProfileSchema, type Config, type IndexedCompany } from "@rawjobs/core";
+import { defaultDataDir, companyKey, loadConfig, companyExtras, suggestCompanies, suggestCompaniesCached, readDirectory, ProfileSchema, type Config, type IndexedCompany } from "@rawjobs/core";
 import { readStdin } from "../util";
 
 /** Remember boards found by "Add by link" that the directory doesn't have yet. */
@@ -17,6 +17,8 @@ export async function cmdCompanies(args: string[]): Promise<number> {
       limit: { type: "string", short: "n", default: "30" },
       json: { type: "boolean", default: false },
       stdin: { type: "boolean", default: false },
+      /** Work the ranking out again instead of reading it from data/cache/suggestions/. */
+      "no-cache": { type: "boolean", default: false },
     },
   });
   if (positionals[0] !== "suggest") {
@@ -49,11 +51,15 @@ export async function cmdCompanies(args: string[]): Promise<number> {
   const started = Date.now();
   const limit = Number(values.limit) || 30;
   // A deep pool for lookalikes and packs; the lists shown are its first `limit` (same order).
-  const pool = suggestCompanies(profile, index.companies, { exclude, others, limit: 400, indexGeneratedAt: new Date(index.generated_at) });
+  const opts = { exclude, others, limit: 400, indexGeneratedAt: new Date(index.generated_at) };
+  const files = ["index.json", "directory.json", "additions.json"].map((f) => resolve(values.data, "catalog", f));
+  const { result: pool, cached } = values["no-cache"]
+    ? { result: suggestCompanies(profile, index.companies, opts), cached: false }
+    : suggestCompaniesCached(profile, index.companies, { ...opts, dataDir: values.data, files });
   const result = { hiringNow: pool.hiringNow.slice(0, limit), worthWatching: pool.worthWatching.slice(0, limit), notScannable: pool.notScannable.slice(0, limit), scanned: pool.scanned };
   const extra = companyExtras(profile, pool, index.companies, directory, exclude);
   if (values.json) {
-    console.log(JSON.stringify({ ...result, ...extra, index_generated_at: index.generated_at, took_ms: Date.now() - started }));
+    console.log(JSON.stringify({ ...result, ...extra, index_generated_at: index.generated_at, took_ms: Date.now() - started, cached }));
     return 0;
   }
   console.log(`Scanned ${result.scanned} companies in ${Date.now() - started} ms (index from ${index.generated_at.slice(0, 10)}).\n`);
