@@ -95,6 +95,7 @@ const QUERIES: { url: string; matchType: "prefix" | "domain" }[] = [
   { url: "careers.hireology.com/", matchType: "prefix" },
   { url: "ultipro.com", matchType: "domain" },
   { url: "rec.pro.ukg.net", matchType: "domain" },
+  { url: "eightfold.ai", matchType: "domain" },
 ];
 
 type Progress = { pages?: number; next: number };

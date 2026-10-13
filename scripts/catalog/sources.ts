@@ -18,6 +18,7 @@ const KALIL = [
   "ashby",
   "bamboohr",
   "breezy",
+  "eightfold",
   "greenhouse",
   "icims",
   "jazzhr",
@@ -43,6 +44,7 @@ const KALIL = [
 export const OPENINGS_MCP = [
   "ashby",
   "bamboohr",
+  "eightfold",
   "greenhouse",
   "icims",
   "join",
