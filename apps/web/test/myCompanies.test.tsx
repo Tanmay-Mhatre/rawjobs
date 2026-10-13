@@ -236,13 +236,26 @@ describe("MyCompanies rows", () => {
     expect(table.queryByLabelText("New careers link for Globex")).toBeNull();
   });
 
-  it("offers Update link on a company that hasn't answered for a few scans, not after one", () => {
+  it("offers Update link on a company that isn't answering, from the first failed scan", () => {
     const list = [row("Initech", "initech"), row("Hooli", "hooli")];
     const m = meta(3, ["initech", "hooli"], (s, i) => (s === "initech" && i < 2 ? { ok: false, error: "timeout" } : s === "hooli" && i === 0 ? { ok: false, error: "timeout" } : {}));
     const { container } = render(<MyCompanies rows={list} savedKeys={keys(list)} meta={m} onUpdateLink={() => {}} onRemove={() => {}} onRemoveMany={() => {}} />);
     const table = within(container.querySelector("table")!);
     expect(table.getByRole("button", { name: "Update Initech's careers link" })).toBeTruthy();
-    expect(table.queryByRole("button", { name: "Update Hooli's careers link" })).toBeNull();
+    expect(table.getByRole("button", { name: "Update Hooli's careers link" })).toBeTruthy();
+  });
+
+  it("says the old page isn't answering (not that it's gone) when updating such a company", async () => {
+    const list = [row("Hooli", "hooli")];
+    const m = meta(1, ["hooli"], () => ({ ok: false, error: "timeout" }));
+    const { container } = render(<MyCompanies rows={list} savedKeys={keys(list)} meta={m} onUpdateLink={() => {}} onRemove={() => {}} onRemoveMany={() => {}} />);
+    const table = within(container.querySelector("table")!);
+    fireEvent.click(table.getByRole("button", { name: "Update Hooli's careers link" }));
+    fireEvent.change(table.getByLabelText("New careers link for Hooli"), { target: { value: "https://jobs.ashbyhq.com/globex-inc" } });
+    fireEvent.click(table.getByRole("button", { name: "Check link" }));
+    await table.findByRole("button", { name: "Use this link" });
+    expect(table.getAllByText("Not answering")).toHaveLength(2);
+    expect(table.queryByText("Not found")).toBeNull();
   });
 
   it("puts words only on problems, each with its fix", () => {
