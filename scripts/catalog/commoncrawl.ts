@@ -96,6 +96,7 @@ const QUERIES: { url: string; matchType?: "domain" }[] = [
   { url: "careers.hireology.com/*" },
   { url: "ultipro.com", matchType: "domain" },
   { url: "rec.pro.ukg.net", matchType: "domain" },
+  { url: "eightfold.ai", matchType: "domain" },
 ];
 
 /**
