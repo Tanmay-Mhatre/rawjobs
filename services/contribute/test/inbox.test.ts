@@ -185,3 +185,184 @@ describe("contribution inbox", () => {
     ]);
   });
 });
+
+describe("move reports", () => {
+  const SECRET = "reporter-secret";
+  const auth = { authorization: "Bearer secret-token" };
+  const fromIp = (ip: string) => ({ "cf-connecting-ip": ip });
+  const move = (from = "old", to = "new", name = "Acme") => ({ name, from: { ats: "lever", slug: from }, to: { ats: "ashby", slug: to } });
+  /** Counts KV writes, which matter on the free plan. */
+  function movesEnv(extra: Partial<Env> = {}) {
+    const env = fakeEnv(true, { REPORTER_SECRET: SECRET, ...extra });
+    const writes: { key: string; ttl?: number }[] = [];
+    const put = env.INBOX.put.bind(env.INBOX);
+    (env.INBOX as unknown as { put: unknown }).put = async (k: string, v: string, o?: { expirationTtl?: number }) => {
+      writes.push({ key: k, ttl: o?.expirationTtl });
+      return put(k, v);
+    };
+    return Object.assign(env, { writes });
+  }
+  const records = (env: { store: Map<string, string> }) => [...env.store.entries()].filter(([k]) => k.startsWith("m:")).map(([k, v]) => [k, JSON.parse(v)] as [string, Record<string, unknown>]);
+
+  it("stores a well-shaped move with a keyed reporter hash and no IP", async () => {
+    const env = movesEnv();
+    const res = await post(
+      env,
+      "/v1/moves",
+      { client: "rawjobs/0.7.0", moves: [{ name: " Acme <Inc>\n", from: { ats: "lever", slug: "acme", name: "x" }, to: { ats: "workday", slug: "acme", shard: "wd3", site: "External" } }] },
+      fromIp("203.0.113.7"),
+    );
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ accepted: 1, skipped: 0 });
+    const [[key, record]] = records(env) as [[string, Record<string, unknown>]];
+    expect(key).toBe("m:lever:acme||>workday:acme|wd3|external");
+    expect(record).toMatchObject({ name: "Acme Inc", from: { ats: "lever", slug: "acme" }, to: { ats: "workday", slug: "acme", shard: "wd3", site: "External" } });
+    expect(Object.keys(record).sort()).toEqual(["first_at", "from", "last_at", "name", "reporters", "to"]);
+    expect(record.reporters).toEqual([expect.stringMatching(/^[0-9a-f]{16}$/)]);
+    expect(env.writes).toEqual([
+      { key, ttl: 30 * 86_400 },
+      { key: expect.stringMatching(/^md:\d{4}-\d{2}-\d{2}$/), ttl: expect.any(Number) },
+    ]);
+  });
+
+  it("never stores an IP address in any value", async () => {
+    const env = movesEnv();
+    const ips = ["203.0.113.7", "198.51.100.23", "2001:db8::1"];
+    for (const ip of ips) await post(env, "/v1/moves", { moves: [move(), move("other", "elsewhere")] }, fromIp(ip));
+    await post(env, "/v1/contributions", { boards: [{ ats: "lever", slug: "acme" }] }, fromIp(ips[0]!));
+    expect(records(env)).toHaveLength(2);
+    for (const [k, v] of env.store) for (const ip of ips) expect(`${k} ${v}`).not.toContain(ip);
+  });
+
+  it("refuses badly shaped moves", async () => {
+    const env = movesEnv();
+    const bad = [
+      { name: "Acme", from: { ats: "hackernews", slug: "acme" }, to: { ats: "ashby", slug: "acme" } },
+      { name: "Acme", from: { ats: "lever", slug: "https://jobs.lever.co/acme" }, to: { ats: "ashby", slug: "acme" } },
+      { name: "Acme", from: { ats: "lever", slug: "acme" }, to: { ats: "ashby", slug: "jobs.ashbyhq.com/acme?ref=me" } },
+      { name: "Acme", from: { ats: "lever", slug: "acme" }, to: { ats: "lever", slug: "ACME" } },
+      { name: "Acme", from: { ats: "workday", slug: "bank" }, to: { ats: "ashby", slug: "bank" } },
+      { name: "  <>  ", from: { ats: "lever", slug: "acme" }, to: { ats: "ashby", slug: "acme" } },
+      { from: { ats: "lever", slug: "acme" }, to: { ats: "ashby", slug: "acme" } },
+      { name: "Acme", from: { ats: "lever", slug: "acme" } },
+    ];
+    for (const m of bad) expect((await post(env, "/v1/moves", { moves: [m] })).status, JSON.stringify(m)).toBe(400);
+    expect((await post(env, "/v1/moves", { moves: Array.from({ length: 11 }, (_, i) => move(`old${i}`)) })).status).toBe(400);
+    expect((await post(env, "/v1/moves", { moves: "nope" })).status).toBe(400);
+    expect((await post(env, "/v1/moves", null)).status).toBe(400);
+    expect((await call(env, "/v1/moves", { method: "POST", body: "x".repeat(11_000) })).status).toBe(400);
+    expect(env.writes).toEqual([]);
+  });
+
+  it("takes 10 moves, skips the bad and repeated ones, and cuts long names to 120 characters", async () => {
+    const env = movesEnv();
+    const moves = [...Array.from({ length: 8 }, (_, i) => move(`old${i}`)), move("old0"), { ...move("x"), to: { ats: "lever", slug: "x" } }];
+    moves[1] = move("old1", "new", "N".repeat(200));
+    expect(await (await post(env, "/v1/moves", { moves })).json()).toEqual({ accepted: 8, skipped: 2 });
+    expect(records(env).find(([k]) => k.startsWith("m:lever:old1"))![1].name).toHaveLength(120);
+  });
+
+  it("writes nothing for a repeat from the same reporter, and adds a new reporter", async () => {
+    const env = movesEnv();
+    await post(env, "/v1/moves", { moves: [move()] }, fromIp("203.0.113.7"));
+    const before = env.writes.length;
+    expect(await (await post(env, "/v1/moves", { moves: [move()] }, fromIp("203.0.113.7"))).json()).toEqual({ accepted: 0, skipped: 1 });
+    expect(env.writes.length).toBe(before);
+    expect(await (await post(env, "/v1/moves", { moves: [move()] }, fromIp("198.51.100.23"))).json()).toEqual({ accepted: 1, skipped: 0 });
+    // One write for the changed record, none for the day counter (no new record).
+    expect(env.writes.slice(before).map((w) => w.key)).toEqual(["m:lever:old||>ashby:new||"]);
+    const [[, record]] = records(env) as [[string, { reporters: string[] }]];
+    expect(new Set(record.reporters).size).toBe(2);
+  });
+
+  it("keeps at most 20 reporters", async () => {
+    const env = movesEnv();
+    for (let i = 0; i < 25; i++) await post(env, "/v1/moves", { moves: [move()] }, fromIp(`203.0.113.${i}`));
+    const [[, record]] = records(env) as [[string, { reporters: string[] }]];
+    expect(record.reporters).toHaveLength(20);
+    expect(env.writes.filter((w) => w.key.startsWith("m:"))).toHaveLength(20);
+  });
+
+  it("stops new records at MOVES_DAILY_CAP, all or nothing, but still counts reporters on known ones", async () => {
+    const env = movesEnv({ MOVES_DAILY_CAP: "3" });
+    expect((await post(env, "/v1/moves", { moves: [move("a"), move("b")] }, fromIp("1.1.1.1"))).status).toBe(200);
+    expect((await post(env, "/v1/moves", { moves: [move("c"), move("d")] }, fromIp("1.1.1.1"))).status).toBe(429);
+    expect((await post(env, "/v1/moves", { moves: [move("c")] }, fromIp("1.1.1.1"))).status).toBe(200);
+    expect((await post(env, "/v1/moves", { moves: [move("e")] }, fromIp("1.1.1.1"))).status).toBe(429);
+    expect(await (await post(env, "/v1/moves", { moves: [move("a")] }, fromIp("2.2.2.2"))).json()).toEqual({ accepted: 1, skipped: 0 });
+    expect(records(env)).toHaveLength(3);
+  });
+
+  it("defaults the daily cap to 100", async () => {
+    const env = movesEnv();
+    for (let i = 0; i < 10; i++) await post(env, "/v1/moves", { moves: Array.from({ length: 10 }, (_, j) => move(`o${i}-${j}`)) });
+    expect((await post(env, "/v1/moves", { moves: [move("one-more")] })).status).toBe(429);
+    expect(records(env)).toHaveLength(100);
+  });
+
+  it("answers 503 without REPORTER_SECRET and stores nothing", async () => {
+    const env = movesEnv({ REPORTER_SECRET: undefined });
+    expect((await post(env, "/v1/moves", { moves: [move()] })).status).toBe(503);
+    expect(env.store.size).toBe(0);
+  });
+
+  it("shares the contributions rate limiter", async () => {
+    const env = fakeEnv(false, { REPORTER_SECRET: SECRET });
+    expect((await post(env, "/v1/moves", { moves: [move()] })).status).toBe(429);
+  });
+
+  it("lists and acknowledges moves only with the token, without the hashes", async () => {
+    const env = movesEnv();
+    await post(env, "/v1/moves", { moves: [move()] }, fromIp("1.1.1.1"));
+    await post(env, "/v1/moves", { moves: [move()] }, fromIp("2.2.2.2"));
+    await post(env, "/v1/contributions", { boards: [{ ats: "lever", slug: "acme" }] });
+    expect((await call(env, "/v1/moves/pending")).status).toBe(401);
+    expect((await call(env, "/v1/moves/pending", { headers: { authorization: "Bearer wrong-token" } })).status).toBe(401);
+    expect((await post(env, "/v1/moves/ack", { ids: ["m:lever:old||>ashby:new||"] })).status).toBe(401);
+    expect(records(env)).toHaveLength(1);
+
+    const res = (await (await call(env, "/v1/moves/pending", { headers: auth })).json()) as { items: Record<string, unknown>[]; cursor?: string };
+    expect(res).toEqual({
+      items: [
+        {
+          id: "m:lever:old||>ashby:new||",
+          name: "Acme",
+          from: { ats: "lever", slug: "old" },
+          to: { ats: "ashby", slug: "new" },
+          reporters: 2,
+          first_at: expect.any(String),
+          last_at: expect.any(String),
+        },
+      ],
+    });
+    const [[, stored]] = records(env) as [[string, { reporters: string[] }]];
+    for (const h of stored.reporters) expect(JSON.stringify(res)).not.toContain(h);
+
+    // The contributions list and ack don't see moves, and the moves ack doesn't touch contributions.
+    const contrib = (await (await call(env, "/v1/pending", { headers: auth })).json()) as { items: { id: string }[] };
+    expect(contrib.items.map((i) => i.id.slice(0, 2))).toEqual(["c:"]);
+    expect(await (await post(env, "/v1/ack", { ids: ["m:lever:old||>ashby:new||"] }, auth)).json()).toEqual({ removed: 0 });
+    expect(await (await post(env, "/v1/moves/ack", { ids: [contrib.items[0]!.id, "m:lever:old||>ashby:new||"] }, auth)).json()).toEqual({ removed: 1 });
+    expect(records(env)).toHaveLength(0);
+    expect(contributions(env)).toHaveLength(1);
+  });
+
+  it("pages past 500 with a cursor", async () => {
+    const env = movesEnv();
+    const rec = JSON.stringify({ name: "A", from: { ats: "lever", slug: "a" }, to: { ats: "ashby", slug: "a" }, first_at: "", last_at: "", reporters: ["0123456789abcdef"] });
+    for (let i = 0; i < 501; i++) env.store.set(`m:${String(i).padStart(4, "0")}`, rec);
+    env.store.set("c:x", JSON.stringify({ boards: [], received_at: "" }));
+    const first = (await (await call(env, "/v1/moves/pending", { headers: auth })).json()) as { items: unknown[]; cursor?: string };
+    expect([first.items.length, typeof first.cursor]).toEqual([500, "string"]);
+    const second = (await (await call(env, `/v1/moves/pending?cursor=${first.cursor}`, { headers: auth })).json()) as { items: { id: string }[]; cursor?: string };
+    expect([second.items.map((i) => i.id), second.cursor]).toEqual([["m:0500"], undefined]);
+  });
+
+  it("acknowledges at most 1,000 ids a request", async () => {
+    const env = movesEnv();
+    for (let i = 0; i < 1001; i++) env.store.set(`m:${i}`, "{}");
+    const ids = [...env.store.keys()];
+    expect(await (await post(env, "/v1/moves/ack", { ids }, auth)).json()).toEqual({ removed: 1000 });
+    expect(env.store.size).toBe(1);
+  });
+});
