@@ -169,6 +169,8 @@ export function CompaniesTab({ configured, meta, jobs, draft, loaded, saved, upd
   };
   /** Bumped each time a "failing" link is followed: My companies switches to Needs attention. */
   const [attention, setAttention] = useState(() => (wantsAttention() ? 1 : 0));
+  /** Bumped by "See hidden companies" after hiding a suggestion: My companies opens its Hidden panel. */
+  const [showHidden, setShowHidden] = useState(0);
   // biome-ignore lint/correctness/useExhaustiveDependencies: registers the hashchange listener once; setTab is a state setter
   useEffect(() => {
     const follow = () => {
@@ -373,6 +375,7 @@ export function CompaniesTab({ configured, meta, jobs, draft, loaded, saved, upd
               if (h.name) onUnhideName(h.name);
             }}
             attention={attention}
+            showHidden={showHidden}
             empty={coverage ?? "You haven't added any companies yet."}
             query={searchMine ? q : ""}
             noMatch={
@@ -412,6 +415,10 @@ export function CompaniesTab({ configured, meta, jobs, draft, loaded, saved, upd
             onRemoveMany={removeMany}
             onMute={(key) => update({ muted: [...new Set([...draft.muted, key])], companies: draft.companies.filter((r) => keyOf(r) !== key) })}
             onUnmute={(key) => update({ muted: draft.muted.filter((k) => k !== key) })}
+            onShowHidden={() => {
+              setTab("mine");
+              setShowHidden((n) => n + 1);
+            }}
             onRetry={() => setRetrying(true)}
             industries={saved.industries.length}
             packActions={packs}
