@@ -20,6 +20,11 @@ export const BOARD_URL: Record<string, (b: string) => string | undefined> = {
   // The account subdomain of {account}.careerplug.com
   careerplug: (b) => (plain(b) && !b.includes(".") ? `https://${b}.careerplug.com/jobs` : undefined),
   comeet: (b) => (b.includes("/") ? `https://www.comeet.com/jobs/${b.split("/").map(enc).join("/")}` : undefined),
+  // "{tenant}/{site}[/{culture}]" on jobs.dayforcehcm.com
+  dayforce: (b) => {
+    const [tenant, site, culture] = b.split("/");
+    return tenant && site && plain(tenant) && plain(site) ? `https://jobs.dayforcehcm.com/${culture && /^[a-z]{2}-[A-Z]{2}$/.test(culture) ? culture : "en-US"}/${tenant}/${site}` : undefined;
+  },
   // "{host}/{tenant domain}"; kept as a board directly in freehireBoards (custom hosts included).
   eightfold: () => undefined,
   freshteam: (b) => (plain(b) ? `https://${b}.freshteam.com/jobs` : undefined),

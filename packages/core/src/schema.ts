@@ -33,6 +33,7 @@ export const ATS_TYPES = [
   "eightfold",
   "phenom",
   "careerplug",
+  "dayforce",
 ] as const;
 
 /**

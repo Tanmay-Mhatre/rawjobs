@@ -13,6 +13,7 @@ import { ukg } from "./ukg";
 import { eightfold } from "./eightfold";
 import { phenom } from "./phenom";
 import { careerplug } from "./careerplug";
+import { dayforce } from "./dayforce";
 import { greenhouse } from "./greenhouse";
 import { hibob } from "./hibob";
 import { icims } from "./icims";
@@ -71,6 +72,7 @@ export const connectors: Partial<Record<AtsType, Connector<any>>> = {
   eightfold,
   phenom,
   careerplug,
+  dayforce,
   // Job boards (JOB_BOARDS), last so a company's own board is always recognised first.
   hackernews,
   remotive,
@@ -197,6 +199,8 @@ export function careersUrl(c: DetectedCompany): string {
       return `https://${c.slug}`;
     case "careerplug":
       return `https://${c.slug}.careerplug.com/jobs`;
+    case "dayforce":
+      return c.site ? `https://jobs.dayforcehcm.com/${c.shard ?? "en-US"}/${c.slug}/${c.site}` : "";
     default:
       return "";
   }
