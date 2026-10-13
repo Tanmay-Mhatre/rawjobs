@@ -136,7 +136,7 @@ function Page({ d, pastEmployers = [], onShowHidden }: { d: CompanySuggestions; 
         industries={2}
         packActions={actions}
       />
-      <Tray visit={visit.visit} watched={watched} actions={actions} />
+      <Tray visit={visit.visit} actions={actions} />
       <span data-testid="count">{companies.length}</span>
     </>
   );
@@ -169,8 +169,7 @@ describe("Starter packs: next in this pack", () => {
     fireEvent.click(p().getByRole("button", { name: "Ledger, add to My companies. New in this pack" }));
     expect(p().getByRole("button", { name: "Sei Labs, add to My companies" })).toBeTruthy();
     expect(p().getByRole("button", { name: "Coinflow, add to My companies. New in this pack" })).toBeTruthy();
-    fireEvent.click(within(screen.getByRole("region", { name: "Added this visit" })).getByRole("button", { name: "Review" }));
-    expect(screen.getByRole("region", { name: "Added this visit" }).textContent).toContain("Crypto & Web3 2");
+    expect(screen.getByRole("region", { name: "Last change" }).textContent).toContain("Added Ledger");
   });
 });
 
