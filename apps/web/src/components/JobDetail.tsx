@@ -9,6 +9,7 @@ import { copyText } from "../lib/clipboard";
 import { useDescription, type Job, type Profile } from "../lib/data";
 import { formatDate, formatSalary, placeSummary, postedOrSeen, timeAgo } from "../lib/format";
 import { atsLabel, evergreenReason, INDEX_MAX_AGE_DAYS, isOlder } from "../lib/filters";
+import { isStale, staleReasons } from "../lib/stale";
 import { load, save } from "../lib/storage";
 import { PIPELINE, STATUS_LABEL, type Entry, type Status } from "../lib/userState";
 import { Dialog } from "./Dialog";
@@ -129,12 +130,16 @@ export function JobDetail(p: JobDetailProps) {
   const evergreen = evergreenReason(job);
   // On a government list of visa sponsors for the job's country (any of the role's places).
   const sponsor = sponsorOf(postings ?? [job]);
+  // The loaded description counts too, for data written before descriptionLength existed.
+  const staleCtx = { descriptionLength: description ? description.trim().length : undefined };
+  const stale = isStale(job, staleCtx) ? staleReasons(job, staleCtx) : null;
   const meta: ReactNode[] = [
     job.company,
     places,
     ...(workplace ? [workplace] : []),
     SENIORITY_LABEL[job.seniority],
-    isOlder(job) && job.status === "open" ? (
+    // The stale callout says how old it is: the meta keeps the plain date then.
+    isOlder(job) && job.status === "open" && !stale ? (
       <span key="older" className="text-warning-text" title="Most roles are filled within two months. It's still listed, but may no longer be hiring.">
         {job.postedAt ? "Posted" : "First seen"} {age} ago · may be filled
       </span>
@@ -158,7 +163,7 @@ export function JobDetail(p: JobDetailProps) {
           </span>,
         ]
       : []),
-    ...(evergreen === "reposted"
+    ...(evergreen === "reposted" && !stale
       ? [
           <span key="reposted" className="text-warning-text" title={`Taken down and posted again on ${formatDate(job.repostedAt)}: dated from the first posting`}>
             Reposted
@@ -233,6 +238,18 @@ export function JobDetail(p: JobDetailProps) {
         {/* Expanded: the description gets the wide column, everything else sits beside it. */}
         {p.expanded && descriptionSection}
         <div className={cx("grid min-w-0 grid-cols-1 content-start gap-6", p.expanded && "md:col-start-2 md:row-start-1")}>
+          {stale && (
+            <section className="rj-drawer__section">
+              <h3 className="rj-h text-warning-text">May be stale</h3>
+              <ul className="list-disc space-y-1 pl-5 type-small">
+                {stale.map((r) => (
+                  <li key={r}>{r}</li>
+                ))}
+              </ul>
+              <p className="type-small text-muted">It's still on the company's board, so it may be real. Worth asking a recruiter before spending time on it.</p>
+            </section>
+          )}
+
           <WhyItMatches job={job} profile={profile} yours={!!p.yours} />
 
           {job.estimated && <NotCheckedYet indexGeneratedAt={p.indexGeneratedAt} onCheck={p.onCheck} />}

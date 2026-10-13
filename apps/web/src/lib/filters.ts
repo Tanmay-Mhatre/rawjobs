@@ -9,6 +9,7 @@ import { ATS_LABEL } from "./companies";
 import type { Job, Profile } from "./data";
 import { ageDays, postedOrSeen } from "./format";
 import { hiddenByRules, type HideRule } from "./notForMe";
+import { isStale } from "./stale";
 import type { Status, UserState } from "./userState";
 
 export type Workplace = Job["workplace"];
@@ -32,7 +33,7 @@ export type Filters = {
   ats: string[];
   match: "all" | "good" | "strong";
   salaryOnly: boolean;
-  /** Leave out talent pools, open applications and reposts (evergreenReason). */
+  /** Leave out talent pools, open applications, reposts (evergreenReason) and jobs that may be stale (isStale). */
   hideEvergreen: boolean;
   /** Only jobs whose company is on a visa sponsor register for the job's country (sponsorOf). */
   visaOnly: boolean;
@@ -55,8 +56,7 @@ export const INDEX_MAX_AGE_DAYS = 30;
  * filled in 45-60 days; senior ones can take three months, so three months keeps those and drops the stale tail.
  */
 export const DEFAULT_MAX_AGE_DAYS = 90;
-/** Postings older than this are still shown, but marked as maybe filled. */
-export const OLDER_DAYS = 60;
+export { isOlder, OLDER_DAYS } from "./stale";
 /** Titles of postings that collect applications rather than fill a role. */
 const EVERGREEN_TITLE =
   /talent (pool|community|network|pipeline)|general application|open application|spontaneous application|expression of interest|speculative application|(for )?future (opportunit|openings?|roles?)|always hiring|interest form/i;
@@ -64,22 +64,24 @@ const EVERGREEN_TITLE =
 /**
  * Why a job may not be a live opening, if it may not: a talent pool or open application ("Join our
  * Talent Community"), or the same role taken down and posted again. Shown on the job, ranked lower in
- * Best match, and can be hidden (More › No talent pools or reposts).
+ * Best match, and can be hidden (More › No talent pools or stale jobs).
  */
 export function evergreenReason(j: Pick<Job, "title" | "repostedAt">): "pool" | "reposted" | undefined {
   if (EVERGREEN_TITLE.test(j.title)) return "pool";
   if (j.repostedAt) return "reposted";
   return undefined;
 }
-/** Best match: what each kind costs. A talent pool is rarely what you're looking for; a repost may well be. */
-const EVERGREEN_RANK = { pool: 15, reposted: 5 } as const;
-const evergreenCost = (j: Job) => {
+/**
+ * Best match: what each kind costs. A talent pool is rarely what you're looking for; a job that may be
+ * stale (isStale) often isn't hiring any more; a single repost may well be.
+ */
+const EVERGREEN_RANK = { pool: 15, stale: 10, reposted: 5 } as const;
+const evergreenCost = (j: Job, now: number) => {
   const r = evergreenReason(j);
+  if (r === "pool") return EVERGREEN_RANK.pool;
+  if (isStale(j, { now })) return EVERGREEN_RANK.stale;
   return r ? EVERGREEN_RANK[r] : 0;
 };
-
-/** "older" past OLDER_DAYS: worth a word before you spend time on it. */
-export const isOlder = (j: Job, now = Date.now()) => ageDays(postedOrSeen(j), now) > OLDER_DAYS;
 
 export const DEFAULT_FILTERS: Filters = {
   q: "",
@@ -170,7 +172,7 @@ function passes(j: Job, f: Filters, ctx: Ctx, terms: string[], skip?: FacetKey):
   if (f.status === "saved" && entry?.status !== "saved") return false;
   if (f.status === "applied" && !(entry?.status && APPLIED_STAGES.includes(entry.status))) return false;
   if (f.salaryOnly && !j.salary) return false;
-  if (f.hideEvergreen && evergreenReason(j)) return false;
+  if (f.hideEvergreen && (evergreenReason(j) || isStale(j, { now: ctx.now }))) return false;
   if (f.visaOnly && !sponsorOf([j])) return false;
   if (skip !== "match" && f.match !== "all" && j.score < (f.match === "strong" ? ctx.min : Math.max(0, ctx.min - 20))) return false;
   if (skip !== "posted" && f.posted && ageDays(postedOrSeen(j), ctx.now) > f.posted) return false;
@@ -298,7 +300,7 @@ const salaryOf = (j: Job) => j.salary?.max ?? j.salary?.min ?? -1;
  * `isYours` gives them a nudge (rankScore), and freshness counts, worked out at `now`.
  */
 export function sortJobs(jobs: Job[], sort: Sort, isYours?: (j: Job) => boolean, now = Date.now()): Job[] {
-  const rank = sort === "best" ? new Map(jobs.map((j) => [j, rankScore(j.score, postedOrSeen(j), now, !!isYours?.(j)) - evergreenCost(j)])) : undefined;
+  const rank = sort === "best" ? new Map(jobs.map((j) => [j, rankScore(j.score, postedOrSeen(j), now, !!isYours?.(j)) - evergreenCost(j, now)])) : undefined;
   const by: Record<Sort, (a: Job, b: Job) => number> = {
     // Equal ranks go to the one mentioning more of your topics, then the newer.
     best: (a, b) => rank!.get(b)! - rank!.get(a)! || b.why.keywords.length - a.why.keywords.length || postedOrSeen(b).localeCompare(postedOrSeen(a)),
@@ -391,7 +393,7 @@ function chipsOf(f: Filters, ctx: Pick<Ctx, "min">): { key: string; label: strin
   list("ats", (v) => `Hiring system: ${atsLabel(v)}`);
   if (f.match !== "all") chips.push({ key: "match", label: f.match === "strong" ? `Strong matches (${ctx.min}+)` : `Good matches (${Math.max(0, ctx.min - 20)}+)`, remove: { match: "all" } });
   if (f.salaryOnly) chips.push({ key: "salary", label: "Salary listed", remove: { salaryOnly: false } });
-  if (f.hideEvergreen) chips.push({ key: "evergreen", label: "No talent pools or reposts", remove: { hideEvergreen: false } });
+  if (f.hideEvergreen) chips.push({ key: "evergreen", label: "No talent pools or stale jobs", remove: { hideEvergreen: false } });
   if (f.visaOnly) chips.push({ key: "visa", label: "Sponsors visas", remove: { visaOnly: false } });
   if (f.showFailed) chips.push({ key: "failed", label: "Including jobs that failed your filters", remove: { showFailed: false } });
   if (f.showClosed) chips.push({ key: "closed", label: "Including closed", remove: { showClosed: false } });

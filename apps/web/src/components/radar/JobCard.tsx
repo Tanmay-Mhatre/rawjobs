@@ -4,6 +4,7 @@ import { Bookmark, Star, X } from "lucide-react";
 import { forwardRef, type ReactNode } from "react";
 import type { JobGroup } from "../../lib/filters";
 import { atsLabel, evergreenReason, isOlder } from "../../lib/filters";
+import { isStale, staleReasons } from "../../lib/stale";
 import { formatSalary, placeSummary, postedOrSeen, shortAge, timeAgo } from "../../lib/format";
 import { STATUS_LABEL, type Entry, type Status } from "../../lib/userState";
 import { IconButton, ScoreBadge, SourceTag } from "../primitives";
@@ -80,7 +81,15 @@ export const JobCard = forwardRef<HTMLLIElement, Props>(function JobCard({ group
         Talent pool
       </span>,
     );
-  if (evergreen === "reposted")
+  // One tag for every sign of a ghost job; a repost alone keeps its own note.
+  const stale = staleReasons(job);
+  if (isStale(job))
+    meta.push(
+      <span className="text-warning-text" title={stale.join(". ")}>
+        May be stale
+      </span>,
+    );
+  else if (evergreen === "reposted")
     meta.push(
       <span className="text-warning-text" title="Taken down and posted again: dated from the first posting">
         Reposted

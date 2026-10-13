@@ -290,6 +290,14 @@ describe("your companies and directory jobs", () => {
     expect(fromQuery(toQuery(f({ visaOnly: true }), "best"))!.filters.visaOnly).toBe(true);
   });
 
+  it("ranks jobs that may be stale lower, and No talent pools or stale jobs hides them", () => {
+    const stale = job({ id: "stale", score: 85, repostedAt: daysAgo(3), repostCount: 2 });
+    const real = job({ id: "real", score: 80 });
+    expect(sortJobs([stale, real], "best", undefined, NOW).map((j) => j.id)).toEqual(["real", "stale"]);
+    expect(applyFilters([stale, real], f({ hideEvergreen: true }), ctx).map((j) => j.id)).toEqual(["real"]);
+    expect(activeChips(f({ hideEvergreen: true }), ctx).map((c) => c.label)).toContain("No talent pools or stale jobs");
+  });
+
   it("marks postings over two months old", () => {
     expect(isOlder(job({ postedAt: daysAgo(61) }), NOW)).toBe(true);
     expect(isOlder(job({ postedAt: daysAgo(59) }), NOW)).toBe(false);

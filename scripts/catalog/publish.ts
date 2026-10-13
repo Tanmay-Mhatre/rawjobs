@@ -8,7 +8,8 @@
  *   - seed companies on hiring systems we can't scan yet (from out/resolved.json), as "unverified",
  *     so they can be watched as "coming soon"
  * Every company gets industry tags (ids from catalog/industries.ts) from the source lists, the seed
- * list and its own job titles; out/tags.json records where each tag came from.
+ * list, Wikidata and its own job titles (lib/tags.ts); `tag_src` says which tags didn't come from a
+ * list, and out/tags.json records every source of every tag.
  *
  *   pnpm exec tsx scripts/catalog/publish.ts [--data <dir>]
  */
@@ -25,13 +26,17 @@ import {
   industryCounts,
   industriesFromTitles,
   isPlaceholderBoard,
+  jobCompanyKey,
   type IndexedCompany,
   type IndexRow,
 } from "@rawjobs/core";
 import type { Resolved, Seed } from "./resolve";
+import type { BulkSeed } from "./seeds-bulk";
 import { type DirectoryMove, dirKeyOf } from "./lib/moves";
 import { catalogDir, dataDir } from "./lib/paths";
 import { matchVisa, type RegisterFile } from "./lib/visa";
+import { readCheckTitles, readFeedTitles, TagBook, TITLES_SOURCE, WIKIDATA_SOURCE } from "./lib/tags";
+import { boardMatchesWebsite, industriesForWikidata, plainName } from "./lib/wikidata";
 
 const dataArg = process.argv.indexOf("--data");
 const DATA = resolve(dataArg > 0 ? process.argv[dataArg + 1]! : dataDir);
@@ -77,16 +82,9 @@ for (const f of readdirSync(join(catalogDir, "out")).filter((n) => /^index-.+\.j
   }
 }
 
-// ---- industry tags: key -> industry id -> sources ----
-const tags = new Map<string, Map<string, Set<string>>>();
-const tag = (key: string, ids: readonly string[], source: string) => {
-  for (const id of ids) {
-    if (!tags.has(key)) tags.set(key, new Map());
-    const m = tags.get(key)!;
-    if (!m.has(id)) m.set(id, new Set());
-    m.get(id)!.add(source);
-  }
-};
+// ---- industry tags: key -> industry id -> sources (lib/tags.ts) ----
+const book = new TagBook();
+const tag = (key: string, ids: readonly string[], source: string) => book.add(key, ids, source);
 // 1. Source lists' own labels.
 const cryptoJobs = readJson<{ companies: { jobs_url: string; category?: string }[] }>(join(catalogDir, "seeds", "crypto-jobs-fyi.companies.json"), { companies: [] });
 for (const c of cryptoJobs.companies) {
@@ -118,35 +116,45 @@ for (const s of seeds) {
   if (same.length === 1) seedBoards.set(same[0]!.key, s);
 }
 for (const [key, s] of seedBoards) tag(key, s.industries, "seed list");
-// 3. Job titles (needs the industries already known, for "requires").
-for (const [key, v] of index) {
-  const known = [...(tags.get(key)?.keys() ?? [])];
-  tag(
-    key,
-    industriesFromTitles(
-      v.rows.map((r) => r[0]),
-      known,
-    ),
-    "job titles",
-  );
+// 3. Wikidata (CC0): the companies seeds-bulk.ts reads, with their industries (lib/wikidata.ts). Matched
+// by the board resolve.ts --bulk found on the company's own website, or by the same name (one Wikidata
+// company has it) and a board named like its website ("visa" for visa.com).
+const wikidata = readJson<{ companies: BulkSeed[] }>(join(catalogDir, "raw", "wikidata", "companies.json"), { companies: [] }).companies;
+const wikidataByName = new Map<string, BulkSeed[]>();
+for (const w of wikidata) {
+  const n = plainName(w.name);
+  if (n) wikidataByName.set(n, [...(wikidataByName.get(n) ?? []), w]);
+}
+const wikidataIds = (w: BulkSeed | undefined) => (w?.industry_items?.length ? industriesForWikidata(w.industry_items) : []);
+const bulkSeeds = new Map(wikidata.map((w) => [w.name, w]));
+for (const r of readJson<{ companies: Resolved[] }>(join(catalogDir, "out", "resolved-bulk.json"), { companies: [] }).companies) {
+  if (r.board) tag(r.board.key, wikidataIds(bulkSeeds.get(r.name)), WIKIDATA_SOURCE);
+}
+for (const d of dir) {
+  const same = wikidataByName.get(plainName(d.name));
+  if (same?.length === 1 && boardMatchesWebsite(d, same[0]!.website)) tag(d.key, wikidataIds(same[0]), WIKIDATA_SOURCE);
+}
+// 4. Job titles (needs the industries already known, for "requires"). From the job index; for the
+// companies it doesn't read (Workday, or not reached this week), from the shared job feed (downloaded
+// into out/feed by the workflows); else from the titles a live check read on the way (out/titles.jsonl).
+const feedTitles = readFeedTitles(join(catalogDir, "out", "feed"));
+const checkTitles = readCheckTitles(join(catalogDir, "out"));
+const titleCounts = { index: 0, feed: 0, checks: 0 };
+for (const d of dir) {
+  const from: [keyof typeof titleCounts, string[] | undefined][] = [
+    ["index", index.get(d.key)?.rows.map((r) => r[0])],
+    ["feed", feedTitles.get(jobCompanyKey(d))],
+    ["checks", checkTitles.get(d.key)],
+  ];
+  const found = from.find(([, titles]) => titles?.length);
+  if (!found) continue;
+  titleCounts[found[0]]++;
+  tag(d.key, industriesFromTitles(found[1]!, book.known(d.key)), TITLES_SOURCE);
 }
 /** The seed list's hand-written name beats one from a source list or the board's address ("Saxobank" -> "Saxo Bank"). */
 const nameOf = (d: Dir) => seedBoards.get(d.key)?.name || d.name;
-/**
- * `tags`: industries a list or the seed list puts the company in. `title_tags`: industries only its job
- * titles point to. Titles say what a company hires for, not what it is: Anthropic's say "Inference", not
- * "AI", while a label with an AI product team has "AI" in many titles. So the two are kept apart.
- */
-const tagsOf = (key: string) => {
-  const m = tags.get(key);
-  if (!m) return {};
-  const fromLists = [...m].filter(([, src]) => [...src].some((s) => s !== "job titles")).map(([id]) => id);
-  const fromTitles = [...m].filter(([, src]) => [...src].every((s) => s === "job titles")).map(([id]) => id);
-  return {
-    ...(fromLists.length ? { tags: fromLists.sort() } : {}),
-    ...(fromTitles.length ? { title_tags: fromTitles.sort() } : {}),
-  };
-};
+/** `tags` (lists, Wikidata), `title_tags` (job titles only) and `tag_src`: see TagBook.tagsOf. */
+const tagsOf = (key: string) => book.tagsOf(key);
 
 // ---- user additions (Add by link) ----
 const additions = readJson<{ companies: Addition[] }>(join(OUT, "additions.json"), { companies: [] }).companies.filter((a) => !byKey.has(a.key) && !movedAway.has(a.key));
@@ -245,7 +253,7 @@ const generated_at = new Date().toISOString();
 // `moves` is new in directory.json: older apps read only `companies` (and `industries`) and ignore it.
 writeFileSync(join(OUT, "directory.json"), JSON.stringify({ generated_at, count: slim.length, industries, companies: slim, moves }));
 writeFileSync(join(OUT, "index.json"), JSON.stringify({ generated_at, count: indexed.length, companies: indexed }));
-writeFileSync(join(catalogDir, "out", "tags.json"), JSON.stringify(Object.fromEntries([...tags].map(([k, m]) => [k, Object.fromEntries([...m].map(([id, src]) => [id, [...src]]))])), null, 1));
+writeFileSync(join(catalogDir, "out", "tags.json"), JSON.stringify(book, null, 1));
 
 const perIndustry = INDUSTRIES.map((i) => {
   const n = slim.filter((c) => c.tags?.includes(i.id)).length;
@@ -264,5 +272,15 @@ console.log(
     ? `Visa sponsors: ${sponsors.stats.map((s) => `${s.country} ${s.matched} (list ${s.period}; ${s.skippedAmbiguous} names shared by several companies and ${s.skippedCommon} common ones skipped)`).join(", ")}.`
     : "Visa sponsors: no registers downloaded (pnpm catalog:visa), so no company is tagged.",
 );
+{
+  // Live companies by the surest source of any of their tags, and where the job titles came from.
+  const live = slim.filter((c) => c.status === "live");
+  const best = (c: (typeof slim)[number]) => (!c.tags?.length && !c.title_tags?.length ? "none" : (c.tags ?? []).some((t) => !c.tag_src?.[t]) ? "list" : c.tags?.length ? "wikidata" : "titles");
+  const bySource: Record<string, number> = { list: 0, wikidata: 0, titles: 0, none: 0 };
+  for (const c of live) bySource[best(c)]!++;
+  console.log(
+    `Live companies with an industry: ${live.length - bySource.none!} of ${live.length} (best source: ${bySource.list} list, ${bySource.wikidata} Wikidata, ${bySource.titles} job titles). Job titles read from: ${titleCounts.index} index, ${titleCounts.feed} job feed, ${titleCounts.checks} live checks.`,
+  );
+}
 const sparse = INDUSTRIES.filter((i) => (industries[i.id] ?? 0) < FEW_COMPANIES).map((i) => `${i.id} (${industries[i.id] ?? 0})`);
 if (sparse.length) console.log(`Few live companies to scan (under ${FEW_COMPANIES}): ${sparse.join(", ")}`);

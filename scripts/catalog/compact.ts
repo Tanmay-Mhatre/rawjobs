@@ -1,5 +1,5 @@
 /**
- * Shrink the catalog's working state (scripts/catalog/out): the check and index logs are
+ * Shrink the catalog's working state (scripts/catalog/out): the check, index and titles logs are
  * append-only, so keep just the result each later step would use per board.
  *
  * Runs inside "Save the working state", also after a step was killed, so a half-written last line
@@ -54,6 +54,8 @@ export function compact(dir: string, pattern: RegExp, target: string, merge: (pr
 export const mergeCheckRow = (prev: Row | undefined, next: Row): Row => mergeCheck(prev as CheckRow | undefined, next as CheckRow);
 /** Index: the newest successful fetch wins; an error only when there's nothing better. */
 export const mergeIndexRow = (prev: Row | undefined, next: Row): Row => (keepIndex(prev, next) ? next : prev!);
+/** Titles read by checks: the newest list wins. */
+export const mergeTitlesRow = (prev: Row | undefined, next: Row): Row => (!prev || (next.fetched_at ?? "") >= (prev.fetched_at ?? "") ? next : prev);
 const keepIndex = (prev: Row | undefined, next: Row) => {
   if (!prev) return true;
   if (next.error && !prev.error) return false;
@@ -65,4 +67,5 @@ if (process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1]) {
   const OUT = join(dirname(fileURLToPath(import.meta.url)), "out");
   compact(OUT, /^checks(-.+)?\.jsonl$/, "checks.jsonl", mergeCheckRow);
   compact(OUT, /^index-.+\.jsonl$/, "index-all.jsonl", mergeIndexRow);
+  compact(OUT, /^titles(-.+)?\.jsonl$/, "titles.jsonl", mergeTitlesRow);
 }

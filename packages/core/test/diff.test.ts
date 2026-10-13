@@ -209,7 +209,20 @@ describe("mergeHistory: reposts", () => {
     const m = mergeHistory([old], run(T1, [again]), companies);
     expect(m.newIds.size).toBe(0);
     expect(m.jobs).toHaveLength(1);
-    expect(m.jobs[0]).toMatchObject({ id: again.id, firstSeen: T0, postedAt: "2026-07-01T00:00:00.000Z", repostedAt: T1 });
+    expect(m.jobs[0]).toMatchObject({ id: again.id, firstSeen: T0, postedAt: "2026-07-01T00:00:00.000Z", repostedAt: T1, repostCount: 1 });
+  });
+
+  it("counts each time it's posted again, and an older save's repost counts as one", () => {
+    const T2 = "2026-10-03T03:00:00.000Z";
+    const once = job("1", { title: "Product Manager", repostedAt: T0, repostCount: 1 });
+    const again = job("2", { title: "Product Manager", firstSeen: T1, lastSeen: T1 });
+    const m = mergeHistory([once], run(T1, [again]), companies);
+    expect(m.jobs[0]).toMatchObject({ id: again.id, repostedAt: T1, repostCount: 2 });
+    const third = job("3", { title: "Product Manager", firstSeen: T2, lastSeen: T2 });
+    expect(mergeHistory(m.jobs, run(T2, [third]), companies).jobs[0]).toMatchObject({ id: third.id, repostedAt: T2, repostCount: 3 });
+    // Saved before the count existed: repostedAt alone.
+    const legacy = job("4", { title: "Product Manager", repostedAt: T0 });
+    expect(mergeHistory([legacy], run(T1, [again]), companies).jobs[0]).toMatchObject({ repostCount: 2 });
   });
 
   it("a new opening in another place, or one still listed, is a new job", () => {

@@ -13,7 +13,7 @@ A free, self-hosted job radar. Tell it the roles, places and industries you want
 
 Good roles often appear on company careers pages (Greenhouse, Lever, Ashby, Workday…) before LinkedIn, or never reach it. Checking 50 careers pages by hand doesn't happen. This does it for you.
 
-> **Status: runs on your computer, installs with one line on Windows, macOS and Linux, and keeps itself up to date.** A web dashboard and a CLI with connectors for 23 hiring systems (Greenhouse, Lever, Ashby, Workday, SmartRecruiters and [18 more](docs/hiring-systems.md)) and 7 public job boards, scoring, run history, scheduled scans and Telegram alerts. Scheduled scans in GitHub Actions are next. See [Roadmap](#roadmap).
+> **Status: runs on your computer, installs with one line on Windows, macOS and Linux, and keeps itself up to date.** A web dashboard and a CLI with connectors for 44 hiring systems (Greenhouse, Lever, Ashby, Workday, SmartRecruiters and [39 more](docs/hiring-systems.md)) and 7 public job boards, scoring, run history, scheduled scans and Telegram alerts. Scheduled scans in GitHub Actions are next. See [Roadmap](#roadmap).
 
 Built by Tanmay Mhatre.
 
@@ -150,7 +150,7 @@ Paste careers URLs into `detect` and copy the lines into `companies:`:
 pnpm rawjobs detect https://jobs.lever.co/somecompany https://job-boards.greenhouse.io/other
 ```
 
-RawJobs reads 23 hiring systems, including Greenhouse, Lever, Ashby, Workday and SmartRecruiters: [the full list, and what their careers links look like](docs/hiring-systems.md).
+RawJobs reads 44 hiring systems, including Greenhouse, Lever, Ashby, Workday and SmartRecruiters: [the full list, and what their careers links look like](docs/hiring-systems.md).
 
 Public job boards (Hacker News "Who is hiring", Remotive, Arbeitnow, Remote OK, Himalayas, Jobicy, We Work Remotely) are added the same way, by pasting their link.
 
@@ -167,7 +167,7 @@ How the directory is built (no AI, `scripts/catalog/`):
 2. **Resolve** the seed list (`seeds/industries.json`, must-have companies per industry, editable): read each company's website the way a person would (homepage → careers link → the board it embeds) to find its hiring system. Polite: one request at a time per site, robots.txt honoured.
 3. **Check** every board live with the cheapest call each hiring system offers (live / dormant / dead).
 4. **Index** each live company's open job titles and locations (no descriptions).
-5. **Tag** companies by industry from three sources: the source lists' own labels, the seed list, and their job titles (e.g. many "Forex" or "MT5" roles means a brokerage). Industries a company merely hires for (`title_tags`, e.g. "hires AI roles") are kept apart.
+5. **Tag** companies by industry from four sources: the source lists' own labels, the seed list, Wikidata's industry statements (CC0), and their job titles (e.g. many "Forex" or "MT5" roles means a brokerage), read from the job index, the daily job feed or the live checks. Industries a company merely hires for (`title_tags`, e.g. "hires AI roles") are kept apart, and `tag_src` says which tags came from Wikidata or job titles ([details](docs/shared-directory.md#industry-tags)).
 6. **Publish** to `data/catalog/`, and write **`out/coverage.md`**: per industry, how many must-have companies we can track, and which hiring systems to support next.
 
 The dashboard downloads a newer directory by itself when yours is more than a week old (Settings → Scans & alerts). To rebuild it locally:
@@ -266,7 +266,7 @@ Connector tests use saved feed responses in `packages/core/test/fixtures`, so te
 | Phase | Scope |
 | --- | --- |
 | 0. Core ✅ | Schema, config validation, Greenhouse / Lever / Ashby, scoring, CLI, tests |
-| 1. Daily radar | ✅ 23 hiring systems, shared directory and daily job feed, run history, scheduled scans on your computer, Telegram alerts. To do: scheduled scans in your own GitHub Actions |
+| 1. Daily radar | ✅ 44 hiring systems, shared directory and daily job feed, run history, scheduled scans on your computer, Telegram alerts. To do: scheduled scans in your own GitHub Actions |
 | 2. Dashboard | ✅ Radar, job detail, pipeline, companies, settings, light and dark themes, each with an increased-contrast version. To do: hosted deploy |
 | 3. Open-source launch | ✅ Setup wizard, contributor docs, privacy page, self-hosting guide. To do: more README screenshots |
 | 3b. Install for everyone | ✅ One-line install for Windows, macOS and Linux, start at log in, signed releases, updates that go back if a new version doesn't start ([plan](docs/plans/local-install.md)) |

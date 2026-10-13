@@ -61,6 +61,16 @@ describe("runRadar", () => {
     expect(result.health[0]).toMatchObject({ company: "GH Co", ok: true, jobsFound: 3, matches: 1, skipped: 1 });
   });
 
+  it("carries a repost's count over, and keeps the board's date when it's later than ours", async () => {
+    const { http } = fakeHttp(routes);
+    const first = (await runRadar(config, { http, now, only: ["GH Co"] })).jobs[0]!;
+    expect(first.postedAt).toBeDefined();
+    expect(first.boardPostedAt).toBeUndefined();
+    const prev = { ...first, firstSeen: "2026-06-01T00:00:00.000Z", postedAt: "2026-06-01T00:00:00.000Z", repostedAt: "2026-08-01T00:00:00.000Z", repostCount: 2 };
+    const again = (await runRadar(config, { http, now, only: ["GH Co"], previous: [prev] })).jobs.find((j) => j.id === first.id)!;
+    expect(again).toMatchObject({ firstSeen: prev.firstSeen, postedAt: prev.postedAt, boardPostedAt: first.postedAt, repostedAt: prev.repostedAt, repostCount: 2 });
+  });
+
   it("can run a single company by name or slug", async () => {
     const { http, calls } = fakeHttp(routes);
     const result = await runRadar(config, { http, now, only: ["LEVERCO"] });

@@ -123,6 +123,13 @@ export type Job = {
    * and posted again. It keeps the old one's dates (see diff.ts), so a repost never looks new.
    */
   repostedAt?: string;
+  /** How many times it was taken down and posted again (repostedAt is the last); older saves only have repostedAt. */
+  repostCount?: number;
+  /**
+   * The date the board itself gave on the last scan, when it's later than postedAt: a board that
+   * refreshes its date, so a months-old job looks freshly posted (postedAt only moves earlier).
+   */
+  boardPostedAt?: string;
   score: number;
   why: ScoreBreakdown;
 };
@@ -195,6 +202,8 @@ export type DashboardJob = Omit<Job, "description" | "missedRuns"> & {
   group: string;
   /** A description is stored (descriptions.json). */
   hasDescription: boolean;
+  /** Characters in the stored description, when there is one: a very short one is a sign of a stale posting. */
+  descriptionLength?: number;
   /**
    * From the shared weekly index, not checked live (data/discover.json): no description, so the score
    * is an estimate (title, location, industry and topics in the title), and `url` is the company's careers page.

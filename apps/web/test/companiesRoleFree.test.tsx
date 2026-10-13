@@ -2,7 +2,7 @@
 import { cleanup, render } from "@testing-library/react";
 import { afterEach, describe, expect, it } from "vitest";
 import { SuggestionCard } from "../src/components/companies/SuggestionCard";
-import { industryOf, searchDirectory, type DirCompany } from "../src/components/CompanyFinder";
+import { BrowseRow, industryOf, industryParts, searchDirectory, type DirCompany } from "../src/components/CompanyFinder";
 import { companyReasons, type CompanySuggestion } from "../src/lib/companySuggest";
 import { fromQuery, radarCompanyHash } from "../src/lib/filters";
 
@@ -86,6 +86,27 @@ describe("Browse all", () => {
     expect(industryOf(c, ["ai"])).toBe(industryOf({ tags: ["ai"] }));
     expect(industryOf(c, ["ai"])).not.toBe(industryOf(c));
     expect(industryOf({ tags: ["not-an-industry"] })).toBeUndefined();
+  });
+
+  it("says where an industry comes from when no hand-made list gives it", () => {
+    expect(industryParts({ tags: ["fintech"] })).toEqual(["Fintech (general)"]);
+    expect(industryParts({ title_tags: ["payments"], tag_src: { payments: "titles" } })).toEqual(["Payments", "from its job titles"]);
+    expect(industryParts({ tags: ["banking"], tag_src: { banking: "wikidata" } })).toEqual(["Banking", "from Wikidata"]);
+    // Directories from before tag_src: job-title tags are still marked.
+    expect(industryParts({ title_tags: ["payments"] })).toEqual(["Payments", "from its job titles"]);
+    // Your industry first, with its own source.
+    expect(industryParts({ tags: ["fintech"], title_tags: ["payments"] }, ["payments"])).toEqual(["Payments", "from its job titles"]);
+    expect(industryParts({})).toEqual([]);
+  });
+
+  it("shows the industry and its source first on a company's line", () => {
+    const c = dir("workday:visa", "Visa", { tags: ["payments"], tag_src: { payments: "wikidata" } });
+    const { container } = render(
+      <ul>
+        <BrowseRow lead={c} others={[]} watched={new Set()} mine={[]} onAdd={() => {}} onRemove={() => {}} />
+      </ul>,
+    );
+    expect(container.textContent).toContain("Payments · from Wikidata");
   });
 });
 
