@@ -48,8 +48,8 @@ What is sent:
 Never sent: your profile, resume, searches, statuses, notes, or which jobs you open.
 
 The inbox is a small Cloudflare Worker (`services/contribute`). What it does with a request:
-- **Your IP address** is used only by Cloudflare's rate limiter (20 requests a minute per address).
-  The Worker doesn't store it, and we haven't turned on Cloudflare's request logs. Cloudflare
+- **Your IP address** is used only by Cloudflare's rate limiter (20 requests a minute per address),
+  and, for move reports, to make the keyed hash described below. The Worker doesn't store it, and we haven't turned on Cloudflare's request logs. Cloudflare
   itself handles the traffic under its own privacy policy.
 - **It stores** the boards, the time they arrived, and the `client` field only if it is exactly the
   app name and version (like `rawjobs/0.1.0`); anything else in that field is dropped. Any
@@ -58,6 +58,14 @@ The inbox is a small Cloudflare Worker (`services/contribute`). What it does wit
   days, to skip repeats and enforce a daily limit.
 - Stored boards are deleted once the directory workflow has processed them, and after 30 days at
   most.
+
+The inbox can also receive **move reports**: "this company's careers page moved from this board to
+that one". A move names two boards (the old one and the new one, each a hiring system and a board
+name) and a company name, nothing else. For each move the inbox stores those, when it first and
+last arrived, and a short keyed hash of your IP address together with the old board. The hash
+can't be turned back into your IP address; it only lets us count how many different people
+reported the same move. Your IP address itself isn't stored. A move report is deleted once the
+directory workflow has processed it, and after 30 days at most.
 
 Boards that pass a live check are then published in `contributions.json` in the public directory
 repo, as a hiring system, a board name and a company name. They aren't linked to you.

@@ -32,7 +32,7 @@ user is ever uploaded.
 |---|---|---|
 | Outbox and sharing | `packages/core/src/directory.ts`, CLI `setup check` | Boards found by Add by link (and not in the directory) are queued in `data/catalog/outbox.json` and sent to the inbox. Kept until sent. Off with `directory.share_additions: false`. |
 | Directory download | `packages/core/src/directory.ts`, `rawjobs directory update` | Reads `manifest.json`, downloads newer files, checks SHA-256, swaps them in. The dev server runs it weekly in the background (`directory.auto_update`). |
-| Contribution inbox | `services/contribute` | Cloudflare Worker. `POST /v1/contributions` (public, rate-limited, shape-checked, capped at `DAILY_CAP` boards a day for everyone, repeats within 7 days skipped); `GET /v1/pending` (500 a page, `?cursor=` for the next) and `POST /v1/ack` (up to 1,000 ids) for the workflow (token). |
+| Contribution inbox | `services/contribute` | Cloudflare Worker. `POST /v1/contributions` (public, rate-limited, shape-checked, capped at `DAILY_CAP` boards a day for everyone, repeats within 7 days skipped); `GET /v1/pending` (500 a page, `?cursor=` for the next) and `POST /v1/ack` (up to 1,000 ids) for the workflow (token). Move reports ("this careers page moved"): `POST /v1/moves` (public, same rate limiter, up to 10 moves, each two boards and a company name; at most `MOVES_DAILY_CAP` new ones a day; distinct reporters counted with a keyed hash of IP + old board, made with `REPORTER_SECRET`, 503 without it); `GET /v1/moves/pending` (reporter count only, never the hashes) and `POST /v1/moves/ack` for the workflow (token). Moves are kept under `m:` keys, which `/v1/pending` never lists. |
 | Contributions workflow | `.github/workflows/directory-contributions.yml` | Every 3 hours: accept, publish incrementally, commit `contributions.json`, acknowledge. |
 | Weekly rebuild | `.github/workflows/directory-rebuild.yml` | Full rebuild and a dated release, in two jobs: `collect` gathers and checks boards, `publish` builds, gates and releases, and runs even if `collect` failed or ran out of time. The working state is saved as the `state` release, so the next run skips recently checked boards. Each collector runs under its own time cap (`scripts/catalog/capped.sh`) and may stop early without stopping the rebuild, so build and publish always get their turn. A run that doesn't publish opens a "Directory rebuild did not publish" issue. GitHub's schedules are best effort, so Monday has backup times (03:07, 05:37, 09:41, and Tuesday 03:13); each runs only if no rebuild has published in the last 5 days. The contributions, Common Crawl and job-feed workflows also start it when it's overdue (`scripts/catalog/watchdog.sh`: nothing for 8 days, or none yet this week by Monday 12:00 UTC), at most once a day and not while a "did not publish" issue is open; they also keep the scheduled workflows from being switched off after 60 quiet days. The directory runs share one concurrency group with `queue: max`, so a waiting run is never cancelled by a newer one. A published rebuild starts the site deploy. To test the workflow without publishing: `gh workflow run directory-rebuild.yml -f smoke=true` (about 25 minutes). |
 | Releases | `rawjobs-directory` releases | Every publish is a new dated release, so earlier ones stay: `directory-YYYY-MM-DD` from the weekly rebuild, `directory-YYYY-MM-DD-HHMM-shared` when users' companies are added in between. Apps read the one marked latest. **Roll back:** `gh release edit <tag> -R Tanmay-Mhatre/rawjobs-directory --latest`. |
@@ -69,7 +69,8 @@ Shared (on by default, off with `directory.share_additions: false` or Settings â
 system, board slug (plus Workday shard/site, EU region), company name, and the app name
 (`rawjobs`, optionally `/version`; older apps send `job-hunter`; any other value is dropped).
 Never shared: profile, resume, searches, statuses, which jobs you open. The inbox uses the IP
-address only for rate limiting and stores none. Full details for users: [PRIVACY.md](../PRIVACY.md).
+address only for rate limiting and stores none; for move reports it keeps a keyed hash of IP + old
+board (30 days) to count distinct reporters. Full details for users: [PRIVACY.md](../PRIVACY.md).
 
 The published data is CC BY 4.0 (`LICENSE-DATA` in the directory repo); sources and credits are
 in its `NOTICE.md`. Public job boards (Hacker News, Remotive, Arbeitnow, Remote OK) are
@@ -159,7 +160,9 @@ filtering is instant. The first format is still published next to it while insta
    and upload `catalog-state.tar.gz` (out/checks.jsonl, out/index-all.jsonl, out/resolved.json) to a prerelease tagged `state`.
 4. **Inbox** (Cloudflare account needed): in `services/contribute`
    (after `pnpm install` at the repo root) `npx wrangler login`, `npx wrangler kv namespace create INBOX` (put the id in `wrangler.toml`),
-   `npx wrangler secret put INBOX_TOKEN` (a long random string), `npx wrangler deploy`.
+   `npx wrangler secret put INBOX_TOKEN` (a long random string), `npx wrangler secret put REPORTER_SECRET`
+   (another long random string, kept only in the Worker; it keys the reporter hashes on move reports, and
+   without it `/v1/moves` answers 503), `npx wrangler deploy`. `DAILY_CAP` and `MOVES_DAILY_CAP` are in `wrangler.toml`.
 5. **Secrets in the code repo** (`gh secret set NAME`):
    - `INBOX_URL`: the Worker URL from step 4
    - `INBOX_TOKEN`: the same string as step 4
