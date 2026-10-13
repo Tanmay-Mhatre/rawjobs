@@ -13,7 +13,7 @@ export const SETTINGS_PAGES = [
   { id: "companies", label: "Companies", group: "Your search", hint: "Companies you'd love to work at." },
   { id: "scans", label: "Scans", group: "Automation", hint: "What RawJobs scans, and when. Changes save right away." },
   { id: "notifications", label: "Notifications", group: "Automation", hint: "Where RawJobs tells you about new jobs. Changes save right away." },
-  { id: "appearance", label: "Appearance", group: "Preferences", hint: "How RawJobs looks in this browser." },
+  { id: "appearance", label: "Appearance", group: "Preferences", hint: "How RawJobs looks." },
   { id: "keyboard", label: "Keyboard", group: "Preferences", hint: "Every shortcut in RawJobs." },
   { id: "data", label: "Data & privacy", group: "System", hint: "What leaves your computer, backups, and starting over. Changes save right away." },
   { id: "updates", label: "Updates", group: "System", hint: "Which version you have, what's newer, and the desktop shortcut." },

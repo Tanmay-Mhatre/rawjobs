@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { DEFAULT_MAX_AGE_DAYS } from "./filters";
+import { useSavedOnDisk } from "./tracking";
 
 /**
  * The four RawJobs themes (design/README.md, "Themes and contrast"). They follow the system's
@@ -124,6 +125,50 @@ export function useMaxAge(): MaxAge {
     };
   }, []);
   return d;
+}
+
+/**
+ * Everything on this page that isn't a default, as saved in profile/tracking.json ("appearance").
+ * The browser only remembers it for one address, and the dashboard's address changes when its port
+ * does, so the file is what counts. Keys in a fixed order, so equal choices compare equal as JSON.
+ */
+export type Appearance = { theme?: "light" | "dark"; contrast?: "more"; density?: "compact"; maxAge?: MaxAge };
+
+export function appearance(): Appearance {
+  const theme = themeChoice();
+  const maxAge = maxAgeChoice();
+  return {
+    ...(theme !== "system" ? { theme } : {}),
+    ...(contrastChoice() === "more" ? { contrast: "more" as const } : {}),
+    ...(densityChoice() === "compact" ? { density: "compact" as const } : {}),
+    ...(maxAge !== DEFAULT_MAX_AGE_DAYS ? { maxAge } : {}),
+  };
+}
+
+/** Take saved choices (anything unknown counts as the default) and show them at once. */
+export function applyAppearance(saved: Appearance): void {
+  write(THEME_KEY, saved.theme === "light" || saved.theme === "dark" ? saved.theme : "system");
+  write(CONTRAST_KEY, saved.contrast === "more" ? "more" : "system");
+  write(DENSITY_KEY, saved.density === "compact" ? "compact" : "system");
+  const age = (MAX_AGE_CHOICES as readonly unknown[]).includes(saved.maxAge) ? (saved.maxAge as MaxAge) : DEFAULT_MAX_AGE_DAYS;
+  write(MAX_AGE_KEY, age === DEFAULT_MAX_AGE_DAYS ? "system" : String(age));
+  applyTheme();
+  window.dispatchEvent(new Event(CHANGED));
+}
+
+/** Keep the appearance choices in step with the file: once, in App. Does nothing on a hosted copy. */
+export function useSavedAppearance(): void {
+  const [value, setValue] = useState(appearance);
+  useEffect(() => {
+    const refresh = () => setValue(appearance());
+    window.addEventListener(CHANGED, refresh);
+    window.addEventListener("storage", refresh);
+    return () => {
+      window.removeEventListener(CHANGED, refresh);
+      window.removeEventListener("storage", refresh);
+    };
+  }, []);
+  useSavedOnDisk<Appearance>("appearance", value, applyAppearance);
 }
 
 /** Your choices and the theme in use; follows the system while set to System. */
