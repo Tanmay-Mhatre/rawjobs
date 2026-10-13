@@ -58,6 +58,7 @@ const SYSTEMS = [
   "Eightfold AI",
   "Phenom",
   "CareerPlug",
+  "Dayforce",
   "Comeet",
   "Oracle Recruiting",
   "SAP SuccessFactors",

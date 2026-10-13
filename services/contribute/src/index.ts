@@ -91,6 +91,7 @@ export const SCANNABLE = new Set([
   "eightfold",
   "phenom",
   "careerplug",
+  "dayforce",
 ]);
 const SLUG = /^[A-Za-z0-9][A-Za-z0-9._-]{0,99}$/;
 /** What `shard` may look like per system (the rest have none). */
@@ -104,11 +105,13 @@ const SHARD: Record<string, RegExp> = {
   ukg: /^[a-z0-9-]{1,60}\.(ultipro\.com|rec\.pro\.ukg\.net)$/,
   // Eightfold's tenant domain (netflix.com), needed by its API.
   eightfold: /^[a-z0-9-]+(\.[a-z0-9-]+)+$/,
+  // Dayforce's site culture, when it isn't en-US.
+  dayforce: /^[a-z]{2}-[A-Z]{2}$/,
   // Zoho Recruit's data centre, when it isn't .com.
   zoho: /^(eu|in|com\.au|jp|ca|sa|uk|com\.cn)$/,
 };
 /** Systems that need `site` (the rest may carry one). */
-const NEEDS_SITE = new Set(["workday", "taleo", "comeet", "ukg"]);
+const NEEDS_SITE = new Set(["workday", "taleo", "comeet", "ukg", "dayforce"]);
 /** The app's name and, optionally, its version ("rawjobs", "rawjobs/0.1.0"; apps from before the rename send "job-hunter"). Anything else is dropped. */
 const CLIENT = /^(rawjobs|job-hunter)(\/\d{1,3}\.\d{1,3}\.\d{1,4})?$/;
 const MAX_BODY = 20_000;

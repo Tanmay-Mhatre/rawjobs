@@ -72,6 +72,7 @@ const keyOf = (ats: string, slug: string, shard?: string, site?: string) => comp
 function add(src: SourceId, b: { ats: string; slug: string; region?: string; shard?: string; site?: string; name?: string }) {
   if (!TRACKED.has(b.ats) || !b.slug) return;
   if ((b.ats === "workday" || b.ats === "ukg") && (!b.shard || !b.site)) return;
+  if (b.ats === "dayforce" && !b.site) return;
   if ((b.ats === "taleo" && !b.site) || (b.ats === "oracle" && !b.shard)) return;
   const key = keyOf(b.ats, b.slug, b.shard, b.site);
   const prev = boards.get(key);
@@ -200,6 +201,8 @@ for (const f of existsSync(raw("kalil0321")) ? readdirSync(raw("kalil0321")).fil
     oracle: (e) => e.host && e.site && `https://${e.host}/hcmUI/CandidateExperience/en/sites/${enc(e.site)}`,
     recruitee: (e) => e.slug && `https://${e.slug}.recruitee.com`,
     rippling: (e) => e.board_slug && `https://ats.rippling.com/${enc(e.board_slug)}/jobs`,
+    dayforce: (e) =>
+      e.namespace && e.job_board_code && `https://jobs.dayforcehcm.com/${/^[a-z]{2}-[A-Z]{2}$/.test(e.culture_code ?? "") ? e.culture_code : "en-US"}/${e.namespace}/${e.job_board_code}`,
     // Eightfold: tenant + its registered domain (kept in shard).
     eightfold: () => undefined,
     // JOIN: the slug, plus the numeric company id its API needs (kept in shard).
