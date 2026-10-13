@@ -1,5 +1,6 @@
 import type { ChangelogEntry, ReleaseChange } from "@rawjobs/core/release-notes";
 import { useCallback, useEffect, useRef, useState } from "react";
+import { PORTS } from "@rawjobs/server/pages";
 import { canRunLocally } from "./data";
 
 /** What GET /api/update says (packages/server/src/updater.ts). */
@@ -11,6 +12,8 @@ export type UpdateStatus = {
   lastCheck?: string;
   /** A newer version. `critical`: a required update; `ready`: downloaded already, installs in seconds. */
   available: { version: string; notes: string; changes?: ReleaseChange[]; critical: boolean; date: string; major: boolean; ready: boolean } | null;
+  /** The newest version, when it didn't start here before (the update went back): Settings offers to try again. */
+  skipped?: { version: string; date: string } | null;
   tooOld: boolean;
   state: "idle" | "checking" | "downloading" | "waiting" | "updating";
   error?: string;
@@ -51,8 +54,12 @@ export const checkForUpdate = () => call("/api/update/check", { method: "POST" }
  * page remembers which version it's restarting into (updatingTo), so it can say "Updating to 0.6.1"
  * while the server is away, instead of a bare "reconnecting".
  */
-export async function updateNow(): Promise<UpdateStatus | null> {
-  const s = await call("/api/update/apply", { method: "POST" });
+export const updateNow = () => rememberUpdating(call("/api/update/apply", { method: "POST" }));
+/** Try again a version that didn't start here before: it's offered again, and installs now (as updateNow). */
+export const retryUpdate = () => rememberUpdating(call("/api/update/retry", { method: "POST" }));
+
+async function rememberUpdating(answer: Promise<UpdateStatus | null>): Promise<UpdateStatus | null> {
+  const s = await answer;
   if (s?.state === "updating" && s.available) {
     try {
       sessionStorage.setItem(UPDATING_KEY, JSON.stringify({ from: s.current, to: s.available.version, at: Date.now() }));
@@ -163,7 +170,11 @@ export function useServerHealth(): ServerHealth {
         hint.current = waiting;
         setDown(!h.ok);
       } catch {
-        if (live) setDown(true);
+        if (!live) return;
+        setDown(true);
+        // Running on another of its ports (this one was taken when it started): go there.
+        const other = await findElsewhere();
+        if (live && other) location.replace(other + location.pathname + location.search + location.hash);
       }
     };
     void poll();
@@ -178,6 +189,22 @@ export function useServerHealth(): ServerHealth {
 }
 
 const FAST_POLL_MS = 1000;
+
+/** RawJobs on another of its ports on this computer ("http://127.0.0.1:4318"), or null. As the offline page does (pages.ts). */
+export async function findElsewhere(): Promise<string | null> {
+  const others = PORTS.filter((p) => String(p) !== location.port).map((p) => `${location.protocol}//${location.hostname}:${p}`);
+  const answers = await Promise.all(
+    others.map(async (o) => {
+      try {
+        const res = await fetch(`${o}/api/health`, { cache: "no-store", signal: AbortSignal.timeout(1500) });
+        return ((await res.json()) as Health).ok ? o : null;
+      } catch {
+        return null;
+      }
+    }),
+  );
+  return answers.find(Boolean) ?? null;
+}
 
 /**
  * Start RawJobs from the page: rawjobs://open runs what the Desktop shortcut runs, without opening

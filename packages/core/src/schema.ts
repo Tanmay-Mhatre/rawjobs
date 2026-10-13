@@ -30,6 +30,7 @@ export const ATS_TYPES = [
   "paycom",
   "hireology",
   "ukg",
+  "eightfold",
 ] as const;
 
 /**

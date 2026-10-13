@@ -40,6 +40,11 @@ export type UpdateStatus = {
     /** Downloaded and checked already: installing takes a few seconds. */
     ready: boolean;
   } | null;
+  /**
+   * The newest version, when it's newer but didn't start here before (the update went back): it
+   * isn't offered by itself again, but Settings → About can try it again (POST …/retry).
+   */
+  skipped: { version: string; date: string } | null;
   /** Too old to update straight to the newest release: run the install line again. */
   tooOld: boolean;
   /**
@@ -92,7 +97,8 @@ export function readChangelog(): ChangelogEntry[] {
  * /api/health's updateHint), and a Telegram message if Telegram alerts are set up. It installs only
  * when you click the pill; if a scan (also a scheduled one) is running then, it waits for it to
  * finish. Required updates come up in a window the dashboard shows until you update. Off never
- * checks. The dashboard reads and drives it through /api/update.
+ * checks. A version that didn't start here (the update went back) isn't offered again by itself;
+ * Settings → About offers to try it again. The dashboard reads and drives it through /api/update.
  */
 export function createUpdater(o: {
   home: string;
@@ -131,6 +137,8 @@ export function createUpdater(o: {
       settings: { mode: f.mode, channel: f.channel, telegram: f.telegram },
       lastCheck: f.lastCheck,
       available: c?.available ? { ...f.latest!, changes: f.latest!.changes ?? [], major: c.major, ready: f.ready?.version === f.latest!.version } : null,
+      skipped:
+        c && !c.available && f.latest && compareVersions(f.latest.version, APP_VERSION) > 0 && (f.skip ?? []).includes(f.latest.version) ? { version: f.latest.version, date: f.latest.date } : null,
       tooOld: !!c?.tooOld,
       state,
       error,
@@ -349,7 +357,15 @@ export function createUpdater(o: {
       // You came back to the dashboard: look for a new version now (unless it just did), in the background.
       if (Date.now() - lastLook > FOCUS_EVERY && state === "idle") watch(0);
     } else if (url === "/api/update/apply" && req.method === "POST") await apply();
-    else if (url === "/api/update/seen" && req.method === "POST") markLastUpdateSeen(home);
+    else if (url === "/api/update/retry" && req.method === "POST") {
+      // Try again: the version that went back last time is offered again, and installed now.
+      const f = readUpdateFile(home);
+      const v = f.latest?.version;
+      if (v && (f.skip ?? []).includes(v)) {
+        writeUpdateFile(home, { skip: (f.skip ?? []).filter((s) => s !== v) });
+        await apply();
+      }
+    } else if (url === "/api/update/seen" && req.method === "POST") markLastUpdateSeen(home);
     else if (url === "/api/update/shortcut" && req.method === "POST") {
       // Add to Desktop / Repair shortcuts (Settings): what came of it is in about.shortcuts.
       makeShortcuts(home, process.env.RAWJOBS_LAUNCHER!, { desktop: true, version: APP_VERSION });

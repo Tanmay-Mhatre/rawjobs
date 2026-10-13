@@ -65,9 +65,9 @@ export function openBrowser(target: string) {
 }
 
 /** A RawJobs server answers at this address. */
-export async function healthy(url: string): Promise<boolean> {
+export async function healthy(url: string, timeoutMs = 1500): Promise<boolean> {
   try {
-    const res = await fetch(`${url}/api/health`, { signal: AbortSignal.timeout(1500) });
+    const res = await fetch(`${url}/api/health`, { signal: AbortSignal.timeout(timeoutMs) });
     return res.ok && ((await res.json()) as { ok?: boolean }).ok === true;
   } catch {
     return false;
@@ -75,6 +75,34 @@ export async function healthy(url: string): Promise<boolean> {
 }
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+export const processAlive = (pid: number) => {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch {
+    return false;
+  }
+};
+
+/**
+ * Whether this folder's server (state.json) is running. A busy one (a big scan) can be slow to
+ * answer: while its process is still there, it gets several tries over about 20 seconds before
+ * another one starts next to it on the next port (two servers made an update start the new version
+ * into the old one's port, and go back).
+ */
+export async function serverRunning(state: ServerState | null, o: { tries?: number; timeoutMs?: number; pauseMs?: number } = {}): Promise<boolean> {
+  if (!state?.port) return false;
+  const url = `http://127.0.0.1:${state.port}`;
+  if (await healthy(url)) return true;
+  if (!state.pid || state.pid === process.pid || !processAlive(state.pid)) return false;
+  for (let i = 0; i < (o.tries ?? 3); i++) {
+    await sleep(o.pauseMs ?? 1000);
+    if (await healthy(url, o.timeoutMs ?? 5000)) return true;
+    if (!processAlive(state.pid)) return false;
+  }
+  return false;
+}
 
 /**
  * `rawjobs open` (the RawJobs shortcut): open the dashboard, starting the server first when it isn't

@@ -1,4 +1,4 @@
-import { spawnSync } from "node:child_process";
+import { spawn, spawnSync } from "node:child_process";
 import { createHash, generateKeyPairSync, sign } from "node:crypto";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { createServer, type Server } from "node:http";
@@ -145,6 +145,39 @@ describe("updating an installed copy", () => {
     expect(existsSync(join(home, "app/versions/0.0.9"))).toBe(false);
     expect(existsSync(join(home, "app/versions/0.1.0"))).toBe(true);
   });
+
+  it("also stops a second server of this folder, so the new version can start", async () => {
+    const home = installedCopy();
+    const r = await release("0.2.0");
+    const v = await prepareVersion(home, r.base, r.manifest);
+    switchTo(home, v.version, v.node);
+    // A second 0.1.0 server, started on the next port when the first was slow to answer: state.json names it.
+    const other = spawn(
+      process.execPath,
+      ["-e", `require("http").createServer((q,s)=>s.end(JSON.stringify({ok:true,version:"0.1.0"}))).listen(0,"127.0.0.1",function(){console.log(this.address().port)})`],
+      { stdio: ["ignore", "pipe", "ignore"] },
+    );
+    const port = await new Promise<number>((done) => other.stdout!.once("data", (d) => done(Number(String(d).trim()))));
+    writeFileSync(join(home, "state.json"), JSON.stringify({ port, pid: other.pid, version: "0.1.0" }));
+    const gone = new Promise<void>((done) => other.once("exit", () => done()));
+    let startedWhileOtherRan = false;
+    const record = await finishUpdate({
+      home,
+      from: "0.1.0",
+      to: "0.2.0",
+      timeoutMs: 5000,
+      pollMs: 50,
+      // The computer's scheduler starts nothing while it still runs the other server.
+      start: () => {
+        startedWhileOtherRan = other.exitCode === null && other.signalCode === null;
+        if (startedWhileOtherRan) return;
+        void serve((_q, res) => res.end(JSON.stringify({ ok: true, version: "0.2.0" }))).then((p) => writeFileSync(join(home, "state.json"), JSON.stringify({ port: p })));
+      },
+    });
+    await gone;
+    expect(startedWhileOtherRan).toBe(false);
+    expect(record.ok).toBe(true);
+  }, 15_000);
 
   /** Finish an update to 0.2.0 that never answers; 0.1.0 answers once it's started again. */
   async function failedUpdate(home: string, backup: string, starts: string[] = []) {

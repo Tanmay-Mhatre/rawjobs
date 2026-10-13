@@ -18,6 +18,8 @@ export const BOARD_URL: Record<string, (b: string) => string | undefined> = {
   breezy: (b) => (plain(b) ? `https://${b}.breezy.hr` : undefined),
   // "{company}/{uid}"
   comeet: (b) => (b.includes("/") ? `https://www.comeet.com/jobs/${b.split("/").map(enc).join("/")}` : undefined),
+  // "{host}/{tenant domain}"; kept as a board directly in freehireBoards (custom hosts included).
+  eightfold: () => undefined,
   freshteam: (b) => (plain(b) ? `https://${b}.freshteam.com/jobs` : undefined),
   greenhouse: (b) => `https://job-boards.greenhouse.io/${enc(b)}`,
   // The tenant slug of careers.hireology.com/{slug}
@@ -74,6 +76,12 @@ export function freehireBoards(provider: string, entries: { company?: unknown; b
     const name = typeof e.company === "string" ? e.company.trim() : "";
     const board = e.board.trim();
     // A Teamtailor site on the company's own domain: the list names the vendor, the URL can't.
+    if (provider === "eightfold") {
+      const [host, domain] = board.split("/");
+      if (host && domain && /^[a-z0-9-]+(\.[a-z0-9-]+)+$/i.test(host) && /^[a-z0-9-]+(\.[a-z0-9-]+)+$/i.test(domain))
+        out.push({ ats: "eightfold", slug: host.toLowerCase(), shard: domain.toLowerCase(), ...(name ? { name } : {}) });
+      continue;
+    }
     if (provider === "successfactors" && isCareerSiteHost({ slug: board }) && !/(^|\.)(successfactors|sapsf)\.(com|eu|cn)$/i.test(board)) {
       out.push({ ats: "successfactors", slug: board.toLowerCase(), ...(name ? { name } : {}) });
       continue;
