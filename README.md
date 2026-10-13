@@ -13,7 +13,7 @@ A free, self-hosted job radar. Tell it the roles, places and industries you want
 
 Good roles often appear on company careers pages (Greenhouse, Lever, Ashby, Workday…) before LinkedIn, or never reach it. Checking 50 careers pages by hand doesn't happen. This does it for you.
 
-> **Status: runs on your computer, installs with one line on Windows, macOS and Linux, and keeps itself up to date.** A web dashboard and a CLI with connectors for 23 hiring systems (Greenhouse, Lever, Ashby, Workday, SmartRecruiters and [18 more](docs/hiring-systems.md)) and 5 public job boards, scoring, run history, scheduled scans and Telegram alerts. Scheduled scans in GitHub Actions are next. See [Roadmap](#roadmap).
+> **Status: runs on your computer, installs with one line on Windows, macOS and Linux, and keeps itself up to date.** A web dashboard and a CLI with connectors for 23 hiring systems (Greenhouse, Lever, Ashby, Workday, SmartRecruiters and [18 more](docs/hiring-systems.md)) and 6 public job boards, scoring, run history, scheduled scans and Telegram alerts. Scheduled scans in GitHub Actions are next. See [Roadmap](#roadmap).
 
 Built by Tanmay Mhatre.
 
@@ -152,7 +152,7 @@ pnpm rawjobs detect https://jobs.lever.co/somecompany https://job-boards.greenho
 
 RawJobs reads 23 hiring systems, including Greenhouse, Lever, Ashby, Workday and SmartRecruiters: [the full list, and what their careers links look like](docs/hiring-systems.md).
 
-Public job boards (Hacker News "Who is hiring", Remotive, Arbeitnow, Remote OK, Himalayas) are added the same way, by pasting their link.
+Public job boards (Hacker News "Who is hiring", Remotive, Arbeitnow, Remote OK, Himalayas, Jobicy) are added the same way, by pasting their link.
 
 ## The shared directory and job feed
 
@@ -219,7 +219,7 @@ Your config lists the companies you're targeting. If you run RawJobs from GitHub
 
 - **Code:** MIT ([LICENSE](LICENSE)), copyright Tanmay Mhatre. Use, change and share it freely; copies must keep the copyright and license notice.
 - **Shared directory and job index:** CC BY 4.0. Sources and credits (Common Crawl, the Wayback Machine, Wikidata, permissively licensed board lists, user contributions) are in the directory repo's `NOTICE.md` ([template](services/directory-repo-template/NOTICE.md)).
-- **Public job boards** (Hacker News "Who is hiring", Remotive, Arbeitnow, Remote OK, Himalayas) are fetched on your own computer only, at most a few times a day, credited by name with every job linking back to the board, and never shared or redistributed. (The Muse and Jobicy aren't included: their terms weren't confirmed.)
+- **Public job boards** (Hacker News "Who is hiring", Remotive, Arbeitnow, Remote OK, Himalayas, Jobicy) are fetched on your own computer only, at most a few times a day, credited by name with every job linking back to the board, and never shared or redistributed. (The Muse and Jobicy aren't included: their terms weren't confirmed.)
 - **Remove a company:** open a [takedown request](.github/ISSUE_TEMPLATE/takedown.yml). We reply within 7 days, and removed companies go into `denylist.json`.
 - **Running a fork with your own data:** [docs/self-hosting.md](docs/self-hosting.md).
 
