@@ -1,6 +1,6 @@
 import { companyOfJobId, getConnector, jobCompanyKey } from "./connectors";
 import { HttpClient, HttpError } from "./http";
-import type { CompanyHealth, CompanyRef, Config, Job, NormalizedJob } from "./schema";
+import type { BoardMove, CompanyHealth, CompanyRef, Config, Job, NormalizedJob } from "./schema";
 import { scoreJob } from "./score";
 import { safeUrl } from "./text";
 
@@ -13,6 +13,8 @@ export type RunResult = {
   partial: boolean;
   /** Companies beyond yours checked live this run (see discover.ts). */
   checked: number;
+  /** Suggested new boards for your companies whose board is gone (see findMoves). */
+  moves?: BoardMove[];
 };
 
 /** Description fetches per company per run, for ATSs that need one request per job. */

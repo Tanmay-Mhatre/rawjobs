@@ -40,6 +40,7 @@ export function summarize(run: RunResult, merged: MergeResult): RunSummary {
     closed: merged.closedIds.size,
     checked: run.checked,
     health: run.health,
+    ...(run.moves?.length ? { moves: run.moves } : {}),
   };
 }
 

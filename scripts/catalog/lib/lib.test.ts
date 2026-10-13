@@ -17,6 +17,12 @@ describe("boardFromUrl", () => {
     expect(boardFromUrl("https://jobs.lever.co/favicon.ico")).toBeNull();
     expect(boardFromUrl("https://jobs.ashbyhq.com/api/non-user-graphql")).toBeNull();
     expect(boardFromUrl("https://bank.wd5.myworkdayjobs.com/")).toBeNull();
+    // Real Workday sites named like host pages (PayPal's is "jobs", Parsons' is "search").
+    expect(boardFromUrl("https://paypal.wd1.myworkdayjobs.com/jobs")).toEqual({ ats: "workday", slug: "paypal", shard: "wd1", site: "jobs" });
+    expect(boardFromUrl("https://parsons.wd5.myworkdayjobs.com/search")).toEqual({ ats: "workday", slug: "parsons", shard: "wd5", site: "search" });
+    expect(boardFromUrl("https://bank.wd5.myworkdayjobs.com/robots.txt")).toBeNull();
+    expect(boardFromUrl("https://wd1.myworkdaysite.com/recruiting/bank/External")).toEqual({ ats: "workday", slug: "bank", shard: "wd1", site: "External" });
+    expect(boardFromUrl("https://acme.zohorecruit.eu/jobs/Careers")).toEqual({ ats: "zoho", slug: "acme", shard: "eu", site: "Careers" });
     // A Taleo pod without a career section isn't one company's board.
     expect(boardFromUrl("https://aa010.taleo.net/smartorg/smartorg/common/toc.jsf")).toBeNull();
     expect(boardFromUrl("https://jobs.lever.co/acme%22%3E")).toBeNull();

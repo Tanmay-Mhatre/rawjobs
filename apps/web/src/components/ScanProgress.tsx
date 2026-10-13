@@ -73,7 +73,11 @@ export function ScanProgress({ scan, onRetry }: { scan: ScanState; onRetry?: () 
       )}
       {s?.moves?.map((m) => (
         <p key={m.name} className="rounded-md bg-inset p-3 type-small">
-          <b>{m.name}</b> moved its careers page. Found its new careers page and updated My companies.
+          <b>{m.name}</b>'s careers page is gone. We may have found the new one: check it in{" "}
+          <button type="button" className="font-medium text-ink underline underline-offset-2 hover:text-muted" onClick={toFailing}>
+            My companies
+          </button>
+          .
         </p>
       ))}
       {scan.sync && scan.phase !== "running" && <p className="type-small text-muted">{syncLine(scan.sync)}</p>}

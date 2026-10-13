@@ -1,5 +1,8 @@
 import { firstPathSegment, type DetectedCompany } from "./types";
 
+/** Zoho Recruit's data centres: .com (US), .eu, .in, .com.au, .jp, .ca, .sa, .uk, .com.cn. */
+export const ZOHO_HOST = /\.zohorecruit\.(com|eu|in|com\.au|jp|ca|sa|uk|com\.cn)$/;
+
 /**
  * Careers URLs of the hiring systems whose connectors share this detection (everything beyond
  * Greenhouse, Lever, Ashby and SmartRecruiters). Each returns what its connector needs to fetch.
@@ -18,6 +21,15 @@ export function detectKnownAts(url: URL): DetectedCompany | null {
     const site = parts.find((p) => !/^[a-z]{2}(-[A-Z]{2})?$/.test(p)) ?? undefined;
     return { ats: "workday", slug: wd[1]!, shard: wd[2]!, site };
   }
+  // The same boards on Workday's path-style host: wd{N}.myworkdaysite.com/[en-US/]recruiting/{tenant}/{site}
+  // (or its /wday/cxs/{tenant}/{site} API). The jobs API also answers on {tenant}.wd{N}.myworkdayjobs.com.
+  const wds = host.match(/^(wd\d+)\.myworkdaysite\.com$/);
+  if (wds) {
+    const parts = url.pathname.split("/").filter(Boolean).map(decodeURIComponent);
+    const i = parts.findIndex((p) => p === "recruiting" || p === "cxs");
+    const [tenant, site] = i >= 0 ? [parts[i + 1], parts[i + 2]] : [];
+    return tenant && site ? { ats: "workday", slug: tenant.toLowerCase(), shard: wds[1]!, site } : null;
+  }
   if (host === "apply.workable.com" && seg && seg !== "api") return { ats: "workable", slug: seg };
   if (host.endsWith(".workable.com") && sub && !["www", "apply", "jobs"].includes(sub)) return { ats: "workable", slug: sub };
   if (host.endsWith(".recruitee.com") && sub && sub !== "www") return { ats: "recruitee", slug: sub };
@@ -29,7 +41,7 @@ export function detectKnownAts(url: URL): DetectedCompany | null {
   const parts = url.pathname.split("/").filter(Boolean).map(decodeURIComponent);
   // SAP SuccessFactors: career{N}.successfactors.com/career?company=acme (also .eu / sapsf.com hosts).
   // The host is the company's data centre, kept in `shard`.
-  if (/(^|\.)successfactors\.(com|eu)$|(^|\.)sapsf\.(com|eu)$/.test(host)) {
+  if (/(^|\.)successfactors\.(com|eu)$|(^|\.)sapsf\.(com|eu|cn)$/.test(host)) {
     const company = url.searchParams.get("company");
     return company ? { ats: "successfactors", slug: company, shard: host } : null;
   }
@@ -55,9 +67,12 @@ export function detectKnownAts(url: URL): DetectedCompany | null {
   if (host.endsWith(".pinpointhq.com") && sub && !["www", "app", "api"].includes(sub)) return { ats: "pinpoint", slug: sub };
   if (host === "ats.rippling.com" && seg) return { ats: "rippling", slug: seg };
   if (host.endsWith(".applytojob.com") && sub && sub !== "www") return { ats: "jazzhr", slug: sub };
-  // Zoho Recruit: {company}.zohorecruit.com/jobs/{careers page}
-  if (/\.zohorecruit\.(com|eu|in|com\.au)$/.test(host) && sub && sub !== "www") {
-    return { ats: "zoho", slug: sub, ...(parts[0] === "jobs" && parts[1] ? { site: parts[1] } : {}) };
+  // Zoho Recruit: {company}.zohorecruit.{data centre}/jobs/{careers page}. A board answers only on its
+  // own data centre's domain, kept in `shard` when it isn't .com.
+  const zoho = host.match(ZOHO_HOST);
+  if (zoho && sub && sub !== "www") {
+    const dc = zoho[1]!;
+    return { ats: "zoho", slug: sub, ...(dc !== "com" ? { shard: dc } : {}), ...(parts[0] === "jobs" && parts[1] ? { site: parts[1] } : {}) };
   }
   if (host.endsWith(".careers.hibob.com") && sub) return { ats: "hibob", slug: sub };
   if (host.endsWith(".freshteam.com") && sub && sub !== "www") return { ats: "freshteam", slug: sub };

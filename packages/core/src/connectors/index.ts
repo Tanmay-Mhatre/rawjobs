@@ -27,7 +27,7 @@ import { remotive } from "./remotive";
 import type { Connector, DetectedCompany } from "./types";
 import { workable } from "./workable";
 import { workday } from "./workday";
-import { zoho } from "./zoho";
+import { zoho, zohoHost } from "./zoho";
 
 /** One connector per hiring system in ATS_TYPES. */
 // biome-ignore lint/suspicious/noExplicitAny: each connector has its own raw posting type; the registry only routes to them
@@ -151,7 +151,7 @@ export function careersUrl(c: DetectedCompany): string {
     case "jazzhr":
       return `https://${c.slug}.applytojob.com/apply`;
     case "zoho":
-      return `https://${c.slug}.zohorecruit.com/jobs/${c.site ?? "Careers"}`;
+      return `${zohoHost(c)}/jobs/${c.site ?? "Careers"}`;
     case "hibob":
       return `https://${c.slug}.careers.hibob.com`;
     case "freshteam":

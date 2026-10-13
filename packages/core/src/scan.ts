@@ -8,8 +8,8 @@ import { HttpClient } from "./http";
 import { FileHttpCache } from "./http-cache";
 import { feedMatches } from "./job-feed";
 import { runRadar, type RunResult } from "./run";
-import type { CompanyHealth, CompanyRef, Config, Job, RunSummary } from "./schema";
-import { estimateSeconds, findMoves, readDirectory, readSpeeds, recordSpeeds, refOfEntry, scopeCompanies, type BoardMove, type ScanScope } from "./scope";
+import type { BoardMove, CompanyHealth, CompanyRef, Config, Job, RunSummary } from "./schema";
+import { estimateSeconds, findMoves, readDirectory, readSpeeds, recordSpeeds, refOfEntry, scopeCompanies, type ScanScope } from "./scope";
 import { readJobs, saveRun } from "./store";
 
 export type ScanStart = {
@@ -63,7 +63,7 @@ export type ScanResult = {
   summary?: RunSummary;
   /** Directory companies fetched beyond yours. */
   checks: CompanyRef[];
-  /** Your companies whose board moved; already fetched on the new board. Save them to your config. */
+  /** Your companies whose board is gone, and where the directory may have it now: suggestions to review, never applied. */
   moves: BoardMove[];
   /** Stopped before the end: resumable. */
   stopped: boolean;
@@ -186,15 +186,9 @@ export async function scan(config: Config, opts: ScanOptions): Promise<ScanResul
   const result: RunResult = resumed ? { ...run, startedAt: resumed.startedAt, jobs: [...resumed.jobs, ...run.jobs], health: [...resumed.health, ...run.health] } : run;
   if (checkOnly) result.partial = true;
 
-  // Your companies whose board is gone, but which the directory lists on another board: fetch that.
+  // Your companies whose board is gone, but which the directory lists on another board: a suggestion only.
+  // Matching names proves nothing (anyone can open a board called "Acme"), so you check it and choose; nothing switches here.
   const moves = fullScan && !stopped ? findMoves(config, directory, result.health) : [];
-  if (moves.length) {
-    const moved = await runRadar({ ...config, companies: moves.map((m) => m.to) }, { http, now, previous, industriesOf });
-    const from = new Set(moves.map((m) => jobCompanyKey(m.from)));
-    result.health = [...result.health.filter((h) => !from.has(h.key ?? jobCompanyKey(h))), ...moved.health];
-    result.jobs = [...result.jobs, ...moved.jobs];
-  }
-  const companies = config.companies.map((c) => moves.find((m) => companyKey(m.from) === companyKey(c))?.to ?? c);
 
   // Directory companies keep their matching jobs between scans (ledger), unless you've added or muted them since.
   // Only ones with matches (or that had some) are recorded, so a scan of the whole directory stays small.
@@ -203,14 +197,14 @@ export async function scan(config: Config, opts: ScanOptions): Promise<ScanResul
   const recorded = checks.filter((c) => (matchesBy.get(`${c.ats}:${c.slug}`) ?? 0) > 0 || !!ledger.companies[companyKey(c)]);
   ledger = recordChecks(ledger, recorded, result.health, now);
   const kept = keptChecked(ledger, now).filter((c) => !tracked.has(companyKey(c)) && !muted.has(companyKey(c)));
-  const merged = mergeHistory(previous, result, [...companies, ...kept]);
+  const merged = mergeHistory(previous, result, [...config.companies, ...kept]);
   cache?.save();
   if (opts.dryRun) return { result, merged, checks, moves, stopped };
 
   // Run history keeps your companies and the directory ones that matched or failed, not every board.
-  const yourKeys = new Set(companies.map(companyKey));
+  const yourKeys = new Set(config.companies.map(companyKey));
   const health = result.health.filter((h) => yourKeys.has(companyKey(h)) || h.matches > 0 || (!h.ok && !h.unsupported));
-  const summary = saveRun(opts.dataDir, { ...config, companies }, { ...result, health, checked: checks.length }, merged, { record: !checkOnly });
+  const summary = saveRun(opts.dataDir, config, { ...result, health, checked: checks.length, ...(moves.length ? { moves } : {}) }, merged, { record: !checkOnly });
   writeLedger(opts.dataDir, ledger);
   if (!checkOnly) recordSpeeds(opts.dataDir, run.health);
   // The Radar shows only jobs fetched live; the shared index is for suggestions on the Companies page.

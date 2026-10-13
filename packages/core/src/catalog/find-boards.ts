@@ -48,7 +48,7 @@ export function findBoards(html: string, base: string): FoundBoard[] {
 /** Script, stylesheet and markup traces of hiring systems: which one a page uses even when no board URL is visible. */
 const HINTS: [string, RegExp][] = [
   ["comeet", /comeet/i],
-  ["workday", /myworkdayjobs\.com|myworkday\.com/i],
+  ["workday", /myworkdayjobs\.com|myworkdaysite\.com|myworkday\.com/i],
   ["successfactors", /successfactors|sapsf\.|jobs2web/i],
   ["teamtailor", /teamtailor/i],
   ["personio", /personio/i],
