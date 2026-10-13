@@ -1,10 +1,10 @@
 import { companyLabel, displayName } from "@rawjobs/core/display-name";
 import { safeUrl } from "@rawjobs/core/text";
 import { Clock, ExternalLink, EyeOff, RefreshCw, Undo2, X } from "lucide-react";
-import { useEffect, useId, useMemo, useState, type ReactNode } from "react";
+import { Fragment, useEffect, useId, useMemo, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
 import type { BoardMove } from "@rawjobs/core/schema";
 import { careersUrl } from "@rawjobs/core/detect";
-import { keyOf } from "../lib/companies";
+import { keyOf, type CompanyRef } from "../lib/companies";
 import { nameRank } from "../lib/companySearch";
 import type { DataMeta } from "../lib/data";
 import { atsLabel, radarCompanyHash } from "../lib/filters";
@@ -30,6 +30,7 @@ import {
 import type { CompanyRow } from "../lib/setup";
 import { Chip, ChipGroup } from "./primitives";
 import { Button, Card, cx, IconButton, Pagination, Select } from "./ui";
+import { UpdateLink } from "./UpdateLink";
 
 type Row = {
   r: CompanyRow;
@@ -120,6 +121,7 @@ export function MyCompanies({
   scanning,
   onPasteLink,
   onUseLink,
+  onUpdateLink,
   hidden = [],
   onShowAgain,
   attention = 0,
@@ -147,6 +149,8 @@ export function MyCompanies({
   onPasteLink?: () => void;
   /** "Use this link" on a company whose careers page wasn't found, for the board the last scan suggested. */
   onUseLink?: (key: string, to: BoardMove["to"]) => void;
+  /** "Update link": the new board you checked and chose for a company whose careers page stopped working. */
+  onUpdateLink?: (key: string, to: CompanyRef, opts: { otherName?: string }) => void;
   hidden?: HiddenCompany[];
   onShowAgain?: (h: HiddenCompany) => void;
   /** Above 0 when a "failing" link was followed; each new value shows Needs attention. */
@@ -163,6 +167,15 @@ export function MyCompanies({
   /** The quiet companies the banner just removed, until Undo or the next change of list. */
   const [removed, setRemoved] = useState<CompanyRow[] | null>(null);
   const ids = useId();
+  /** The row whose "Update link" panel is open (one at a time). */
+  const [editing, setEditing] = useState<string | null>(null);
+  /** Rows just given a new link: they stay in view, saying so, until the filter changes. */
+  const [updated, setUpdated] = useState<ReadonlySet<string>>(new Set());
+  /** The "Update link" button that opened the panel, where focus goes back on Cancel or Escape. */
+  const opener = useRef<HTMLButtonElement | null>(null);
+  const md = useMedia("(min-width: 768px)");
+  // biome-ignore lint/correctness/useExhaustiveDependencies: the filter is the trigger
+  useEffect(() => setUpdated(new Set()), [filter]);
   useEffect(() => {
     if (attention) setFilter("attention");
   }, [attention]);
@@ -209,7 +222,7 @@ export function MyCompanies({
   const byName = (a: Row, b: Row) => companyLabel(a.r).localeCompare(companyLabel(b.r));
   const rank = (x: Row) => (needsAttention(x.problem) ? 2 : x.problem?.kind === "notChecked" ? 1 : 0);
   const shown = rows
-    .filter((x) => matchesFilter(active, { problem: x.problem, quiet: x.isQuiet }) && (!q || nameRank(q, x.r.name, companyLabel(x.r)) >= 0))
+    .filter((x) => (updated.has(x.r.id) || matchesFilter(active, { problem: x.problem, quiet: x.isQuiet })) && (!q || nameRank(q, x.r.name, companyLabel(x.r)) >= 0))
     .sort((a, b) => (sort === "recent" ? b.index - a.index : sort === "attention" ? rank(b) - rank(a) || b.quiet.scans - a.quiet.scans || byName(a, b) : byName(a, b)));
   const { items, page: at } = pageOf(shown, page);
 
@@ -224,18 +237,69 @@ export function MyCompanies({
   const toggle = (p: "runs" | "hidden") => setPanel((v) => (v === p ? null : p));
   const runsId = `${ids}-runs`;
   const hiddenId = `${ids}-hidden`;
-  const status = (x: Row) => (
-    <Status
-      problem={x.problem}
-      quiet={x.isQuiet ? x.quiet : undefined}
-      onScan={onScan}
-      scanning={scanning}
-      onPasteLink={onPasteLink}
-      name={companyLabel(x.r)}
-      moved={x.moved}
-      onUseLink={onUseLink && ((to) => onUseLink(x.key, to))}
-    />
-  );
+  const panelId = (x: Row) => `${ids}-update-${x.r.id}`;
+  /** "Update link" opens the panel under the row; without a handler, "Paste new link" opens Add by link. */
+  const fixLink = (x: Row) =>
+    onUpdateLink ? (
+      <button
+        type="button"
+        className={linkClass}
+        aria-expanded={editing === x.r.id}
+        aria-controls={panelId(x)}
+        aria-label={`Update ${companyLabel(x.r)}'s careers link`}
+        onClick={(e) => {
+          opener.current = e.currentTarget;
+          setEditing((v) => (v === x.r.id ? null : x.r.id));
+        }}
+      >
+        Update link
+      </button>
+    ) : (
+      onPasteLink && (
+        <button type="button" className={linkClass} onClick={onPasteLink}>
+          Paste new link
+        </button>
+      )
+    );
+  const status = (x: Row) =>
+    updated.has(x.r.id) && !needsAttention(x.problem) ? (
+      <span className="flex flex-wrap items-center gap-x-2">
+        <span className="font-medium text-ink">Link updated</span>
+        <span className="text-muted">Checked on your next scan</span>
+      </span>
+    ) : (
+      <Status
+        problem={x.problem}
+        quiet={x.isQuiet ? x.quiet : undefined}
+        onScan={onScan}
+        scanning={scanning}
+        fixLink={fixLink(x)}
+        name={companyLabel(x.r)}
+        moved={x.moved}
+        onUseLink={onUseLink && ((to) => onUseLink(x.key, to))}
+      />
+    );
+  const yours = new Map(rows.map((x) => [x.key, companyLabel(x.r)]));
+  const updatePanel = (x: Row) =>
+    editing === x.r.id &&
+    onUpdateLink && (
+      <UpdateLink
+        id={panelId(x)}
+        name={companyLabel(x.r)}
+        oldKey={x.key}
+        oldUrl={/^https?:\/\//.test(x.r.input) ? x.r.input : careersUrl(x.r as never) || undefined}
+        yours={new Map([...yours].filter(([k]) => k !== x.key))}
+        onClose={() => {
+          setEditing(null);
+          opener.current?.focus();
+        }}
+        onUse={(to, opts) => {
+          setEditing(null);
+          setUpdated((u) => new Set(u).add(x.r.id));
+          onUpdateLink(x.key, to, opts);
+        }}
+      />
+    );
   const remove = (x: Row, className?: string) => (
     <IconButton label={`Remove ${companyLabel(x.r)}`} onClick={() => onRemove(x.key)} className={cx("hover:text-danger-text", className)}>
       <X className="size-4" />
@@ -357,6 +421,7 @@ export function MyCompanies({
                       <ScanBars bars={x.bars} />
                     </div>
                     {status(x)}
+                    {!md && updatePanel(x)}
                   </div>
                   {remove(x, "shrink-0")}
                 </li>
@@ -376,16 +441,25 @@ export function MyCompanies({
                 </thead>
                 <tbody>
                   {items.map((x) => (
-                    <tr key={x.r.id} className={cx("border-b border-line last:border-b-0", x.isNew && "bg-inset")}>
-                      <td className="px-4 py-2.5">
-                        <NameCell x={x} />
-                      </td>
-                      <td className="px-3 py-2.5">
-                        <ScanBars bars={x.bars} />
-                      </td>
-                      <td className="px-3 py-2.5">{status(x)}</td>
-                      <td className="px-2 py-2.5 text-right">{remove(x)}</td>
-                    </tr>
+                    <Fragment key={x.r.id}>
+                      <tr className={cx("border-b border-line last:border-b-0", x.isNew && "bg-inset", md && editing === x.r.id && "border-b-0")}>
+                        <td className="px-4 py-2.5">
+                          <NameCell x={x} />
+                        </td>
+                        <td className="px-3 py-2.5">
+                          <ScanBars bars={x.bars} />
+                        </td>
+                        <td className="px-3 py-2.5">{status(x)}</td>
+                        <td className="px-2 py-2.5 text-right">{remove(x)}</td>
+                      </tr>
+                      {md && editing === x.r.id && (
+                        <tr className="border-b border-line last:border-b-0">
+                          <td colSpan={4} className="px-4 pb-3">
+                            {updatePanel(x)}
+                          </td>
+                        </tr>
+                      )}
+                    </Fragment>
                   ))}
                 </tbody>
               </table>
@@ -456,7 +530,7 @@ function Status({
   quiet,
   onScan,
   scanning,
-  onPasteLink,
+  fixLink,
   name,
   moved,
   onUseLink,
@@ -465,7 +539,8 @@ function Status({
   quiet?: Quiet;
   onScan?: () => void;
   scanning?: boolean;
-  onPasteLink?: () => void;
+  /** "Update link" (or "Paste new link"): shown when the careers page is gone, or hasn't answered for a few scans. */
+  fixLink?: ReactNode;
   name?: string;
   moved?: BoardMove;
   onUseLink?: (to: BoardMove["to"]) => void;
@@ -480,11 +555,7 @@ function Status({
   if (!problem) return quiet ? <span className="text-muted">Nothing for you in the last {quiet.scans} scans</span> : null;
   switch (problem.kind) {
     case "notFound": {
-      const paste = onPasteLink && (
-        <button type="button" className={linkClass} onClick={onPasteLink}>
-          Paste new link
-        </button>
-      );
+      const paste = fixLink;
       // Same name isn't proof (anyone can open a board called "Acme"): the board opens to check, and only your click switches.
       const to = moved && onUseLink ? moved.to : undefined;
       const href = to && safeUrl(to.careers_url || careersUrl(to as never));
@@ -525,11 +596,15 @@ function Status({
       return line(
         "Not answering",
         problem.scans > 1 ? `since ${shortDate(problem.since)}` : "on the last scan",
-        onScan && (
-          <button type="button" className={linkClass} onClick={onScan} disabled={scanning}>
-            <RefreshCw className="size-3" /> Check again
-          </button>
-        ),
+        <>
+          {onScan && (
+            <button type="button" className={linkClass} onClick={onScan} disabled={scanning}>
+              <RefreshCw className="size-3" /> Check again
+            </button>
+          )}
+          {/* One timeout usually passes; after a few failed scans the link may be the problem. */}
+          {problem.scans > 1 && fixLink}
+        </>,
         "danger",
       );
     case "cantRead":
@@ -587,5 +662,18 @@ function HiddenPanel({ hidden, onShowAgain, id }: { hidden: HiddenCompany[]; onS
         })}
       </ul>
     </Card>
+  );
+}
+
+/** Whether a media query matches, kept up to date (true where matchMedia doesn't exist). */
+function useMedia(query: string): boolean {
+  return useSyncExternalStore(
+    (on) => {
+      if (typeof matchMedia !== "function") return () => {};
+      const m = matchMedia(query);
+      m.addEventListener("change", on);
+      return () => m.removeEventListener("change", on);
+    },
+    () => typeof matchMedia !== "function" || matchMedia(query).matches,
   );
 }
