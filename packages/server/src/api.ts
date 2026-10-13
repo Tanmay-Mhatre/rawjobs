@@ -1,6 +1,6 @@
 import { spawn, type ChildProcess } from "node:child_process";
 import { createHash } from "node:crypto";
-import { readFileSync, writeFileSync } from "node:fs";
+import { readFileSync, statSync, writeFileSync } from "node:fs";
 import type { IncomingMessage, ServerResponse } from "node:http";
 import { resolve } from "node:path";
 import {
@@ -15,6 +15,7 @@ import {
   fileStamp,
   LEGACY_CONFIG_CANDIDATES,
   pruneCache,
+  scanLockHeld,
   suggestCacheDir,
   writeCacheFile,
 } from "@rawjobs/core";
@@ -42,8 +43,10 @@ type Line = string;
 
 /**
  * The dashboard's API: everything it needs to set up and run RawJobs on this computer.
- *   GET  /api/health          { ok, version, scanning, update, startLink, platform }: is the server up, which version, one waiting
- *                             to install, and (for the page to remember while it's down) how to start it again
+ *   GET  /api/health          { ok, version, scanning, background, dataVersion, update, startLink, platform }: is the server up,
+ *                             which version, one waiting to install, and (for the page to remember while it's down) how to
+ *                             start it again. background: a scan this server didn't start (a scheduled one) is running.
+ *                             dataVersion: meta.json's generatedAt, so an open page sees when a scan wrote new results
  *   GET/PUT /api/tracking     your statuses, notes and Radar preferences (profile/tracking.json)
  *   GET  /api/update          an installed copy's updates (POST …/check, …/apply, …/seen; PUT …/settings)
  *   GET  /api/setup           setup status (+ current config)
@@ -203,6 +206,25 @@ Stopped after ${Math.round(timeoutMs / 1000)} s without finishing.`.trim(),
   let checking = false;
   const busy = () => scan !== null || checking;
 
+  /** meta.json's generatedAt, read again only when the file changes (open pages ask every few seconds). */
+  let meta: { stamp: string; generatedAt: string | null } | null = null;
+  function dataVersion(): string | null {
+    const path = resolve(dataDir, "meta.json");
+    try {
+      const { mtimeMs, size } = statSync(path);
+      const stamp = `${mtimeMs}:${size}`;
+      if (meta?.stamp !== stamp) {
+        const { generatedAt } = JSON.parse(readFileSync(path, "utf8")) as { generatedAt?: unknown };
+        meta = { stamp, generatedAt: typeof generatedAt === "string" ? generatedAt : null };
+      }
+      return meta.generatedAt;
+    } catch {
+      // No scan yet: nothing to show.
+      meta = null;
+      return null;
+    }
+  }
+
   function follow(res: ServerResponse) {
     if (!scan) return;
     res.setHeader("content-type", "application/x-ndjson");
@@ -274,7 +296,16 @@ Stopped after ${Math.round(timeoutMs / 1000)} s without finishing.`.trim(),
 
   async function route(url: string, req: IncomingMessage, res: ServerResponse): Promise<void> {
     if (url === "/api/health" && req.method === "GET")
-      return json(res, { ok: true, version, scanning: busy(), update: opts.updater?.updateHint() ?? null, startLink: opts.startLink?.() ?? false, platform: process.platform });
+      return json(res, {
+        ok: true,
+        version,
+        scanning: busy(),
+        background: scan === null && scanLockHeld(dataDir),
+        dataVersion: dataVersion(),
+        update: opts.updater?.updateHint() ?? null,
+        startLink: opts.startLink?.() ?? false,
+        platform: process.platform,
+      });
     if (url === "/api/update" || url.startsWith("/api/update/")) {
       if (opts.updater && (await opts.updater.route(url, req, res, () => readBody(req)))) return;
       if (url === "/api/update" && req.method === "GET")

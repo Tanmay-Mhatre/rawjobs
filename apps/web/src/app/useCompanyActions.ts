@@ -15,7 +15,7 @@ type Options = {
   jobs: readonly Job[];
   setCompanyHidden: (company: string, hidden: boolean) => void;
   refreshSetup: () => Promise<void>;
-  reload: () => Promise<void>;
+  reload: () => Promise<unknown>;
 };
 
 /** Your companies, from the Radar: add, remove, mute, check now. */
