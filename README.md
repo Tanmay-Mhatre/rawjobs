@@ -167,7 +167,7 @@ How the directory is built (no AI, `scripts/catalog/`):
 2. **Resolve** the seed list (`seeds/industries.json`, must-have companies per industry, editable): read each company's website the way a person would (homepage → careers link → the board it embeds) to find its hiring system. Polite: one request at a time per site, robots.txt honoured.
 3. **Check** every board live with the cheapest call each hiring system offers (live / dormant / dead).
 4. **Index** each live company's open job titles and locations (no descriptions).
-5. **Tag** companies by industry from three sources: the source lists' own labels, the seed list, and their job titles (e.g. many "Forex" or "MT5" roles means a brokerage). Industries a company merely hires for (`title_tags`, e.g. "hires AI roles") are kept apart.
+5. **Tag** companies by industry from four sources: the source lists' own labels, the seed list, Wikidata's industry statements (CC0), and their job titles (e.g. many "Forex" or "MT5" roles means a brokerage), read from the job index, the daily job feed or the live checks. Industries a company merely hires for (`title_tags`, e.g. "hires AI roles") are kept apart, and `tag_src` says which tags came from Wikidata or job titles ([details](docs/shared-directory.md#industry-tags)).
 6. **Publish** to `data/catalog/`, and write **`out/coverage.md`**: per industry, how many must-have companies we can track, and which hiring systems to support next.
 
 The dashboard downloads a newer directory by itself when yours is more than a week old (Settings → Scans & alerts). To rebuild it locally:

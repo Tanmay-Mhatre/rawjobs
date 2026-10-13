@@ -67,6 +67,12 @@ describe("the directory build, on known input", () => {
     // The hand-reviewed list sets the tier and its segment a tag; a source list's category tags too.
     expect(by.get("greenhouse:betapay")).toMatchObject({ tier: "curated", tags: ["fintech"] });
     expect(by.get("ashby:gammapay")!.tags).toEqual(["payments"]);
+    // Titles a live check read tag what the company hires for, marked as such; Wikidata tags what it is,
+    // matched by name and a board named like its website (Acme Corporation, acme.com).
+    expect(by.get("greenhouse:betapay")).toMatchObject({ tags: ["fintech"], title_tags: ["payments"], tag_src: { payments: "titles" } });
+    expect(by.get("lever:acme")).toMatchObject({ tags: ["banking"], tag_src: { banking: "wikidata" } });
+    // Same name, but a website its board isn't named after: no Wikidata tag (Beta Pay isn't an insurer).
+    expect(by.get("greenhouse:betapay")!.tags).not.toContain("insurtech");
   });
 
   it("releases files whose checksums match the manifest and whose contents are what was published", () => {

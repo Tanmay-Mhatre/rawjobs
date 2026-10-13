@@ -96,6 +96,7 @@ jobs:
           DENYLIST_FILE: ${{ github.workspace }}/directory-repo/denylist.json
           # Approved moves: the directory's `moves` list (build.ts).
           MOVES_FILE: ${{ github.workspace }}/directory-repo/moves.json
+          GH_TOKEN: ${{ secrets.DATA_REPO_TOKEN }}
         run: |
           pnpm catalog:sources
           pnpm exec tsx scripts/catalog/merge.ts
@@ -104,6 +105,8 @@ jobs:
           pnpm exec tsx scripts/catalog/check.ts --max-minutes 30
           pnpm exec tsx scripts/catalog/build.ts
           pnpm exec tsx scripts/catalog/index.ts --max-age-days 9999
+          # Job titles for industry tags, as the weekly rebuild reads them (best effort).
+          bash scripts/catalog/feed.sh
           pnpm exec tsx scripts/catalog/publish.ts --data dist-data
           pnpm exec tsx scripts/catalog/release.ts --data dist-data --out dist
 

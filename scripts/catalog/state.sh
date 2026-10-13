@@ -24,6 +24,10 @@ case "$SET" in
     FILES=(
       out/checks.jsonl
       out/index-all.jsonl
+      # Job titles checks read on the way, and the Wikidata companies with their industries: publish
+      # tags industries from both, also in runs that don't fetch them again.
+      out/titles.jsonl
+      raw/wikidata/companies.json
       out/resolved.json
       out/resolved-bulk.json
       out/probe.jsonl
