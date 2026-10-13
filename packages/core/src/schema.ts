@@ -52,7 +52,7 @@ export const ATS_TYPES = [
  * your own computer, credited to the board and linked back to it; they're never shared, put in the
  * directory or the job feed (so the catalog only ever works with ATS_TYPES).
  */
-export const JOB_BOARDS = ["hackernews", "remotive", "arbeitnow", "remoteok", "himalayas", "jobicy"] as const;
+export const JOB_BOARDS = ["hackernews", "remotive", "arbeitnow", "remoteok", "himalayas", "jobicy", "weworkremotely"] as const;
 
 export type AtsType = (typeof ATS_TYPES)[number] | (typeof JOB_BOARDS)[number];
 

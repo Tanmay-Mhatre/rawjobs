@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0" xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:media="http://search.yahoo.com/mrss">
+  <channel>
+    <title>We Work Remotely: Remote jobs in design, programming, marketing and more</title>
+    <link>https://weworkremotely.com/categories/remote-programming-jobs.rss</link>
+    <description>We Work Remotely: Remote jobs in design, programming, marketing and more</description>
+    <language>en-US</language>
+    <ttl>60</ttl>
+    <item>
+      <media:content url="https://wwr-pro.s3.amazonaws.com/logos/0171/6491/logo.gif" type="image/png"/>
+      <title>bondex: Fullstack Web3 Engineer (Solidity / Rust / Typescript)</title>
+      <region>Remote - Americas</region>
+      <category>Front-End Programming</category>
+      <description>&lt;p&gt;Build &lt;b&gt;protocols&lt;/b&gt;.&lt;/p&gt;</description>
+      <pubDate>Tue, 29 Sep 2026 19:13:52 +0000</pubDate>
+      <guid>https://weworkremotely.com/remote-jobs/bondex-fullstack-web3-engineer-solidity-rust-typescript</guid>
+      <link>https://weworkremotely.com/remote-jobs/bondex-fullstack-web3-engineer-solidity-rust-typescript</link>
+    </item>
+<item>
+      <title>Discord: Engineering Manager, Machine Learning (Safety)</title>
+      <region>Anywhere in the World</region>
+      <category>Full-Stack Programming</category>
+      <description>&lt;p&gt;Build &lt;b&gt;protocols&lt;/b&gt;.&lt;/p&gt;</description>
+      <pubDate>Tue, 29 Sep 2026 07:30:41 +0000</pubDate>
+      <guid>https://weworkremotely.com/remote-jobs/discord-engineering-manager-machine-learning-safety</guid>
+      <link>https://weworkremotely.com/remote-jobs/discord-engineering-manager-machine-learning-safety</link>
+    </item>
+  </channel>
+</rss>
