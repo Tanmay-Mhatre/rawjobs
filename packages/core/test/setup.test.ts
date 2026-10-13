@@ -122,9 +122,9 @@ describe("checkCompanies", () => {
     expect(res[0]!.matches).toBeUndefined(); // no profile given
     expect(res[1]!.error).toMatch(/Not found/);
     expect(res[2]!.error).toMatch(/full Workday link/); // no site in that URL
-    // Never fetches an incomplete Workday link; an unknown site gets one look for a Teamtailor feed.
-    expect(calls).toHaveLength(3);
-    expect(calls[2]).toBe("https://example.com/jobs.rss");
+    // Never fetches an incomplete Workday link; an unknown site gets a look for a Teamtailor feed
+    // and a SuccessFactors career site.
+    expect(calls.slice(2)).toEqual(["https://example.com/jobs.rss", "https://example.com/search/?q=&startrow=0"]);
   });
 
   it("recognises a Teamtailor site on the company's own domain by its feed", async () => {
@@ -141,7 +141,15 @@ describe("checkCompanies", () => {
       open_jobs: 1,
     });
     expect(other).toMatchObject({ status: "unknown" });
-    expect(calls).toContain("https://www.example.com/jobs.rss"); // one probe, then it gives up
+    expect(calls).toContain("https://www.example.com/jobs.rss"); // it looked, then gave up
+  });
+
+  it("recognises a SuccessFactors career site on the company's own domain by its search page", async () => {
+    const search =
+      '<script src="/platform/js/j2w/j2w.core.js"></script><span class="paginationLabel">Results <b>1 – 1</b> of <b>1</b></span><table id="searchresults"><tr class="data-row"><td><a href="/job/Delft-Planner/42/" class="jobTitle-link">Planner</a><span class="jobLocation">Delft, NL</span></td></tr></table>';
+    const { http } = fakeHttp((url) => (url.startsWith("https://jobs.acme.com/search/") ? text(search) : text("<html></html>")));
+    const [sf] = await checkCompanies(["https://jobs.acme.com/"], { http });
+    expect(sf).toMatchObject({ status: "live", ats: "successfactors", slug: "jobs.acme.com", key: "successfactors:jobs.acme.com", careers_url: "https://jobs.acme.com/search/", open_jobs: 1 });
   });
 
   it("counts jobs matching the profile and marks companies already in the directory", async () => {

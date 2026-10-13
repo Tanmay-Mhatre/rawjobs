@@ -36,7 +36,7 @@ const KALIL = [
   "workday",
 ];
 /** openings-mcp providers we have connectors for (merge.ts turns each entry into a careers URL). */
-export const OPENINGS_MCP = ["ashby", "bamboohr", "greenhouse", "icims", "lever", "oracle", "recruitee", "rippling", "smartrecruiters", "teamtailor", "workable", "workday"];
+export const OPENINGS_MCP = ["ashby", "bamboohr", "greenhouse", "icims", "lever", "oracle", "recruitee", "rippling", "smartrecruiters", "successfactors", "teamtailor", "workable", "workday"];
 
 /** [folder, file name, URL] */
 const FILES: [string, string, string][] = [

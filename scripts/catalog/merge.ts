@@ -9,7 +9,7 @@
  */
 import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { ATS_TYPES, companyKey, detectCompany, isTeamtailorHost, type AtsType } from "@rawjobs/core";
+import { ATS_TYPES, companyKey, detectCompany, isCareerSiteHost, isTeamtailorHost, type AtsType } from "@rawjobs/core";
 import { parse as parseYaml } from "yaml";
 import { BOARD_URL, freehireBoards } from "./lib/freehire";
 import { catalogDir, dataDir } from "./lib/paths";
@@ -93,6 +93,17 @@ function fromUrl(src: SourceId, url: string, name?: string) {
   if (d) add(src, { ...d, name });
 }
 
+/** A SuccessFactors career site (RMK) named by a list that says so: its host is the board. */
+function addCareerSite(src: SourceId, url: string, name?: string) {
+  let host = "";
+  try {
+    host = new URL(/^https?:\/\//i.test(url) ? url : `https://${url}`).hostname.toLowerCase();
+  } catch {
+    return;
+  }
+  if (isCareerSiteHost({ slug: host }) && !/(^|\.)(successfactors|sapsf)\.(com|eu|cn)$/.test(host)) add(src, { ats: "successfactors", slug: host, name });
+}
+
 function csvRows(path: string): string[][] {
   // Small, simple CSVs (quoted fields possible in names).
   return readFileSync(path, "utf8")
@@ -153,7 +164,12 @@ withFile(raw("latmay", "ats_career_page_urls.csv"), (p) => {
 for (const f of existsSync(raw("kalil0321")) ? readdirSync(raw("kalil0321")).filter((n) => n.endsWith(".csv")) : []) {
   const p = raw("kalil0321", f);
   const rows = csvRows(p);
-  for (const [name, , url] of rows) if (url) fromUrl("kalil", url, name);
+  for (const [name, , url] of rows) {
+    if (!url) continue;
+    // Its SuccessFactors list holds career sites on companies' own domains, which no URL rule reveals.
+    if (f === "successfactors.csv" && !detectCompany(url)) addCareerSite("kalil", url, name);
+    else fromUrl("kalil", url, name);
+  }
   count("kalil", rows.length);
 }
 {
@@ -169,6 +185,8 @@ for (const f of existsSync(raw("kalil0321")) ? readdirSync(raw("kalil0321")).fil
     recruitee: (e) => e.slug && `https://${e.slug}.recruitee.com`,
     rippling: (e) => e.board_slug && `https://ats.rippling.com/${enc(e.board_slug)}/jobs`,
     smartrecruiters: (e) => e.company_identifier && `https://jobs.smartrecruiters.com/${enc(e.company_identifier)}`,
+    // Career-site hosts; added as boards in the loop below (no URL rule reveals them).
+    successfactors: () => undefined,
     teamtailor: (e) => e.host && `https://${e.host}`,
     workable: (e) => e.account && `https://apply.workable.com/${enc(e.account)}`,
     workday: (e) => e.tenant && e.instance && e.site && `https://${e.tenant}.${e.instance}.myworkdayjobs.com/${enc(e.site)}`,
@@ -180,8 +198,13 @@ for (const f of existsSync(raw("kalil0321")) ? readdirSync(raw("kalil0321")).fil
         // Hosts and slugs come from a public list: only plain host names reach a URL.
         if (e.host && !/^[a-z0-9.-]+$/i.test(e.host)) continue;
         if (e.slug && !/^[a-z0-9_-]+$/i.test(e.slug)) continue;
-        // A Teamtailor site on the company's own domain: the list names the vendor, the URL can't.
-        if (provider === "teamtailor" && e.host && isTeamtailorHost(e.host) && !/.teamtailor.com$/i.test(e.host)) {
+        // Career sites (SuccessFactors) and Teamtailor sites on companies' own domains: the list names
+        // the vendor, the URL can't.
+        if (provider === "successfactors") {
+          if (e.host) addCareerSite("openingsmcp", e.host, e.company);
+          continue;
+        }
+        if (provider === "teamtailor" && e.host && isTeamtailorHost(e.host) && !/\.teamtailor\.com$/i.test(e.host)) {
           add("openingsmcp", { ats: "teamtailor", slug: e.host.toLowerCase(), name: e.company });
           continue;
         }

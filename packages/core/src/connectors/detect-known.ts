@@ -45,6 +45,8 @@ export function detectKnownAts(url: URL): DetectedCompany | null {
     const company = url.searchParams.get("company");
     return company ? { ats: "successfactors", slug: company, shard: host } : null;
   }
+  // SuccessFactors career sites on SAP's own hosts: acme.jobs2web.com, acme.jobs.hr.cloud.sap. The host is the board.
+  if (/^[a-z0-9-]+\.(jobs2web\.com|jobs\.hr\.cloud\.sap)$/.test(host)) return { ats: "successfactors", slug: host };
   if (host.endsWith(".teamtailor.com") && sub && !["www", "app", "career", "api"].includes(sub)) return { ats: "teamtailor", slug: sub };
   // Comeet: comeet.com/jobs/{company}/{uid}. Keyed by the company uid; the name goes in `site`.
   if (/(^|\.)comeet\.(com|co)$/.test(host) && parts[0] === "jobs" && parts[1] && parts[2]) return { ats: "comeet", slug: parts[2], site: parts[1] };

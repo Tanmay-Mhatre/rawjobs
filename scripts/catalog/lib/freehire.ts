@@ -3,7 +3,7 @@
  * 2026-09-04, then moved them into a database (#2406), so sources.ts downloads the last committed
  * copy, pinned to that commit, and merge.ts turns each entry into a board with freehireBoards().
  */
-import { detectCompany, isTeamtailorHost } from "@rawjobs/core";
+import { detectCompany, isCareerSiteHost, isTeamtailorHost } from "@rawjobs/core";
 
 /** The parent of freehire's "Retire sources/" commit (2b781bf5, #2406): the last one with the list. */
 export const FREEHIRE_COMMIT = "96b53a2c7b1e545bbad0868e16ec85a2eba4f36a";
@@ -36,6 +36,8 @@ export const BOARD_URL: Record<string, (b: string) => string | undefined> = {
   recruitee: (b) => (plain(b) ? `https://${b}.recruitee.com` : undefined),
   rippling: (b) => `https://ats.rippling.com/${enc(b)}/jobs`,
   smartrecruiters: (b) => `https://jobs.smartrecruiters.com/${enc(b)}`,
+  // The SAP SuccessFactors career-site host (RMK); kept as the board in freehireBoards.
+  successfactors: (b) => (plain(b) ? `https://${b}` : undefined),
   // The career-site host: {x}.teamtailor.com, or the company's own domain (handled in freehireBoards).
   teamtailor: (b) => (plain(b) ? `https://${b}` : undefined),
   workable: (b) => `https://apply.workable.com/${enc(b)}`,
@@ -61,7 +63,11 @@ export function freehireBoards(provider: string, entries: { company?: unknown; b
     const name = typeof e.company === "string" ? e.company.trim() : "";
     const board = e.board.trim();
     // A Teamtailor site on the company's own domain: the list names the vendor, the URL can't.
-    if (provider === "teamtailor" && isTeamtailorHost(board) && !/.teamtailor.com$/i.test(board)) {
+    if (provider === "successfactors" && isCareerSiteHost({ slug: board }) && !/(^|\.)(successfactors|sapsf)\.(com|eu|cn)$/i.test(board)) {
+      out.push({ ats: "successfactors", slug: board.toLowerCase(), ...(name ? { name } : {}) });
+      continue;
+    }
+    if (provider === "teamtailor" && isTeamtailorHost(board) && !/\.teamtailor\.com$/i.test(board)) {
       out.push({ ats: "teamtailor", slug: board.toLowerCase(), ...(name ? { name } : {}) });
       continue;
     }
