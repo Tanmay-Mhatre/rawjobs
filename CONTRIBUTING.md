@@ -50,7 +50,7 @@ The contribution inbox (`services/contribute`) is a Cloudflare Worker in the sam
   the User-Agent, back off on rate limits, and never touch apply endpoints.
 - **Data licences.** Only add sources to the shared directory whose licence allows it (see
   `services/directory-repo-template/NOTICE.md`). Public job boards (Hacker News, Remotive, Arbeitnow,
-  Remote OK, Himalayas, Jobicy) are fetched on the user's computer only, never published.
+  Remote OK, Himalayas, Jobicy, We Work Remotely) are fetched on the user's computer only, never published.
 
 ## Adding a company
 

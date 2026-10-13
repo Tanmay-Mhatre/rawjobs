@@ -75,7 +75,7 @@ and accept only releases signed with **its** key. To ship your own installs and 
   workflow may read and acknowledge it. Acknowledging removes boards, so a second poller would
   quietly take other users' contributions away from the central directory. The central inbox
   token is never shared.
-- Keep the public job boards (Hacker News, Remotive, Arbeitnow, Remote OK, Himalayas, Jobicy) out of any data
+- Keep the public job boards (Hacker News, Remotive, Arbeitnow, Remote OK, Himalayas, Jobicy, We Work Remotely) out of any data
   you publish. They are fetched on each user's own computer only.
 - Honour `denylist.json`: companies removed on request in the central directory should stay out of
   yours too.
