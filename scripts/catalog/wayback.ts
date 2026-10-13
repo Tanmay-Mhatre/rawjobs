@@ -90,6 +90,7 @@ const QUERIES: { url: string; matchType: "prefix" | "domain" }[] = [
   { url: "fa.ocs.oraclecloud.com", matchType: "domain" },
   { url: "fa.ap1.oraclecloud.com", matchType: "domain" },
   { url: "fa.ca2.oraclecloud.com", matchType: "domain" },
+  { url: "recruiting.paylocity.com/Recruiting/Jobs/All/", matchType: "prefix" },
 ];
 
 type Progress = { pages?: number; next: number };

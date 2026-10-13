@@ -25,6 +25,7 @@ const KALIL = [
   "join_com",
   "lever",
   "oracle",
+  "paylocity",
   "personio",
   "pinpoint",
   "recruitee",
