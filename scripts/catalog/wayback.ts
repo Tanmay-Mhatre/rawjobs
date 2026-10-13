@@ -101,6 +101,7 @@ const QUERIES: { url: string; matchType: "prefix" | "domain" }[] = [
   { url: "workforcenow.adp.com/mascsr/default/mdf/recruitment/", matchType: "prefix" },
   { url: "applicantpro.com", matchType: "domain" },
   { url: "isolvedhire.com", matchType: "domain" },
+  { url: "recruitingbypaycor.com/career/", matchType: "prefix" },
 ];
 
 type Progress = { pages?: number; next: number };

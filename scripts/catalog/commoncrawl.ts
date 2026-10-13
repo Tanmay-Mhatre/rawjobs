@@ -102,6 +102,7 @@ const QUERIES: { url: string; matchType?: "domain" }[] = [
   { url: "workforcenow.adp.com/mascsr/default/mdf/recruitment/*" },
   { url: "applicantpro.com", matchType: "domain" },
   { url: "isolvedhire.com", matchType: "domain" },
+  { url: "recruitingbypaycor.com/career/*" },
 ];
 
 /**
