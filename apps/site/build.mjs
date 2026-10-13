@@ -64,6 +64,7 @@ const SYSTEMS = [
   "Paycor Recruiting",
   "HiringThing",
   "Manatal",
+  "Trakstar Hire",
   "Comeet",
   "Oracle Recruiting",
   "SAP SuccessFactors",

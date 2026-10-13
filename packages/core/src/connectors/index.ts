@@ -19,6 +19,7 @@ import { applicantpro } from "./applicantpro";
 import { paycor } from "./paycor";
 import { hiringthing } from "./hiringthing";
 import { manatal } from "./manatal";
+import { trakstar } from "./trakstar";
 import { greenhouse } from "./greenhouse";
 import { hibob } from "./hibob";
 import { icims } from "./icims";
@@ -83,6 +84,7 @@ export const connectors: Partial<Record<AtsType, Connector<any>>> = {
   paycor,
   hiringthing,
   manatal,
+  trakstar,
   // Job boards (JOB_BOARDS), last so a company's own board is always recognised first.
   hackernews,
   remotive,
@@ -221,6 +223,8 @@ export function careersUrl(c: DetectedCompany): string {
       return `https://${c.slug}/`;
     case "manatal":
       return `https://www.careers-page.com/${c.slug}`;
+    case "trakstar":
+      return `https://${c.slug}.hire.trakstar.com/`;
     default:
       return "";
   }
