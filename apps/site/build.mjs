@@ -33,7 +33,7 @@ const ANALYTICS_TOKEN = (process.env.CF_ANALYTICS_TOKEN || "").trim();
 const DATA_REPO = process.env.DATA_REPO || "Tanmay-Mhatre/rawjobs-directory";
 const APP_REPO = process.env.APP_REPO || "Tanmay-Mhatre/rawjobs";
 
-// The 23 hiring systems with a connector in packages/core (README, "Adding companies").
+// The 44 hiring systems with a connector in packages/core (README, "Adding companies").
 const SYSTEMS = [
   "Greenhouse",
   "Lever",
