@@ -46,6 +46,11 @@ export const BOARD_URL: Record<string, (b: string) => string | undefined> = {
   successfactors: (b) => (plain(b) ? `https://${b}` : undefined),
   // The career-site host: {x}.teamtailor.com, or the company's own domain (handled in freehireBoards).
   teamtailor: (b) => (plain(b) ? `https://${b}` : undefined),
+  // "{host}/{company code}/{board GUID}" of UKG Pro Recruiting
+  ukg: (b) => {
+    const [host, code, guid] = b.split("/");
+    return host && code && guid && plain(host) && plain(code) && plain(guid) ? `https://${host}/${code}/JobBoard/${guid}` : undefined;
+  },
   workable: (b) => `https://apply.workable.com/${enc(b)}`,
   // "{tenant}.wdN.myworkdayjobs.com/{site}" or "wdN.myworkdaysite.com/{tenant}/{site}"
   workday: (b) => {

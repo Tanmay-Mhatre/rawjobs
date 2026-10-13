@@ -20,7 +20,7 @@ export function boardFromUrl(url: string): UrlBoard | null {
   // Workday sites can really be named "jobs" or "search" (PayPal, Parsons), so those two stay.
   if (d.ats === "workday" && (!d.shard || !d.site || (IGNORE.has(d.site.toLowerCase()) && !WORKDAY_SITE_NAMES.has(d.site.toLowerCase())))) return null;
   // A Taleo pod hosts many companies: without the section it isn't one board. Oracle needs its data centre.
-  if ((d.ats === "taleo" && !d.site) || (d.ats === "oracle" && !d.shard) || (d.ats === "comeet" && !d.site)) return null;
+  if ((d.ats === "taleo" && !d.site) || (d.ats === "oracle" && !d.shard) || (d.ats === "comeet" && !d.site) || (d.ats === "ukg" && (!d.shard || !d.site))) return null;
   return { ats: d.ats, slug, ...(d.region ? { region: d.region } : {}), ...(d.shard ? { shard: d.shard } : {}), ...(d.site ? { site: d.site } : {}) };
 }
 

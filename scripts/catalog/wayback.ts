@@ -93,6 +93,8 @@ const QUERIES: { url: string; matchType: "prefix" | "domain" }[] = [
   { url: "recruiting.paylocity.com/Recruiting/Jobs/All/", matchType: "prefix" },
   { url: "www.paycomonline.net/v4/ats/web.php/portal/", matchType: "prefix" },
   { url: "careers.hireology.com/", matchType: "prefix" },
+  { url: "ultipro.com", matchType: "domain" },
+  { url: "rec.pro.ukg.net", matchType: "domain" },
 ];
 
 type Progress = { pages?: number; next: number };
