@@ -1,6 +1,6 @@
 import { resolve } from "node:path";
 import { parseArgs } from "node:util";
-import { defaultDataDir, directoryIndustryCounts, loadConfig, directoryAgeDays, directoryStatus, sendContributions, updateDirectory } from "@rawjobs/core";
+import { defaultDataDir, directoryIndustryCounts, loadConfig, directoryAgeDays, directoryStatus, sendContributions, sendMoves, updateDirectory } from "@rawjobs/core";
 
 /** The shared company directory: status, download the latest copy, share waiting additions. */
 export async function cmdDirectory(args: string[]): Promise<number> {
@@ -59,14 +59,19 @@ export async function cmdDirectory(args: string[]): Promise<number> {
         out({ updated: false, message: "Recent enough." }, "Directory is recent enough.");
         return 0;
       }
-      const shared = await sendContributions(dataDir, { enabled: sharing() });
+      const on = sharing();
+      const shared = await sendContributions(dataDir, { enabled: on });
+      // Confirmed careers-link moves go with this update, never when they're confirmed.
+      const moved = await sendMoves(dataDir, { enabled: on });
       const result = await updateDirectory(dataDir, { force: values.force }).catch((err: Error) => ({ updated: false, message: `Update failed: ${err.message}` }));
-      out({ ...result, shared: shared.sent }, `${result.message}${shared.sent ? ` ${shared.message}` : ""}`);
+      out({ ...result, shared: shared.sent, moves_shared: moved.sent }, `${result.message}${shared.sent ? ` ${shared.message}` : ""}${moved.sent ? ` ${moved.message}` : ""}`);
       return 0;
     }
     case "share": {
-      const result = await sendContributions(dataDir, { enabled: sharing() });
-      out(result, result.message);
+      const on = sharing();
+      const result = await sendContributions(dataDir, { enabled: on });
+      const moved = await sendMoves(dataDir, { enabled: on });
+      out({ ...result, moves_shared: moved.sent }, `${result.message}${moved.sent ? ` ${moved.message}` : ""}`);
       return 0;
     }
     default:

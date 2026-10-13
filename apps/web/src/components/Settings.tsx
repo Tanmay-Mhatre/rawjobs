@@ -453,12 +453,13 @@ export function Settings({
               <div className="space-y-2">
                 <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
                   <Toggle checked={draft.directory.share_additions} onChange={(v) => void saveSwitch("share_additions", v)}>
-                    Share companies I add by link with everyone
+                    Share companies I add or update by link
                   </Toggle>
                   <SaveNote state={switchSave.share_additions} />
                 </div>
                 <p className="type-small text-muted">
-                  Only the careers link is shared: the company's name, its hiring system and its board name. Never your profile, resume, searches or which jobs you look at.{" "}
+                  Only the careers link is shared: the company's name, its hiring system and its board name. When you confirm a company's new careers link, just the two links and the company's name
+                  are shared too, with the next directory update. Never your profile, resume, searches or which jobs you look at.{" "}
                   <a
                     href="https://github.com/Tanmay-Mhatre/rawjobs/blob/main/PRIVACY.md"
                     target="_blank"
