@@ -1,0 +1,8 @@
+# Fixture in openings-mcp's format.
+- company: "Golden Bank"
+  tenant: "goldenbank"
+  instance: "wd3"
+  site: "Careers"
+- company: "No Site Co"
+  tenant: "nosite"
+  instance: "wd1"
