@@ -7,6 +7,8 @@ export type SeenBoard = UrlBoard & { seen: string[] };
 
 /** Paths on board hosts that are the host's own pages, not company boards. */
 const IGNORE = new Set(["embed", "v1", "v0", "api", "jobs", "favicon.ico", "robots.txt", "sitemap.xml", "assets", "static", "_next", "search", "oauth", "login", "privacy", "terms", "wday", "cxs"]);
+/** Words in IGNORE that are also real Workday site names. */
+const WORKDAY_SITE_NAMES = new Set(["jobs", "search"]);
 const TRACKED = new Set<string>(ATS_TYPES);
 
 /** One URL -> the board it belongs to, or null when it isn't a company board we track. */
@@ -15,7 +17,8 @@ export function boardFromUrl(url: string): UrlBoard | null {
   if (!d || !TRACKED.has(d.ats)) return null;
   const slug = d.slug.trim();
   if (!slug || slug.length > 80 || IGNORE.has(slug.toLowerCase()) || /[\s<>"{}|\\^`]/.test(slug)) return null;
-  if (d.ats === "workday" && (!d.shard || !d.site || IGNORE.has(d.site.toLowerCase()))) return null;
+  // Workday sites can really be named "jobs" or "search" (PayPal, Parsons), so those two stay.
+  if (d.ats === "workday" && (!d.shard || !d.site || (IGNORE.has(d.site.toLowerCase()) && !WORKDAY_SITE_NAMES.has(d.site.toLowerCase())))) return null;
   // A Taleo pod hosts many companies: without the section it isn't one board. Oracle needs its data centre.
   if ((d.ats === "taleo" && !d.site) || (d.ats === "oracle" && !d.shard) || (d.ats === "comeet" && !d.site)) return null;
   return { ats: d.ats, slug, ...(d.region ? { region: d.region } : {}), ...(d.shard ? { shard: d.shard } : {}), ...(d.site ? { site: d.site } : {}) };
