@@ -67,6 +67,20 @@ describe("feed row (design/components/Feed)", () => {
     expect(screen.getAllByRole("button")).toHaveLength(3); // the title, Save, Not interested
   });
 
+  it("tags a job that may be stale once, with the reasons in its tooltip; a single repost stays Reposted", () => {
+    const stale = job({ repostedAt: new Date(Date.now() - 5 * DAY).toISOString(), repostCount: 2, descriptionLength: 200 });
+    const { container } = renderRow({ group: { key: stale.group, lead: stale, jobs: [stale] } });
+    const tag = screen.getByText("May be stale");
+    expect(tag.className).toContain("text-warning-text");
+    expect(tag.title).toMatch(/^Taken down and posted again twice .*\. The description is short \(200 characters\)$/);
+    expect(container.textContent).not.toContain("Reposted");
+    cleanup();
+    const once = job({ repostedAt: new Date(Date.now() - 5 * DAY).toISOString() });
+    renderRow({ group: { key: once.group, lead: once, jobs: [once] } });
+    expect(screen.getByText("Reposted")).toBeTruthy();
+    expect(screen.queryByText("May be stale")).toBeNull();
+  });
+
   it("says which dealbreaker a job breaks, in the warning treatment", () => {
     const lead = job({
       score: 37,

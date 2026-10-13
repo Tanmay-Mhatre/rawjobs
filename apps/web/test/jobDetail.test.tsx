@@ -40,6 +40,26 @@ describe("JobDetail", () => {
     expect(tag?.querySelector(".rj-dot")).not.toBeNull();
   });
 
+  it("lists why a job may be stale near the top, and the meta keeps the plain date", () => {
+    const day = 86_400_000;
+    const posted = new Date(Date.now() - 130 * day).toISOString();
+    const { container } = renderDetail(job({ postedAt: posted, firstSeen: posted, repostedAt: new Date(Date.now() - 5 * day).toISOString() }));
+    const heading = screen.getByRole("heading", { name: "May be stale" });
+    expect(heading.className).toContain("text-warning-text");
+    const items = [...heading.parentElement!.querySelectorAll("li")].map((li) => li.textContent);
+    expect(items).toEqual(["Posted 4 months ago", expect.stringMatching(/^Taken down and posted again once/)]);
+    expect(heading.parentElement!.textContent).toContain("It's still on the company's board, so it may be real.");
+    const meta = container.querySelector(".rj-drawer__meta")!.textContent!;
+    expect(meta).not.toContain("may be filled");
+    expect(meta).not.toContain("Reposted");
+    expect(meta).toContain("Posted ");
+    cleanup();
+    // Just old: no callout, the meta says it may be filled as before.
+    const { container: c2 } = renderDetail(job({ postedAt: new Date(Date.now() - 70 * day).toISOString() }));
+    expect(screen.queryByRole("heading", { name: "May be stale" })).toBeNull();
+    expect(c2.querySelector(".rj-drawer__meta")!.textContent).toContain("may be filled");
+  });
+
   it("never uses uppercase classes", () => {
     const { container } = renderDetail(job());
     expect(container.querySelector('[class*="uppercase"]')).toBeNull();
