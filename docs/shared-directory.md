@@ -31,6 +31,7 @@ user is ever uploaded.
 | Piece | Where | What it does |
 |---|---|---|
 | Outbox and sharing | `packages/core/src/directory.ts`, CLI `setup check` | Boards found by Add by link (and not in the directory) are queued in `data/catalog/outbox.json` and sent to the inbox. Kept until sent. Off with `directory.share_additions: false`. |
+| Moves outbox | `packages/core/src/directory.ts` (`queueMove`, `sendMoves`), `POST /api/directory/moves` | When you confirm a company's new careers link, the local server queues `{ name, from, to }` (boards checked like additions, from ≠ to) in `data/catalog/moves-outbox.json`, once per from+to. `rawjobs directory update` (and `share`) sends them to the inbox's `POST /v1/moves`, 10 a request, never at the moment of the click. 2xx or 400: dropped. 404 (an inbox from before moves), 429 (full or rate-limited), 503 (not open yet), other errors, offline: kept. Same switch as additions; with it off, nothing is queued and anything waiting is dropped unsent. The directory bar's "waiting to be shared" counts added boards only (`outbox`); `GET /api/directory` reports waiting moves separately as `moves`. |
 | Directory download | `packages/core/src/directory.ts`, `rawjobs directory update` | Reads `manifest.json`, downloads newer files, checks SHA-256, swaps them in. The dev server runs it weekly in the background (`directory.auto_update`). |
 | Contribution inbox | `services/contribute` | Cloudflare Worker. `POST /v1/contributions` (public, rate-limited, shape-checked, capped at `DAILY_CAP` boards a day for everyone, repeats within 7 days skipped); `GET /v1/pending` (500 a page, `?cursor=` for the next) and `POST /v1/ack` (up to 1,000 ids) for the workflow (token). |
 | Contributions workflow | `.github/workflows/directory-contributions.yml` | Every 3 hours: accept, publish incrementally, commit `contributions.json`, acknowledge. |
@@ -68,6 +69,8 @@ Restricted lists (share-alike or no licence) are only counted, never published. 
 Shared (on by default, off with `directory.share_additions: false` or Settings → Sharing): hiring
 system, board slug (plus Workday shard/site, EU region), company name, and the app name
 (`rawjobs`, optionally `/version`; older apps send `job-hunter`; any other value is dropped).
+Confirmed careers-link moves (same switch): the company name and its old and new board, sent with
+the next directory update. A move names a company the user follows, which additions don't.
 Never shared: profile, resume, searches, statuses, which jobs you open. The inbox uses the IP
 address only for rate limiting and stores none. Full details for users: [PRIVACY.md](../PRIVACY.md).
 

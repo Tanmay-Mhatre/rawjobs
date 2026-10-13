@@ -6,7 +6,9 @@ import { resolve } from "node:path";
 import {
   APP_VERSION,
   CONFIG_CANDIDATES,
+  cleanMove,
   cliCommand,
+  contributeUrl,
   codeStamp,
   companyKey,
   findConfigPath,
@@ -15,6 +17,7 @@ import {
   fileStamp,
   LEGACY_CONFIG_CANDIDATES,
   pruneCache,
+  queueMove,
   scanLockHeld,
   suggestCacheDir,
   writeCacheFile,
@@ -55,7 +58,10 @@ type Line = string;
  *   POST /api/setup/check     detect + live-check careers URLs
  *   GET/POST/DELETE /api/setup/resume  read / save / remove the master resume (profile/resume.md, gitignored)
  *   GET  /api/directory       the shared company directory's local copy (and what's waiting to be shared)
- *   POST /api/directory/update download the latest shared directory and share waiting additions
+ *   POST /api/directory/update download the latest shared directory and share waiting additions (and careers-link moves)
+ *   POST /api/directory/moves  { name, from, to }: queue a confirmed careers-link move to share with the next directory
+ *                             update (never sent right away). { queued: true }, { queued: false, reason } when sharing
+ *                             is off, or 400 { ok: false, errors } for a body that isn't a move
  *   POST /api/companies/suggest  companies that fit a profile ({ profile?, watched?, hidden? }), with lookalikes of past employers
  *   GET  /api/companies/suggest/size  { companies }: how many companies a suggestion request checks (null when unknown)
  *   POST /api/run             scan ({ scope: "mine" | "all", fresh? }); streams NDJSON progress
@@ -354,6 +360,27 @@ Stopped after ${Math.round(timeoutMs / 1000)} s without finishing.`.trim(),
     if (url === "/api/setup/check" && req.method === "POST") return await respondJson(res, ["setup", "check", "--data", dataDir], await readBody(req));
     if (url === "/api/directory" && req.method === "GET") return await respondJson(res, ["directory", "status", "--json", "--data", dataDir]);
     if (url === "/api/directory/update" && req.method === "POST") return await respondJson(res, ["directory", "update", "--json", "--data", dataDir]);
+    if (url === "/api/directory/moves" && req.method === "POST") {
+      let body: unknown;
+      try {
+        body = JSON.parse((await readBody(req, 10_000)) || "null");
+      } catch (err) {
+        return json(res, { ok: false, errors: (err as Error).message }, 400);
+      }
+      const move = cleanMove(body);
+      if (typeof move === "string") return json(res, { ok: false, errors: move }, 400);
+      const sharingOn = (() => {
+        try {
+          return loadConfig(findConfigPath(home)).config.directory.share_additions !== false;
+        } catch {
+          return true;
+        }
+      })();
+      if (!sharingOn) return json(res, { queued: false, reason: "Sharing is off in your settings." });
+      if (!contributeUrl()) return json(res, { queued: false, reason: "Sharing isn't set up for this install." });
+      queueMove(dataDir, move);
+      return json(res, { queued: true });
+    }
     if (url === "/api/companies/suggest/size" && req.method === "GET") return json(res, { companies: suggestSize() });
     if (url === "/api/companies/suggest" && req.method === "POST") {
       try {

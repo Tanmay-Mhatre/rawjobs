@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { gzipSync } from "node:zlib";
 import { afterAll, afterEach, beforeEach, describe, expect, it } from "vitest";
-import { contributeUrl, directoryStatus, directoryUrl, queueContributions, sendContributions, updateDirectory } from "../src/directory";
+import { cleanMove, contributeUrl, directoryStatus, directoryUrl, queueContributions, queueMove, sendContributions, sendMoves, updateDirectory } from "../src/directory";
 import { suggestPoolSize } from "../src/scope";
 import { testDataKey } from "./helpers";
 
@@ -153,6 +153,96 @@ describe("sharing additions", () => {
     process.env.RAWJOBS_CONTRIBUTE_URL = "";
     queueContributions(dir, [{ ats: "lever", slug: "acme" }]);
     expect((await sendContributions(dir)).message).toMatch(/isn't set up/);
+  });
+});
+
+describe("sharing careers-link moves", () => {
+  const from = { ats: "lever", slug: "acme" };
+  const to = { ats: "ashby", slug: "acme-inc" };
+  const outbox = () => JSON.parse(readFileSync(join(dir, "catalog", "moves-outbox.json"), "utf8")).moves as { name: string }[];
+  const inbox = (status: number, seen: { url: string; body: { client?: string; moves: unknown[] } }[] = []) =>
+    (async (url: string, init: RequestInit) => {
+      seen.push({ url, body: JSON.parse(String(init.body)) });
+      return new Response("{}", { status });
+    }) as unknown as typeof fetch;
+
+  it("checks a move before queueing it: known systems, board-shaped slugs, a name, two different boards", () => {
+    expect(cleanMove({ name: " Acme<> ", from: { ...from, name: "x" }, to })).toEqual({ name: "Acme", from, to });
+    expect(cleanMove({ name: "Acme", from, to: { ats: "workday", slug: "acme", shard: "wd5", site: "Ext" } })).toMatchObject({ to: { shard: "wd5", site: "Ext" } });
+    expect(cleanMove({ from, to })).toBe("name is missing");
+    expect(cleanMove({ name: "Acme", from: { ats: "kenexa", slug: "acme" }, to })).toMatch(/^from: unsupported/);
+    expect(cleanMove({ name: "Acme", from, to: { ats: "lever", slug: "https://x.test/a" } })).toBe("to: bad slug");
+    expect(cleanMove({ name: "Acme", from, to: { ats: "lever", slug: "ACME" } })).toMatch(/same board/);
+    expect(cleanMove({ name: "Acme", from, to: { ats: "workday", slug: "acme" } })).toMatch(/shard and site/);
+    expect(queueMove(dir, { name: "Acme", from, to: from })).toMatchObject({ ok: false });
+    expect(existsSync(join(dir, "catalog", "moves-outbox.json"))).toBe(false);
+  });
+
+  it("queues a move once per from+to, without sending it, and counts it apart from boards", () => {
+    expect(queueMove(dir, { name: "Acme", from, to }, new Date("2026-10-13T10:00:00Z"))).toMatchObject({ ok: true, waiting: 1 });
+    expect(queueMove(dir, { name: "Acme again", from: { ats: "lever", slug: "ACME" }, to })).toMatchObject({ ok: true, waiting: 1 });
+    expect(queueMove(dir, { name: "Acme", from, to: { ats: "greenhouse", slug: "acme" } })).toMatchObject({ ok: true, waiting: 2 });
+    expect(outbox()[0]).toEqual({ name: "Acme", from, to, at: "2026-10-13T10:00:00.000Z" });
+    expect(directoryStatus(dir)).toMatchObject({ outbox: 0, moves: 2 });
+  });
+
+  it("sends moves to /v1/moves in batches of 10 and drops them once the inbox answers", async () => {
+    for (let i = 0; i < 23; i++) queueMove(dir, { name: `Co ${i}`, from: { ats: "lever", slug: `co-${i}` }, to });
+    const seen: { url: string; body: { client?: string; moves: unknown[] } }[] = [];
+    expect(await sendMoves(dir, { fetchImpl: inbox(200, seen) })).toMatchObject({ sent: 23 });
+    expect(seen.map((s) => s.url)).toEqual(Array(3).fill("https://inbox.example.test/v1/moves"));
+    expect(seen.map((s) => s.body.moves.length)).toEqual([10, 10, 3]);
+    expect(seen[0]!.body).toMatchObject({ client: "rawjobs" });
+    expect(seen[0]!.body.moves[0]).toEqual({ name: "Co 0", from: { ats: "lever", slug: "co-0" }, to });
+    expect(outbox()).toEqual([]);
+    expect(directoryStatus(dir).moves).toBe(0);
+  });
+
+  it("keeps moves on a 404 (an inbox from before moves), 429 (full or rate-limited), 503 (not open yet), a server error or no connection", async () => {
+    queueMove(dir, { name: "Acme", from, to });
+    expect((await sendMoves(dir, { fetchImpl: inbox(404) })).sent).toBe(0);
+    expect(outbox()).toHaveLength(1);
+    expect(await sendMoves(dir, { fetchImpl: inbox(429) })).toMatchObject({ sent: 0, message: expect.stringMatching(/retried \(HTTP 429\)/) });
+    expect(outbox()).toHaveLength(1);
+    expect((await sendMoves(dir, { fetchImpl: inbox(500) })).sent).toBe(0);
+    expect(outbox()).toHaveLength(1);
+    expect((await sendMoves(dir, { fetchImpl: inbox(503) })).sent).toBe(0);
+    expect(outbox()).toHaveLength(1);
+    const offline = (async () => {
+      throw new Error("fetch failed");
+    }) as unknown as typeof fetch;
+    expect(await sendMoves(dir, { fetchImpl: offline })).toMatchObject({ sent: 0, message: expect.stringMatching(/retried \(fetch failed\)/) });
+    expect(outbox()).toHaveLength(1);
+  });
+
+  it("keeps the batches after one that failed, and drops the ones before it", async () => {
+    for (let i = 0; i < 15; i++) queueMove(dir, { name: `Co ${i}`, from: { ats: "lever", slug: `co-${i}` }, to });
+    let n = 0;
+    const flaky = (async () => new Response("{}", { status: n++ === 0 ? 200 : 502 })) as unknown as typeof fetch;
+    expect((await sendMoves(dir, { fetchImpl: flaky })).sent).toBe(10);
+    expect(outbox().map((m) => m.name)).toEqual(["Co 10", "Co 11", "Co 12", "Co 13", "Co 14"]);
+  });
+
+  it("drops moves the inbox refuses (400)", async () => {
+    queueMove(dir, { name: "Acme", from, to });
+    expect((await sendMoves(dir, { fetchImpl: inbox(400) })).sent).toBe(0);
+    expect(outbox()).toEqual([]);
+  });
+
+  it("drops waiting moves without sending them once sharing is turned off", async () => {
+    queueMove(dir, { name: "Acme", from, to });
+    const seen: { url: string; body: { moves: unknown[] } }[] = [];
+    expect(await sendMoves(dir, { fetchImpl: inbox(200, seen), enabled: false })).toMatchObject({ sent: 0 });
+    expect(seen).toEqual([]);
+    expect(outbox()).toEqual([]);
+  });
+
+  it("sends nothing when no inbox is configured", async () => {
+    process.env.RAWJOBS_CONTRIBUTE_URL = "";
+    queueMove(dir, { name: "Acme", from, to });
+    const seen: { url: string; body: { moves: unknown[] } }[] = [];
+    expect((await sendMoves(dir, { fetchImpl: inbox(200, seen) })).message).toMatch(/isn't set up/);
+    expect(seen).toEqual([]);
   });
 });
 
