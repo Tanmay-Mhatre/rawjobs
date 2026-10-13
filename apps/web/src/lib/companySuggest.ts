@@ -1,10 +1,11 @@
 import { INDUSTRY_BY_ID } from "@rawjobs/core/catalog/industries";
 import type { CompanySuggestion, HiresIn } from "@rawjobs/core/suggest";
 import { isPlaceholderBoard } from "@rawjobs/core/text";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { keyOf, type CompanyRef } from "./companies";
 import { canRunLocally } from "./data";
 import { draftToConfig, type Draft } from "./setup";
+import { load, save } from "./storage";
 
 export type { CompanySuggestion };
 export type Lookalike = CompanySuggestion & { similarity: number; like: string };
@@ -40,36 +41,85 @@ export const refOf = (s: CompanySuggestion): CompanyRef => ({
   ...(s.site ? { site: s.site } : {}),
 });
 
+/** How long the last real match took (ms), for the "Still matching" line: a measured estimate, never a guess. */
+export const MATCH_MS_KEY = "rawjobs.suggestMatchMs";
+/** An answer slower than this was worked out; a kept one comes back in milliseconds and says nothing about the next match. */
+const WORKED_OUT_MS = 3000;
+/** A profile edit waits this long for the next one before asking. */
+const EDIT_PAUSE_MS = 600;
+
+/** The last real match's length in seconds, rounded up to 5 ("about 20 seconds"); null before one was timed here. */
+export function matchEstimate(): number | null {
+  const ms = load<number | null>(MATCH_MS_KEY, null);
+  return typeof ms === "number" && ms > 0 ? Math.ceil(ms / 5000) * 5 : null;
+}
+
 /**
- * Companies that fit the profile being edited, from the local API. Asks again (after a pause) when
- * the profile changes; adding or hiding a company doesn't refetch, the page filters those out itself.
+ * Companies that fit the profile being edited, from the local API. The first ask of a visit goes out
+ * at once (a kept answer then shows without a wait); a profile change asks again after a pause. Adding
+ * or hiding a company doesn't refetch, the page filters those out itself.
  */
 export function useCompanySuggestions(draft: Draft, enabled = true): SuggestState {
   const profile = useMemo(() => JSON.stringify(draftToConfig(draft).profile), [draft]);
   // Leave out what's saved in the config; companies added or hidden since are filtered on the page.
   const ready = enabled && canRunLocally && draft.include.length > 0;
   const [state, setState] = useState<SuggestState>({ kind: "off" });
+  /** No request has gone out yet since the page opened (or since suggestions were switched back on). */
+  const first = useRef(true);
   useEffect(() => {
-    if (!ready) return setState({ kind: "off" });
+    if (!ready) {
+      first.current = true;
+      return setState({ kind: "off" });
+    }
     let live = true;
     setState((s) => ({ kind: "loading", previous: s.kind === "ready" ? s.data : s.kind === "loading" ? s.previous : undefined }));
-    const t = setTimeout(() => {
-      fetch("/api/companies/suggest", { method: "POST", body: JSON.stringify({ profile: JSON.parse(profile) }) })
-        .then(async (r) => {
-          const body = (await r.json()) as CompanySuggestions & { ok?: false; errors?: string };
-          if (!live) return;
-          if (!r.ok || body.ok === false) setState({ kind: "error", message: body.errors ?? `HTTP ${r.status}` });
-          else if (body.error) setState({ kind: "error", message: body.error });
-          else setState({ kind: "ready", data: body });
-        })
-        .catch((err: Error) => live && setState({ kind: "error", message: err.message }));
-    }, 600);
+    const t = setTimeout(
+      () => {
+        first.current = false;
+        const started = Date.now();
+        fetch("/api/companies/suggest", { method: "POST", body: JSON.stringify({ profile: JSON.parse(profile) }) })
+          .then(async (r) => {
+            const body = (await r.json()) as CompanySuggestions & { ok?: false; errors?: string };
+            if (!live) return;
+            if (!r.ok || body.ok === false) setState({ kind: "error", message: body.errors ?? `HTTP ${r.status}` });
+            else if (body.error) setState({ kind: "error", message: body.error });
+            else {
+              const took = Date.now() - started;
+              if (took >= WORKED_OUT_MS) save(MATCH_MS_KEY, took);
+              setState({ kind: "ready", data: body });
+            }
+          })
+          .catch((err: Error) => live && setState({ kind: "error", message: err.message }));
+      },
+      first.current ? 0 : EDIT_PAUSE_MS,
+    );
     return () => {
       live = false;
       clearTimeout(t);
     };
   }, [profile, ready]);
   return state;
+}
+
+/**
+ * How many companies a match checks (GET /api/companies/suggest/size), for "Matching 24,687 companies
+ * to your profile". Null until it's known, or when the server can't say: the page then leaves the
+ * number out rather than guess.
+ */
+export function useSuggestPoolSize(enabled: boolean): number | null {
+  const [n, setN] = useState<number | null>(null);
+  useEffect(() => {
+    if (!enabled || !canRunLocally) return;
+    let live = true;
+    fetch("/api/companies/suggest/size", { cache: "no-store" })
+      .then((r) => (r.ok ? (r.json() as Promise<{ companies?: number | null }>) : null))
+      .then((b) => live && typeof b?.companies === "number" && b.companies > 0 && setN(b.companies))
+      .catch(() => {});
+    return () => {
+      live = false;
+    };
+  }, [enabled]);
+  return n;
 }
 
 /**

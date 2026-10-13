@@ -73,20 +73,31 @@ export function SuggestionCard({ s, added, onAdd, onRemove, onHide, note, addedT
   );
 }
 
-/** A card-shaped placeholder while suggestions load: the kit's shimmer bars (design/components/Loading), not a pulse. */
-export function CardSkeleton() {
+/**
+ * A card-shaped placeholder while suggestions load: the kit's shimmer bars (design/components/Loading),
+ * in the card's own boxes (monogram, name line, "Hires in" line, Add and Hide), so it's the same
+ * height as the card that replaces it.
+ */
+export function CardSkeleton({ className }: { className?: string }) {
   return (
-    <div className="flex flex-col gap-3 rounded-md border border-line p-4" aria-hidden>
-      <div className="flex gap-3">
-        <span className="rj-skel size-10" />
-        <div className="flex-1 space-y-2 pt-1">
-          <span className="rj-skel h-3 w-2/3" />
-          <span className="rj-skel h-2.5 w-1/3" />
+    <div className={cx("flex min-w-0 flex-col gap-3 rounded-md border border-line bg-raised p-4", className)} aria-hidden data-skeleton="card">
+      <div className="flex items-start gap-3">
+        <span className="rj-skel size-10 shrink-0" />
+        <div className="min-w-0 flex-1">
+          <p className="flex h-5 items-center">
+            <span className="rj-skel h-3 w-24 max-w-full" />
+          </p>
+          <p className="flex h-[1.3125rem] items-center">
+            <span className="rj-skel h-2.5 w-40 max-w-full" />
+          </p>
         </div>
       </div>
-      <span className="rj-skel h-3 w-1/2" />
-      <span className="rj-skel h-2.5 w-5/6" />
-      <span className="rj-skel mt-2 h-8 w-24" />
+      <div className="mt-auto flex items-center gap-1.5 pt-1">
+        <span className="rj-skel h-7 w-[4.125rem] rounded-md pointer-coarse:h-11" />
+        <span className="flex h-7 w-[4.25rem] items-center px-3">
+          <span className="rj-skel h-3 w-full" />
+        </span>
+      </div>
     </div>
   );
 }

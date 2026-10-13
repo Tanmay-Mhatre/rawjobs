@@ -3,7 +3,7 @@ import { ArrowRight, Check, CircleAlert, LoaderCircle, Radar, RefreshCw, X } fro
 import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
 import { addCompanies, countCompanies, jobCompanyKey, keyOf, wantsAttention, type CompanyRef } from "../lib/companies";
 import { companyIndex, nameRank, type CompanyIndex } from "../lib/companySearch";
-import { useCompanySuggestions, type SuggestState } from "../lib/companySuggest";
+import { useCompanySuggestions, useSuggestPoolSize, type SuggestState } from "../lib/companySuggest";
 import { coverageLine, initialCompaniesTab, type CompaniesTabId } from "../lib/companiesPage";
 import type { DataMeta, Job } from "../lib/data";
 import { canRunLocally, useDirectorySize } from "../lib/data";
@@ -129,9 +129,12 @@ function SaveStatus({ state, retry, onScan, scanning }: { state: SaveState; retr
 type Tab = CompaniesTabId;
 const TAB_KEY = "rawjobs.companiesTab";
 
-/** What each scan type covers (GET /api/scan/plan), asked again whenever the saved companies or industries change. */
-function useScanPlan(saved: Draft, enabled: boolean): ScanPlan | null {
-  const [plan, setPlan] = useState<ScanPlan | null>(null);
+/**
+ * What each scan type covers (GET /api/scan/plan), asked again whenever the saved companies or
+ * industries change: undefined until the first answer, null when it can't be had.
+ */
+function useScanPlan(saved: Draft, enabled: boolean): ScanPlan | null | undefined {
+  const [plan, setPlan] = useState<ScanPlan | null | undefined>(undefined);
   const key = JSON.stringify([draftToConfig(saved).companies, saved.muted, saved.industries]);
   // biome-ignore lint/correctness/useExhaustiveDependencies: `key` (what the plan depends on) is the trigger
   useEffect(() => {
@@ -205,7 +208,7 @@ export function CompaniesTab({ configured, meta, jobs, draft, loaded, saved, upd
   const plan = useScanPlan(saved, configured && canRunLocally);
   const { scope } = useScanPrefs();
   /** "Right now: your 12 companies plus 175 in your 3 industries.": what your usual scan covers. */
-  const coverage = plan && coverageLine({ plan, scope, industries: saved.industries.length, hasJobs: jobs.length > 0 });
+  const coverage = plan ? coverageLine({ plan, scope, industries: saved.industries.length, hasJobs: jobs.length > 0 }) : null;
   const savedKeys = useMemo(() => new Set(saved.companies.map(keyOf)), [saved.companies]);
   const watched = useMemo(() => new Set(draft.companies.map(keyOf)), [draft.companies]);
   const muted = useMemo(() => new Set(draft.muted), [draft.muted]);
@@ -219,6 +222,7 @@ export function CompaniesTab({ configured, meta, jobs, draft, loaded, saved, upd
     return () => clearTimeout(t);
   }, [retrying]);
   const fetched = useCompanySuggestions(suggestFrom, configured && !retrying);
+  const poolSize = useSuggestPoolSize(configured);
   const suggestions: SuggestState = retrying ? { kind: "loading" } : fetched;
   /** Fit scores from the suggestions, for ordering search results (never shown). */
   const fit = useMemo(() => {
@@ -404,7 +408,7 @@ export function CompaniesTab({ configured, meta, jobs, draft, loaded, saved, upd
 
       {tab === "suggestions" && (
         <TabPanel id="suggestions" ids={ids} className="space-y-4">
-          {coverage && <CoverageLine text={coverage} />}
+          {coverage ? <CoverageLine text={coverage} /> : plan === undefined && <CoverageSkeleton />}
           <ForYou
             state={suggestions}
             watched={watched}
@@ -422,6 +426,7 @@ export function CompaniesTab({ configured, meta, jobs, draft, loaded, saved, upd
             onRetry={() => setRetrying(true)}
             industries={saved.industries.length}
             packActions={packs}
+            poolSize={poolSize}
             offHint="Suggestions aren't available in this version of the app. Search the directory or add a company by link instead."
           />
         </TabPanel>
@@ -501,5 +506,24 @@ function CoverageLine({ text }: { text: string }) {
     <p className="flex items-start gap-2 type-small text-ink" aria-live="polite">
       <Radar className="mt-0.5 size-4 shrink-0 text-muted" aria-hidden /> {text}
     </p>
+  );
+}
+
+/** The coverage line's place while the scan plan loads (two lines on a phone, where the line wraps), so nothing below moves when it arrives. */
+function CoverageSkeleton() {
+  return (
+    <div className="flex items-start gap-2" aria-hidden data-skeleton="coverage">
+      <span className="flex h-[1.3125rem] items-center">
+        <span className="rj-skel size-4" />
+      </span>
+      <span className="grid min-w-0 flex-1">
+        <span className="flex h-[1.3125rem] items-center">
+          <span className="rj-skel h-3 w-80 max-w-full" />
+        </span>
+        <span className="flex h-[1.3125rem] items-center sm:hidden">
+          <span className="rj-skel h-3 w-40" />
+        </span>
+      </span>
+    </div>
   );
 }

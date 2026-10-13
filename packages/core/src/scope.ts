@@ -1,4 +1,4 @@
-import { existsSync, readFileSync, writeFileSync } from "node:fs";
+import { closeSync, existsSync, openSync, readFileSync, readSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { companyIndustries } from "./catalog/industries";
 import { companyKey, connectors } from "./connectors";
@@ -33,6 +33,28 @@ export function readDirectory(dataDir: string): DirectoryEntry[] {
       .filter((c) => !known.has(c.key))
       .map((c) => ({ ...c, origin: "user" as const })),
   ];
+}
+
+/**
+ * How many companies a suggestion request checks: every company in the job index plus the directory
+ * companies without job rows (the `scanned` in `rawjobs companies suggest --json`). Cheap: the index's
+ * count is read from the head of the file instead of parsing its 40 MB. Null when there's no index,
+ * or its head doesn't say.
+ */
+export function suggestPoolSize(dataDir: string): number | null {
+  const file = join(dataDir, "catalog", "index.json");
+  if (!existsSync(file)) return null;
+  const head = Buffer.alloc(512);
+  const fd = openSync(file, "r");
+  let read = 0;
+  try {
+    read = readSync(fd, head, 0, head.length, 0);
+  } finally {
+    closeSync(fd);
+  }
+  const indexed = head.toString("utf8", 0, read).match(/"count":\s*(\d+)/)?.[1];
+  if (indexed === undefined) return null;
+  return Number(indexed) + readDirectory(dataDir).filter((c) => !c.indexed).length;
 }
 
 const nameKey = (name: string) => companyWords(name).join(" ");

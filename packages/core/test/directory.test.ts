@@ -1,10 +1,11 @@
 import { createHash } from "node:crypto";
-import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { gzipSync } from "node:zlib";
 import { afterAll, afterEach, beforeEach, describe, expect, it } from "vitest";
 import { contributeUrl, directoryStatus, directoryUrl, queueContributions, sendContributions, updateDirectory } from "../src/directory";
+import { suggestPoolSize } from "../src/scope";
 import { testDataKey } from "./helpers";
 
 const key = testDataKey();
@@ -152,5 +153,26 @@ describe("sharing additions", () => {
     process.env.RAWJOBS_CONTRIBUTE_URL = "";
     queueContributions(dir, [{ ats: "lever", slug: "acme" }]);
     expect((await sendContributions(dir)).message).toMatch(/isn't set up/);
+  });
+});
+
+describe("suggestPoolSize", () => {
+  const write = (name: string, body: unknown) => {
+    mkdirSync(join(dir, "catalog"), { recursive: true });
+    writeFileSync(join(dir, "catalog", name), JSON.stringify(body));
+  };
+  const entry = (slug: string, indexed?: boolean) => ({ key: `greenhouse:${slug}`, name: slug, ats: "greenhouse", slug, ...(indexed ? { indexed } : {}) });
+
+  it("counts the index plus the directory companies without job rows, as a suggestion request checks them", () => {
+    write("index.json", { generated_at: "2026-10-07T09:55:42.522Z", count: 3, companies: [{}, {}, {}] });
+    write("directory.json", { count: 4, companies: [entry("a", true), entry("b", true), entry("c"), entry("d")] });
+    write("additions.json", { companies: [entry("e"), entry("c")] });
+    expect(suggestPoolSize(dir)).toBe(3 + 3);
+  });
+
+  it("is null without an index, or when its head doesn't say how many", () => {
+    expect(suggestPoolSize(dir)).toBeNull();
+    write("index.json", { companies: [] });
+    expect(suggestPoolSize(dir)).toBeNull();
   });
 });
