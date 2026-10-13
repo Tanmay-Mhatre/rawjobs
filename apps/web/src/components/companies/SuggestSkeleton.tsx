@@ -143,7 +143,7 @@ export function SuggestSkeleton({
 }) {
   const packs = Math.min(Math.max(industries ?? 3, 1), 3);
   return (
-    <div className="mt-4 space-y-4 animate-[rj-fade_var(--duration-quick)_var(--ease-enter)_100ms_backwards]" aria-busy="true" data-lens={lens}>
+    <div className={cx(compact && "mt-4", "space-y-4 animate-[rj-fade_var(--duration-quick)_var(--ease-enter)_100ms_backwards]")} aria-busy="true" data-lens={lens}>
       <TabsSkeleton industries={industries} />
       <div className="space-y-4">
         {lens === "packs" ? (

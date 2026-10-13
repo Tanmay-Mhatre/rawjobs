@@ -241,6 +241,9 @@ export function ForYou({
   };
 
   const Wrap = compact ? "div" : Card;
+  // In the card, the tabs sit right under its top padding (no gap above them); in the setup wizard the
+  // panel follows other content, so it keeps its own space.
+  const top = compact ? "mt-4" : undefined;
   const top5 = lists ? [...lists.hiring, ...lists.like.flatMap((r) => r.items)].filter((s, i, all) => all.findIndex((x) => x.key === s.key) === i).slice(0, 5) : [];
   return (
     <Wrap className={compact ? "" : "p-5 sm:p-6"}>
@@ -256,7 +259,7 @@ export function ForYou({
       )}
 
       {state.kind === "off" && offSettled ? (
-        <p className="mt-4 rounded-md border border-dashed border-line p-4 type-small text-muted">
+        <p className={cx(top, "rounded-md border border-dashed border-line p-4 type-small text-muted")}>
           {!canRunLocally && offHint
             ? offHint
             : canRunLocally
@@ -264,7 +267,7 @@ export function ForYou({
               : "Suggestions aren't available in this version of the app. Search the directory or add a company by link instead."}
         </p>
       ) : state.kind === "error" ? (
-        <div role="alert" className="mt-4 space-y-2 rounded-md bg-warning-subtle/50 p-4 type-small">
+        <div role="alert" className={cx(top, "space-y-2 rounded-md bg-warning-subtle/50 p-4 type-small")}>
           <p className="font-medium">Suggestions aren't available right now.</p>
           <div className="flex flex-wrap items-center gap-3">
             {onRetry ? (
@@ -290,7 +293,7 @@ export function ForYou({
         />
       ) : (
         // A new answer on its way: the one on screen stays readable and usable until it's replaced in place.
-        <div className="mt-4 space-y-4" aria-busy={state.kind === "loading"}>
+        <div className={cx(top, "space-y-4")} aria-busy={state.kind === "loading"}>
           <TabList
             tabs={tabs}
             value={current}
@@ -316,9 +319,13 @@ export function ForYou({
               needIndustries ? (
                 <NeedIndustries />
               ) : allIn?.packs ? (
-                <AllAdded title="Every starter pack is in My companies" actions={[seeMine, tryNext("packs")]}>
-                  {packsDone(finished)} New companies in your industries show up here when the directory updates.
-                </AllAdded>
+                <>
+                  <AllAdded title="Every starter pack is in My companies" actions={[seeMine, tryNext("packs")]}>
+                    {packsDone(finished)} New companies in your industries show up here when the directory updates.
+                  </AllAdded>
+                  {/* Folded, as a way to Remove pack without the cards repeating what the block says. */}
+                  <FinishedPacks finished={finished} actions={packActs} />
+                </>
               ) : (
                 <PacksHeader packs={shownPacks} finished={finished} watched={watched} actions={packActs} onSeeMine={onSeeMine} />
               )
@@ -833,13 +840,46 @@ function Packs({
   onPick: (industry: string, s: CompanySuggestion) => void;
 }) {
   return (
-    <div className="grid items-start gap-3 md:grid-cols-2 xl:grid-cols-3">
-      {packs.map((p) => (
-        <PackCard key={p.industry} pack={p} next={nextUp[p.industry]} watched={watched} actions={actions} onPick={(s) => onPick(p.industry, s)} />
-      ))}
-      {finished.map((f) => (
-        <FinishedPack key={f.industry} pack={f} actions={actions} />
-      ))}
+    <>
+      <div className="grid items-start gap-3 md:grid-cols-2 xl:grid-cols-3">
+        {packs.map((p) => (
+          <PackCard key={p.industry} pack={p} next={nextUp[p.industry]} watched={watched} actions={actions} onPick={(s) => onPick(p.industry, s)} />
+        ))}
+      </div>
+      <FinishedPacks finished={finished} actions={actions} />
+    </>
+  );
+}
+
+/**
+ * Packs you've fully added, folded into one line after the ones with something left: "10 packs fully
+ * added · Show". It opens below itself, so nothing above it moves, and focus stays on the toggle.
+ */
+function FinishedPacks({ finished, actions }: { finished: Finished[]; actions: PackActions }) {
+  const [open, setOpen] = useState(false);
+  const listId = useId();
+  if (!finished.length) return null;
+  const n = finished.length;
+  return (
+    <div className="space-y-3">
+      <button
+        type="button"
+        aria-expanded={open}
+        aria-controls={listId}
+        onClick={() => setOpen((o) => !o)}
+        className="group/fin inline-flex min-h-8 items-center gap-1.5 rounded-md type-small text-muted pointer-coarse:min-h-11 hover:text-ink"
+      >
+        <CircleCheck className="size-4 shrink-0 text-success-text" aria-hidden />
+        {n} {n === 1 ? "pack" : "packs"} fully added
+        <span aria-hidden>·</span>
+        {/* The state is aria-expanded's to say, so the name stays the same. */}
+        <span aria-hidden className="type-label text-ink underline underline-offset-2 group-hover/fin:text-muted">
+          {open ? "Hide" : "Show"}
+        </span>
+      </button>
+      <div id={listId} hidden={!open} className={cx(open ? "grid" : "hidden", "items-start gap-3 md:grid-cols-2 xl:grid-cols-3")}>
+        {open && finished.map((f) => <FinishedPack key={f.industry} pack={f} actions={actions} />)}
+      </div>
     </div>
   );
 }
@@ -866,7 +906,7 @@ function FinishedPack({ pack: f, actions }: { pack: Finished; actions: PackActio
       <div className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-2">
         <span className="h-1 bg-ink" aria-hidden />
         <span className="inline-flex items-center gap-1 whitespace-nowrap type-meta text-muted">
-          <Check className="size-3.5" aria-hidden /> {n === 1 ? "In My companies" : `All ${n} in My companies`}
+          <Check className="size-3.5" aria-hidden /> {n === 1 ? "1 in My companies" : `All ${n} in My companies`}
         </span>
       </div>
     </section>

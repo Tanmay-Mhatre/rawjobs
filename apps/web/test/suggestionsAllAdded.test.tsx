@@ -146,11 +146,13 @@ describe("Starter packs, every pack added", () => {
 });
 
 describe("one pack fully added, next visit", () => {
-  it("stays as a short finished card at the end, with Remove pack", () => {
+  it("folds into a line at the end that opens to a short finished card, with Remove pack", () => {
     const brokerage = ["lever:public", "lever:thndr", "lever:tickmill"];
     const s = show(answer({ packs, added: { ...none, packs: { brokerage } } }), { mine: brokerage });
     expect(screen.getByText("3 packs from your industries")).toBeTruthy();
     expect(screen.getByRole("button", { name: "Add all 5" })).toBeTruthy();
+    expect(screen.queryByRole("region", { name: "Brokerage, CFD & FX" })).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "1 pack fully added", expanded: false }));
     const card = screen.getByRole("region", { name: "Brokerage, CFD & FX" });
     expect(card.textContent).toMatch("All 3 in My companies");
     const headings = screen.getAllByRole("heading", { level: 3 }).map((h) => h.textContent);
@@ -159,6 +161,81 @@ describe("one pack fully added, next visit", () => {
     expect(s.remove).toHaveBeenCalledWith(brokerage);
     // Its companies left My companies, so the card goes (the tray offers Undo).
     expect(screen.queryByRole("region", { name: "Brokerage, CFD & FX" })).toBeNull();
+  });
+});
+
+describe("many packs fully added, next visit", () => {
+  const finishedPacks = { brokerage: ["lever:public", "lever:thndr"], payments: ["lever:stripe", "lever:adyen", "lever:wise"], "digital-bank": ["lever:revolut"] };
+  const mine = Object.values(finishedPacks).flat();
+
+  it("the packs with something left keep their cards; the rest fold into one line after them", () => {
+    show(answer({ packs, added: { ...none, packs: finishedPacks } }), { mine });
+    expect(screen.getAllByRole("region")).toHaveLength(2);
+    const toggle = screen.getByRole("button", { name: "3 packs fully added" });
+    expect(toggle.getAttribute("aria-expanded")).toBe("false");
+    expect(toggle.textContent).toBe("3 packs fully added·Show");
+    // It comes after every card that still has companies to add.
+    const lastCard = screen.getByRole("region", { name: "Fintech (general)" });
+    expect(lastCard.compareDocumentPosition(toggle) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    const list = document.getElementById(toggle.getAttribute("aria-controls")!)!;
+    expect(list.hidden).toBe(true);
+  });
+
+  it("opens in place below the line and closes again, with focus kept on the toggle", () => {
+    show(answer({ packs, added: { ...none, packs: finishedPacks } }), { mine });
+    const toggle = screen.getByRole("button", { name: "3 packs fully added" });
+    toggle.focus();
+    fireEvent.click(toggle);
+    expect(toggle.getAttribute("aria-expanded")).toBe("true");
+    expect(toggle.textContent).toMatch(/Hide$/);
+    expect(document.activeElement).toBe(toggle);
+    const list = document.getElementById(toggle.getAttribute("aria-controls")!)!;
+    expect(list.hidden).toBe(false);
+    expect(toggle.compareDocumentPosition(list) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(within(list).getAllByRole("button", { name: /^Remove the .* pack$/ })).toHaveLength(3);
+    // Every finished card says how many of its companies are in My companies, one included.
+    expect(within(list).getByRole("region", { name: "Digital bank / neobank" }).textContent).toMatch("1 in My companies");
+    expect(within(list).getByRole("region", { name: "Payments" }).textContent).toMatch("All 3 in My companies");
+    fireEvent.click(toggle);
+    expect(toggle.getAttribute("aria-expanded")).toBe("false");
+    expect(list.hidden).toBe(true);
+    expect(within(list).queryByRole("region")).toBeNull();
+  });
+
+  it("every pack added: the block says so, with the folded line under it for Remove pack", () => {
+    const s = show(answer({ hiringNow: fintech, packs: [], added: { ...none, packs: finishedPacks } }), { mine });
+    doneBlock("Every starter pack is in My companies");
+    expect(screen.queryByRole("region")).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "3 packs fully added" }));
+    fireEvent.click(screen.getByRole("button", { name: "Remove the Payments pack" }));
+    expect(s.remove).toHaveBeenCalledWith(finishedPacks.payments);
+    expect(screen.getByRole("button", { name: "2 packs fully added" })).toBeTruthy();
+  });
+});
+
+describe("the panel's top", () => {
+  it("has no gap above the tabs, loading or loaded, so nothing moves when the answer arrives", () => {
+    const first = (c: HTMLElement) => [...c.firstElementChild!.children].find((el) => !el.classList.contains("sr-only")) as HTMLElement;
+    const { view } = show(answer({ packs, added: none }));
+    expect(first(view.container).className).not.toMatch(/(^|\s)mt-/);
+    cleanup();
+    const loading = render(
+      <ForYou
+        state={{ kind: "loading" }}
+        watched={new Set()}
+        muted={new Set()}
+        pastEmployers={[]}
+        onPastEmployers={() => {}}
+        onAddMany={() => []}
+        onRemoveMany={() => {}}
+        onMute={() => {}}
+        onUnmute={() => {}}
+        industries={3}
+      />,
+    );
+    const top = first(loading.container);
+    expect(top.dataset.lens).toBe("packs");
+    expect(top.className).not.toMatch(/(^|\s)mt-/);
   });
 });
 
