@@ -135,6 +135,8 @@ export type CompanyHealth = {
   skipped?: number;
   /** Job pages that failed to load, so those jobs have no description. */
   describeFailed?: number;
+  /** The list was cut short (a page cap): its unseen jobs stay open instead of counting as gone. */
+  partial?: boolean;
 };
 
 export type RunSummary = {

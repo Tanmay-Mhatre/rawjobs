@@ -57,11 +57,12 @@ export const paycom: Connector<PaycomJob> = {
     return parts.includes("portal") && key && KEY.test(key) ? { ats: "paycom", slug: key.toLowerCase() } : null;
   },
 
-  async fetch(ref, { http }) {
+  async fetch(ref, { http, partial }) {
     if (!KEY.test(ref.slug)) throw new Error(`Paycom client key should be 32 hex characters, got "${ref.slug}"`);
     const s = await session(ref.slug, http);
     const out: PaycomJob[] = [];
     const seen = new Set<number>();
+    let total = 0;
     for (let skip = 0; skip < MAX_POSTINGS; skip += PAGE) {
       const body = {
         skip,
@@ -87,8 +88,11 @@ export const paycom: Connector<PaycomJob> = {
         seen.add(j.jobId);
         out.push({ ...j, session: s });
       }
-      if (!fresh.length || out.length >= (page.jobPostingPreviewsCount ?? 0)) break;
+      total = page.jobPostingPreviewsCount ?? 0;
+      if (!fresh.length || out.length >= total) break;
     }
+    // Stopped at the cap (or the API stopped early) well short of the total it reports.
+    if (total - out.length >= PAGE) partial?.();
     return out;
   },
 

@@ -48,16 +48,20 @@ export const join: Connector<JoinJob> = {
     return parts[0] === "companies" && parts[1] && /^[a-z0-9][a-z0-9_-]*$/i.test(parts[1]) ? { ats: "join", slug: parts[1].toLowerCase() } : null;
   },
 
-  async fetch(ref, { http }) {
+  async fetch(ref, { http, partial }) {
     const id = await companyId(ref, http);
     const out: JoinJob[] = [];
+    let total = 0;
     for (let page = 1, pages = 1; page <= pages && out.length < MAX_POSTINGS; page++) {
       const res = await http.getJson<Page>(`${API}/companies/${id}/jobs?page=${page}&pageSize=${PAGE}`);
       if (!Array.isArray(res.items)) throw new Error("unexpected JOIN response: no items array");
       out.push(...res.items);
       pages = res.pagination?.pageCount ?? 1;
+      total = res.pagination?.rowCount ?? 0;
       if (!res.items.length) break;
     }
+    // Stopped at the cap (or the API stopped early) well short of the total it reports.
+    if (total - out.length >= PAGE) partial?.();
     return out;
   },
 

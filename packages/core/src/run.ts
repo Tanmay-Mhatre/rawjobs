@@ -104,7 +104,15 @@ export async function runRadar(config: Config, opts: RunOptions = {}): Promise<R
         if (!extra || !why.gate) kept.push({ ...j, score, why });
         if (!why.gate) h.matches++;
       }
-      const raws = recent ? [] : await connector.fetch(company, { http, now });
+      const raws = recent
+        ? []
+        : await connector.fetch(company, {
+            http,
+            now,
+            partial: () => {
+              h.partial = true;
+            },
+          });
       let described = 0;
       for (const raw of raws) {
         let base: NormalizedJob;

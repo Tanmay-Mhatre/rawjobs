@@ -41,7 +41,7 @@ export const workday: Connector<WorkdayPosting> = {
   ats: "workday",
   detect: detectAs("workday"),
 
-  async fetch(ref, { http, now }) {
+  async fetch(ref, { http, now, partial }) {
     if (!ref.shard || !ref.site) throw new Error('workday needs "shard" and "site" from the careers URL');
     const out: WorkdayPosting[] = [];
     let total = Infinity;
@@ -53,6 +53,8 @@ export const workday: Connector<WorkdayPosting> = {
       out.push(...page.jobPostings.map((p) => ({ ...p, postedAt: relativePosted(p.postedOn, now) })));
       if (page.jobPostings.length < PAGE) break;
     }
+    // Stopped at the cap (or the API stopped early) well short of the total it reports.
+    if (total - out.length >= PAGE) partial?.();
     return out;
   },
 

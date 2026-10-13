@@ -40,6 +40,18 @@ describe("mergeHistory: Workday and Taleo", () => {
     expect(m2.newIds.size).toBe(0);
   });
 
+  it("never closes jobs a capped list didn't reach (the fetch was partial)", () => {
+    const partialRun = (at: string, jobs: Job[]): RunResult => ({ ...wdRun(at, jobs), health: wdHealth(true).map((h) => ({ ...h, partial: true })) });
+    // R1 is past the cap on both runs; R2 is seen each time.
+    let m = mergeHistory([wdJob("R1"), wdJob("R2")], partialRun(T1, [wdJob("R2", { lastSeen: T1 })]), [wd]);
+    m = mergeHistory(m.jobs, partialRun(T2, [wdJob("R2", { lastSeen: T2 })]), [wd]);
+    expect(m.closedIds.size).toBe(0);
+    expect(m.jobs.map((j) => [j.id, j.status, j.missedRuns ?? 0]).sort()).toEqual([
+      ["workday:bank|external:R1", "open", 0],
+      ["workday:bank|external:R2", "open", 0],
+    ]);
+  });
+
   it("carries history over from ids saved with the title in them", () => {
     const old = wdJob("R1", { id: "workday:bank|external:Senior-PM_R1", firstSeen: T0 });
     const m = mergeHistory([old], wdRun(T1, [wdJob("R1", { firstSeen: T1, lastSeen: T1 })]), [wd]);

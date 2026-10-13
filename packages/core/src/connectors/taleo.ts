@@ -56,12 +56,13 @@ export const taleo: Connector<TaleoRequisition> = {
   ats: "taleo",
   detect: detectAs("taleo"),
 
-  async fetch(ref, { http }) {
+  async fetch(ref, { http, partial }) {
     // The search needs the section's portal number, which only its search page shows.
     const page = await http.getText(`${base(ref)}/${encodeURIComponent(sectionOf(ref))}/jobsearch.ftl?lang=en`);
     const portal = page.match(/portal=(\d+)/)?.[1];
     if (!portal) throw new Error(`Taleo career section "${sectionOf(ref)}" not found on ${ref.slug}.taleo.net`);
     const out: TaleoRequisition[] = [];
+    let total = 0;
     for (let pageNo = 1; pageNo <= MAX_PAGES; pageNo++) {
       const res = await http.request(`${base(ref)}/rest/jobboard/searchjobs?lang=en&portal=${portal}`, {
         method: "POST",
@@ -71,9 +72,12 @@ export const taleo: Connector<TaleoRequisition> = {
       const data = (await res.json()) as Search;
       if (!Array.isArray(data.requisitionList)) throw new Error("unexpected Taleo response: no requisitionList");
       out.push(...data.requisitionList);
+      total = data.pagingData?.totalCount ?? 0;
       const size = data.pagingData?.pageSize || 25;
       if (pageNo * size >= (data.pagingData?.totalCount ?? 0) || data.requisitionList.length === 0) break;
     }
+    // Stopped at the cap (or the API stopped early) well short of the total it reports.
+    if (total - out.length >= 25) partial?.();
     return out;
   },
 

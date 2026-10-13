@@ -46,18 +46,22 @@ export const ukg: Connector<UkgOpportunity> = {
     return code && guid && GUID.test(guid) ? { ats: "ukg", slug: code, shard: host, site: guid.toLowerCase() } : null;
   },
 
-  async fetch(ref, { http }) {
+  async fetch(ref, { http, partial }) {
     const url = `${board(ref)}/JobBoardView/LoadSearchResults`;
     const out: UkgOpportunity[] = [];
     const seen = new Set<string>();
+    let total = 0;
     for (let skip = 0; skip < MAX_POSTINGS; skip += PAGE) {
       const page = await http.postJson<{ opportunities?: UkgOpportunity[]; totalCount?: number }>(url, { opportunitySearch: { Top: PAGE, Skip: skip } });
       if (!Array.isArray(page.opportunities)) throw new Error("unexpected UKG response: no opportunities array");
       const fresh = page.opportunities.filter((o) => !seen.has(o.Id));
       for (const o of fresh) seen.add(o.Id);
       out.push(...fresh);
-      if (!fresh.length || out.length >= (page.totalCount ?? 0)) break;
+      total = page.totalCount ?? 0;
+      if (!fresh.length || out.length >= total) break;
     }
+    // Stopped at the cap (or the API stopped early) well short of the total it reports.
+    if (total - out.length >= PAGE) partial?.();
     return out;
   },
 

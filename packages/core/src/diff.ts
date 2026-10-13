@@ -22,13 +22,14 @@ export type MergeResult = {
 
 /**
  * Merge this run into the stored history: new / still open / missing / closed.
- * Jobs of companies that failed or weren't run this time are left untouched, so a
- * broken feed never closes everything. Jobs of companies removed from the config are dropped.
+ * Jobs of companies that failed, weren't run this time or were read only in part (a capped
+ * list) are left untouched, so a broken or cut-short feed never closes anything. Jobs of companies removed from the config are dropped.
  */
 export function mergeHistory(previous: readonly Job[], run: RunResult, companies: readonly Pick<CompanyRef, "ats" | "slug" | "site">[], now = new Date(run.startedAt)): MergeResult {
   // Job ids carry their company's jobCompanyKey(); Workday and Taleo ones include the site.
   const configured = new Set(companies.map(jobCompanyKey));
-  const fetchedOk = new Set(run.health.filter((h) => h.ok).map((h) => h.key ?? jobCompanyKey(h)));
+  // A list cut short at a cap (partial) is no proof its other jobs closed: treat it like a failed fetch.
+  const fetchedOk = new Set(run.health.filter((h) => h.ok && !h.partial).map((h) => h.key ?? jobCompanyKey(h)));
   const current = new Map(run.jobs.map((j) => [j.id, j]));
   // Older saves may hold ids in an earlier form; rewrite them so their history carries on.
   previous = previous.map((j) => {

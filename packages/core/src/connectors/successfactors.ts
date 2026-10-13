@@ -93,12 +93,13 @@ export const successfactors: Connector<SuccessFactorsJob> = {
   ats: "successfactors",
   detect: detectAs("successfactors"),
 
-  async fetch(ref, { http }) {
+  async fetch(ref, { http, partial }) {
     if (isCareerSiteHost(ref)) {
       const site = ref.slug.toLowerCase();
       const out: SuccessFactorsJob[] = [];
       const seen = new Set<string>();
-      for (let start = 0, total = Infinity; start < Math.min(total, MAX_POSTINGS); ) {
+      let total = Infinity;
+      for (let start = 0; start < Math.min(total, MAX_POSTINGS); ) {
         const page = parseCareerSitePage(await http.getText(`https://${site}/search/?q=&startrow=${start}`), site);
         if (!page.readable) throw new Error(`${site}: this SuccessFactors career site template isn't readable yet`);
         if (start === 0) total = page.total || page.jobs.length;
@@ -108,6 +109,8 @@ export const successfactors: Connector<SuccessFactorsJob> = {
         out.push(...fresh);
         start += page.jobs.length;
       }
+      // Stopped at the cap well short of the total the site reports.
+      if (Number.isFinite(total) && total - out.length >= 25) partial?.();
       return out;
     }
     const xml = await http.getText(`https://${host(ref)}/career?company=${encodeURIComponent(ref.slug)}&career_ns=job_listing_summary&resultType=XML`);
