@@ -56,6 +56,8 @@ export const BOARD_URL: Record<string, (b: string) => string | undefined> = {
   paylocity: (b) => (/^[0-9a-f-]{36}$/i.test(b) ? `https://recruiting.paylocity.com/Recruiting/Jobs/All/${b}` : undefined),
   // The careers site's host; kept as a board directly in freehireBoards.
   phenom: () => undefined,
+  // The 32-hex clientId of recruitingbypaycor.com/career/CareerHome.action?clientId={id}
+  paycor: (b) => (/^[0-9a-f]{32}$/i.test(b) ? `https://recruitingbypaycor.com/career/CareerHome.action?clientId=${b}` : undefined),
   personio: (b) => (plain(b) ? `https://${b}.jobs.personio.com` : undefined),
   pinpoint: (b) => (plain(b) ? `https://${b}.pinpointhq.com` : undefined),
   recruitee: (b) => (plain(b) ? `https://${b}.recruitee.com` : undefined),

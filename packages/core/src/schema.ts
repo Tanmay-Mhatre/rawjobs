@@ -36,6 +36,7 @@ export const ATS_TYPES = [
   "dayforce",
   "adp",
   "applicantpro",
+  "paycor",
 ] as const;
 
 /**
