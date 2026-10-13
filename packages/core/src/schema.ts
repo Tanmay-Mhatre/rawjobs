@@ -27,6 +27,7 @@ export const ATS_TYPES = [
   "freshteam",
   "join",
   "paylocity",
+  "paycom",
 ] as const;
 
 /**

@@ -31,6 +31,8 @@ export const BOARD_URL: Record<string, (b: string) => string | undefined> = {
     const [host, site] = b.split("/");
     return host && site && plain(host) ? `https://${host}/hcmUI/CandidateExperience/en/sites/${enc(site)}` : undefined;
   },
+  // The 32-hex client key of paycomonline.net/v4/ats/web.php/portal/{key}
+  paycom: (b) => (/^[0-9a-f]{32}$/i.test(b) ? `https://www.paycomonline.net/v4/ats/web.php/portal/${b}/career-page` : undefined),
   // The company GUID of recruiting.paylocity.com/Recruiting/Jobs/All/{guid}
   paylocity: (b) => (/^[0-9a-f-]{36}$/i.test(b) ? `https://recruiting.paylocity.com/Recruiting/Jobs/All/${b}` : undefined),
   personio: (b) => (plain(b) ? `https://${b}.jobs.personio.com` : undefined),
