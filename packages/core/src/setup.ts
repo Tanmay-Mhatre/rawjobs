@@ -3,7 +3,8 @@ import { join, resolve } from "node:path";
 import { parse as parseYaml } from "yaml";
 import { z } from "zod";
 import { CONFIG_CANDIDATES, LEGACY_CONFIG_CANDIDATES } from "./config";
-import { careersUrl, companyKey, detectCompany, getConnector } from "./connectors";
+import { careersUrl, companyKey, detectCompany, getConnector, type DetectResult } from "./connectors";
+import { isTeamtailorFeed, isTeamtailorHost } from "./connectors/teamtailor";
 import { HttpClient, HttpError } from "./http";
 import { RESUME_PATH } from "./resume";
 import { ConfigSchema, type Profile } from "./schema";
@@ -79,6 +80,28 @@ export type CheckOptions = {
 };
 
 /**
+ * A careers site on a company's own domain, which its URL can't reveal: one request for the
+ * host's /jobs.rss, accepted only when it is Teamtailor's feed.
+ */
+async function detectByFeed(input: string, http: HttpClient): Promise<DetectResult | null> {
+  let host: string;
+  try {
+    host = new URL(/^https?:\/\//i.test(input) ? input : `https://${input}`).hostname.toLowerCase();
+  } catch {
+    return null;
+  }
+  if (!isTeamtailorHost(host)) return null;
+  try {
+    const xml = await http.getText(`https://${host}/jobs.rss`);
+    if (!isTeamtailorFeed(xml)) return null;
+    const title = xml.match(/<channel>\s*<title>([^<]*)<\/title>/)?.[1]?.trim();
+    return { ats: "teamtailor", slug: host, name: title || host, supported: true };
+  } catch {
+    return null;
+  }
+}
+
+/**
  * Detect each careers URL and, where we have a connector, fetch it once: the result carries
  * everything the company directory records, plus how many jobs match the user.
  */
@@ -89,7 +112,7 @@ export async function checkCompanies(inputs: readonly string[], opts: CheckOptio
   for (const raw of inputs) {
     const input = raw.trim();
     if (!input) continue;
-    const found = detectCompany(input);
+    const found = detectCompany(input) ?? (await detectByFeed(input, http));
     if (!found) {
       out.push({ input, status: "unknown", error: "Not a careers site RawJobs can read yet." });
       continue;

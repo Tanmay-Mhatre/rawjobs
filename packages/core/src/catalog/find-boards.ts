@@ -1,4 +1,5 @@
 import { companyKey, detectCompany, type DetectResult } from "../connectors";
+import { isTeamtailorHost } from "../connectors/teamtailor";
 
 export type FoundBoard = DetectResult & { key: string /** The URL on the page that revealed it. */; evidence: string };
 
@@ -38,6 +39,19 @@ export function findBoards(html: string, base: string): FoundBoard[] {
     if (uid) {
       const key = companyKey({ ats: "comeet", slug: uid });
       if (!seen.has(key)) seen.set(key, { ats: "comeet", slug: uid, name: "", supported: false, key, evidence: base });
+    }
+  }
+  // A Teamtailor careers site on the company's own domain loads Teamtailor's assets; the host is the
+  // board (the live check then reads its /jobs.rss and accepts only Teamtailor's feed).
+  if (/teamtailor-cdn\.com/i.test(html)) {
+    try {
+      const host = new URL(base).hostname.toLowerCase();
+      if (isTeamtailorHost(host) && !host.endsWith(".teamtailor.com")) {
+        const key = companyKey({ ats: "teamtailor", slug: host });
+        if (!seen.has(key)) seen.set(key, { ats: "teamtailor", slug: host, name: "", supported: true, key, evidence: base });
+      }
+    } catch {
+      // base isn't a URL
     }
   }
   // Supported first; then the board seen most often on the page.

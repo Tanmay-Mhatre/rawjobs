@@ -3,7 +3,17 @@ import { htmlToText, inferWorkplace } from "../text";
 import { detectAs, isoDate, joinParts, xmlBlocks, xmlOne } from "./parse";
 import { jobId, type Connector } from "./types";
 
-/** One <item> of {company}.teamtailor.com/jobs.rss, the careers site's public feed (descriptions included). */
+/**
+ * Teamtailor careers sites live on {company}.teamtailor.com or on the company's own domain
+ * (careers.acme.com). A slug with a dot is that host; both serve the same /jobs.rss.
+ */
+const HOST = /^[a-z0-9-]+(\.[a-z0-9-]+)+$/i;
+export const isTeamtailorHost = (slug: string) => slug.includes(".") && HOST.test(slug);
+export const teamtailorBase = (slug: string) => (isTeamtailorHost(slug) ? `https://${slug.toLowerCase()}` : `https://${slug}.teamtailor.com`);
+/** Teamtailor's feeds declare its namespace: how a feed on any domain proves it is one. */
+export const isTeamtailorFeed = (xml: string) => /<rss[\s>]/.test(xml) && /xmlns:tt="https?:\/\/teamtailor\.com/.test(xml);
+
+/** One <item> of a Teamtailor careers site's /jobs.rss, its public feed (descriptions included). */
 export type TeamtailorItem = {
   guid: string;
   title: string;
@@ -36,8 +46,11 @@ export const teamtailor: Connector<TeamtailorItem> = {
   detect: detectAs("teamtailor"),
 
   async fetch(ref, { http }) {
-    const xml = await http.getText(`https://${ref.slug}.teamtailor.com/jobs.rss`);
+    if (ref.slug.includes(".") && !isTeamtailorHost(ref.slug)) throw new Error(`not a careers site host: ${ref.slug}`);
+    const xml = await http.getText(`${teamtailorBase(ref.slug)}/jobs.rss`);
     if (!/<rss[\s>]/.test(xml)) throw new Error("unexpected Teamtailor response: not an RSS feed");
+    // On a company's own domain, only a feed that really is Teamtailor's counts.
+    if (isTeamtailorHost(ref.slug) && !isTeamtailorFeed(xml)) throw new Error(`${ref.slug} is not a Teamtailor careers site`);
     return parseTeamtailor(xml);
   },
 
