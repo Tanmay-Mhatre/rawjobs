@@ -4,7 +4,7 @@ import type { CompanyRow } from "./setup";
 /**
  * Starter packs and the tray at the bottom of the Companies page. The pack buttons and progress are
  * worked out from your companies (so a finished pack still offers Remove pack after a reload); the
- * tray remembers this visit only: what you added, grouped by pack, and the changes Undo walks back.
+ * tray remembers this visit only: the changes Undo walks back.
  * Nothing here is saved.
  */
 
@@ -70,18 +70,6 @@ export function undoLast(v: Visit): { visit: Visit; change: Change } | null {
   const hist = v.hist.slice(0, -1);
   return { visit: { ...v, hist, last: hist[hist.length - 1]?.text ?? null }, change };
 }
-
-/** What you added this visit and still have, grouped by pack in the order you first added from it. */
-export function visitGroups(v: Visit, watched: ReadonlySet<string>): { pack: string | null; refs: CompanyRef[] }[] {
-  const groups = new Map<string | null, CompanyRef[]>();
-  for (const [key, { ref, pack }] of v.added) {
-    if (!watched.has(key)) continue;
-    groups.set(pack, [...(groups.get(pack) ?? []), ref]);
-  }
-  return [...groups].map(([pack, refs]) => ({ pack, refs }));
-}
-
-export const visitCount = (v: Visit, watched: ReadonlySet<string>) => [...v.added.keys()].filter((k) => watched.has(k)).length;
 
 /**
  * "Next in this pack": after you pick one company in a pack, up to 2 of the pack's extras join its

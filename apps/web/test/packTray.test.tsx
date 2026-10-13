@@ -6,7 +6,7 @@ import { ForYou } from "../src/components/companies/ForYou";
 import { packActions, Tray, useVisit } from "../src/components/companies/Tray";
 import { addCompanies, keyOf, type CompanyRef } from "../src/lib/companies";
 import type { CompanySuggestion, CompanySuggestions } from "../src/lib/companySuggest";
-import { emptyVisit, packState, recordAdd, recordRemove, uniqueMembers, undoLast, visitCount } from "../src/lib/packVisit";
+import { emptyVisit, packState, recordAdd, recordRemove, uniqueMembers, undoLast } from "../src/lib/packVisit";
 import type { CompanyRow } from "../src/lib/setup";
 
 afterEach(cleanup);
@@ -77,7 +77,7 @@ function Page({ initial = [] }: { initial?: CompanyRow[] }) {
         industries={2}
         packActions={actions}
       />
-      <Tray visit={visit.visit} watched={watched} actions={actions} />
+      <Tray visit={visit.visit} actions={actions} />
       <p data-testid="said">{visit.said}</p>
       <span data-testid="count">{companies.length}</span>
     </>
@@ -86,7 +86,7 @@ function Page({ initial = [] }: { initial?: CompanyRow[] }) {
 
 const pack = (name: RegExp) => screen.getByRole("region", { name });
 const count = () => Number(screen.getByTestId("count").textContent);
-const tray = () => screen.getByRole("region", { name: "Added this visit" });
+const tray = () => screen.getByRole("region", { name: "Last change" });
 
 describe("pack logic", () => {
   it("counts a company in two packs once", () => {
@@ -111,7 +111,6 @@ describe("pack logic", () => {
     expect(batch.change.added).toHaveLength(4);
     expect(batch.visit.hist).toHaveLength(0);
     expect(undoLast(batch.visit)).toBeNull();
-    expect(visitCount(v, new Set(refs.map(keyOf)))).toBe(4);
   });
 });
 
@@ -159,7 +158,7 @@ describe("Starter packs", () => {
 describe("Tray", () => {
   it("stays hidden until something changes", () => {
     render(<Page />);
-    expect(screen.queryByRole("region", { name: "Added this visit" })).toBeNull();
+    expect(screen.queryByRole("region", { name: "Last change" })).toBeNull();
   });
 
   it("undoes one company, then a whole pack", () => {
@@ -173,18 +172,19 @@ describe("Tray", () => {
     expect(document.activeElement).toBe(btn);
     expect(btn.textContent).toBe("Remove pack");
     expect(count()).toBe(5);
-    expect(tray().textContent).toContain("5 added this visit");
-    expect(tray().textContent).toContain("Added 4 from Payments");
+    // Only the last change and Undo: the companies themselves are on the page.
+    expect(tray().textContent).toBe("Added 4 from Payments Undo");
+    expect(within(tray()).getAllByRole("button").length).toBe(1);
 
     fireEvent.click(within(tray()).getByRole("button", { name: /Undo/ }));
     expect(count()).toBe(1);
     expect(screen.getByTestId("said").textContent?.trim()).toBe("Undid: Added 4 from Payments.");
-    expect(tray().textContent).toContain("1 added this visit");
+    expect(tray().textContent).toContain("Added Kraken");
 
     fireEvent.click(within(tray()).getByRole("button", { name: /Undo/ }));
     expect(count()).toBe(0);
-    expect(tray().textContent).toContain("0 added this visit");
-    // Nothing left to undo, but the tray (and its focus) stays.
+    // Nothing left to undo, but the bar (and its focus) stays.
+    expect(tray().textContent).toContain("Nothing left to undo");
     expect(within(tray()).getByRole("button", { name: /Undo/ }).getAttribute("aria-disabled")).toBe("true");
   });
 
@@ -194,21 +194,5 @@ describe("Tray", () => {
     expect(count()).toBe(0);
     fireEvent.click(within(tray()).getByRole("button", { name: /Undo/ }));
     expect(count()).toBe(1);
-  });
-
-  it("reviews the visit by pack, with a remove per company and Undo pack", () => {
-    render(<Page />);
-    fireEvent.click(within(pack(/Payments/)).getByRole("button", { name: "Add all 4" }));
-    fireEvent.click(screen.getByRole("button", { name: "Kraken, add to My companies" }));
-    fireEvent.click(within(tray()).getByRole("button", { name: "Review" }));
-    const list = within(tray());
-    fireEvent.click(list.getByRole("button", { name: "Remove Airwallex" }));
-    expect(count()).toBe(4);
-    fireEvent.click(list.getAllByRole("button", { name: /Undo pack/ })[0]!);
-    expect(count()).toBe(1);
-    expect(tray().textContent).toContain("Removed 3 from");
-    // Undo puts the pack's 3 back.
-    fireEvent.click(list.getByRole("button", { name: /^Undo$/ }));
-    expect(count()).toBe(4);
   });
 });

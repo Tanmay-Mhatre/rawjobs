@@ -446,7 +446,7 @@ export function CompaniesTab({ configured, meta, jobs, draft, loaded, saved, upd
         </TabPanel>
       )}
 
-      <Tray visit={visit.visit} watched={watched} actions={packs} />
+      <Tray visit={visit.visit} actions={packs} />
       {/* One polite line that reads out each pack change and Undo, always there so none is missed. */}
       <p role="status" aria-live="polite" className="sr-only">
         {visit.said}
