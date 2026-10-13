@@ -256,6 +256,14 @@ jobs:
         timeout-minutes: 72
         run: bash scripts/catalog/capped.sh "Index open jobs" ${{ inputs.smoke && 5 || 70 }} pnpm exec tsx scripts/catalog/index.ts --max-age-days 7 --max-minutes ${{ inputs.smoke && 2 || 60 }}
 
+      # Job titles for industry tags, for the companies the index doesn't read (best effort).
+      - name: Download the job feed
+        timeout-minutes: 5
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ secrets.DATA_REPO_TOKEN }}
+        run: bash scripts/catalog/feed.sh
+
       - name: Package
         timeout-minutes: 10
         run: |

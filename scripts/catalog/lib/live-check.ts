@@ -2,9 +2,27 @@
 import { getConnector, HttpError, type AtsType, type HttpClient } from "@rawjobs/core";
 
 export type Board = { key: string; ats: string; slug: string; region?: string; shard?: string; site?: string };
-export type CheckResult = { status: "live" | "dormant" | "dead" | "error"; jobs: number | null; name?: string; http?: number; error?: string };
+/** `titles`: job titles the check read anyway (systems with no cheap count), at most MAX_TITLES distinct ones. */
+export type CheckResult = { status: "live" | "dormant" | "dead" | "error"; jobs: number | null; name?: string; http?: number; error?: string; titles?: string[] };
 
 const enc = encodeURIComponent;
+
+/** Enough titles to tell a company's industry, few enough to keep the saved state small. */
+export const MAX_TITLES = 60;
+
+/** Distinct job titles (ignoring case and spacing), first seen first, at most MAX_TITLES. */
+export function titlesOf(titles: readonly (string | undefined)[]): string[] {
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const t of titles) {
+    const title = t?.replace(/\s+/g, " ").trim().slice(0, 120);
+    if (!title || seen.has(title.toLowerCase())) continue;
+    seen.add(title.toLowerCase());
+    out.push(title);
+    if (out.length >= MAX_TITLES) break;
+  }
+  return out;
+}
 
 export async function checkBoard(http: HttpClient, b: Board): Promise<CheckResult> {
   try {
@@ -54,10 +72,22 @@ export async function checkBoard(http: HttpClient, b: Board): Promise<CheckResul
           ...(b.shard ? { shard: b.shard } : {}),
           ...(b.site ? { site: b.site } : {}),
         };
-        const n = (await connector.fetch(ref, { http, now: new Date() })).length;
+        const raws = await connector.fetch(ref, { http, now: new Date() });
+        const n = raws.length;
         // Gem answers any made-up board with an empty list, like SmartRecruiters: empty means dead.
         if (!n && b.ats === "gem") return { status: "dead", jobs: 0 };
-        return { status: n ? "live" : "dormant", jobs: n };
+        // The list is already here: keep its titles for industry tags (publish.ts), so systems the
+        // job index doesn't read get tagged without another request.
+        const titles = titlesOf(
+          raws.slice(0, 500).map((r) => {
+            try {
+              return connector.normalize(r, ref).title;
+            } catch {
+              return undefined;
+            }
+          }),
+        );
+        return { status: n ? "live" : "dormant", jobs: n, ...(titles.length ? { titles } : {}) };
       }
     }
   } catch (err) {

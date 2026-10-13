@@ -1,0 +1,7 @@
+{
+ "source": "Wikidata (CC0)",
+ "companies": [
+  { "name": "Acme Corporation", "website": "https://www.acme.com/", "industries": [], "wikidata": "Q1", "industry_items": ["Q22687", "Q837171"] },
+  { "name": "Beta Pay", "website": "https://www.betapayments.example/", "industries": [], "wikidata": "Q2", "industry_items": ["Q43183"] }
+ ]
+}

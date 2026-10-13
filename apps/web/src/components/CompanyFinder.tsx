@@ -20,6 +20,8 @@ export type DirCompany = CompanyRef & {
   indexed: boolean;
   tags?: string[];
   title_tags?: string[];
+  /** Where each tag that no hand-made list gives came from (directories from October 2026 on). */
+  tag_src?: Record<string, "wikidata" | "titles">;
   /** Found by you with "Add by link", or from the industry seed list. */
   origin?: "user" | "seed";
 };
@@ -316,11 +318,30 @@ export type LineProps = {
   onRemove: (key: string) => void;
 };
 
+/** The id of the company's industry, one of yours when it's in several. */
+function industryIdOf(c: Pick<DirCompany, "tags" | "title_tags">, mine: readonly string[]): string | undefined {
+  const ids = [...(c.tags ?? []), ...(c.title_tags ?? [])].filter((id) => INDUSTRY_BY_ID.has(id));
+  return ids.find((i) => mine.includes(i)) ?? ids[0];
+}
+
 /** The company's industry, one of yours when it's in several ("Payments"). */
 export function industryOf(c: Pick<DirCompany, "tags" | "title_tags">, mine: readonly string[] = []): string | undefined {
-  const ids = [...(c.tags ?? []), ...(c.title_tags ?? [])].filter((id) => INDUSTRY_BY_ID.has(id));
-  const id = ids.find((i) => mine.includes(i)) ?? ids[0];
+  const id = industryIdOf(c, mine);
   return id ? INDUSTRY_BY_ID.get(id)!.label : undefined;
+}
+
+const SOURCE_HINT = { titles: "from its job titles", wikidata: "from Wikidata" } as const;
+
+/**
+ * The company's industry and, when no hand-made list says so, where it comes from:
+ * ["Fintech (general)", "from its job titles"]. Directories from before `tag_src` mark only job-title
+ * tags (title_tags). Empty without an industry.
+ */
+export function industryParts(c: Pick<DirCompany, "tags" | "title_tags" | "tag_src">, mine: readonly string[] = []): string[] {
+  const id = industryIdOf(c, mine);
+  if (!id) return [];
+  const src = c.tag_src?.[id] ?? (c.title_tags?.includes(id) && !c.tags?.includes(id) ? "titles" : undefined);
+  return [INDUSTRY_BY_ID.get(id)!.label, ...(src && src in SOURCE_HINT ? [SOURCE_HINT[src]] : [])];
 }
 
 /** One careers page: the company and what it is (industry), no job counts (those are on the Radar). */
@@ -338,7 +359,7 @@ function BoardLine({ c, watched, mine, onAdd, onRemove, sub, why }: LineProps & 
         </p>
         <p className="type-small text-muted">
           {[
-            !sub && industryOf(c, mine),
+            ...(sub ? [] : industryParts(c, mine)),
             !sub && why,
             c.status === "dormant" ? "not hiring right now" : c.status === "unverified" ? "not checked yet" : null,
             c.origin === "user" && "added by you",

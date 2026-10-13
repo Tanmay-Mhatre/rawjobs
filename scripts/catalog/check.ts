@@ -9,6 +9,7 @@
  *   pnpm exec tsx scripts/catalog/check.ts [--max-minutes 30] [--recheck-days 30] [--ats greenhouse,lever]
  *
  * Result per board: live (has jobs) · dormant (exists, 0 jobs) · dead (404/410/422) · error (retry later)
+ * Systems with no cheap count are checked by reading their job list; those titles go to out/titles.jsonl.
  */
 import { appendFileSync, readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
@@ -29,6 +30,8 @@ const RECHECK_DAYS = recheckArg > 0 ? Number(process.argv[recheckArg + 1]) : Inf
 /** Stop starting new checks after this long (default: no limit). */
 const MAX_MS = maxMsFromArgs();
 const OUT = join(OUT_DIR, ONLY ? `checks-${[...ONLY].sort().join("-")}.jsonl` : "checks.jsonl");
+/** Job titles some checks read on the way (lib/live-check.ts), one file per process like OUT. */
+const TITLES = join(OUT_DIR, ONLY ? `titles-${[...ONLY].sort().join("-")}.jsonl` : "titles.jsonl");
 // Polite: each lane is sequential, with a small gap per host on top of request latency.
 const http = new HttpClient({ retries: 2, hostDelayMs: 200, timeoutMs: 20_000, backoffMs: 3_000, userAgent: "RawJobs-catalog/0.1 (open-source job radar; low-rate board validation)" });
 
@@ -70,8 +73,10 @@ async function main() {
       Array.from({ length: WORKERS[ats] ?? 1 }, async () => {
         while (list.length && Date.now() - started < MAX_MS) {
           const b = list.shift()!;
-          const r = await checkBoard(http, b);
+          const { titles, ...r } = await checkBoard(http, b);
           const checked_at = new Date().toISOString();
+          // Titles the check read anyway go to their own log (publish.ts tags industries from them).
+          if (titles?.length) appendFileSync(TITLES, `${JSON.stringify({ key: b.key, fetched_at: checked_at, titles })}\n`);
           // An error extends the board's streak, which sets how long until its next retry.
           const row: Result = { key: b.key, ...r, checked_at, ...(r.status === "error" ? { errors: mergeCheck(known.get(b.key), { key: b.key, ...r, checked_at }).errors } : {}) };
           appendFileSync(OUT, `${JSON.stringify(row)}\n`);

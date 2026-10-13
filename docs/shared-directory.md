@@ -65,6 +65,32 @@ The goal is to hold at least 90% of the companies on each hiring system the dire
 
 Restricted lists (share-alike or no licence) are only counted, never published. yc-oss/api was left out because it has no licence.
 
+## Industry tags
+
+"My companies + my industries" scans, the Companies page's industry filter and the starter packs
+only see directory companies with an industry, so `publish.ts` tags as many as it can verify. No AI:
+each tag comes from one of these sources (`scripts/catalog/lib/tags.ts`):
+
+| Source | `tag_src` | How | Kept in |
+|---|---|---|---|
+| Hand-made lists | (absent) | The seed list (`seeds/industries.json`), the curated list's `segment`, crypto-jobs-fyi's `category`. The other public lists have no industry column. | `tags` |
+| Wikidata (CC0) | `wikidata` | The industries (P452) of the ~18k companies `seeds-bulk.ts` reads, fetched by two more item-pair queries in the same run (seconds each). Mapped by a fixed table of Wikidata items (`lib/wikidata.ts`; broad ones like "financial services" count only when nothing more specific does). A company matches by the board `resolve.ts --bulk` found on its website, or by the same name (one Wikidata company has it) and a board named like its website (`visa` for visa.com). | `tags` |
+| Job titles | `titles` | `industriesFromTitles` (8% of titles, at least 2). Titles come from the job index (Greenhouse, Lever, Ashby, SmartRecruiters); else from the daily job feed's shards (Workday, and boards the index didn't reach), downloaded by `scripts/catalog/feed.sh`; else from the titles a live check read anyway (systems with no cheap count read the whole list: up to 60 distinct titles go to `out/titles.jsonl`, kept in the saved state). No extra requests. | `title_tags` |
+
+In `directory.json` (and `index.json`) each company keeps `tags` (what the company is: lists,
+Wikidata) and `title_tags` (what it hires for: titles only), as apps have always read them; scans
+use both. `tag_src` (new, ignored by older apps) names the source of each tag that isn't from a
+hand-made list, e.g. `{"payments": "titles", "banking": "wikidata"}`; the Companies page shows it
+after the industry ("Payments · from its job titles"). `out/tags.json` records every source of
+every tag. The publish log prints how many live companies have an industry, by source.
+
+Measured on 2026-10-13 (the saved state, today's job feed and Wikidata): the 2026-10-12 release had
+an industry on 6,176 of 38,302 live companies (16%). The same inputs built today hold 91,140 live
+companies; the old rules tag 6,307 of them, the new ones 10,161 (+1,198 through Wikidata, +2,656
+more through the job feed's titles, mostly Workday), before any check has kept titles. A sample of 400 live boards on the other
+systems found titles for 398 and an industry for 134 (34%): about 20,000 more companies once their
+monthly recheck has run.
+
 ## What is shared, and what isn't
 
 Shared (on by default, off with `directory.share_additions: false` or Settings → Sharing): hiring
@@ -222,7 +248,9 @@ only companies whose jobs changed are checked again.
 
 On real data (1.28M jobs), a day's update takes about 3 s and filtering about 2.5 s; with nothing new,
 filtering is instant. The first format is still published next to it while installs update; drop it
-(and the shard code in `jobs.ts` and `syncJobFeed`) once every supported app reads the second.
+(and the shard code in `jobs.ts` and `syncJobFeed`) once every supported app reads the second. The
+directory build reads the first format's shards for industry tags (`feed.sh`, `readFeedTitles`):
+move those to the full copy first.
 
 ## One-time setup
 
@@ -230,7 +258,7 @@ filtering is instant. The first format is still published next to it while insta
 2. **Public directory repo**: `gh repo create Tanmay-Mhatre/rawjobs-directory --public`, then add the files from `services/directory-repo-template/`.
 3. **Seed it** from an existing local build so the first weekly run is quick:
    `pnpm catalog:release --out dist`, then `gh release create directory-YYYY-MM-DD dist/* --latest -R <repo>`;
-   and upload `catalog-state.tar.gz` (out/checks.jsonl, out/index-all.jsonl, out/resolved.json) to a prerelease tagged `state`.
+   and upload `catalog-state.tar.gz` (out/checks.jsonl, out/index-all.jsonl, out/titles.jsonl, out/resolved.json, raw/wikidata/companies.json) to a prerelease tagged `state`.
 4. **Inbox** (Cloudflare account needed): in `services/contribute`
    (after `pnpm install` at the repo root) `npx wrangler login`, `npx wrangler kv namespace create INBOX` (put the id in `wrangler.toml`),
    `npx wrangler secret put INBOX_TOKEN` (a long random string), `npx wrangler secret put REPORTER_SECRET`

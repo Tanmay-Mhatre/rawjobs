@@ -90,8 +90,8 @@
    "edtech": 0,
    "hrtech": 0,
    "fintech": 1,
-   "payments": 0,
-   "banking": 0,
+   "payments": 1,
+   "banking": 1,
    "digital-bank": 0,
    "lending": 0,
    "wealth": 0,
@@ -155,7 +155,13 @@
     "indexed": false,
     "tags": [
      "fintech"
-    ]
+    ],
+    "title_tags": [
+     "payments"
+    ],
+    "tag_src": {
+     "payments": "titles"
+    }
    },
    {
     "key": "lever:acme",
@@ -166,7 +172,13 @@
     "tier": "dump",
     "status": "live",
     "open_jobs": 5,
-    "indexed": false
+    "indexed": false,
+    "tags": [
+     "banking"
+    ],
+    "tag_src": {
+     "banking": "wikidata"
+    }
    }
   ]
  }
