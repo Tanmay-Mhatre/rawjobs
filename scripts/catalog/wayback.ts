@@ -59,6 +59,7 @@ const QUERIES: { url: string; matchType: "prefix" | "domain" }[] = [
   { url: "www.comeet.com/jobs/", matchType: "prefix" },
   { url: "jobs.jobvite.com/", matchType: "prefix" },
   { url: "ats.rippling.com/", matchType: "prefix" },
+  { url: "join.com/companies/", matchType: "prefix" },
   { url: "recruitee.com", matchType: "domain" },
   { url: "jobs.personio.de", matchType: "domain" },
   { url: "jobs.personio.com", matchType: "domain" },

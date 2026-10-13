@@ -60,6 +60,7 @@ const QUERIES: { url: string; matchType?: "domain" }[] = [
   { url: "www.comeet.com/jobs/*" },
   { url: "jobs.jobvite.com/*" },
   { url: "ats.rippling.com/*" },
+  { url: "join.com/companies/*" },
   { url: "recruitee.com", matchType: "domain" },
   { url: "jobs.personio.de", matchType: "domain" },
   { url: "jobs.personio.com", matchType: "domain" },

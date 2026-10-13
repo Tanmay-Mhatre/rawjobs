@@ -5,6 +5,7 @@ import { breezy } from "./breezy";
 import { comeet } from "./comeet";
 import { detectKnownAts } from "./detect-known";
 import { freshteam } from "./freshteam";
+import { join } from "./join";
 import { greenhouse } from "./greenhouse";
 import { hibob } from "./hibob";
 import { icims } from "./icims";
@@ -55,6 +56,7 @@ export const connectors: Partial<Record<AtsType, Connector<any>>> = {
   zoho,
   hibob,
   freshteam,
+  join,
   // Job boards (JOB_BOARDS), last so a company's own board is always recognised first.
   hackernews,
   remotive,
@@ -156,6 +158,8 @@ export function careersUrl(c: DetectedCompany): string {
       return `https://${c.slug}.careers.hibob.com`;
     case "freshteam":
       return `https://${c.slug}.freshteam.com/jobs`;
+    case "join":
+      return `https://join.com/companies/${c.slug}`;
     case "icims":
       return `https://${c.slug}.icims.com/jobs`;
     case "taleo":

@@ -184,6 +184,8 @@ for (const f of existsSync(raw("kalil0321")) ? readdirSync(raw("kalil0321")).fil
     oracle: (e) => e.host && e.site && `https://${e.host}/hcmUI/CandidateExperience/en/sites/${enc(e.site)}`,
     recruitee: (e) => e.slug && `https://${e.slug}.recruitee.com`,
     rippling: (e) => e.board_slug && `https://ats.rippling.com/${enc(e.board_slug)}/jobs`,
+    // JOIN: the slug, plus the numeric company id its API needs (kept in shard).
+    join: () => undefined,
     smartrecruiters: (e) => e.company_identifier && `https://jobs.smartrecruiters.com/${enc(e.company_identifier)}`,
     // Career-site hosts; added as boards in the loop below (no URL rule reveals them).
     successfactors: () => undefined,
@@ -200,6 +202,10 @@ for (const f of existsSync(raw("kalil0321")) ? readdirSync(raw("kalil0321")).fil
         if (e.slug && !/^[a-z0-9_-]+$/i.test(e.slug)) continue;
         // Career sites (SuccessFactors) and Teamtailor sites on companies' own domains: the list names
         // the vendor, the URL can't.
+        if (provider === "join") {
+          if (e.slug) add("openingsmcp", { ats: "join", slug: e.slug.toLowerCase(), ...(/^\d+$/.test(String(e.company_id)) ? { shard: String(e.company_id) } : {}), name: e.company });
+          continue;
+        }
         if (provider === "successfactors") {
           if (e.host) addCareerSite("openingsmcp", e.host, e.company);
           continue;
