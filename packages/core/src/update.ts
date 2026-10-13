@@ -395,6 +395,18 @@ const alive = (pid: number) => {
   }
 };
 
+/** Give a server up to `graceMs` to stop by itself, then stop it, and wait (up to 5 s) until it has. */
+async function stopServer(pid: number, graceMs = 10_000): Promise<void> {
+  for (let waited = 0; waited < graceMs && alive(pid); waited += 250) await sleep(250);
+  if (!alive(pid)) return;
+  try {
+    process.kill(pid);
+  } catch {
+    // gone
+  }
+  for (let i = 0; i < 20 && alive(pid); i++) await sleep(250);
+}
+
 /** Wait until this folder's server answers as `version`; false when it hasn't within `ms`. */
 async function waitFor(home: string, version: string, ms: number, pollMs = 1000): Promise<boolean> {
   const deadline = Date.now() + ms;
@@ -428,16 +440,15 @@ export type FinishOptions = {
 export async function finishUpdate(o: FinishOptions): Promise<UpdateRecord> {
   const start = o.start ?? startServer;
   console.log(`Finishing the update from ${o.from} to ${o.to}.`);
-  if (o.pid) {
-    for (let i = 0; i < 40 && alive(o.pid); i++) await sleep(250);
-    if (alive(o.pid)) {
-      try {
-        process.kill(o.pid);
-      } catch {
-        // gone
-      }
-      await sleep(500);
-    }
+  if (o.pid) await stopServer(o.pid);
+  // Another server for this folder (one that started next to it, on the next port) would keep the
+  // computer's scheduler busy and answer for the new version: it stops too.
+  const other = read<{ pid?: number }>(join(o.home, "state.json"))?.pid;
+  if (other && other !== o.pid && other !== process.pid && alive(other) && (await runningVersion(o.home)) !== null) {
+    console.log(`Another RawJobs server (process ${other}) is running here too; stopping it.`);
+    await stopServer(other, 0);
+    // Windows' scheduler counts its task as running until the window around the server closes too.
+    await sleep(1000);
   }
   console.log("The old server has stopped; starting the new version.");
   start(o.home);

@@ -1,7 +1,7 @@
 // @vitest-environment happy-dom
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { ServerNotices } from "../src/components/Updates";
+import { AboutRawJobs, ServerNotices } from "../src/components/Updates";
 import { UpdatePill } from "../src/components/WhatsNew";
 import type { UpdateStatus } from "../src/lib/update";
 
@@ -68,7 +68,24 @@ describe("ServerNotices", () => {
     expect(await screen.findByRole("heading", { name: "The update to 0.3.0 didn't start" })).toBeTruthy();
     expect(screen.getByText(/Went back to 0\.2\.0/)).toBeTruthy();
     expect(screen.getByText("Nothing changed. Your data is as it was.")).toBeTruthy();
-    expect(screen.getByText(/won't offer 0\.3\.0 again/)).toBeTruthy();
+    expect(screen.getByText(/won't offer 0\.3\.0 by itself again/)).toBeTruthy();
+    expect(screen.getByRole("link", { name: "Try 0.3.0 again" }).getAttribute("href")).toMatch(/^#settings\/updates/);
+  });
+
+  it("offers to try a version that went back again, in Settings → About", async () => {
+    const skipped = { ...base, current: "0.2.0", lastCheck: new Date().toISOString(), skipped: { version: "0.3.0", date: "2026-10-13" } };
+    const calls: string[] = [];
+    api(skipped, true);
+    const f = globalThis.fetch as ReturnType<typeof vi.fn>;
+    f.mockImplementation(async (url: string, init?: RequestInit) => {
+      calls.push(`${init?.method ?? "GET"} ${url}`);
+      return new Response(JSON.stringify(url === "/api/update/retry" ? { ...skipped, state: "updating", skipped: null } : skipped));
+    });
+    render(<AboutRawJobs />);
+    expect(await screen.findByText(/didn't start here last time, so you're still on 0\.2\.0/)).toBeTruthy();
+    expect(screen.queryByText("You have the newest version.")).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: /Try 0\.3\.0 again/ }));
+    await vi.waitFor(() => expect(calls).toContain("POST /api/update/retry"));
   });
 
   it("says Updating to the new version while RawJobs restarts after you clicked Update", async () => {

@@ -132,6 +132,23 @@ console.log(JSON.stringify({ type: "done", scope: args[args.indexOf("--scope") +
     });
   });
 
+  it("lets a page on another port of this computer read health, and no other site", async () => {
+    const { port } = await start();
+    const from = (origin: string) =>
+      new Promise<IncomingMessage["headers"]>((done, fail) => {
+        request({ host: "127.0.0.1", port, path: "/api/health", headers: { origin } }, (res) => {
+          res.resume();
+          done(res.headers);
+        })
+          .on("error", fail)
+          .end();
+      });
+    expect((await from("http://127.0.0.1:4317"))["access-control-allow-origin"]).toBe("http://127.0.0.1:4317");
+    expect((await from("http://localhost:4320"))["access-control-allow-origin"]).toBe("http://localhost:4320");
+    expect((await from("https://evil.example"))["access-control-allow-origin"]).toBeUndefined();
+    expect((await from("http://127.0.0.1.evil.example:80"))["access-control-allow-origin"]).toBeUndefined();
+  });
+
   it("says when a scheduled scan is running and when a scan wrote new results", async () => {
     const { port, dataDir } = await start();
     const health = async () => JSON.parse((await call(port, "GET", "/api/health")).text) as { background: boolean; dataVersion: string | null };
