@@ -31,6 +31,14 @@ no GitHub auto-merge (`mcp__ccd_pr__set_auto_merge`). Those skip the queue.
 
 Don't change `main`'s branch protection or `.mergify.yml` to get your PR in faster.
 
+## UI and UX changes: show the user a screenshot
+
+After any change the user can see (layout, copy, styling, a new state or interaction), once the
+checks pass, run the app and take a screenshot of the changed screen in the state that shows the
+change, and send it to the user so they can check it. Use a scratch copy of the data
+(`RAWJOBS_HOME`), never their real config. Send one screenshot per changed screen or state, and say
+in a line what each one shows. When phones or dark mode are affected, include those too.
+
 ## Releasing: remind the user to tag
 
 Merging releases nothing: a release happens only when the user pushes a version tag
