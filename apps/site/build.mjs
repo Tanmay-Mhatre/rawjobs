@@ -60,6 +60,7 @@ const SYSTEMS = [
   "CareerPlug",
   "Dayforce",
   "ADP Workforce Now",
+  "ApplicantPro / iSolved Hire",
   "Comeet",
   "Oracle Recruiting",
   "SAP SuccessFactors",

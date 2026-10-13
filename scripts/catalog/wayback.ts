@@ -99,6 +99,8 @@ const QUERIES: { url: string; matchType: "prefix" | "domain" }[] = [
   { url: "careerplug.com", matchType: "domain" },
   { url: "jobs.dayforcehcm.com/", matchType: "prefix" },
   { url: "workforcenow.adp.com/mascsr/default/mdf/recruitment/", matchType: "prefix" },
+  { url: "applicantpro.com", matchType: "domain" },
+  { url: "isolvedhire.com", matchType: "domain" },
 ];
 
 type Progress = { pages?: number; next: number };
