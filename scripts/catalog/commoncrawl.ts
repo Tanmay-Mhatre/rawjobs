@@ -108,6 +108,8 @@ const QUERIES: { url: string; matchType?: "domain" }[] = [
   { url: "oasisrecruit.com", matchType: "domain" },
   { url: "www.careers-page.com/*" },
   { url: "hire.trakstar.com", matchType: "domain" },
+  { url: "factorialhr.com", matchType: "domain" },
+  { url: "factorial.es", matchType: "domain" },
 ];
 
 /**
