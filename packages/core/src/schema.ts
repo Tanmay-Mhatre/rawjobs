@@ -42,6 +42,7 @@ export const ATS_TYPES = [
   "trakstar",
   "factorial",
   "gem",
+  "hrmdirect",
 ] as const;
 
 /**

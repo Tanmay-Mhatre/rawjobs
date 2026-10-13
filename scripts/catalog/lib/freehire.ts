@@ -47,6 +47,8 @@ export const BOARD_URL: Record<string, (b: string) => string | undefined> = {
   hiringthing: (b) => (plain(b) && b.includes(".") ? `https://${b}/` : undefined),
   hibob: (b) => (plain(b) ? `https://${b}.careers.hibob.com` : undefined),
   // A bare id is the careers-{id}.icims.com portal; full hosts are companies' own domains (not detectable yet).
+  // The account subdomain of {account}.hrmdirect.com
+  hrmdirect: (b) => (plain(b) && !b.includes(".") ? `https://${b}.hrmdirect.com/employment/` : undefined),
   icims: (b) => (plain(b) && !b.includes(".") ? `https://careers-${b}.icims.com/jobs` : undefined),
   jazzhr: (b) => (plain(b) ? `https://${b}.applytojob.com/apply` : undefined),
   jobvite: (b) => `https://jobs.jobvite.com/${enc(b)}`,

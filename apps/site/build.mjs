@@ -67,6 +67,7 @@ const SYSTEMS = [
   "Trakstar Hire",
   "Factorial",
   "Gem",
+  "HRMDirect (ClearCompany)",
   "Comeet",
   "Oracle Recruiting",
   "SAP SuccessFactors",
