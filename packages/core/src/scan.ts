@@ -9,7 +9,7 @@ import { FileHttpCache } from "./http-cache";
 import { feedMatches } from "./job-feed";
 import { runRadar, type RunResult } from "./run";
 import type { BoardMove, CompanyHealth, CompanyRef, Config, Job, RunSummary } from "./schema";
-import { estimateSeconds, findMoves, readDirectory, readSpeeds, recordSpeeds, refOfEntry, scopeCompanies, type ScanScope } from "./scope";
+import { estimateSeconds, findMoves, readDirectory, readDirectoryMoves, readSpeeds, recordSpeeds, refOfEntry, scopeCompanies, type ScanScope } from "./scope";
 import { readJobs, saveRun } from "./store";
 
 export type ScanStart = {
@@ -188,7 +188,7 @@ export async function scan(config: Config, opts: ScanOptions): Promise<ScanResul
 
   // Your companies whose board is gone, but which the directory lists on another board: a suggestion only.
   // Matching names proves nothing (anyone can open a board called "Acme"), so you check it and choose; nothing switches here.
-  const moves = fullScan && !stopped ? findMoves(config, directory, result.health) : [];
+  const moves = fullScan && !stopped ? findMoves(config, directory, result.health, readDirectoryMoves(opts.dataDir)) : [];
 
   // Directory companies keep their matching jobs between scans (ledger), unless you've added or muted them since.
   // Only ones with matches (or that had some) are recorded, so a scan of the whole directory stays small.

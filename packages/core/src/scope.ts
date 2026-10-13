@@ -19,6 +19,20 @@ export const SCAN_SCOPES: readonly ScanScope[] = ["mine", "all"];
 
 export type DirectoryEntry = DirectoryCompany & { indexed?: boolean; status?: string; origin?: "user" };
 
+/** A move the shared directory accepted after its checks: old board key → new board key ("ats:slug|shard|site"). */
+export type DirectoryMove = { from: string; to: string; name: string; accepted_at: string };
+
+/** Board key as the directory's `moves` list writes it (lowercase; shard and site may be empty). */
+export const boardKey = (c: { ats: string; slug: string; shard?: string; site?: string }) => `${c.ats}:${c.slug}|${c.shard ?? ""}|${c.site ?? ""}`.toLowerCase();
+
+/** The shared directory's accepted moves (empty for a directory from before moves, or none downloaded). */
+export function readDirectoryMoves(dataDir: string): DirectoryMove[] {
+  const file = join(dataDir, "catalog", "directory.json");
+  if (!existsSync(file)) return [];
+  const moves = (JSON.parse(readFileSync(file, "utf8")) as { moves?: unknown }).moves;
+  return Array.isArray(moves) ? moves.filter((m): m is DirectoryMove => !!m && typeof m.from === "string" && typeof m.to === "string" && typeof m.accepted_at === "string") : [];
+}
+
 /** The local directory copy plus companies added by link (empty when not downloaded yet). */
 export function readDirectory(dataDir: string): DirectoryEntry[] {
   const read = (name: string): DirectoryEntry[] => {
@@ -150,11 +164,22 @@ export function estimateSeconds(companies: readonly Pick<CompanyRef, "ats" | "re
  * board we can read: the company may have moved hiring system or renamed its board. Only a suggestion:
  * the same name proves nothing (anyone can open a board called "Acme"), so the user checks it and chooses.
  */
-export function findMoves(config: Config, directory: readonly DirectoryEntry[], health: readonly CompanyHealth[]): BoardMove[] {
-  const gone = new Set(health.filter((h) => !h.ok && /\(404\)/.test(h.error ?? "")).map((h) => `${h.ats}:${h.slug}`.toLowerCase()));
+export function findMoves(config: Config, directory: readonly DirectoryEntry[], health: readonly CompanyHealth[], accepted: readonly DirectoryMove[] = []): BoardMove[] {
+  const failed = (ok: (h: CompanyHealth) => boolean) => new Set(health.filter((h) => !h.ok && ok(h)).map((h) => `${h.ats}:${h.slug}`.toLowerCase()));
+  const gone = failed((h) => /\(404\)/.test(h.error ?? ""));
+  const failing = failed(() => true);
   const yours = new Set(config.companies.map(companyKey));
+  const byBoard = new Map(directory.map((d) => [boardKey(d), d]));
+  const acceptedFrom = new Map(accepted.map((m) => [m.from.toLowerCase(), m]));
   const moves: BoardMove[] = [];
   for (const c of config.companies) {
+    // A move RawJobs checked and accepted for everyone: offered whenever your board fails.
+    const known = acceptedFrom.get(boardKey(c));
+    const target = known && byBoard.get(known.to.toLowerCase());
+    if (known && target && failing.has(`${c.ats}:${c.slug}`.toLowerCase()) && !yours.has(target.key) && readable(target)) {
+      moves.push({ name: c.name, from: c, to: { ...refOfEntry(target), name: c.name }, checked_at: known.accepted_at });
+      continue;
+    }
     if (!gone.has(`${c.ats}:${c.slug}`.toLowerCase())) continue;
     const name = nameKey(c.name);
     const to = directory.filter((d) => nameKey(d.name) === name && d.status === "live" && readable(d) && !yours.has(d.key)).sort((a, b) => (b.open_jobs ?? 0) - (a.open_jobs ?? 0))[0];
