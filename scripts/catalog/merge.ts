@@ -9,7 +9,7 @@
  */
 import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { ATS_TYPES, companyKey, detectCompany, type AtsType } from "@rawjobs/core";
+import { ATS_TYPES, companyKey, detectCompany, isTeamtailorHost, type AtsType } from "@rawjobs/core";
 import { parse as parseYaml } from "yaml";
 import { BOARD_URL, freehireBoards } from "./lib/freehire";
 import { catalogDir, dataDir } from "./lib/paths";
@@ -180,6 +180,11 @@ for (const f of existsSync(raw("kalil0321")) ? readdirSync(raw("kalil0321")).fil
         // Hosts and slugs come from a public list: only plain host names reach a URL.
         if (e.host && !/^[a-z0-9.-]+$/i.test(e.host)) continue;
         if (e.slug && !/^[a-z0-9_-]+$/i.test(e.slug)) continue;
+        // A Teamtailor site on the company's own domain: the list names the vendor, the URL can't.
+        if (provider === "teamtailor" && e.host && isTeamtailorHost(e.host) && !/.teamtailor.com$/i.test(e.host)) {
+          add("openingsmcp", { ats: "teamtailor", slug: e.host.toLowerCase(), name: e.company });
+          continue;
+        }
         const u = url(e);
         if (u) fromUrl("openingsmcp", u, e.company);
       }

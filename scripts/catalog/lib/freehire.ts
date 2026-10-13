@@ -3,7 +3,7 @@
  * 2026-09-04, then moved them into a database (#2406), so sources.ts downloads the last committed
  * copy, pinned to that commit, and merge.ts turns each entry into a board with freehireBoards().
  */
-import { detectCompany } from "@rawjobs/core";
+import { detectCompany, isTeamtailorHost } from "@rawjobs/core";
 
 /** The parent of freehire's "Retire sources/" commit (2b781bf5, #2406): the last one with the list. */
 export const FREEHIRE_COMMIT = "96b53a2c7b1e545bbad0868e16ec85a2eba4f36a";
@@ -36,7 +36,7 @@ export const BOARD_URL: Record<string, (b: string) => string | undefined> = {
   recruitee: (b) => (plain(b) ? `https://${b}.recruitee.com` : undefined),
   rippling: (b) => `https://ats.rippling.com/${enc(b)}/jobs`,
   smartrecruiters: (b) => `https://jobs.smartrecruiters.com/${enc(b)}`,
-  // The career-site host; only {x}.teamtailor.com is detectable for now.
+  // The career-site host: {x}.teamtailor.com, or the company's own domain (handled in freehireBoards).
   teamtailor: (b) => (plain(b) ? `https://${b}` : undefined),
   workable: (b) => `https://apply.workable.com/${enc(b)}`,
   // "{tenant}.wdN.myworkdayjobs.com/{site}" or "wdN.myworkdaysite.com/{tenant}/{site}"
@@ -58,10 +58,16 @@ export function freehireBoards(provider: string, entries: { company?: unknown; b
   const out: FreehireBoard[] = [];
   for (const e of entries) {
     if (typeof e.board !== "string" || !e.board.trim()) continue;
-    const url = toUrl(e.board.trim());
+    const name = typeof e.company === "string" ? e.company.trim() : "";
+    const board = e.board.trim();
+    // A Teamtailor site on the company's own domain: the list names the vendor, the URL can't.
+    if (provider === "teamtailor" && isTeamtailorHost(board) && !/.teamtailor.com$/i.test(board)) {
+      out.push({ ats: "teamtailor", slug: board.toLowerCase(), ...(name ? { name } : {}) });
+      continue;
+    }
+    const url = toUrl(board);
     const d = url ? detectCompany(url) : null;
     if (!d?.supported) continue;
-    const name = typeof e.company === "string" ? e.company.trim() : "";
     out.push({ ats: d.ats, slug: d.slug, ...(d.region ? { region: d.region } : {}), ...(d.shard ? { shard: d.shard } : {}), ...(d.site ? { site: d.site } : {}), ...(name ? { name } : {}) });
   }
   return out;

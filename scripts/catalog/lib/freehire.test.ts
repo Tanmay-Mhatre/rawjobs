@@ -20,8 +20,19 @@ describe("freehireBoards", () => {
     expect(freehireBoards("icims", [{ company: "360care", board: "360care" }])).toEqual([{ ats: "icims", slug: "careers-360care", name: "360care" }]);
   });
 
+  it("keeps Teamtailor sites on companies' own domains (the list names the vendor)", () => {
+    expect(
+      freehireBoards("teamtailor", [
+        { company: "Monta", board: "careers.monta.com" },
+        { company: "Beauhurst", board: "beauhurst.teamtailor.com" },
+      ]),
+    ).toEqual([
+      { ats: "teamtailor", slug: "careers.monta.com", name: "Monta" },
+      { ats: "teamtailor", slug: "beauhurst", name: "Beauhurst" },
+    ]);
+  });
+
   it("skips boards we can't read yet and anything that isn't a plain id", () => {
-    expect(freehireBoards("teamtailor", [{ company: "Arrive", board: "careers.arrive.com" }])).toEqual([]);
     expect(freehireBoards("icims", [{ board: "careers.docusign.com" }])).toEqual([]);
     expect(freehireBoards("bamboohr", [{ board: "evil.example/x" }, { board: "" }, { company: "No board" }])).toEqual([]);
     expect(freehireBoards("paycom", [{ board: "abc" }])).toEqual([]);

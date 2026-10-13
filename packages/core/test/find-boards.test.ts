@@ -16,6 +16,12 @@ describe("findBoards", () => {
     expect(findBoards(page("home.html"), "https://acme-markets.com/")).toEqual([]);
   });
 
+  it("takes a Teamtailor careers site on the company's own domain from its assets", () => {
+    const html = '<link rel="stylesheet" href="https://assets.teamtailor-cdn.com/assets/careersite.css">';
+    expect(findBoards(html, "https://careers.acme.com/jobs")[0]).toMatchObject({ key: "teamtailor:careers.acme.com", supported: true });
+    expect(findBoards(html, "https://acme.teamtailor.com/jobs").map((b) => b.key)).toEqual(["teamtailor:acme"]);
+  });
+
   it("treats a page that redirected onto a board as that board", () => {
     expect(findBoards("<html></html>", "https://jobs.lever.co/acme")[0]).toMatchObject({ key: "lever:acme", supported: true });
   });

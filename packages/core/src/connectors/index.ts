@@ -19,7 +19,7 @@ import { rippling } from "./rippling";
 import { smartrecruiters } from "./smartrecruiters";
 import { successfactors } from "./successfactors";
 import { taleo } from "./taleo";
-import { teamtailor } from "./teamtailor";
+import { teamtailor, teamtailorBase } from "./teamtailor";
 import { arbeitnow } from "./arbeitnow";
 import { hackernews } from "./hackernews";
 import { remoteok } from "./remoteok";
@@ -131,7 +131,7 @@ export function careersUrl(c: DetectedCompany): string {
     case "workable":
       return `https://apply.workable.com/${c.slug}`;
     case "teamtailor":
-      return `https://${c.slug}.teamtailor.com/jobs`;
+      return `${teamtailorBase(c.slug)}/jobs`;
     case "comeet":
       return c.site ? `https://www.comeet.com/jobs/${c.site}/${c.slug}` : "";
     case "recruitee":

@@ -10,6 +10,8 @@ import { checkCompanies, resetConfig, saveConfig, setupStatus } from "../src/set
 import { configToYaml } from "../src/yaml-writer";
 import { profile, fakeHttp, fixture, json } from "./helpers";
 
+const text = (body: string, type = "text/html") => new Response(body, { status: 200, headers: { "content-type": type } });
+
 const example = parseConfig(readFileSync(new URL("../../../rawjobs.config.example.yaml", import.meta.url), "utf8"));
 
 describe("configToYaml", () => {
@@ -120,7 +122,26 @@ describe("checkCompanies", () => {
     expect(res[0]!.matches).toBeUndefined(); // no profile given
     expect(res[1]!.error).toMatch(/Not found/);
     expect(res[2]!.error).toMatch(/full Workday link/); // no site in that URL
-    expect(calls).toHaveLength(2); // never fetches an incomplete Workday link or an unknown site
+    // Never fetches an incomplete Workday link; an unknown site gets one look for a Teamtailor feed.
+    expect(calls).toHaveLength(3);
+    expect(calls[2]).toBe("https://example.com/jobs.rss");
+  });
+
+  it("recognises a Teamtailor site on the company's own domain by its feed", async () => {
+    const ttFeed = `<rss version="2.0" xmlns:tt="https://teamtailor.com/locations"><channel><title>Acme </title><item><title>PM</title><link>https://careers.acme.com/jobs/1-pm</link><guid>g-1</guid></item></channel></rss>`;
+    const { http, calls } = fakeHttp((url) => (url === "https://careers.acme.com/jobs.rss" ? text(ttFeed, "application/rss+xml") : text("<html></html>", "text/html")));
+    const [tt, other] = await checkCompanies(["https://careers.acme.com/jobs/1-pm", "https://www.example.com/careers"], { http });
+    expect(tt).toMatchObject({
+      status: "live",
+      ats: "teamtailor",
+      slug: "careers.acme.com",
+      key: "teamtailor:careers.acme.com",
+      name: "Acme",
+      careers_url: "https://careers.acme.com/jobs",
+      open_jobs: 1,
+    });
+    expect(other).toMatchObject({ status: "unknown" });
+    expect(calls).toContain("https://www.example.com/jobs.rss"); // one probe, then it gives up
   });
 
   it("counts jobs matching the profile and marks companies already in the directory", async () => {

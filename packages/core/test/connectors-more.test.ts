@@ -232,6 +232,15 @@ describe("feed connectors (XML and embedded data)", () => {
     });
   });
 
+  it("teamtailor: a site on the company's own domain is read there, and must be Teamtailor's feed", async () => {
+    const ttFeed = `<rss version="2.0" xmlns:tt="https://teamtailor.com/locations"><channel><title>Acme </title><item><title>PM</title><link>https://careers.acme.com/jobs/1-pm</link><guid>g-1</guid></item></channel></rss>`;
+    const { jobs, calls } = await run("teamtailor", { slug: "careers.acme.com" }, () => text(ttFeed, "application/rss+xml"));
+    expect(calls[0]).toBe("https://careers.acme.com/jobs.rss");
+    expect(jobs[0]).toMatchObject({ title: "PM", url: "https://careers.acme.com/jobs/1-pm" });
+    await expect(run("teamtailor", { slug: "careers.acme.com" }, () => text('<rss version="2.0"><channel></channel></rss>', "application/rss+xml"))).rejects.toThrow(/not a Teamtailor careers site/);
+    await expect(run("teamtailor", { slug: "evil.com/x" }, () => text(ttFeed))).rejects.toThrow(/not a careers site host/);
+  });
+
   it("teamtailor: RSS items with locations, department and remote status", async () => {
     const rss = `<rss version="2.0" xmlns:tt="https://teamtailor.com/locations"><channel><item><title>PM</title><description>&lt;p&gt;Role&lt;/p&gt;</description><pubDate>Fri, 24 Jul 2026 09:05:16 +0200</pubDate><link>https://acme.teamtailor.com/jobs/1-pm</link><remoteStatus>fully</remoteStatus><guid>g-1</guid><tt:locations><tt:location><tt:name>HQ</tt:name><tt:city>Stockholm</tt:city><tt:country>Sweden</tt:country></tt:location></tt:locations><tt:department>Product</tt:department></item></channel></rss>`;
     const { jobs } = await run("teamtailor", { slug: "acme" }, () => text(rss, "application/rss+xml"));
