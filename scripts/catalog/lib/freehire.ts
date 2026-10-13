@@ -17,6 +17,8 @@ export const BOARD_URL: Record<string, (b: string) => string | undefined> = {
   bamboohr: (b) => (plain(b) ? `https://${b}.bamboohr.com/careers` : undefined),
   breezy: (b) => (plain(b) ? `https://${b}.breezy.hr` : undefined),
   // "{company}/{uid}"
+  // The account subdomain of {account}.careerplug.com
+  careerplug: (b) => (plain(b) && !b.includes(".") ? `https://${b}.careerplug.com/jobs` : undefined),
   comeet: (b) => (b.includes("/") ? `https://www.comeet.com/jobs/${b.split("/").map(enc).join("/")}` : undefined),
   // "{host}/{tenant domain}"; kept as a board directly in freehireBoards (custom hosts included).
   eightfold: () => undefined,
