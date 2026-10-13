@@ -15,6 +15,7 @@ import { phenom } from "./phenom";
 import { careerplug } from "./careerplug";
 import { dayforce } from "./dayforce";
 import { adp } from "./adp";
+import { applicantpro } from "./applicantpro";
 import { greenhouse } from "./greenhouse";
 import { hibob } from "./hibob";
 import { icims } from "./icims";
@@ -75,6 +76,7 @@ export const connectors: Partial<Record<AtsType, Connector<any>>> = {
   careerplug,
   dayforce,
   adp,
+  applicantpro,
   // Job boards (JOB_BOARDS), last so a company's own board is always recognised first.
   hackernews,
   remotive,
@@ -205,6 +207,8 @@ export function careersUrl(c: DetectedCompany): string {
       return c.site ? `https://jobs.dayforcehcm.com/${c.shard ?? "en-US"}/${c.slug}/${c.site}` : "";
     case "adp":
       return c.site ? `https://workforcenow.adp.com/mascsr/default/mdf/recruitment/recruitment.html?cid=${c.slug}&ccId=${c.site}` : "";
+    case "applicantpro":
+      return `https://${c.slug}.${c.shard === "isolvedhire.com" ? "isolvedhire.com" : "applicantpro.com"}/jobs/`;
     default:
       return "";
   }

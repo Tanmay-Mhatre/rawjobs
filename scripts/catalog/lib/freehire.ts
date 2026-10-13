@@ -20,6 +20,9 @@ export const BOARD_URL: Record<string, (b: string) => string | undefined> = {
   // The account subdomain of {account}.careerplug.com
   careerplug: (b) => (plain(b) && !b.includes(".") ? `https://${b}.careerplug.com/jobs` : undefined),
   comeet: (b) => (b.includes("/") ? `https://www.comeet.com/jobs/${b.split("/").map(enc).join("/")}` : undefined),
+  // The account subdomain of {account}.applicantpro.com / {account}.isolvedhire.com (the same platform)
+  applicantpro: (b) => (plain(b) && !b.includes(".") ? `https://${b}.applicantpro.com/jobs/` : undefined),
+  isolvedhire: (b) => (plain(b) && !b.includes(".") ? `https://${b}.isolvedhire.com/jobs/` : undefined),
   // "{cid}:{ccId}" of an ADP Workforce Now career center
   adp: (b) => {
     const [cid, ccId] = b.split(":");

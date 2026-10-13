@@ -93,6 +93,7 @@ export const SCANNABLE = new Set([
   "careerplug",
   "dayforce",
   "adp",
+  "applicantpro",
 ]);
 const SLUG = /^[A-Za-z0-9][A-Za-z0-9._-]{0,99}$/;
 /** What `shard` may look like per system (the rest have none). */
@@ -108,6 +109,8 @@ const SHARD: Record<string, RegExp> = {
   eightfold: /^[a-z0-9-]+(\.[a-z0-9-]+)+$/,
   // Dayforce's site culture, when it isn't en-US.
   dayforce: /^[a-z]{2}-[A-Z]{2}$/,
+  // ApplicantPro's domain (it's also sold as iSolved Hire).
+  applicantpro: /^(applicantpro|isolvedhire)\.com$/,
   // Zoho Recruit's data centre, when it isn't .com.
   zoho: /^(eu|in|com\.au|jp|ca|sa|uk|com\.cn)$/,
 };

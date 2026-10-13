@@ -100,6 +100,8 @@ const QUERIES: { url: string; matchType?: "domain" }[] = [
   { url: "careerplug.com", matchType: "domain" },
   { url: "jobs.dayforcehcm.com/*" },
   { url: "workforcenow.adp.com/mascsr/default/mdf/recruitment/*" },
+  { url: "applicantpro.com", matchType: "domain" },
+  { url: "isolvedhire.com", matchType: "domain" },
 ];
 
 /**
