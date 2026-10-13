@@ -238,6 +238,17 @@ console.log(JSON.stringify({ type: "done", scope: args[args.indexOf("--scope") +
     }
   });
 
+  it("says how many companies a suggestion request checks, without running the CLI, and again once the index changes", async () => {
+    const { port, dataDir } = await start();
+    const size = async () => JSON.parse((await call(port, "GET", "/api/companies/suggest/size")).text);
+    expect(await size()).toEqual({ companies: null });
+    mkdirSync(join(dataDir, "catalog"));
+    const directory = { companies: [{ key: "lever:a", indexed: true }, { key: "lever:b" }] };
+    writeFileSync(join(dataDir, "catalog", "directory.json"), JSON.stringify(directory));
+    writeFileSync(join(dataDir, "catalog", "index.json"), JSON.stringify({ generated_at: "2026-10-07", count: 24686, companies: [] }));
+    expect(await size()).toEqual({ companies: 24687 });
+  });
+
   it("answers what it can't do: no company to check, an unknown route, stop or notify with no scan", async () => {
     const { port } = await start();
     expect((await call(port, "POST", "/api/check", '{"keys":["not a key"]}')).status).toBe(400);

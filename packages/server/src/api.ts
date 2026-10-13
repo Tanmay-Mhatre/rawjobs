@@ -19,7 +19,7 @@ import {
   suggestCacheDir,
   writeCacheFile,
 } from "@rawjobs/core";
-import { readTracking, saveTracking } from "@rawjobs/core";
+import { readTracking, saveTracking, suggestPoolSize } from "@rawjobs/core";
 import { refuse } from "./guard";
 import type { Updater } from "./updater";
 
@@ -57,6 +57,7 @@ type Line = string;
  *   GET  /api/directory       the shared company directory's local copy (and what's waiting to be shared)
  *   POST /api/directory/update download the latest shared directory and share waiting additions
  *   POST /api/companies/suggest  companies that fit a profile ({ profile?, watched?, hidden? }), with lookalikes of past employers
+ *   GET  /api/companies/suggest/size  { companies }: how many companies a suggestion request checks (null when unknown)
  *   POST /api/run             scan ({ scope: "mine" | "all", fresh? }); streams NDJSON progress
  *   GET  /api/run             follow the running scan from the start (204 when none is running)
  *   POST /api/run/stop        stop the running scan after the companies in progress (it can be resumed)
@@ -199,6 +200,22 @@ Stopped after ${Math.round(timeoutMs / 1000)} s without finishing.`.trim(),
     return hit;
   }
 
+  /** How many companies a suggestion request checks, kept until the index or directory changes. */
+  let poolSize: { stamp: string; companies: number | null } | undefined;
+  function suggestSize(): number | null {
+    const stamp = ["catalog/index.json", "catalog/directory.json", "catalog/additions.json"]
+      .map((f) => {
+        try {
+          return statSync(resolve(dataDir, f)).mtimeMs;
+        } catch {
+          return 0;
+        }
+      })
+      .join(":");
+    if (poolSize?.stamp !== stamp) poolSize = { stamp, companies: suggestPoolSize(dataDir) };
+    return poolSize.companies;
+  }
+
   // ---------- the running scan ----------
   /** The scan the server is running: its scope, every progress line so far, and the tabs following it. */
   let scan: { scope: string; lines: Line[]; partial: string; followers: Set<ServerResponse>; child: ChildProcess } | null = null;
@@ -335,6 +352,7 @@ Stopped after ${Math.round(timeoutMs / 1000)} s without finishing.`.trim(),
     if (url === "/api/setup/check" && req.method === "POST") return await respondJson(res, ["setup", "check", "--data", dataDir], await readBody(req));
     if (url === "/api/directory" && req.method === "GET") return await respondJson(res, ["directory", "status", "--json", "--data", dataDir]);
     if (url === "/api/directory/update" && req.method === "POST") return await respondJson(res, ["directory", "update", "--json", "--data", dataDir]);
+    if (url === "/api/companies/suggest/size" && req.method === "GET") return json(res, { companies: suggestSize() });
     if (url === "/api/companies/suggest" && req.method === "POST") {
       try {
         res.setHeader("content-type", "application/json");
