@@ -74,6 +74,8 @@ export const BOARD_URL: Record<string, (b: string) => string | undefined> = {
   rippling: (b) => `https://ats.rippling.com/${enc(b)}/jobs`,
   smartrecruiters: (b) => `https://jobs.smartrecruiters.com/${enc(b)}`,
   // The SAP SuccessFactors career-site host (RMK); kept as the board in freehireBoards.
+  // The account subdomain of {account}.career.softgarden.de
+  softgarden: (b) => (plain(b) && !b.includes(".") ? `https://${b}.career.softgarden.de/` : undefined),
   successfactors: (b) => (plain(b) ? `https://${b}` : undefined),
   // The career-site host: {x}.teamtailor.com, or the company's own domain (handled in freehireBoards).
   teamtailor: (b) => (plain(b) ? `https://${b}` : undefined),

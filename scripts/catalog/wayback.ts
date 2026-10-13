@@ -111,6 +111,7 @@ const QUERIES: { url: string; matchType: "prefix" | "domain" }[] = [
   { url: "factorial.es", matchType: "domain" },
   { url: "jobs.gem.com/", matchType: "prefix" },
   { url: "hrmdirect.com", matchType: "domain" },
+  { url: "career.softgarden.de", matchType: "domain" },
 ];
 
 type Progress = { pages?: number; next: number };
