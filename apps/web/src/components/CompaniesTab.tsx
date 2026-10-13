@@ -386,6 +386,7 @@ export function CompaniesTab({ configured, meta, jobs, draft, loaded, saved, upd
             scanning={scanning}
             onPasteLink={() => openLink()}
             onUseLink={switchLinkWithUndo}
+            onUpdateLink={(key, to) => switchLinkWithUndo(key, to)}
             hidden={hidden}
             onShowAgain={(h) => {
               if (h.key) update({ muted: draft.muted.filter((k) => k !== h.key) });
