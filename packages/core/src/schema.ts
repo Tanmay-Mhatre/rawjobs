@@ -148,7 +148,13 @@ export type RunSummary = {
 };
 
 /** A company whose board is gone (404), and a live directory board with the same name that may be its new one. */
-export type BoardMove = { name: string; from: CompanyRef; to: CompanyRef };
+export type BoardMove = {
+  name: string;
+  from: CompanyRef;
+  to: CompanyRef;
+  /** When RawJobs checked and accepted this move for everyone (the directory's `moves` list); absent for a same-name guess. */
+  checked_at?: string;
+};
 
 /** data/jobs.json */
 /** data/history.json: every job ever seen, as merge needs it (internal). */

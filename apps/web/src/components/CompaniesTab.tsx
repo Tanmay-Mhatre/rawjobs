@@ -11,7 +11,9 @@ import { useScanPrefs } from "../lib/scan";
 import { draftToConfig, saveConfig, scanPlan, type CompanyRow, type Draft, type ScanPlan } from "../lib/setup";
 import { load, save } from "../lib/storage";
 import { AddByLink } from "./AddByLink";
-import { MyCompanies, type HiddenCompany } from "./Companies";
+import type { BoardMove } from "@rawjobs/core/schema";
+import { shareMove } from "../lib/shareMove";
+import { MyCompanies, moveKey, type HiddenCompany } from "./Companies";
 import { CompanyFinder, searchDirectory, useDirectory, type DirCompany } from "./CompanyFinder";
 import { ForYou } from "./companies/ForYou";
 import { QuickAdd } from "./companies/QuickAdd";
@@ -246,6 +248,8 @@ export function CompaniesTab({ configured, meta, jobs, draft, loaded, saved, upd
 
   // Undo needs the draft as it is when clicked, not when the toast was made.
   const latest = useRef(draft);
+  /** Suggested pages you turned down ("Not this one"), remembered on this computer. */
+  const [dismissedMoves, setDismissedMoves] = useState<ReadonlySet<string>>(() => new Set(load<string[]>(DISMISSED_KEY, [])));
   latest.current = draft;
   /** This visit's Starter pack changes, for the tray (session memory, nothing saved). */
   const visit = useVisit();
@@ -303,6 +307,32 @@ export function CompaniesTab({ configured, meta, jobs, draft, loaded, saved, upd
       message: `Updated ${companyLabel(done.before)}'s careers link.`,
       actionLabel: "Undo",
       onAction: () => update({ companies: latest.current.companies.map((r) => (keyOf(r) === done.key ? done.before : r)) }),
+    });
+  };
+
+  /**
+   * "Use this link" in the Update link panel: switch, with Undo, and share the move with the directory
+   * (sent with the next directory update, after the server's own checks). A board that calls itself
+   * another company isn't shared.
+   */
+  const updateLink = (oldKey: string, to: CompanyRef, opts: { otherName?: string }) => {
+    const from = draft.companies.find((r) => keyOf(r) === oldKey);
+    switchLinkWithUndo(oldKey, to);
+    if (from?.ats && from.slug && !opts.otherName) void shareMove(companyLabel(from), { ats: from.ats, slug: from.slug, region: from.region, shard: from.shard, site: from.site }, to);
+  };
+  /** "Not this one" on a suggested page: not offered again on this computer, with Undo. */
+  const dismissMove = (m: BoardMove) => {
+    const key = moveKey(m);
+    setDismissedMoves((s) => saveDismissed(new Set(s).add(key)));
+    toast({
+      message: `We won't suggest that page for ${m.name} again.`,
+      actionLabel: "Undo",
+      onAction: () =>
+        setDismissedMoves((s) => {
+          const next = new Set(s);
+          next.delete(key);
+          return saveDismissed(next);
+        }),
     });
   };
 
@@ -385,8 +415,9 @@ export function CompaniesTab({ configured, meta, jobs, draft, loaded, saved, upd
             onScan={onScan}
             scanning={scanning}
             onPasteLink={() => openLink()}
-            onUseLink={switchLinkWithUndo}
-            onUpdateLink={(key, to) => switchLinkWithUndo(key, to)}
+            onUpdateLink={updateLink}
+            dismissedMoves={dismissedMoves}
+            onDismissMove={dismissMove}
             hidden={hidden}
             onShowAgain={(h) => {
               if (h.key) update({ muted: draft.muted.filter((k) => k !== h.key) });
@@ -542,4 +573,11 @@ function CoverageSkeleton() {
       </span>
     </div>
   );
+}
+
+const DISMISSED_KEY = "rawjobs.notThisOne";
+/** Keep the turned-down suggestions (the last 200) and return them, for a state update. */
+function saveDismissed(keys: Set<string>): Set<string> {
+  save(DISMISSED_KEY, [...keys].slice(-200));
+  return keys;
 }

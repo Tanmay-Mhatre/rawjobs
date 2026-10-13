@@ -157,29 +157,52 @@ describe("MyCompanies rows", () => {
     expect(screen.getAllByTitle("See Acme on your Radar").length).toBeGreaterThan(0);
   });
 
-  it("offers the board the last scan suggested for a page not found, switching only on your click", () => {
-    const list = [row("Globex", "globex"), row("Acme", "acme")];
-    const m = meta(1, ["globex", "acme"], (s) => (s === "globex" ? { ok: false, error: "Not found (404)" } : {}));
-    const to = { name: "Globex", ats: "ashby" as const, slug: "globex-inc", careers_url: "https://jobs.ashbyhq.com/globex-inc" };
+  it("offers a page the last scan found: Review opens it filled in and checked, and only Use this link switches", async () => {
+    const list = [row("Globex", "globex"), row("Acme", "acme"), row("Initech", "initech")];
+    const m = meta(1, ["globex", "acme", "initech"], (s) => (s === "globex" ? { ok: false, error: "Not found (404)" } : s === "initech" ? { ok: false, error: "timeout" } : {}));
+    const to = { name: "Globex", ats: "ashby" as const, slug: "globex-inc", careers_url: "https://jobs.ashbyhq.com/globex-inc", enabled: true };
     m.runs[0]!.moves = [
-      { name: "Globex", from: { name: "Globex", ats: "greenhouse", slug: "globex", enabled: true }, to: { ...to, enabled: true } },
+      { name: "Globex", from: { name: "Globex", ats: "greenhouse", slug: "globex", enabled: true }, to },
       // Already one of yours: not offered.
       { name: "Acme", from: { name: "Acme", ats: "greenhouse", slug: "acme", enabled: true }, to: { name: "Acme", ats: "greenhouse", slug: "globex", enabled: true } },
+      // Checked by RawJobs for everyone: offered even though the old page only timed out, and can't be turned down.
+      {
+        name: "Initech",
+        from: { name: "Initech", ats: "greenhouse", slug: "initech", enabled: true },
+        to: { name: "Initech", ats: "lever", slug: "initech", careers_url: "https://jobs.lever.co/initech", enabled: true },
+        checked_at: "2026-10-01T00:00:00Z",
+      },
     ];
-    const onUseLink = vi.fn();
-    const { container } = render(<MyCompanies rows={list} savedKeys={keys(list)} meta={m} onUseLink={onUseLink} onPasteLink={() => {}} onRemove={() => {}} onRemoveMany={() => {}} />);
+    const onUpdateLink = vi.fn();
+    const onDismissMove = vi.fn();
+    const { container } = render(<MyCompanies rows={list} savedKeys={keys(list)} meta={m} onUpdateLink={onUpdateLink} onDismissMove={onDismissMove} onRemove={() => {}} onRemoveMany={() => {}} />);
     const table = within(container.querySelector("table")!);
     const rowOf = (name: string) => within(table.getByRole("link", { name: `${name}: see its jobs on your Radar` }).closest("tr")!);
-    expect(
-      rowOf("Globex")
-        .getByRole("link", { name: /this Ashby page/ })
-        .getAttribute("href"),
-    ).toBe("https://jobs.ashbyhq.com/globex-inc");
-    expect(rowOf("Globex").getByRole("button", { name: "Paste new link" })).toBeTruthy();
-    expect(onUseLink).not.toHaveBeenCalled();
-    fireEvent.click(rowOf("Globex").getByRole("button", { name: "Use this Ashby page for Globex" }));
-    expect(onUseLink).toHaveBeenCalledWith("greenhouse:globex", expect.objectContaining({ ats: "ashby", slug: "globex-inc" }));
-    expect(rowOf("Acme").queryByRole("button", { name: /Use this/ })).toBeNull();
+    expect(rowOf("Globex").getByText("May have moved to Ashby")).toBeTruthy();
+    expect(rowOf("Acme").queryByRole("button", { name: /Review/ })).toBeNull();
+    expect(rowOf("Initech").getByText("Moved to Lever, checked by RawJobs")).toBeTruthy();
+    expect(rowOf("Initech").queryByRole("button", { name: /^Not / })).toBeNull();
+
+    fireEvent.click(rowOf("Globex").getByRole("button", { name: "Not Globex's new careers page" }));
+    expect(onDismissMove).toHaveBeenCalledWith(expect.objectContaining({ name: "Globex" }));
+
+    fireEvent.click(rowOf("Globex").getByRole("button", { name: "Review Globex's possible new careers page" }));
+    expect((table.getByLabelText("New careers link for Globex") as HTMLInputElement).value).toBe("https://jobs.ashbyhq.com/globex-inc");
+    expect(table.getByText(/Check it's really Globex/)).toBeTruthy();
+    expect(await table.findByText(/Ashby · 14 open jobs/)).toBeTruthy();
+    expect(onUpdateLink).not.toHaveBeenCalled();
+    fireEvent.click(table.getByRole("button", { name: "Use this link" }));
+    expect(onUpdateLink).toHaveBeenCalledWith("greenhouse:globex", expect.objectContaining({ ats: "ashby", slug: "globex-inc" }), {});
+  });
+
+  it("doesn't offer a page you turned down", () => {
+    const list = [row("Globex", "globex")];
+    const m = meta(1, ["globex"], () => ({ ok: false, error: "Not found (404)" }));
+    m.runs[0]!.moves = [{ name: "Globex", from: { name: "Globex", ats: "greenhouse", slug: "globex", enabled: true }, to: { name: "Globex", ats: "ashby", slug: "globex-inc", enabled: true } }];
+    const { container } = render(
+      <MyCompanies rows={list} savedKeys={keys(list)} meta={m} onUpdateLink={() => {}} dismissedMoves={new Set(["greenhouse:globex>ashby:globex-inc"])} onRemove={() => {}} onRemoveMany={() => {}} />,
+    );
+    expect(within(container.querySelector("table")!).queryByRole("button", { name: /^Review/ })).toBeNull();
   });
 
   it("updates a link in place: check it, see old and new, and only Use this link changes anything", async () => {
