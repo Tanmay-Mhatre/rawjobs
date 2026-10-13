@@ -25,67 +25,31 @@ describe("digest", () => {
     expect(digest([], { minScore: 70 })).toBeUndefined();
   });
 
-  it("lists the best first, labels strong fits, links, escaped text and the first place only", () => {
-    const text = digest([job("PM", 60), job("Head of Product", 85)], { minScore: 70, scopeLabel: "My companies + my industries" })!;
-    expect(text.startsWith("<b>2 new jobs for you</b> · 1 strong\n<i>My companies + my industries</i>")).toBe(true);
-    expect(text.indexOf("Head of Product")).toBeLessThan(text.indexOf(">PM<"));
-    expect(text).toContain('\n\n<a href="https://example.com/Head%20of%20Product">Head of Product</a>\nCo &lt;&amp;&gt; · Dubai, UAE · score 85/100 · strong fit');
-    expect(text).not.toContain("⭐");
+  it("is a header, the counts and what to do: no jobs, scores or links", () => {
+    expect(digest([job("PM", 60), job("Head of Product", 85), job("<b>", 90)], { minScore: 70 })).toBe("💼 <b>New jobs</b>\n3 new jobs, 2 strong fits.\nOpen RawJobs on your computer to see them.");
   });
 
-  it("says which dealbreaker a job breaks, in place of strong fit", () => {
-    const why = { title: 30, location: 20, keywords: [], keywordPoints: 0, industry: 10, dealbreakers: ["Pay below your floor: up to AED 18k vs your 25k a month"] };
-    const text = digest([job("SMB AE", 48, { why })], { minScore: 40 })!;
-    expect(text).toContain("score 48/100 · Pay below your floor: up to AED 18k vs your 25k a month");
-    expect(text).not.toContain("strong fit");
+  it("uses the singular for one, and never a 0", () => {
+    expect(digest([job("Head of Product", 85)], { minScore: 70 })).toBe("💼 <b>New jobs</b>\n1 new job, 1 strong fit.\nOpen RawJobs on your computer to see it.");
+    expect(digest([job("PM", 60), job("PO", 50)], { minScore: 70 })).toContain("\n2 new jobs, no strong fits.\n");
   });
 
-  it("stars jobs at your companies, as the Radar does", () => {
-    const text = digest([job("Yours", 50, { id: "greenhouse:acme:1" }), job("Other", 50, { id: "lever:else:1" })], { minScore: 70, yours: new Set(["greenhouse:acme"]) })!;
-    expect(text).toContain('⭐ <a href="https://example.com/Yours">Yours</a>');
-    expect(text).toContain('\n\n<a href="https://example.com/Other">Other</a>');
-  });
-
-  it("uses the Radar's best-match order: a slightly lower job posted today beats an older one", () => {
-    const now = Date.parse("2026-10-10T12:00:00Z");
-    const old = job("Old", 80, { postedAt: "2026-09-30T12:00:00Z" });
-    const fresh = job("Fresh", 76, { postedAt: "2026-10-10T12:00:00Z" });
-    const text = digest([old, fresh], { minScore: 70, now })!;
-    expect(text.indexOf(">Fresh<")).toBeLessThan(text.indexOf(">Old<"));
-  });
-
-  it("caps at 10 lines and points to the rest", () => {
-    const text = digest(
-      Array.from({ length: 13 }, (_, i) => job(`Role ${i}`, 50 + i)),
-      { minScore: 90 },
-    )!;
-    expect(text.match(/<a /g)).toHaveLength(10);
-    expect(text).toContain("…and 3 more on your Radar.");
+  it("counts strong fits, not new jobs, with only_new off", () => {
+    expect(digest([job("A", 80), job("B", 90)], { minScore: 70, onlyNew: false })).toBe("💼 <b>Strong fits</b>\n2 strong fits.\nOpen RawJobs on your computer to see them.");
   });
 });
 
 describe("finishedMessage", () => {
-  it("always says the scan is complete, with totals, 'no new jobs' and where to look", () => {
-    const none = finishedMessage({ scopeLabel: "All companies", matches: 3, newJobs: [], minScore: 70, total: 16538 });
-    expect(none).toBe(
-      "✅ <b>Scan complete</b> · All companies\n16,538 companies checked.\n3 jobs match you.\n\nNo new jobs this time.\n\n💻 Open RawJobs on your laptop to see every job: http://127.0.0.1:5173",
-    );
+  it("says the scan finished, with the same counts as the digest", () => {
+    expect(finishedMessage({ newJobs: [job("A", 80), job("B", 50)], minScore: 70 })).toBe("✅ <b>Scan finished</b>\n2 new jobs, 1 strong fit.\nOpen RawJobs on your computer to see them.");
+    expect(finishedMessage({ newJobs: [], minScore: 70 })).toBe("✅ <b>Scan finished</b>\nNo new jobs.\nOpen RawJobs on your computer to see your matches.");
   });
 
-  it("splits the new jobs into your companies, strong fits elsewhere and the rest, adding up", () => {
-    const newJobs = [job("Yours strong", 90, { id: "Greenhouse:Acme:1" }), job("Yours weak", 40, { id: "greenhouse:acme:2" }), job("Strong", 80), job("Other A", 50), job("Other B", 60)];
-    const text = finishedMessage({ scopeLabel: "My companies + my industries", matches: 384, newJobs, minScore: 70, yours: new Set(["greenhouse:acme"]) });
-    expect(text).toContain(
-      '<b>5 new jobs</b>\n⭐ 2 from your companies (1 strong fit)\n🎯 1 strong fit (score 70+) from other companies\n• 2 other matches\n\n⭐ <a href="https://example.com/Yours%20strong">Yours strong</a>\nCo &lt;&amp;&gt; · Dubai, UAE · score 90/100 · strong fit',
+  it("says a scan stopped, and to finish it", () => {
+    expect(finishedMessage({ newJobs: [job("A", 50)], minScore: 70, stopped: true })).toBe(
+      "⏸ <b>Scan stopped</b>\n1 new job, no strong fits.\nOpen RawJobs on your computer to see it and finish the scan.",
     );
-    expect(text.match(/<a /g)).toHaveLength(5);
-    expect(text.endsWith("\n\n💻 Open RawJobs on your laptop to see every job: http://127.0.0.1:5173")).toBe(true);
-  });
-
-  it("says where a stopped scan got to", () => {
-    expect(finishedMessage({ scopeLabel: "All companies", matches: 0, newJobs: [], minScore: 70, stopped: true, done: 900, total: 16538 })).toMatch(
-      /^⏸ <b>Scan stopped<\/b> · All companies\nGot to 900 of 16,538 companies\. Start it again/,
-    );
+    expect(finishedMessage({ newJobs: [], minScore: 70, stopped: true })).toBe("⏸ <b>Scan stopped</b>\nNo new jobs yet.\nOpen RawJobs on your computer to finish the scan.");
   });
 });
 

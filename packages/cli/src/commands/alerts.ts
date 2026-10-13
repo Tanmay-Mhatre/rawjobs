@@ -1,5 +1,18 @@
 import { resolve } from "node:path";
-import { loadConfig, saveConfig, sendTelegram, telegramSecrets, saveTelegramSecrets, telegramBotName, findTelegramChat, looksLikeToken, maskToken, personalConfigPath } from "@rawjobs/core";
+import {
+  loadConfig,
+  saveConfig,
+  sendTelegram,
+  connectedMessage,
+  testMessage,
+  telegramSecrets,
+  saveTelegramSecrets,
+  telegramBotName,
+  findTelegramChat,
+  looksLikeToken,
+  maskToken,
+  personalConfigPath,
+} from "@rawjobs/core";
 import { readStdin } from "../util";
 
 /** Telegram alerts (JSON in and out, for the dashboard): status, token, connect, test, off. */
@@ -50,12 +63,12 @@ export async function cmdAlerts(args: string[]): Promise<number> {
       }
       saveTelegramSecrets({ chatId: chat.chatId });
       setEnabled(true);
-      await sendTelegram("✅ RawJobs is connected. New jobs from your scans will arrive here.", { ...secrets, chatId: chat.chatId });
+      await sendTelegram(connectedMessage(), { ...secrets, chatId: chat.chatId });
       out({ ok: true, name: chat.name });
       return 0;
     }
     if (action === "test") {
-      await sendTelegram("👋 Test from RawJobs. Alerts are working.", secrets);
+      await sendTelegram(testMessage(), secrets);
       out({ ok: true });
       return 0;
     }
