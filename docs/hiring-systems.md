@@ -32,7 +32,7 @@ boards. Paste a company's careers link into **Companies → Add by link** in the
 
 iCIMS, Jobvite and JazzHR have no keyless feed, so their connectors read the public careers pages. If a company changes its page template, that connector may need an update.
 
-Public job boards: Hacker News "Who is hiring", Remotive, Arbeitnow, Remote OK and Himalayas, added the same way,
+Public job boards: Hacker News "Who is hiring", Remotive, Arbeitnow, Remote OK, Himalayas and Jobicy, added the same way,
 by pasting their link.
 
 The connectors are in [`packages/core/src/connectors/`](../packages/core/src/connectors/). Each one
