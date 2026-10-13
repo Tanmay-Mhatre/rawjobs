@@ -10,6 +10,10 @@
  *   GET  /v1/pending         list waiting contributions, 500 a page; ?cursor= for the next  (Bearer INBOX_TOKEN)
  *   POST /v1/ack             { ids: [...] } remove processed contributions                   (Bearer INBOX_TOKEN)
  *
+ *   POST /v1/moves           { client?, moves: [{ name, from: Board, to: Board }] }  (public)
+ *   GET  /v1/moves/pending   list waiting move reports, 500 a page; ?cursor= for the next    (Bearer INBOX_TOKEN)
+ *   POST /v1/moves/ack       { ids: [...] } remove processed move reports                    (Bearer INBOX_TOKEN)
+ *
  * Abuse limits: 20 requests a minute per IP (Cloudflare rate limiter; the IP is not stored), at
  * most 25 boards a request, at most DAILY_CAP boards accepted a day for everyone together, and a
  * board already received in the last 7 days is skipped. Only boards on the hiring systems the
@@ -19,6 +23,20 @@
  * KV keys: "c:…" contributions (the only keys /v1/pending lists) and "day:YYYY-MM-DD", the boards
  * accepted that day (for the cap and the dedupe). One accepted request costs two KV writes, which
  * matters on the free plan (1,000 writes a day).
+ *
+ * Move reports ("this company's careers page moved from board A to board B"): at most 10 a request,
+ * body at most 10 KB, the same board rules and name cleaning as contributions, and the same rate
+ * limiter. One KV record per move, "m:<fromKey>><toKey>", kept 30 days:
+ * { name, from, to, first_at, last_at, reporters }. `reporters` holds up to 20 keyed hashes,
+ * HMAC-SHA256(REPORTER_SECRET, ip + "|" + fromKey) cut to 16 hex characters, so the workflow can
+ * count distinct reporters. No IP is stored, and the hashes never leave the Worker
+ * (/v1/moves/pending returns only how many there are). A repeat from the same reporter writes
+ * nothing. "md:YYYY-MM-DD" counts the new move records that day, capped at MOVES_DAILY_CAP. KV
+ * writes: one per new or changed record, plus the day counter when a record is new.
+ *
+ * Settings: INBOX_TOKEN (secret, shared with the workflow), REPORTER_SECRET (secret, keys the
+ * reporter hashes; without it /v1/moves answers 503), DAILY_CAP and MOVES_DAILY_CAP (wrangler.toml
+ * [vars]).
  */
 
 export interface Env {
@@ -28,6 +46,10 @@ export interface Env {
   INBOX_TOKEN: string;
   /** Most boards accepted per UTC day, for everyone together (wrangler.toml [vars]). Default 2000. */
   DAILY_CAP?: string;
+  /** Key for the reporter hashes on move reports (a secret). Without it, /v1/moves answers 503. */
+  REPORTER_SECRET?: string;
+  /** Most new move records per UTC day, for everyone together (wrangler.toml [vars]). Default 100. */
+  MOVES_DAILY_CAP?: string;
 }
 
 type Board = { ats: string; slug: string; region?: string; shard?: string; site?: string; name?: string };
@@ -88,14 +110,7 @@ function clean(b: unknown): Board | null {
   if ((o.ats === "workday" || o.ats === "oracle") && o.shard === undefined) return null;
   if (o.site !== undefined && !(typeof o.site === "string" && SLUG.test(o.site))) return null;
   if (NEEDS_SITE.has(o.ats) && o.site === undefined) return null;
-  const name =
-    typeof o.name === "string"
-      ? o.name
-          // biome-ignore lint/suspicious/noControlCharactersInRegex: stripping control characters is the point
-          .replace(/[\u0000-\u001f<>]/g, "")
-          .trim()
-          .slice(0, 100)
-      : "";
+  const name = cleanName(o.name, 100);
   return {
     ats: o.ats,
     slug: o.slug,
@@ -104,6 +119,17 @@ function clean(b: unknown): Board | null {
     ...(typeof o.site === "string" ? { site: o.site } : {}),
     ...(name ? { name } : {}),
   };
+}
+
+/** A company name without control characters or angle brackets, trimmed and cut to `max`; "" when there is none. */
+function cleanName(raw: unknown, max: number): string {
+  return typeof raw === "string"
+    ? raw
+        // biome-ignore lint/suspicious/noControlCharactersInRegex: stripping control characters is the point
+        .replace(/[\u0000-\u001f<>]/g, "")
+        .trim()
+        .slice(0, max)
+    : "";
 }
 
 /** Constant-time comparison for the workflow's token. */
@@ -207,6 +233,149 @@ async function ack(req: Request, env: Env): Promise<Response> {
   return json({ removed: ids.length });
 }
 
+// ── Move reports ──────────────────────────────────────────────────────────────────────────────
+
+const MAX_MOVES_BODY = 10_000;
+const MAX_MOVES = 10;
+const MAX_MOVE_NAME = 120;
+const MAX_REPORTERS = 20;
+const DEFAULT_MOVES_DAILY_CAP = 100;
+/** KV keys are at most 512 bytes; a move whose key would be longer can't be stored. */
+const MAX_KEY = 512;
+
+type MoveBoard = Omit<Board, "name">;
+type MoveRecord = { name: string; from: MoveBoard; to: MoveBoard; first_at: string; last_at: string; reporters: string[] };
+
+/** A board in a move: the contribution rules, without the name (the move carries it). */
+function moveBoard(raw: unknown): MoveBoard | null {
+  const b = clean(raw);
+  if (!b) return null;
+  const { name: _name, ...board } = b;
+  return board;
+}
+
+/** The move as stored and its KV key, or null when it isn't well-shaped. */
+function cleanMove(raw: unknown): { key: string; fromKey: string; name: string; from: MoveBoard; to: MoveBoard } | null {
+  if (!raw || typeof raw !== "object") return null;
+  const o = raw as Record<string, unknown>;
+  const name = cleanName(o.name, MAX_MOVE_NAME);
+  const from = moveBoard(o.from);
+  const to = moveBoard(o.to);
+  if (!name || !from || !to) return null;
+  const fromKey = boardKey(from);
+  const toKey = boardKey(to);
+  if (fromKey === toKey) return null;
+  const key = `m:${fromKey}>${toKey}`;
+  if (new TextEncoder().encode(key).length > MAX_KEY) return null;
+  return { key, fromKey, name, from, to };
+}
+
+/** HMAC-SHA256(secret, ip + "|" + fromKey) as hex, first 16 characters: tells reporters apart without keeping the IP. */
+async function reporterHash(secret: string, ip: string, fromKey: string): Promise<string> {
+  const enc = new TextEncoder();
+  const key = await crypto.subtle.importKey("raw", enc.encode(secret), { name: "HMAC", hash: "SHA-256" }, false, ["sign"]);
+  const sig = new Uint8Array(await crypto.subtle.sign("HMAC", key, enc.encode(`${ip}|${fromKey}`)));
+  return Array.from(sig, (x) => x.toString(16).padStart(2, "0"))
+    .join("")
+    .slice(0, 16);
+}
+
+function movesDailyCap(env: Env): number {
+  const n = Number(env.MOVES_DAILY_CAP);
+  return Number.isFinite(n) && n > 0 ? Math.floor(n) : DEFAULT_MOVES_DAILY_CAP;
+}
+
+function parseMove(value: string | null): MoveRecord | null {
+  if (!value) return null;
+  try {
+    const r = JSON.parse(value) as MoveRecord;
+    return r && typeof r === "object" && Array.isArray(r.reporters) ? r : null;
+  } catch {
+    return null;
+  }
+}
+
+async function reportMoves(req: Request, env: Env): Promise<Response> {
+  // Without the key the reporter hashes can't be made, and we never store reporters any other way.
+  if (!env.REPORTER_SECRET) return json({ error: "Move reports aren't open yet. Your app will try again later." }, 503);
+  const ip = req.headers.get("cf-connecting-ip") ?? "unknown";
+  if (env.LIMITER && !(await env.LIMITER.limit({ key: ip })).success) return json({ error: "Too many requests, try again in a minute." }, 429);
+  const text = await req.text();
+  if (text.length > MAX_MOVES_BODY) return json({ error: "Request too large." }, 400);
+  let body: { moves?: unknown };
+  try {
+    body = JSON.parse(text);
+  } catch {
+    return json({ error: "Body must be JSON." }, 400);
+  }
+  if (!body || typeof body !== "object" || !Array.isArray(body.moves)) return json({ error: "Body must have a list of moves." }, 400);
+  if (body.moves.length > MAX_MOVES) return json({ error: `At most ${MAX_MOVES} moves a request.` }, 400);
+
+  const seen = new Set<string>();
+  const moves: NonNullable<ReturnType<typeof cleanMove>>[] = [];
+  let skipped = 0;
+  for (const raw of body.moves) {
+    const m = cleanMove(raw);
+    if (!m || seen.has(m.key)) {
+      skipped++;
+      continue;
+    }
+    seen.add(m.key);
+    moves.push(m);
+  }
+  if (!moves.length) return json({ error: "No moves we can use." }, 400);
+
+  const now = new Date();
+  const at = now.toISOString();
+  const dayKey = `md:${at.slice(0, 10)}`;
+  const [existing, todayRaw] = await Promise.all([Promise.all(moves.map((m) => env.INBOX.get(m.key))), env.INBOX.get(dayKey)]);
+  const writes: { key: string; record: MoveRecord }[] = [];
+  let created = 0;
+  for (const [i, m] of moves.entries()) {
+    const reporter = await reporterHash(env.REPORTER_SECRET, ip, m.fromKey);
+    const old = parseMove(existing[i] ?? null);
+    if (!old) {
+      created++;
+      writes.push({ key: m.key, record: { name: m.name, from: m.from, to: m.to, first_at: at, last_at: at, reporters: [reporter] } });
+    } else if (old.reporters.includes(reporter) || old.reporters.length >= MAX_REPORTERS) {
+      // A repeat (or a full list) changes nothing, so it costs no write.
+      skipped++;
+    } else {
+      writes.push({ key: m.key, record: { ...old, last_at: at, reporters: [...old.reporters, reporter] } });
+    }
+  }
+
+  // The cap counts new records for everyone together. All or nothing, like contributions: the app
+  // keeps the reports and sends them again later. KV isn't atomic, so a burst can go slightly over.
+  const today = Number(todayRaw) || 0;
+  if (created && today + created > movesDailyCap(env)) return json({ error: "The inbox is full for today. Your app will try again later." }, 429);
+
+  // No IP is stored: only the boards, the name, the times and the keyed reporter hashes.
+  await Promise.all(writes.map((w) => env.INBOX.put(w.key, JSON.stringify(w.record), { expirationTtl: KEEP_DAYS * 86_400 })));
+  if (created) await env.INBOX.put(dayKey, String(today + created), { expirationTtl: 2 * 86_400 });
+  return json({ accepted: writes.length, skipped });
+}
+
+async function pendingMoves(req: Request, env: Env): Promise<Response> {
+  const cursor = new URL(req.url).searchParams.get("cursor") || undefined;
+  const list = await env.INBOX.list({ prefix: "m:", limit: 500, cursor });
+  const items = await Promise.all(
+    list.keys.map(async (k) => {
+      const r = parseMove(await env.INBOX.get(k.name));
+      // A damaged record is left out; it expires on its own. The hashes never leave the Worker, only their count.
+      return r && { id: k.name, name: r.name, from: r.from, to: r.to, reporters: r.reporters.length, first_at: r.first_at, last_at: r.last_at };
+    }),
+  );
+  return json({ items: items.filter(Boolean), ...(list.list_complete ? {} : { cursor: list.cursor }) });
+}
+
+async function ackMoves(req: Request, env: Env): Promise<Response> {
+  const body = (await req.json().catch(() => ({}))) as { ids?: unknown };
+  const ids = (Array.isArray(body?.ids) ? body.ids : []).filter((x): x is string => typeof x === "string" && x.startsWith("m:")).slice(0, 1000);
+  await Promise.all(ids.map((id) => env.INBOX.delete(id)));
+  return json({ removed: ids.length });
+}
+
 export default {
   async fetch(req: Request, env: Env): Promise<Response> {
     const { pathname } = new URL(req.url);
@@ -214,6 +383,9 @@ export default {
       if (req.method === "POST" && pathname === "/v1/contributions") return await contribute(req, env);
       if (req.method === "GET" && pathname === "/v1/pending") return authorized(req, env) ? await pending(req, env) : json({ error: "Unauthorized" }, 401);
       if (req.method === "POST" && pathname === "/v1/ack") return authorized(req, env) ? await ack(req, env) : json({ error: "Unauthorized" }, 401);
+      if (req.method === "POST" && pathname === "/v1/moves") return await reportMoves(req, env);
+      if (req.method === "GET" && pathname === "/v1/moves/pending") return authorized(req, env) ? await pendingMoves(req, env) : json({ error: "Unauthorized" }, 401);
+      if (req.method === "POST" && pathname === "/v1/moves/ack") return authorized(req, env) ? await ackMoves(req, env) : json({ error: "Unauthorized" }, 401);
       if (req.method === "GET" && pathname === "/") return new Response("RawJobs contribution inbox. POST /v1/contributions\n", { headers: { "content-type": "text/plain" } });
       return json({ error: "Not found" }, 404);
     } catch (err) {

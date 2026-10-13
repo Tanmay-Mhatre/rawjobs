@@ -8,14 +8,45 @@
 import { mkdirSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { BOARD_URL, FREEHIRE_COMMIT } from "./lib/freehire";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const GH = "https://raw.githubusercontent.com";
 
+/** ats-scrapers files for the systems we have connectors for (its other files are systems we don't read yet). */
+const KALIL = [
+  "ashby",
+  "bamboohr",
+  "breezy",
+  "greenhouse",
+  "icims",
+  "jazzhr",
+  "jobvite",
+  "lever",
+  "oracle",
+  "personio",
+  "pinpoint",
+  "recruitee",
+  "rippling",
+  "smartrecruiters",
+  "successfactors",
+  "taleo",
+  "teamtailor",
+  "workable",
+  "workday",
+];
+/** openings-mcp providers we have connectors for (merge.ts turns each entry into a careers URL). */
+export const OPENINGS_MCP = ["ashby", "bamboohr", "greenhouse", "icims", "lever", "oracle", "recruitee", "rippling", "smartrecruiters", "teamtailor", "workable", "workday"];
+
 /** [folder, file name, URL] */
 const FILES: [string, string, string][] = [
   ["latmay", "ats_career_page_urls.csv", "https://huggingface.co/datasets/latmay/ats-career-page-urls/resolve/main/ats_career_page_urls.csv"],
-  ...["ashby", "greenhouse", "lever", "smartrecruiters", "workday"].map((f): [string, string, string] => ["kalil0321", `${f}.csv`, `${GH}/kalil0321/ats-scrapers/HEAD/ats-companies/${f}.csv`]),
+  // kalil0321/ats-scrapers (MIT): one name,slug,url list per hiring system we read.
+  ...KALIL.map((f): [string, string, string] => ["kalil0321", `${f}.csv`, `${GH}/kalil0321/ats-scrapers/HEAD/ats-companies/${f}.csv`]),
+  // strelov1/freehire (MIT): its last committed board list, pinned (lib/freehire.ts).
+  ...Object.keys(BOARD_URL).map((f): [string, string, string] => ["freehire", `${f}.yml`, `${GH}/strelov1/freehire/${FREEHIRE_COMMIT}/sources/${f}.yml`]),
+  // amikai/openings-mcp (MIT): companies.yaml per provider, each entry checked live by its author.
+  ...OPENINGS_MCP.map((f): [string, string, string] => ["openingsmcp", `${f}.yaml`, `${GH}/amikai/openings-mcp/HEAD/internal/provider/${f}/companies.yaml`]),
   ["conorscode", "companies.json", `${GH}/ConorsCode/open-jobs-data/HEAD/companies.json`],
   // LastRound AI's ATS company directory, CC BY 4.0: credit "LastRound AI" (NOTICE.md in the directory repo).
   ["lastround", "ats-directory.csv", "https://datahub.io/lastroundai-hiring-data/lastroundai-hiring-data/_r/-/ats-directory/lastroundai-ats-company-directory-2026-08.csv"],

@@ -1,0 +1,6 @@
+- company: "Golden Studio"
+  host: goldenstudio.teamtailor.com
+- company: "Custom Domain Co"
+  host: careers.customdomain.example
+- company: "Bad Host"
+  host: "evil.teamtailor.com/../x"

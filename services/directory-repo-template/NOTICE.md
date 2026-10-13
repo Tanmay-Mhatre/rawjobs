@@ -11,6 +11,8 @@ used only to confirm boards that are already listed, and are never published.
 | Companies' own public job boards (Greenhouse, Lever, Ashby, SmartRecruiters, Workday) | facts published by each company | live checks; job titles, locations and dates in the index |
 | [latmay/ats-career-page-urls](https://huggingface.co/datasets/latmay/ats-career-page-urls) | CC BY 4.0 | adds companies |
 | [kalil0321/ats-scrapers](https://github.com/kalil0321/ats-scrapers) | MIT | adds companies |
+| [amikai/openings-mcp](https://github.com/amikai/openings-mcp) | MIT | adds companies, each verified live by its author |
+| [strelov1/freehire](https://github.com/strelov1/freehire) (board list as of 2026-09-04) | MIT | adds companies |
 | [ConorsCode/open-jobs-data](https://github.com/ConorsCode/open-jobs-data) | MIT | adds companies |
 | [crypto-jobs-fyi/crawler](https://github.com/crypto-jobs-fyi/crawler) | Apache-2.0 | adds companies, industry labels |
 | [Common Crawl](https://commoncrawl.org) URL index (our own query) | [Common Crawl terms of use](https://commoncrawl.org/terms-of-use) | adds companies (board URLs only) |
@@ -26,6 +28,10 @@ Contains information from latmay/ats-career-page-urls, made available under the 
 Attribution 4.0 International licence.
 
 Contains data from Wikidata, made available under CC0.
+
+Contains company lists from kalil0321/ats-scrapers (Copyright (c) 2026 Kalil Bouzigues),
+amikai/openings-mcp (Copyright (c) 2026 amikai) and strelov1/freehire (Copyright (c) 2026 freehire
+contributors), all under the MIT License.
 
 Contains information from the LastRound AI ATS company directory (August 2026 snapshot), made available
 under the Creative Commons Attribution 4.0 International licence. Credit: LastRound AI.

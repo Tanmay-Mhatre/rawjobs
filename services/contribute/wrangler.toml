@@ -20,6 +20,13 @@ simple = { limit = 20, period = 60 }
 # retry later. Each accepted request costs 2 KV writes (free plan: 1,000 writes a day).
 [vars]
 DAILY_CAP = "2000"
+# Most new move reports (POST /v1/moves) stored per day (UTC), for everyone together. Each new one
+# costs 2 KV writes, a new reporter on a known one costs 1.
+MOVES_DAILY_CAP = "100"
 
-# Secret (not in this file): INBOX_TOKEN, shared with the GitHub workflow.
-#   npx wrangler secret put INBOX_TOKEN
+# Secrets (not in this file):
+#   INBOX_TOKEN, shared with the GitHub workflow:
+#     npx wrangler secret put INBOX_TOKEN
+#   REPORTER_SECRET, a long random string that keys the reporter hashes on move reports (never
+#   shared; without it /v1/moves answers 503):
+#     npx wrangler secret put REPORTER_SECRET
