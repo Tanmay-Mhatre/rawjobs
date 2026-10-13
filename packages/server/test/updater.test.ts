@@ -22,6 +22,7 @@ vi.mock("@rawjobs/core/update", async (importActual) => ({
 }));
 
 const { createUpdater } = await import("../src/updater");
+const { readUpdateFile, writeUpdateFile } = await import("@rawjobs/core/update");
 
 let home: string;
 beforeEach(() => {
@@ -77,5 +78,20 @@ describe("the updater", () => {
     await u.apply();
     expect(fake.startUpdate).not.toHaveBeenCalled();
     expect(u.status().error).toMatch(/too old/);
+  });
+
+  it("doesn't offer a version that went back by itself, but tries it again when you ask", async () => {
+    vi.useFakeTimers();
+    writeUpdateFile(home, { skip: ["99.0.0"] });
+    const u = createUpdater({ home, isBusy: () => false, exit: () => {}, installed: true });
+    await u.check();
+    expect(u.status()).toMatchObject({ available: null, skipped: { version: "99.0.0" } });
+    expect(u.updateHint()).toBeNull();
+    // Settings → About → Try 99.0.0 again.
+    const res = { statusCode: 0, setHeader: () => {}, end: vi.fn() };
+    await u.route("/api/update/retry", { method: "POST" } as never, res as never, async () => "");
+    expect(readUpdateFile(home).skip).toEqual([]);
+    expect(fake.startUpdate).toHaveBeenCalledOnce();
+    expect(JSON.parse(res.end.mock.calls[0]![0] as string)).toMatchObject({ state: "updating", available: { version: "99.0.0" }, skipped: null });
   });
 });

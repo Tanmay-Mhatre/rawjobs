@@ -9,6 +9,7 @@ import {
   ISSUES_URL,
   markUpdateSeen,
   RELEASES_URL,
+  retryUpdate,
   saveUpdateSettings,
   updateNow,
   updatingTo,
@@ -152,13 +153,16 @@ export function ServerNotices({ onRadar = false }: { onRadar?: boolean }) {
           className="mt-3"
           items={[
             [ShieldCheck, "Nothing changed. Your data is as it was."],
-            [Info, `RawJobs won't offer ${last.to} again. The next version comes up by itself.`],
+            [Info, `RawJobs won't offer ${last.to} by itself again. You can try it again in Settings, or wait for the next version.`],
           ]}
         />
         <div className="mt-3 flex flex-wrap items-center gap-2">
           <Button size="sm" onClick={() => void seen()}>
             Got it
           </Button>
+          <a className={linkClass} href={`#${settingsHash("version")}`} onClick={() => void seen()}>
+            Try {last.to} again
+          </a>
           <a className={linkClass} href={ISSUES_URL} target="_blank" rel="noreferrer">
             Report a problem <ExternalLink className="size-3.5" aria-hidden />
           </a>
@@ -269,9 +273,9 @@ export function AboutRawJobs() {
     );
   }
 
-  const run = async (kind: "check" | "update") => {
-    setBusy(kind);
-    const s = kind === "check" ? await checkForUpdate() : await updateNow();
+  const run = async (kind: "check" | "update" | "retry") => {
+    setBusy(kind === "check" ? "check" : "update");
+    const s = kind === "check" ? await checkForUpdate() : kind === "retry" ? await retryUpdate() : await updateNow();
     if (s) setStatus(s);
     announceUpdateStatus();
     setBusy(null);
@@ -285,6 +289,15 @@ export function AboutRawJobs() {
       <span>
         <b>RawJobs {a.version}</b> is out{a.date ? `, from ${formatDate(a.date)}` : ""}.{a.critical && <b className="text-warning-text"> Required update.</b>}
       </span>
+    );
+  else if (status.skipped && !status.tooOld)
+    latest = (
+      <div className="space-y-3">
+        <p>
+          <b>RawJobs {status.skipped.version}</b> didn't start here last time, so you're still on {status.current}. Your data is safe.
+        </p>
+        <UpdateButton status={status} onClick={() => void run("retry")} busy={busy === "update"} label={`Try ${status.skipped.version} again`} />
+      </div>
     );
   else if (status.lastCheck) latest = "You have the newest version.";
 

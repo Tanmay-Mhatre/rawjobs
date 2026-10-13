@@ -41,6 +41,9 @@ export type ApiOptions = {
   startLink?: () => boolean;
 };
 
+/** A page served from this computer (any port): may read /api/health from another port. */
+const LOCAL_ORIGIN = /^http:\/\/(127\.0\.0\.1|localhost|\[::1\]):\d{1,5}$/;
+
 /** One line of the scan's NDJSON progress. */
 type Line = string;
 
@@ -320,7 +323,12 @@ Stopped after ${Math.round(timeoutMs / 1000)} s without finishing.`.trim(),
   }
 
   async function route(url: string, req: IncomingMessage, res: ServerResponse): Promise<void> {
-    if (url === "/api/health" && req.method === "GET")
+    if (url === "/api/health" && req.method === "GET") {
+      // A dashboard left open on another port of this computer (RawJobs moved to the next port) may
+      // read it, to find RawJobs here and go to it. Only this computer's own addresses.
+      const origin = req.headers.origin;
+      if (origin && LOCAL_ORIGIN.test(origin)) res.setHeader("access-control-allow-origin", origin);
+      res.setHeader("vary", "origin");
       return json(res, {
         ok: true,
         version,
@@ -331,6 +339,7 @@ Stopped after ${Math.round(timeoutMs / 1000)} s without finishing.`.trim(),
         startLink: opts.startLink?.() ?? false,
         platform: process.platform,
       });
+    }
     if (url === "/api/update" || url.startsWith("/api/update/")) {
       if (opts.updater && (await opts.updater.route(url, req, res, () => readBody(req)))) return;
       if (url === "/api/update" && req.method === "GET")
