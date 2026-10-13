@@ -36,6 +36,7 @@ case "$SET" in
       raw/latmay/*.csv
       raw/kalil0321/*.csv
       raw/openingsmcp/*.yaml
+      raw/freehire/*.yml
       raw/conorscode/*.json
       raw/lastround/*.csv
     )

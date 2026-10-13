@@ -8,6 +8,7 @@
 import { mkdirSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { BOARD_URL, FREEHIRE_COMMIT } from "./lib/freehire";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const GH = "https://raw.githubusercontent.com";
@@ -42,6 +43,8 @@ const FILES: [string, string, string][] = [
   ["latmay", "ats_career_page_urls.csv", "https://huggingface.co/datasets/latmay/ats-career-page-urls/resolve/main/ats_career_page_urls.csv"],
   // kalil0321/ats-scrapers (MIT): one name,slug,url list per hiring system we read.
   ...KALIL.map((f): [string, string, string] => ["kalil0321", `${f}.csv`, `${GH}/kalil0321/ats-scrapers/HEAD/ats-companies/${f}.csv`]),
+  // strelov1/freehire (MIT): its last committed board list, pinned (lib/freehire.ts).
+  ...Object.keys(BOARD_URL).map((f): [string, string, string] => ["freehire", `${f}.yml`, `${GH}/strelov1/freehire/${FREEHIRE_COMMIT}/sources/${f}.yml`]),
   // amikai/openings-mcp (MIT): companies.yaml per provider, each entry checked live by its author.
   ...OPENINGS_MCP.map((f): [string, string, string] => ["openingsmcp", `${f}.yaml`, `${GH}/amikai/openings-mcp/HEAD/internal/provider/${f}/companies.yaml`]),
   ["conorscode", "companies.json", `${GH}/ConorsCode/open-jobs-data/HEAD/companies.json`],

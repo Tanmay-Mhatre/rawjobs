@@ -11,6 +11,7 @@ import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from 
 import { join } from "node:path";
 import { ATS_TYPES, companyKey, detectCompany, type AtsType } from "@rawjobs/core";
 import { parse as parseYaml } from "yaml";
+import { BOARD_URL, freehireBoards } from "./lib/freehire";
 import { catalogDir, dataDir } from "./lib/paths";
 
 const raw = (...p: string[]) => join(catalogDir, "raw", ...p);
@@ -29,6 +30,8 @@ const SOURCES = {
   kalil: { family: "kalil", publishable: true },
   // amikai/openings-mcp companies.yaml lists (MIT, attribution in the directory repo's NOTICE.md).
   openingsmcp: { family: "openingsmcp", publishable: true },
+  // strelov1/freehire's last committed board list (MIT, pinned in lib/freehire.ts).
+  freehire: { family: "freehire", publishable: true },
   conors: { family: "openjobsdata", publishable: true },
   // LastRound AI ATS directory (CC BY 4.0, attribution in the directory repo's NOTICE.md).
   lastround: { family: "lastround", publishable: true },
@@ -183,6 +186,13 @@ for (const f of existsSync(raw("kalil0321")) ? readdirSync(raw("kalil0321")).fil
       count("openingsmcp", list?.length ?? 0);
     });
   }
+}
+for (const provider of Object.keys(BOARD_URL)) {
+  withFile(raw("freehire", `${provider}.yml`), (p) => {
+    const entries = (parseYaml(readFileSync(p, "utf8")) as { company?: unknown; board?: unknown }[] | null) ?? [];
+    for (const b of freehireBoards(provider, entries)) add("freehire", b);
+    count("freehire", entries.length);
+  });
 }
 withFile(raw("lastround", "ats-directory.csv"), (p) => {
   // Columns by header name: ats_vendor, company_name, board_slug, last_crawled.
