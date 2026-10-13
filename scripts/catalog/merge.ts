@@ -73,6 +73,8 @@ function add(src: SourceId, b: { ats: string; slug: string; region?: string; sha
     prev.sources.add(src);
     if (!prev.name && b.name) prev.name = b.name;
     if (!prev.region && b.region) prev.region = b.region;
+    // E.g. a Zoho board first seen in a list without its data centre, then in a crawl with it.
+    if (!prev.shard && b.shard) prev.shard = b.shard;
     if (!prev.site && b.site) prev.site = b.site;
     if (!prev.shard && b.shard) prev.shard = b.shard;
     return;
