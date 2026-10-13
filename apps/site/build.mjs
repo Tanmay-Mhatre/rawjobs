@@ -53,6 +53,7 @@ const SYSTEMS = [
   "JOIN",
   "Paylocity",
   "Paycom",
+  "Hireology",
   "Comeet",
   "Oracle Recruiting",
   "SAP SuccessFactors",

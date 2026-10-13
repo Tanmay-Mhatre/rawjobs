@@ -8,6 +8,7 @@ import { freshteam } from "./freshteam";
 import { join } from "./join";
 import { paylocity } from "./paylocity";
 import { paycom } from "./paycom";
+import { hireology } from "./hireology";
 import { greenhouse } from "./greenhouse";
 import { hibob } from "./hibob";
 import { icims } from "./icims";
@@ -61,6 +62,7 @@ export const connectors: Partial<Record<AtsType, Connector<any>>> = {
   join,
   paylocity,
   paycom,
+  hireology,
   // Job boards (JOB_BOARDS), last so a company's own board is always recognised first.
   hackernews,
   remotive,
@@ -177,6 +179,8 @@ export function careersUrl(c: DetectedCompany): string {
       return `https://recruiting.paylocity.com/Recruiting/Jobs/All/${c.slug}`;
     case "paycom":
       return `https://www.paycomonline.net/v4/ats/web.php/portal/${c.slug}/career-page`;
+    case "hireology":
+      return `https://careers.hireology.com/${c.slug}`;
     default:
       return "";
   }

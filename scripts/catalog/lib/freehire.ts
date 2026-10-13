@@ -20,6 +20,8 @@ export const BOARD_URL: Record<string, (b: string) => string | undefined> = {
   comeet: (b) => (b.includes("/") ? `https://www.comeet.com/jobs/${b.split("/").map(enc).join("/")}` : undefined),
   freshteam: (b) => (plain(b) ? `https://${b}.freshteam.com/jobs` : undefined),
   greenhouse: (b) => `https://job-boards.greenhouse.io/${enc(b)}`,
+  // The tenant slug of careers.hireology.com/{slug}
+  hireology: (b) => (plain(b) && !b.includes(".") ? `https://careers.hireology.com/${b}` : undefined),
   hibob: (b) => (plain(b) ? `https://${b}.careers.hibob.com` : undefined),
   // A bare id is the careers-{id}.icims.com portal; full hosts are companies' own domains (not detectable yet).
   icims: (b) => (plain(b) && !b.includes(".") ? `https://careers-${b}.icims.com/jobs` : undefined),
