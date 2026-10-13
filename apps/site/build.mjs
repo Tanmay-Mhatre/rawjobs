@@ -50,6 +50,7 @@ const SYSTEMS = [
   "Rippling",
   "HiBob",
   "Freshteam",
+  "JOIN",
   "Comeet",
   "Oracle Recruiting",
   "SAP SuccessFactors",

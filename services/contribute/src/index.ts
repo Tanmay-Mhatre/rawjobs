@@ -83,6 +83,7 @@ export const SCANNABLE = new Set([
   "zoho",
   "hibob",
   "freshteam",
+  "join",
 ]);
 const SLUG = /^[A-Za-z0-9][A-Za-z0-9._-]{0,99}$/;
 /** What `shard` may look like per system (the rest have none). */
@@ -90,6 +91,8 @@ const SHARD: Record<string, RegExp> = {
   workday: /^wd\d{1,3}$/,
   oracle: /^[a-z0-9-]{2,30}$/,
   successfactors: /^[a-z0-9.-]{1,60}\.(successfactors\.(com|eu)|sapsf\.(com|eu|cn))$/,
+  // JOIN's numeric company id.
+  join: /^\d{1,10}$/,
   // Zoho Recruit's data centre, when it isn't .com.
   zoho: /^(eu|in|com\.au|jp|ca|sa|uk|com\.cn)$/,
 };

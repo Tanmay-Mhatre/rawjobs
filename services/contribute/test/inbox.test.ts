@@ -68,6 +68,22 @@ describe("contribution inbox", () => {
     ]);
   });
 
+  it("takes Zoho data centres, sapsf.cn hosts, JOIN company ids and boards keyed by host", async () => {
+    const env = fakeEnv();
+    const res = await post(env, "/v1/contributions", {
+      boards: [
+        { ats: "zoho", slug: "acme", shard: "in", site: "Careers" },
+        { ats: "successfactors", slug: "acme09", shard: "career15.sapsf.cn" },
+        { ats: "successfactors", slug: "jobs.acme.com" },
+        { ats: "teamtailor", slug: "careers.acme.com" },
+        { ats: "join", slug: "acme", shard: "30107" },
+        { ats: "zoho", slug: "evil", shard: "example.com" },
+        { ats: "join", slug: "evil", shard: "30107.example" },
+      ],
+    });
+    expect(await res.json()).toEqual({ received: 5, duplicates: 0 });
+  });
+
   it("accepts and refuses the same boards as the directory workflow", async () => {
     const boards = [
       { ats: "workable", slug: "acme" },

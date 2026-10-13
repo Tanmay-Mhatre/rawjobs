@@ -25,6 +25,7 @@ export const ATS_TYPES = [
   "zoho",
   "hibob",
   "freshteam",
+  "join",
 ] as const;
 
 /**
