@@ -2,10 +2,12 @@ import { companyLabel, displayName } from "@rawjobs/core/display-name";
 import { safeUrl } from "@rawjobs/core/text";
 import { Clock, ExternalLink, EyeOff, RefreshCw, Undo2, X } from "lucide-react";
 import { useEffect, useId, useMemo, useState, type ReactNode } from "react";
+import type { BoardMove } from "@rawjobs/core/schema";
+import { careersUrl } from "@rawjobs/core/detect";
 import { keyOf } from "../lib/companies";
 import { nameRank } from "../lib/companySearch";
 import type { DataMeta } from "../lib/data";
-import { radarCompanyHash } from "../lib/filters";
+import { atsLabel, radarCompanyHash } from "../lib/filters";
 import { formatDateTime, timeAgo } from "../lib/format";
 import {
   barsOf,
@@ -40,6 +42,8 @@ type Row = {
   radar: string;
   bars: Bar[];
   problem: Problem;
+  /** A board the last scan found under the same name: maybe its new careers page (you check, then choose). */
+  moved?: BoardMove;
   quiet: Quiet;
   isQuiet: boolean;
 };
@@ -115,6 +119,7 @@ export function MyCompanies({
   onScan,
   scanning,
   onPasteLink,
+  onUseLink,
   hidden = [],
   onShowAgain,
   attention = 0,
@@ -140,6 +145,8 @@ export function MyCompanies({
   scanning?: boolean;
   /** Opens Add by link: "Paste new link" on a company whose careers page wasn't found. */
   onPasteLink?: () => void;
+  /** "Use this link" on a company whose careers page wasn't found, for the board the last scan suggested. */
+  onUseLink?: (key: string, to: BoardMove["to"]) => void;
   hidden?: HiddenCompany[];
   onShowAgain?: (h: HiddenCompany) => void;
   /** Above 0 when a "failing" link was followed; each new value shows Needs attention. */
@@ -167,27 +174,30 @@ export function MyCompanies({
   useEffect(() => setPage(1), [filter, sort, query]);
 
   const runs = meta?.runs ?? [];
-  const rows = useMemo<Row[]>(
-    () =>
-      list.map((r, index) => {
-        const key = keyOf(r);
-        const seen = healthOf(meta, key);
-        const quiet = quietOf(seen);
-        const radar = radarCompanyHash(jobNames?.get(key) ?? [r.name || r.slug || companyLabel(r)]);
-        return {
-          r,
-          key,
-          index,
-          isNew: !savedKeys.has(key),
-          radar,
-          bars: barsOf(meta?.runs ?? [], (health) => health.find((x) => keyOf(x) === key)),
-          problem: problemOf(seen, { unreadable: r.state === "soon", anyScans: !!meta?.runs.length }),
-          quiet,
-          isQuiet: isQuiet(quiet),
-        };
-      }),
-    [list, savedKeys, meta, jobNames],
-  );
+  const rows = useMemo<Row[]>(() => {
+    const keys = new Set(list.map(keyOf));
+    // The last scan's suggested new boards: only shown, never applied until you choose one.
+    const moves = meta?.runs[0]?.moves ?? [];
+    return list.map((r, index) => {
+      const key = keyOf(r);
+      const seen = healthOf(meta, key);
+      const quiet = quietOf(seen);
+      const problem = problemOf(seen, { unreadable: r.state === "soon", anyScans: !!meta?.runs.length });
+      const radar = radarCompanyHash(jobNames?.get(key) ?? [r.name || r.slug || companyLabel(r)]);
+      return {
+        r,
+        key,
+        index,
+        isNew: !savedKeys.has(key),
+        radar,
+        bars: barsOf(meta?.runs ?? [], (health) => health.find((x) => keyOf(x) === key)),
+        problem,
+        moved: problem?.kind === "notFound" ? moves.find((m) => keyOf(m.from) === key && !keys.has(keyOf(m.to))) : undefined,
+        quiet,
+        isQuiet: isQuiet(quiet),
+      };
+    });
+  }, [list, savedKeys, meta, jobNames]);
   const facts = rows.map((x) => ({ problem: x.problem, quiet: x.isQuiet }));
   const counts = filterCounts(facts);
   const quiet = rows.filter((x) => x.isQuiet);
@@ -214,7 +224,18 @@ export function MyCompanies({
   const toggle = (p: "runs" | "hidden") => setPanel((v) => (v === p ? null : p));
   const runsId = `${ids}-runs`;
   const hiddenId = `${ids}-hidden`;
-  const status = (x: Row) => <Status problem={x.problem} quiet={x.isQuiet ? x.quiet : undefined} onScan={onScan} scanning={scanning} onPasteLink={onPasteLink} />;
+  const status = (x: Row) => (
+    <Status
+      problem={x.problem}
+      quiet={x.isQuiet ? x.quiet : undefined}
+      onScan={onScan}
+      scanning={scanning}
+      onPasteLink={onPasteLink}
+      name={companyLabel(x.r)}
+      moved={x.moved}
+      onUseLink={onUseLink && ((to) => onUseLink(x.key, to))}
+    />
+  );
   const remove = (x: Row, className?: string) => (
     <IconButton label={`Remove ${companyLabel(x.r)}`} onClick={() => onRemove(x.key)} className={cx("hover:text-danger-text", className)}>
       <X className="size-4" />
@@ -430,7 +451,25 @@ function NameCell({ x }: { x: Row }) {
 const linkClass = "inline-flex min-h-6 items-center gap-1 type-label text-ink underline underline-offset-2 hover:text-muted disabled:opacity-50";
 
 /** Words only when something is wrong, each with what to do; a quiet company says so quietly. Healthy rows: nothing. */
-function Status({ problem, quiet, onScan, scanning, onPasteLink }: { problem: Problem; quiet?: Quiet; onScan?: () => void; scanning?: boolean; onPasteLink?: () => void }) {
+function Status({
+  problem,
+  quiet,
+  onScan,
+  scanning,
+  onPasteLink,
+  name,
+  moved,
+  onUseLink,
+}: {
+  problem: Problem;
+  quiet?: Quiet;
+  onScan?: () => void;
+  scanning?: boolean;
+  onPasteLink?: () => void;
+  name?: string;
+  moved?: BoardMove;
+  onUseLink?: (to: BoardMove["to"]) => void;
+}) {
   const line = (word: string, detail?: string, action?: ReactNode, tone: "danger" | "muted" = "muted") => (
     <span className="flex flex-wrap items-center gap-x-2 gap-y-0.5">
       <span className={cx("font-medium", tone === "danger" ? "text-danger-text" : "text-ink")}>{word}</span>
@@ -440,17 +479,48 @@ function Status({ problem, quiet, onScan, scanning, onPasteLink }: { problem: Pr
   );
   if (!problem) return quiet ? <span className="text-muted">Nothing for you in the last {quiet.scans} scans</span> : null;
   switch (problem.kind) {
-    case "notFound":
+    case "notFound": {
+      const paste = onPasteLink && (
+        <button type="button" className={linkClass} onClick={onPasteLink}>
+          Paste new link
+        </button>
+      );
+      // Same name isn't proof (anyone can open a board called "Acme"): the board opens to check, and only your click switches.
+      const to = moved && onUseLink ? moved.to : undefined;
+      const href = to && safeUrl(to.careers_url || careersUrl(to as never));
       return line(
         "Careers page not found",
         `since ${shortDate(problem.since)}`,
-        onPasteLink && (
-          <button type="button" className={linkClass} onClick={onPasteLink}>
-            Paste new link
-          </button>
+        to ? (
+          <>
+            <span className="text-muted">
+              Maybe moved to{" "}
+              {href ? (
+                <a href={href} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 text-ink underline underline-offset-2 hover:text-muted">
+                  this {atsLabel(to.ats)} page <ExternalLink className="size-3" aria-hidden />
+                  <span className="sr-only"> (opens in a new tab)</span>
+                </a>
+              ) : (
+                `a ${atsLabel(to.ats)} page`
+              )}
+            </span>
+            <button
+              type="button"
+              className={linkClass}
+              onClick={() => onUseLink?.(to)}
+              aria-label={`Use this ${atsLabel(to.ats)} page for ${name ?? "this company"}`}
+              title="Check it's the same company first"
+            >
+              Use this link
+            </button>
+            {paste}
+          </>
+        ) : (
+          paste
         ),
         "danger",
       );
+    }
     case "notAnswering":
       return line(
         "Not answering",

@@ -143,7 +143,12 @@ export type RunSummary = {
   /** Companies beyond yours checked live this run (their health is in `health` too). */
   checked?: number;
   health: CompanyHealth[];
+  /** Your companies whose board was gone, and the directory board with the same name: suggestions to review, never applied. */
+  moves?: BoardMove[];
 };
+
+/** A company whose board is gone (404), and a live directory board with the same name that may be its new one. */
+export type BoardMove = { name: string; from: CompanyRef; to: CompanyRef };
 
 /** data/jobs.json */
 /** data/history.json: every job ever seen, as merge needs it (internal). */

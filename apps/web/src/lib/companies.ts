@@ -137,3 +137,19 @@ export function addCompanies(draft: Pick<Draft, "companies" | "muted">, list: re
   const keys = new Set(rows.map(keyOf));
   return { patch: { companies: [...draft.companies, ...rows.map(toRow)], muted: draft.muted.filter((k) => !keys.has(k)) }, keys: [...keys] };
 }
+
+/**
+ * Put a company's new board in place of its old one: same place in the list, same name, and the new
+ * board unhidden. Null when the old one isn't in the list or the new board already is.
+ */
+export function replaceCompany(
+  draft: Pick<Draft, "companies" | "muted">,
+  oldKey: string,
+  to: Omit<CompanyRef, "careers_url"> & { careers_url?: string },
+): { patch: Partial<Draft>; before: CompanyRow; key: string } | null {
+  const before = draft.companies.find((r) => keyOf(r) === oldKey);
+  const key = keyOf(to);
+  if (!before || draft.companies.some((r) => keyOf(r) === key)) return null;
+  const row = { ...toRow({ ...to, name: before.name || to.name, careers_url: to.careers_url || careersUrl(to as never) }), id: before.id };
+  return { patch: { companies: draft.companies.map((r) => (r === before ? row : r)), muted: draft.muted.filter((k) => k !== key) }, before, key };
+}

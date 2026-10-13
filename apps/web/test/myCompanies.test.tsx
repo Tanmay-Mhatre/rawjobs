@@ -150,6 +150,31 @@ describe("MyCompanies rows", () => {
     expect(screen.getAllByTitle("See Acme on your Radar").length).toBeGreaterThan(0);
   });
 
+  it("offers the board the last scan suggested for a page not found, switching only on your click", () => {
+    const list = [row("Globex", "globex"), row("Acme", "acme")];
+    const m = meta(1, ["globex", "acme"], (s) => (s === "globex" ? { ok: false, error: "Not found (404)" } : {}));
+    const to = { name: "Globex", ats: "ashby" as const, slug: "globex-inc", careers_url: "https://jobs.ashbyhq.com/globex-inc" };
+    m.runs[0]!.moves = [
+      { name: "Globex", from: { name: "Globex", ats: "greenhouse", slug: "globex", enabled: true }, to: { ...to, enabled: true } },
+      // Already one of yours: not offered.
+      { name: "Acme", from: { name: "Acme", ats: "greenhouse", slug: "acme", enabled: true }, to: { name: "Acme", ats: "greenhouse", slug: "globex", enabled: true } },
+    ];
+    const onUseLink = vi.fn();
+    const { container } = render(<MyCompanies rows={list} savedKeys={keys(list)} meta={m} onUseLink={onUseLink} onPasteLink={() => {}} onRemove={() => {}} onRemoveMany={() => {}} />);
+    const table = within(container.querySelector("table")!);
+    const rowOf = (name: string) => within(table.getByRole("link", { name: `${name}: see its jobs on your Radar` }).closest("tr")!);
+    expect(
+      rowOf("Globex")
+        .getByRole("link", { name: /this Ashby page/ })
+        .getAttribute("href"),
+    ).toBe("https://jobs.ashbyhq.com/globex-inc");
+    expect(rowOf("Globex").getByRole("button", { name: "Paste new link" })).toBeTruthy();
+    expect(onUseLink).not.toHaveBeenCalled();
+    fireEvent.click(rowOf("Globex").getByRole("button", { name: "Use this Ashby page for Globex" }));
+    expect(onUseLink).toHaveBeenCalledWith("greenhouse:globex", expect.objectContaining({ ats: "ashby", slug: "globex-inc" }));
+    expect(rowOf("Acme").queryByRole("button", { name: /Use this/ })).toBeNull();
+  });
+
   it("puts words only on problems, each with its fix", () => {
     const list = [row("Acme", "acme"), row("Globex", "globex"), row("Initech", "initech"), row("Umbrella", "umbrella")];
     const m = meta(3, ["acme", "globex", "initech"], (s, i) => (s === "globex" ? { ok: false, error: "Not found (404)" } : s === "initech" && i === 0 ? { ok: false, error: "timeout" } : {}));

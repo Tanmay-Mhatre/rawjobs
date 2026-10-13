@@ -99,8 +99,9 @@ export type RunEvent =
       checked?: number;
       /** Stopped before the end; the next scan of the same type resumes. */
       stopped?: boolean;
-      /** Your companies whose board moved; your config is updated. */
+      /** Your companies whose board is gone, with a directory board that may be the new one: suggestions, never applied. */
       moves?: { name: string; from: string; to: string }[];
+      /** Older CLIs: switching a moved board in your config failed. */
       moveError?: string;
       /** Older CLIs: jobs found in the directory index. */
       indexJobs?: number;
