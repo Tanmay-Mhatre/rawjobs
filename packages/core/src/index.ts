@@ -20,6 +20,7 @@ export * from "./diagnose";
 export * from "./yaml-writer";
 export * from "./resume";
 export * from "./suggest";
+export * from "./suggest-cache";
 export * from "./discover";
 export * from "./scan";
 export * from "./migrate";

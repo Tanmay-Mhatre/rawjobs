@@ -2,7 +2,7 @@ import { companyIndustries, INDUSTRY_BY_ID } from "./catalog/industries";
 import { COUNTRIES, countriesIn, countryTerms, groupPlaces } from "./catalog/places";
 import { connectors } from "./connectors";
 import type { Profile } from "./schema";
-import { gateOf, scoreJob } from "./score";
+import { passesLocationGate, passesTitleGate, scoreJob } from "./score";
 import { isPlaceholderBoard, matchesAny, matchesTerm, termRegex } from "./text";
 
 /** [title, location, workplace, ageDays, count] — one merged row per (title, location). ageDays is as of the company's fetched_at. */
@@ -95,7 +95,8 @@ export type SuggestResult = {
 
 const GCC = ["united arab emirates", "saudi arabia", "qatar", "bahrain", "kuwait", "oman"];
 const gccTerms = GCC.flatMap((n) => countryTerms(COUNTRIES.find((c) => c.name === n)!, true)).filter((t) => t !== "emirates");
-const BIG_COMPANY_JOBS = 300;
+/** Open jobs above which a company counts as a very large employer (rerankForDiversity). */
+export const BIG_COMPANY_JOBS = 300;
 
 /** If the user targets a GCC place, other GCC places count as "near". Otherwise only remote does. */
 function nearRegionTerms(profile: Profile): string[] {
@@ -131,20 +132,67 @@ function top(counts: Map<string, number>, n: number): string[] {
  *
  * Never suggested: sandbox/training/test boards (isPlaceholderBoard). Job rows older than
  * STALE_ROW_DAYS are ignored.
+ *
+ * Two steps, so the slow one can be kept on disk (suggest-cache.ts): rankCompanies reads every job
+ * row and depends only on the profile, the index and the day; pickSuggestions leaves out the
+ * companies to exclude and cuts the lists to `limit`.
  */
-export function suggestCompanies(
-  profile: Profile,
-  companies: readonly IndexedCompany[],
-  opts: {
-    exclude?: ReadonlySet<string>;
-    limit?: number;
-    now?: Date;
-    /** When the index was built; row ages count from here unless a company has its own fetched_at. Defaults to now. */
-    indexGeneratedAt?: Date;
-    others?: readonly DirectoryCompany[];
-    supported?: ReadonlySet<string>;
-  } = {},
-): SuggestResult {
+export function suggestCompanies(profile: Profile, companies: readonly IndexedCompany[], opts: RankOptions & PickOptions = {}): SuggestResult {
+  return pickSuggestions(rankCompanies(profile, companies, opts), companies, opts);
+}
+
+export type RankOptions = {
+  now?: Date;
+  /** When the index was built; row ages count from here unless a company has its own fetched_at. Defaults to now. */
+  indexGeneratedAt?: Date;
+  others?: readonly DirectoryCompany[];
+  supported?: ReadonlySet<string>;
+};
+
+export type PickOptions = {
+  exclude?: ReadonlySet<string>;
+  limit?: number;
+  now?: Date;
+  indexGeneratedAt?: Date;
+};
+
+/** Every relevant company, best first (bySuggestion), before exclusions, the diversity rule and the limit. */
+export type RankedSuggestions = {
+  hiringNow: CompanySuggestion[];
+  worthWatching: CompanySuggestion[];
+  notScannable: CompanySuggestion[];
+  scanned: number;
+};
+
+/**
+ * Leave out the excluded companies, space out the giants, cut each list to `limit` and add where the
+ * companies hire. Sorting is stable, so leaving companies out after ranking gives the same order as
+ * leaving them out before.
+ */
+export function pickSuggestions(ranked: RankedSuggestions, companies: readonly IndexedCompany[], opts: PickOptions = {}): SuggestResult {
+  const now = opts.now ?? new Date();
+  const generatedAt = opts.indexGeneratedAt ?? now;
+  const limit = opts.limit ?? 30;
+  const keep = (s: CompanySuggestion) => !opts.exclude?.has(s.key);
+  let indexed: Map<string, IndexedCompany> | undefined;
+  // Worked out only for the companies returned: reading places is too slow for the whole index.
+  const withPlaces = (s: CompanySuggestion): CompanySuggestion => {
+    indexed ??= new Map(companies.map((c) => [c.key, c]));
+    const c = indexed.get(s.key);
+    const where = c && hiresIn(c, { now, indexGeneratedAt: generatedAt });
+    return where ? { ...s, hires_in: where } : s;
+  };
+  const order = (list: readonly CompanySuggestion[]) => rerankForDiversity(list.filter(keep)).slice(0, limit).map(withPlaces);
+  return {
+    hiringNow: order(ranked.hiringNow),
+    worthWatching: order(ranked.worthWatching),
+    notScannable: order(ranked.notScannable),
+    scanned: ranked.scanned,
+  };
+}
+
+/** The slow step of suggestCompanies: score every company in the index and the directory for this profile. */
+export function rankCompanies(profile: Profile, companies: readonly IndexedCompany[], opts: RankOptions = {}): RankedSuggestions {
   const now = opts.now ?? new Date();
   const generatedAt = opts.indexGeneratedAt ?? now;
   const near = nearRegionTerms(profile);
@@ -177,11 +225,22 @@ export function suggestCompanies(
   };
   // Compiled once: counting keyword hits across thousands of companies' titles.
   const keywordRes = keywords.map((k) => [k, new RegExp(termRegex(k).source, "giu")] as const);
+  // Remembered per title and per place: the index repeats them a lot (about 270,000 titles and
+  // 64,000 places in 420,000 rows), and reading one is most of the work.
+  const titleOk = memo((title: string) => passesTitleGate(title, profile));
+  const placeOkIn = new Map<string, (location: string) => boolean>();
+  const placeOk = (workplace: string, location: string) => {
+    let ok = placeOkIn.get(workplace);
+    if (!ok) placeOkIn.set(workplace, (ok = memo((l: string) => passesLocationGate({ location: l, workplace: workplace as never }, profile))));
+    return ok(location);
+  };
+  const isNear = memo((location: string) => matchesAny(location, near));
+  const yourPlace = memo((location: string) => (matchesAny(location, places) ? (places.find((t) => matchesTerm(location, t)) ?? "") : ""));
 
   const hiring: CompanySuggestion[] = [];
   const watching: CompanySuggestion[] = [];
   for (const c of companies) {
-    if (opts.exclude?.has(c.key) || isPlaceholderBoard(c.name)) continue;
+    if (isPlaceholderBoard(c.name)) continue;
     let matches = 0;
     let fresh = 0;
     let nearMisses = 0;
@@ -197,7 +256,8 @@ export function suggestCompanies(
     const rows = c.rows.filter((r) => !isStale(r[3], fetchedAt, now));
     for (const [title, location, workplace, age, count] of rows) {
       // Cheap gate check first; full scoring only for the few jobs that pass.
-      const gate = gateOf({ title, location, workplace: workplace as never }, profile);
+      // Same as gateOf, remembered.
+      const gate = !titleOk(title) ? "title" : placeOk(workplace, location) ? undefined : "location";
       const example = location ? `${title} (${location})` : title;
       if (!gate) {
         const posted = rowPostedAt(age, fetchedAt);
@@ -206,7 +266,7 @@ export function suggestCompanies(
         scores.push(scoreJob({ title, location, workplace: workplace as never, description: "" }, profile, { industries: companyIndustries(c) }).score);
         if (examples.length < 3) examples.push(example);
       } else if (gate === "location") {
-        if (workplace === "remote" || matchesAny(location, near)) {
+        if (workplace === "remote" || isNear(location)) {
           nearMisses += count;
           if (nearExamples.length < 3) nearExamples.push(example);
         } else {
@@ -217,7 +277,7 @@ export function suggestCompanies(
         }
       } else {
         // Wrong title: does the company hire in one of the user's places?
-        const place = matchesAny(location, places) ? places.find((t) => matchesTerm(location, t)) : undefined;
+        const place = yourPlace(location);
         if (place) {
           inPlaces += count;
           ownPlaces.set(place, (ownPlaces.get(place) ?? 0) + count);
@@ -276,7 +336,7 @@ export function suggestCompanies(
   // relevant. Ones on hiring systems we can't scan yet get their own list.
   const notScannable: CompanySuggestion[] = [];
   for (const c of opts.others ?? []) {
-    if (opts.exclude?.has(c.key) || isPlaceholderBoard(c.name)) continue;
+    if (isPlaceholderBoard(c.name)) continue;
     const topics = tagTopics(allTags(c));
     const { industries, hires_for } = fitOf(c);
     const s = watchSuggestion(
@@ -303,20 +363,21 @@ export function suggestCompanies(
     } else watching.push(s);
   }
 
-  const limit = opts.limit ?? 30;
-  const indexed = new Map(companies.map((c) => [c.key, c]));
-  // Worked out only for the companies returned: reading places is too slow for the whole index.
-  const withPlaces = (s: CompanySuggestion): CompanySuggestion => {
-    const c = indexed.get(s.key);
-    const where = c && hiresIn(c, { now, indexGeneratedAt: generatedAt });
-    return where ? { ...s, hires_in: where } : s;
-  };
-  const order = (list: CompanySuggestion[]) => rerankForDiversity(list.sort(bySuggestion)).slice(0, limit).map(withPlaces);
   return {
-    hiringNow: order(hiring),
-    worthWatching: order(watching),
-    notScannable: order(notScannable),
+    hiringNow: hiring.sort(bySuggestion),
+    worthWatching: watching.sort(bySuggestion),
+    notScannable: notScannable.sort(bySuggestion),
     scanned: companies.length + (opts.others?.length ?? 0),
+  };
+}
+
+/** f, remembered per argument (f never returns undefined). */
+function memo<T>(f: (key: string) => T): (key: string) => T {
+  const seen = new Map<string, T>();
+  return (key) => {
+    let v = seen.get(key);
+    if (v === undefined) seen.set(key, (v = f(key)));
+    return v;
   };
 }
 

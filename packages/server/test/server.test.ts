@@ -1,4 +1,4 @@
-import { existsSync, mkdirSync, mkdtempSync, realpathSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, writeFileSync } from "node:fs";
 import { createServer, request, type IncomingMessage, type Server } from "node:http";
 import type { AddressInfo } from "node:net";
 import { tmpdir } from "node:os";
@@ -240,6 +240,45 @@ console.log(JSON.stringify({ type: "done", scope: args[args.indexOf("--scope") +
     expect((await call(port, "POST", "/api/run", "{}")).text).toMatch(/updating/);
     expect((await call(port, "POST", "/api/check", '{"keys":["lever:acme"]}')).status).toBe(503);
     expect((await call(port, "POST", "/api/schedule/run")).status).toBe(503);
+  });
+
+  it("keeps suggestion answers on disk, so a restart answers without running the CLI until an input changes", async () => {
+    const { port, home, dataDir } = await start();
+    const config = join(home, "rawjobs.config.local.yaml");
+    const example = readFileSync(join(import.meta.dirname, "../../../rawjobs.config.example.yaml"), "utf8");
+    writeFileSync(config, example);
+    const body = JSON.stringify({ watched: ["greenhouse:a"] });
+    const first = await call(port, "POST", "/api/companies/suggest", body);
+    expect(JSON.parse(first.text)).toMatchObject({ args: ["companies", "suggest", "--json", "--stdin", "--data", dataDir], stdin: body });
+    server!.close();
+
+    // Restarted with a CLI that only fails: the saved answer is served.
+    const broken = join(home, "broken-cli.mjs");
+    writeFileSync(broken, "process.exit(1);");
+    const api = createApi({ home, dataDir, cli: { command: process.execPath, args: [broken] }, version: "9.9.9" });
+    server = createServer((rq, rs) => void api.handle(rq, rs));
+    await new Promise<void>((r) => server!.listen(0, "127.0.0.1", r));
+    const again = (server!.address() as AddressInfo).port;
+    expect((await call(again, "POST", "/api/companies/suggest", body)).text).toBe(first.text);
+
+    // Saving a setting the answer doesn't read changes nothing...
+    writeFileSync(config, `${example}\n# a note\n`);
+    expect((await call(again, "POST", "/api/companies/suggest", body)).text).toBe(first.text);
+    // ...but another body, or muting a company, needs the CLI again.
+    expect((await call(again, "POST", "/api/companies/suggest", JSON.stringify({ watched: [] }))).status).toBe(500);
+    writeFileSync(config, `${example}\ncompanies_muted: ["greenhouse:zzz"]\n`);
+    expect((await call(again, "POST", "/api/companies/suggest", body)).status).toBe(500);
+  });
+
+  it("ranks companies in the background once the directory is up to date", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "rawjobs-warm-"));
+    const log = join(dir, "calls.log");
+    const fake = join(dir, "log-cli.mjs");
+    writeFileSync(fake, `import { appendFileSync } from "node:fs";\nappendFileSync(${JSON.stringify(log)}, process.argv.slice(2, 4).join(" ") + "\\n");\nconsole.log("{}");`);
+    const api = createApi({ home: dir, dataDir: dir, cli: { command: process.execPath, args: [fake] }, version: "9.9.9" });
+    api.startBackground();
+    await until(() => existsSync(log) && readFileSync(log, "utf8").split("\n").length > 2);
+    expect(readFileSync(log, "utf8").trim().split("\n")).toEqual(["directory update", "companies suggest"]);
   });
 
   it("on shutdown, asks the running scan to stop and waits for it", async () => {

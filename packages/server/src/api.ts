@@ -1,8 +1,23 @@
 import { spawn, type ChildProcess } from "node:child_process";
-import { statSync, writeFileSync } from "node:fs";
+import { createHash } from "node:crypto";
+import { readFileSync, writeFileSync } from "node:fs";
 import type { IncomingMessage, ServerResponse } from "node:http";
 import { resolve } from "node:path";
-import { APP_VERSION, cliCommand, type Command } from "@rawjobs/core";
+import {
+  APP_VERSION,
+  CONFIG_CANDIDATES,
+  cliCommand,
+  codeStamp,
+  companyKey,
+  findConfigPath,
+  loadConfig,
+  type Command,
+  fileStamp,
+  LEGACY_CONFIG_CANDIDATES,
+  pruneCache,
+  suggestCacheDir,
+  writeCacheFile,
+} from "@rawjobs/core";
 import { readTracking, saveTracking } from "@rawjobs/core";
 import { refuse } from "./guard";
 import type { Updater } from "./updater";
@@ -108,29 +123,71 @@ Stopped after ${Math.round(timeoutMs / 1000)} s without finishing.`.trim(),
   }
 
   /**
-   * Company suggestions read the whole 40 MB index (about 10 s), so answers are kept per request
-   * body until the index, directory or resume changes. Identical requests in flight share one run.
+   * Company suggestions read the whole 40 MB index, so answers are kept per request body until the
+   * index, directory, resume, config (your companies and muted ones) or the day changes: in memory,
+   * and on disk so the first visit after a restart doesn't wait. Identical requests in flight share
+   * one run. (The CLI keeps its slow step on disk too, for bodies not seen before.)
    */
   const suggestCache = new Map<string, Promise<string>>();
-  function suggestions(body: string): Promise<string> {
-    const mtime = (path: string) => {
+  /**
+   * Suggestion runs one at a time: a page request that comes while the background run ranks
+   * companies waits for it and then reads its ranking, instead of doing the same work alongside.
+   */
+  let suggestRuns: Promise<unknown> = Promise.resolve();
+  function oneSuggestRun<T>(run: () => Promise<T>): Promise<T> {
+    const next = suggestRuns.then(run, run);
+    suggestRuns = next.catch(() => {});
+    return next;
+  }
+  /** A saved answer (written whole by writeCacheFile), or undefined. */
+  const readSaved = (file: string) => {
+    try {
+      const text = readFileSync(file, "utf8");
+      return text.startsWith("{") ? text : undefined;
+    } catch {
+      return undefined;
+    }
+  };
+  /**
+   * The parts of the config an answer depends on: your companies and muted ones (left out), and the
+   * profile when the request doesn't send one. Saving other settings doesn't change it. Read again
+   * only when the file changes; one that doesn't load counts by its file stamp.
+   */
+  let configPart: { stamp: string; part: string } | undefined;
+  function configKey(): string {
+    const files = [...CONFIG_CANDIDATES, ...LEGACY_CONFIG_CANDIDATES].map((f) => resolve(home, f));
+    const stamp = files.map(fileStamp).join(":");
+    if (configPart?.stamp !== stamp) {
+      let part = stamp;
       try {
-        return statSync(path).mtimeMs;
+        const { config } = loadConfig(findConfigPath(home));
+        part = JSON.stringify([config.companies.map(companyKey), config.companies_muted ?? [], config.profile]);
       } catch {
-        return 0;
+        // No config yet, or one that doesn't load: its stamp.
       }
-    };
-    const stamp = [resolve(dataDir, "catalog/index.json"), resolve(dataDir, "catalog/directory.json"), resolve(dataDir, "catalog/additions.json"), resolve(home, "profile/resume.md")]
-      .map(mtime)
-      .join(":");
+      configPart = { stamp, part };
+    }
+    return configPart.part;
+  }
+
+  function suggestions(body: string): Promise<string> {
+    const inputs = [...["index.json", "directory.json", "additions.json"].map((f) => resolve(dataDir, "catalog", f)), resolve(home, "profile/resume.md")];
+    const stamp = [codeStamp(), new Date().toISOString().slice(0, 10), ...inputs.map(fileStamp), configKey()].join("|");
     const key = `${stamp}|${body}`;
     let hit = suggestCache.get(key);
     if (!hit) {
-      hit = collect(["companies", "suggest", "--json", "--stdin", "--data", dataDir], body).then((r) => {
-        const out = r.stdout.trim();
-        if (!out.startsWith("{")) throw new Error((r.stderr || "suggestions failed").trim().slice(-1500));
-        return out;
-      });
+      const dir = suggestCacheDir(dataDir);
+      const file = resolve(dir, `answer-${createHash("sha256").update(key).digest("hex").slice(0, 32)}.json`);
+      const saved = readSaved(file);
+      hit = saved
+        ? Promise.resolve(saved)
+        : oneSuggestRun(() => collect(["companies", "suggest", "--json", "--stdin", "--data", dataDir], body)).then((r) => {
+            const out = r.stdout.trim();
+            if (!out.startsWith("{")) throw new Error((r.stderr || "suggestions failed").trim().slice(-1500));
+            writeCacheFile(dir, file, out);
+            pruneCache(dir, "answer-");
+            return out;
+          });
       hit.catch(() => suggestCache.delete(key));
       suggestCache.set(key, hit);
       // Keep the last few profiles only.
@@ -323,8 +380,14 @@ Stopped after ${Math.round(timeoutMs / 1000)} s without finishing.`.trim(),
   }
 
   /** Keep the shared company directory fresh: a weekly check in the background, off if you turned it off. */
+  /**
+   * Once the directory is up to date, rank companies for the saved profile in the background, so
+   * the Companies page's first visit reads the ranking from disk instead of waiting for it.
+   */
   function startBackground() {
-    cli(["directory", "update", "--auto", "--if-older", "7", "--data", dataDir]).on("error", () => {});
+    const update = cli(["directory", "update", "--auto", "--if-older", "7", "--data", dataDir]);
+    update.on("error", () => {});
+    update.on("close", () => void oneSuggestRun(() => collect(["companies", "suggest", "--json", "--data", dataDir])));
   }
 
   /**
