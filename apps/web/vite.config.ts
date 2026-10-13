@@ -42,6 +42,7 @@ export default defineConfig(({ command }) => ({
   // dashboard is shipped to other people, and the server serves data/ live next to it.
   publicDir: command === "serve" ? dataDir : false,
   plugins: [react(), tailwindcss(), localApi()],
-  // open: `pnpm dev` opens the dashboard in your browser (BROWSER=none turns that off).
-  server: { port: 5173, host: "127.0.0.1", open: true },
+  // open: false, so `pnpm dev` never opens a browser tab by itself. Test runs start it on other
+  // ports, and a stray tab in your browser can clash with the installed app. Open the URL yourself.
+  server: { port: 5173, host: "127.0.0.1", open: false },
 }));

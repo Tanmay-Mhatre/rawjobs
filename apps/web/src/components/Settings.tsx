@@ -363,7 +363,7 @@ export function Settings({
         {page(
           "scans",
           <>
-            <Section id="scope" title="What to scan" hint="What Scan now does. Saved in this browser, right away.">
+            <Section id="scope" title="What to scan" hint={canRunLocally ? "What Scan now does. Saved on this computer, right away." : "What Scan now does. Saved in this browser, right away."}>
               <div className="space-y-3">
                 <ScanPrefsPicker />
                 <details className="type-small">
