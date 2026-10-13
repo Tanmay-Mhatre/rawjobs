@@ -7,6 +7,7 @@ import { readLedger } from "../src/discover";
 import { readProgress, resumable, scan, type ScanStart } from "../src/scan";
 import { estimateSeconds, readSpeeds, recordSpeeds, scopeCompanies, type DirectoryEntry } from "../src/scope";
 import { fakeHttp, fixture, json } from "./helpers";
+import type { DataMeta } from "../src/schema";
 
 const now = new Date("2026-10-03T12:00:00Z");
 
@@ -192,14 +193,23 @@ describe("scan", () => {
     expect(resumable(dir, "all", now)?.done).toBe(done);
   });
 
-  it("fetches a company whose board moved on its new board, and reports the move", async () => {
+  it("suggests a same-name directory board for a company whose board is gone, but never switches to it", async () => {
     const dir = setup([...DIRECTORY, entry("lever:leverco2", { name: "Old Co" })]);
     const cfg = config(`  - { name: "Old Co", ats: ashby, slug: "oldco" }`);
-    const lever = (url: string) => (url.includes("lever.co/v0/postings/leverco2") ? json(fixture("lever.json")) : routes(url));
+    const calls: string[] = [];
+    const lever = (url: string) => {
+      calls.push(url);
+      return url.includes("lever.co/v0/postings/leverco2") ? json(fixture("lever.json")) : routes(url);
+    };
     const r = await scan(cfg, { dataDir: dir, http: fakeHttp(lever).http, now, scope: "mine" });
     expect(r.moves.map((m) => [m.name, `${m.from.ats}:${m.from.slug}`, `${m.to.ats}:${m.to.slug}`])).toEqual([["Old Co", "ashby:oldco", "lever:leverco2"]]);
-    expect(r.result.health.find((h) => h.slug === "leverco2")).toMatchObject({ ok: true, company: "Old Co" });
-    expect(r.result.health.some((h) => h.slug === "oldco")).toBe(false);
+    // Same name proves nothing: the suggested board isn't fetched, and the old one stays yours (and failing) until you choose.
+    expect(calls.some((u) => u.includes("leverco2"))).toBe(false);
+    expect(r.result.health.find((h) => h.slug === "oldco")).toMatchObject({ ok: false });
+    expect(r.result.health.some((h) => h.slug === "leverco2")).toBe(false);
+    const meta = JSON.parse(readFileSync(join(dir, "meta.json"), "utf8")) as DataMeta;
+    expect(meta.companies.map((c) => `${c.ats}:${c.slug}`)).toContain("ashby:oldco");
+    expect(meta.runs[0]!.moves?.map((m) => `${m.from.slug}>${m.to.slug}`)).toEqual(["oldco>leverco2"]);
   });
 
   it("works without companies of your own", async () => {

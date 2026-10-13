@@ -1,7 +1,7 @@
 import { companyLabel } from "@rawjobs/core/display-name";
 import { ArrowRight, Check, CircleAlert, LoaderCircle, Radar, RefreshCw, X } from "lucide-react";
 import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
-import { addCompanies, countCompanies, jobCompanyKey, keyOf, wantsAttention, type CompanyRef } from "../lib/companies";
+import { addCompanies, countCompanies, jobCompanyKey, keyOf, replaceCompany, wantsAttention, type CompanyRef } from "../lib/companies";
 import { companyIndex, nameRank, type CompanyIndex } from "../lib/companySearch";
 import { useCompanySuggestions, useSuggestPoolSize, type SuggestState } from "../lib/companySuggest";
 import { coverageLine, initialCompaniesTab, type CompaniesTabId } from "../lib/companiesPage";
@@ -294,6 +294,18 @@ export function CompaniesTab({ configured, meta, jobs, draft, loaded, saved, upd
     });
   };
 
+  /** Switch a company to the board the last scan suggested (only on your click), with Undo in a toast. */
+  const switchLinkWithUndo = (oldKey: string, to: Parameters<typeof replaceCompany>[2]) => {
+    const done = replaceCompany(draft, oldKey, to);
+    if (!done) return;
+    update(done.patch);
+    toast({
+      message: `Updated ${companyLabel(done.before)}'s careers link.`,
+      actionLabel: "Undo",
+      onAction: () => update({ companies: latest.current.companies.map((r) => (keyOf(r) === done.key ? done.before : r)) }),
+    });
+  };
+
   // Hidden companies: muted in your config (by key) and hidden on the Radar (by name), shown once each.
   const names = new Map((directory ?? []).map((c) => [c.key, c.name]));
   const mutedRows = draft.muted.map((key) => ({ key, name: names.get(key) }));
@@ -373,6 +385,7 @@ export function CompaniesTab({ configured, meta, jobs, draft, loaded, saved, upd
             onScan={onScan}
             scanning={scanning}
             onPasteLink={() => openLink()}
+            onUseLink={switchLinkWithUndo}
             hidden={hidden}
             onShowAgain={(h) => {
               if (h.key) update({ muted: draft.muted.filter((k) => k !== h.key) });

@@ -4,7 +4,6 @@ import { parseArgs } from "node:util";
 import {
   defaultDataDir,
   loadConfig,
-  saveConfig,
   scan,
   syncDirectory,
   syncJobFeed,
@@ -21,8 +20,6 @@ import {
   type ScheduledRun,
   resumable,
   SCAN_SCOPES,
-  personalConfigPath,
-  type BoardMove,
   type ScanScope,
   type CompanyHealth,
   type Config,
@@ -60,19 +57,6 @@ export function stopSignal(dataDir: string): () => boolean {
     console.error("\nStopping after the companies in progress… (progress is saved; run again to resume)");
   });
   return () => interrupted || existsSync(stopFile(dataDir));
-}
-
-/** Moved boards go into your personal config (the scan already fetched them on their new board). */
-export function saveMoves(config: Config, path: string, moves: BoardMove[]): string | undefined {
-  if (!moves.length) return undefined;
-  if (resolve(path) !== personalConfigPath()) return `Update ${path} by hand: ${moves.map((m) => `${m.name} is now ${m.to.ats}:${m.to.slug}`).join("; ")}`;
-  const key = (c: { ats: string; slug: string }) => `${c.ats}:${c.slug}`.toLowerCase();
-  const companies = config.companies.map((c) => {
-    const m = moves.find((x) => key(x.from) === key(c));
-    return m ? { ...m.to, enabled: c.enabled } : c;
-  });
-  const res = saveConfig({ ...config, companies });
-  return res.ok ? undefined : res.errors;
 }
 
 export const duration = (s: number) => (s < 90 ? `${Math.max(1, Math.round(s / 60))} min` : s < 5400 ? `${Math.round(s / 60)} min` : `${(s / 3600).toFixed(1)} h`);
@@ -178,9 +162,7 @@ export async function cmdRun(args: string[]): Promise<number> {
       console.log(`\n${matches.length} jobs passed your title and location gates (${fresh} new); ${matches.filter((j) => j.score >= min).length} scored ${min}+ (alert threshold).`);
       if (checks.length) console.log(`Checked ${checks.length.toLocaleString()} directory companies besides yours.`);
       if (stopped) console.log("Stopped before the end. Run the same scan again to carry on where it stopped.");
-      for (const m of moves) console.log(`${m.name} moved from ${m.from.ats}:${m.from.slug} to ${m.to.ats}:${m.to.slug}; your config is updated.`);
-      const moveError = values["dry-run"] ? undefined : saveMoves(config, path, moves);
-      if (moveError) console.error(moveError);
+      for (const m of moves) console.log(`${m.name}'s careers page is gone. It may have moved to ${m.to.ats}:${m.to.slug}: check it's the same company, then update its link in My companies.`);
       console.log("");
       if (shown.length) printJobs(shown, min);
 
@@ -278,7 +260,6 @@ export async function runNdjson(values: RunValues): Promise<number> {
           else if (done % 25 === 0) emit({ type: "progress", done, ats: h.ats, doneByAts });
         },
       });
-      const moveError = values["dry-run"] ? undefined : saveMoves(config, path, moves);
       const matches = result.jobs.filter((j) => !j.why.gate);
       emit({
         type: "done",
@@ -290,7 +271,6 @@ export async function runNdjson(values: RunValues): Promise<number> {
         checked: checks.length,
         stopped,
         moves: moves.map((m) => ({ name: m.name, from: `${m.from.ats}:${m.from.slug}`, to: `${m.to.ats}:${m.to.slug}` })),
-        ...(moveError ? { moveError } : {}),
       });
       if (existsSync(notifyFile(dataDir))) {
         rmSync(notifyFile(dataDir), { force: true });

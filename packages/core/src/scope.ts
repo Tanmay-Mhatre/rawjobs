@@ -5,7 +5,7 @@ import { companyKey, connectors } from "./connectors";
 import { companyWords } from "./employers";
 import { isPlaceholderBoard } from "./text";
 import type { ScanScope } from "./protocol";
-import type { CompanyHealth, CompanyRef, Config } from "./schema";
+import type { BoardMove, CompanyHealth, CompanyRef, Config } from "./schema";
 import type { DirectoryCompany } from "./suggest";
 
 /**
@@ -145,11 +145,10 @@ export function estimateSeconds(companies: readonly Pick<CompanyRef, "ats" | "re
   return Math.ceil(Math.max(0, ...lanes.values()));
 }
 
-export type BoardMove = { name: string; from: CompanyRef; to: CompanyRef };
-
 /**
  * Your companies whose board is gone (404 this scan) but which the directory knows on another live
- * board we can read: the company moved hiring system or renamed its board.
+ * board we can read: the company may have moved hiring system or renamed its board. Only a suggestion:
+ * the same name proves nothing (anyone can open a board called "Acme"), so the user checks it and chooses.
  */
 export function findMoves(config: Config, directory: readonly DirectoryEntry[], health: readonly CompanyHealth[]): BoardMove[] {
   const gone = new Set(health.filter((h) => !h.ok && /\(404\)/.test(h.error ?? "")).map((h) => `${h.ats}:${h.slug}`.toLowerCase()));
