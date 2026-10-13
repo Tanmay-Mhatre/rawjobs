@@ -54,6 +54,7 @@ const SYSTEMS = [
   "Paylocity",
   "Paycom",
   "Hireology",
+  "UKG Pro (UltiPro)",
   "Comeet",
   "Oracle Recruiting",
   "SAP SuccessFactors",

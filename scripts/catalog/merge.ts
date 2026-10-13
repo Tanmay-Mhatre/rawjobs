@@ -71,7 +71,7 @@ const keyOf = (ats: string, slug: string, shard?: string, site?: string) => comp
 
 function add(src: SourceId, b: { ats: string; slug: string; region?: string; shard?: string; site?: string; name?: string }) {
   if (!TRACKED.has(b.ats) || !b.slug) return;
-  if (b.ats === "workday" && (!b.shard || !b.site)) return;
+  if ((b.ats === "workday" || b.ats === "ukg") && (!b.shard || !b.site)) return;
   if ((b.ats === "taleo" && !b.site) || (b.ats === "oracle" && !b.shard)) return;
   const key = keyOf(b.ats, b.slug, b.shard, b.site);
   const prev = boards.get(key);
@@ -187,6 +187,7 @@ for (const f of existsSync(raw("kalil0321")) ? readdirSync(raw("kalil0321")).fil
     // JOIN: the slug, plus the numeric company id its API needs (kept in shard).
     join: () => undefined,
     smartrecruiters: (e) => e.company_identifier && `https://jobs.smartrecruiters.com/${enc(e.company_identifier)}`,
+    ultipro: (e) => e.host && e.company_code && e.board_id && `https://${e.host}/${e.company_code}/JobBoard/${e.board_id}`,
     // Career-site hosts; added as boards in the loop below (no URL rule reveals them).
     successfactors: () => undefined,
     teamtailor: (e) => e.host && `https://${e.host}`,

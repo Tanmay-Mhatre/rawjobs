@@ -87,6 +87,7 @@ export const SCANNABLE = new Set([
   "paylocity",
   "paycom",
   "hireology",
+  "ukg",
 ]);
 const SLUG = /^[A-Za-z0-9][A-Za-z0-9._-]{0,99}$/;
 /** What `shard` may look like per system (the rest have none). */
@@ -96,11 +97,13 @@ const SHARD: Record<string, RegExp> = {
   successfactors: /^[a-z0-9.-]{1,60}\.(successfactors\.(com|eu)|sapsf\.(com|eu|cn))$/,
   // JOIN's numeric company id.
   join: /^\d{1,10}$/,
+  // UKG Pro Recruiting's host (recruiting2.ultipro.com, acme.rec.pro.ukg.net).
+  ukg: /^[a-z0-9-]{1,60}\.(ultipro\.com|rec\.pro\.ukg\.net)$/,
   // Zoho Recruit's data centre, when it isn't .com.
   zoho: /^(eu|in|com\.au|jp|ca|sa|uk|com\.cn)$/,
 };
 /** Systems that need `site` (the rest may carry one). */
-const NEEDS_SITE = new Set(["workday", "taleo", "comeet"]);
+const NEEDS_SITE = new Set(["workday", "taleo", "comeet", "ukg"]);
 /** The app's name and, optionally, its version ("rawjobs", "rawjobs/0.1.0"; apps from before the rename send "job-hunter"). Anything else is dropped. */
 const CLIENT = /^(rawjobs|job-hunter)(\/\d{1,3}\.\d{1,3}\.\d{1,4})?$/;
 const MAX_BODY = 20_000;
@@ -119,7 +122,7 @@ function clean(b: unknown): Board | null {
   if (typeof o.slug !== "string" || !SLUG.test(o.slug)) return null;
   const shard = SHARD[o.ats];
   if (o.shard !== undefined && !(shard && typeof o.shard === "string" && shard.test(o.shard))) return null;
-  if ((o.ats === "workday" || o.ats === "oracle") && o.shard === undefined) return null;
+  if ((o.ats === "workday" || o.ats === "oracle" || o.ats === "ukg") && o.shard === undefined) return null;
   if (o.site !== undefined && !(typeof o.site === "string" && SLUG.test(o.site))) return null;
   if (NEEDS_SITE.has(o.ats) && o.site === undefined) return null;
   const name = cleanName(o.name, 100);

@@ -94,6 +94,8 @@ const QUERIES: { url: string; matchType?: "domain" }[] = [
   { url: "recruiting.paylocity.com/Recruiting/Jobs/All/*" },
   { url: "www.paycomonline.net/v4/ats/web.php/portal/*" },
   { url: "careers.hireology.com/*" },
+  { url: "ultipro.com", matchType: "domain" },
+  { url: "rec.pro.ukg.net", matchType: "domain" },
 ];
 
 /**
