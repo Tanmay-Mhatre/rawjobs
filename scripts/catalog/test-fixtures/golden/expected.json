@@ -25,6 +25,13 @@
    ]
   },
   {
+   "key": "bamboohr:goldenpayroll",
+   "confidence": "single",
+   "families": [
+    "kalil"
+   ]
+  },
+  {
    "key": "greenhouse:takendown",
    "confidence": "single",
    "families": [
@@ -43,6 +50,20 @@
    "confidence": "single",
    "families": [
     "commoncrawl"
+   ]
+  },
+  {
+   "key": "teamtailor:goldenstudio",
+   "confidence": "single",
+   "families": [
+    "openingsmcp"
+   ]
+  },
+  {
+   "key": "workday:goldenbank|wd3|careers",
+   "confidence": "single",
+   "families": [
+    "openingsmcp"
    ]
   }
  ],

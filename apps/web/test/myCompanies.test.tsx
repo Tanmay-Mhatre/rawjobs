@@ -1,6 +1,13 @@
 // @vitest-environment happy-dom
 import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
+
+vi.mock("../src/lib/setup", async (orig) => ({
+  ...(await orig<typeof import("../src/lib/setup")>()),
+  checkCompanies: vi.fn(async (urls: string[]) =>
+    urls.map((input) => ({ input, status: "live", ats: "ashby", slug: "globex-inc", careers_url: "https://jobs.ashbyhq.com/globex-inc", name: "Globex", name_source: "ats", open_jobs: 14 })),
+  ),
+}));
 import { MyCompanies } from "../src/components/Companies";
 import type { CompanyHealth, DataMeta } from "../src/lib/data";
 import { barsOf, barsSummary, filterCounts, pageOf, problemOf, quietOf, type Seen } from "../src/lib/myCompanies";
@@ -173,6 +180,46 @@ describe("MyCompanies rows", () => {
     fireEvent.click(rowOf("Globex").getByRole("button", { name: "Use this Ashby page for Globex" }));
     expect(onUseLink).toHaveBeenCalledWith("greenhouse:globex", expect.objectContaining({ ats: "ashby", slug: "globex-inc" }));
     expect(rowOf("Acme").queryByRole("button", { name: /Use this/ })).toBeNull();
+  });
+
+  it("updates a link in place: check it, see old and new, and only Use this link changes anything", async () => {
+    const list = [row("Globex", "globex"), row("Acme", "acme")];
+    const m = meta(2, ["globex", "acme"], (s) => (s === "globex" ? { ok: false, error: "Not found (404)" } : {}));
+    const onUpdateLink = vi.fn();
+    const { container } = render(<MyCompanies rows={list} savedKeys={keys(list)} meta={m} onUpdateLink={onUpdateLink} onRemove={() => {}} onRemoveMany={() => {}} attention={1} />);
+    const table = within(container.querySelector("table")!);
+    const open = table.getByRole("button", { name: "Update Globex's careers link" });
+    expect(open.getAttribute("aria-expanded")).toBe("false");
+    fireEvent.click(open);
+    expect(open.getAttribute("aria-expanded")).toBe("true");
+    const input = table.getByLabelText("New careers link for Globex");
+    expect(document.activeElement).toBe(input);
+
+    // Escape closes without a change, and focus goes back to the button.
+    fireEvent.keyDown(input, { key: "Escape" });
+    expect(table.queryByLabelText("New careers link for Globex")).toBeNull();
+    expect(document.activeElement).toBe(open);
+
+    fireEvent.click(open);
+    fireEvent.change(table.getByLabelText("New careers link for Globex"), { target: { value: "https://jobs.ashbyhq.com/globex-inc" } });
+    fireEvent.click(table.getByRole("button", { name: "Check link" }));
+    expect(await table.findByText("Not found")).toBeTruthy();
+    expect(table.getByRole("link", { name: /jobs\.ashbyhq\.com\/globex-inc/ }).getAttribute("href")).toBe("https://jobs.ashbyhq.com/globex-inc");
+    expect(table.getByText(/Ashby · 14 open jobs/)).toBeTruthy();
+    expect(onUpdateLink).not.toHaveBeenCalled();
+
+    fireEvent.click(table.getByRole("button", { name: "Use this link" }));
+    expect(onUpdateLink).toHaveBeenCalledWith("greenhouse:globex", expect.objectContaining({ ats: "ashby", slug: "globex-inc", name: "Globex" }), {});
+    expect(table.queryByLabelText("New careers link for Globex")).toBeNull();
+  });
+
+  it("offers Update link on a company that hasn't answered for a few scans, not after one", () => {
+    const list = [row("Initech", "initech"), row("Hooli", "hooli")];
+    const m = meta(3, ["initech", "hooli"], (s, i) => (s === "initech" && i < 2 ? { ok: false, error: "timeout" } : s === "hooli" && i === 0 ? { ok: false, error: "timeout" } : {}));
+    const { container } = render(<MyCompanies rows={list} savedKeys={keys(list)} meta={m} onUpdateLink={() => {}} onRemove={() => {}} onRemoveMany={() => {}} />);
+    const table = within(container.querySelector("table")!);
+    expect(table.getByRole("button", { name: "Update Initech's careers link" })).toBeTruthy();
+    expect(table.queryByRole("button", { name: "Update Hooli's careers link" })).toBeNull();
   });
 
   it("puts words only on problems, each with its fix", () => {

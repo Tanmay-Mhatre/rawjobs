@@ -7,9 +7,11 @@
  * Licences: only "publishable" sources may put a board into our list. Restricted sources
  * (share-alike / non-commercial) only add agreement votes to boards that are already in it.
  */
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { ATS_TYPES, companyKey, detectCompany, type AtsType } from "@rawjobs/core";
+import { parse as parseYaml } from "yaml";
+import { BOARD_URL, freehireBoards } from "./lib/freehire";
 import { catalogDir, dataDir } from "./lib/paths";
 
 const raw = (...p: string[]) => join(catalogDir, "raw", ...p);
@@ -26,6 +28,10 @@ const SOURCES = {
   probe: { family: "probe", publishable: true },
   latmay: { family: "latmay", publishable: true },
   kalil: { family: "kalil", publishable: true },
+  // amikai/openings-mcp companies.yaml lists (MIT, attribution in the directory repo's NOTICE.md).
+  openingsmcp: { family: "openingsmcp", publishable: true },
+  // strelov1/freehire's last committed board list (MIT, pinned in lib/freehire.ts).
+  freehire: { family: "freehire", publishable: true },
   conors: { family: "openjobsdata", publishable: true },
   // LastRound AI ATS directory (CC BY 4.0, attribution in the directory repo's NOTICE.md).
   lastround: { family: "lastround", publishable: true },
@@ -144,12 +150,49 @@ withFile(raw("latmay", "ats_career_page_urls.csv"), (p) => {
   for (const [url] of rows) if (url) fromUrl("latmay", url);
   count("latmay", rows.length);
 });
-for (const f of ["greenhouse", "lever", "ashby", "smartrecruiters", "workday"]) {
-  const p = raw("kalil0321", `${f}.csv`);
-  if (!existsSync(p)) continue;
+for (const f of existsSync(raw("kalil0321")) ? readdirSync(raw("kalil0321")).filter((n) => n.endsWith(".csv")) : []) {
+  const p = raw("kalil0321", f);
   const rows = csvRows(p);
   for (const [name, , url] of rows) if (url) fromUrl("kalil", url, name);
   count("kalil", rows.length);
+}
+{
+  // openings-mcp: each provider's entry fields, turned into the careers URL our detection reads.
+  const enc = encodeURIComponent;
+  const toUrl: Record<string, (e: Record<string, string>) => string | undefined> = {
+    ashby: (e) => e.board && `https://jobs.ashbyhq.com/${enc(e.board)}`,
+    bamboohr: (e) => e.slug && `https://${e.slug}.bamboohr.com/careers`,
+    greenhouse: (e) => e.board_token && `https://job-boards.greenhouse.io/${enc(e.board_token)}`,
+    icims: (e) => e.host && `https://${e.host}/jobs`,
+    lever: (e) => e.site && `https://jobs.lever.co/${enc(e.site)}`,
+    oracle: (e) => e.host && e.site && `https://${e.host}/hcmUI/CandidateExperience/en/sites/${enc(e.site)}`,
+    recruitee: (e) => e.slug && `https://${e.slug}.recruitee.com`,
+    rippling: (e) => e.board_slug && `https://ats.rippling.com/${enc(e.board_slug)}/jobs`,
+    smartrecruiters: (e) => e.company_identifier && `https://jobs.smartrecruiters.com/${enc(e.company_identifier)}`,
+    teamtailor: (e) => e.host && `https://${e.host}`,
+    workable: (e) => e.account && `https://apply.workable.com/${enc(e.account)}`,
+    workday: (e) => e.tenant && e.instance && e.site && `https://${e.tenant}.${e.instance}.myworkdayjobs.com/${enc(e.site)}`,
+  };
+  for (const [provider, url] of Object.entries(toUrl)) {
+    withFile(raw("openingsmcp", `${provider}.yaml`), (p) => {
+      const list = parseYaml(readFileSync(p, "utf8")) as Record<string, string>[] | null;
+      for (const e of list ?? []) {
+        // Hosts and slugs come from a public list: only plain host names reach a URL.
+        if (e.host && !/^[a-z0-9.-]+$/i.test(e.host)) continue;
+        if (e.slug && !/^[a-z0-9_-]+$/i.test(e.slug)) continue;
+        const u = url(e);
+        if (u) fromUrl("openingsmcp", u, e.company);
+      }
+      count("openingsmcp", list?.length ?? 0);
+    });
+  }
+}
+for (const provider of Object.keys(BOARD_URL)) {
+  withFile(raw("freehire", `${provider}.yml`), (p) => {
+    const entries = (parseYaml(readFileSync(p, "utf8")) as { company?: unknown; board?: unknown }[] | null) ?? [];
+    for (const b of freehireBoards(provider, entries)) add("freehire", b);
+    count("freehire", entries.length);
+  });
 }
 withFile(raw("lastround", "ats-directory.csv"), (p) => {
   // Columns by header name: ats_vendor, company_name, board_slug, last_crawled.
