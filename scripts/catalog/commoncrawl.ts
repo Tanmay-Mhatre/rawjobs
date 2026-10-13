@@ -91,6 +91,7 @@ const QUERIES: { url: string; matchType?: "domain" }[] = [
   { url: "fa.ocs.oraclecloud.com", matchType: "domain" },
   { url: "fa.ap1.oraclecloud.com", matchType: "domain" },
   { url: "fa.ca2.oraclecloud.com", matchType: "domain" },
+  { url: "recruiting.paylocity.com/Recruiting/Jobs/All/*" },
 ];
 
 /**

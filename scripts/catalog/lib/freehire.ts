@@ -31,6 +31,8 @@ export const BOARD_URL: Record<string, (b: string) => string | undefined> = {
     const [host, site] = b.split("/");
     return host && site && plain(host) ? `https://${host}/hcmUI/CandidateExperience/en/sites/${enc(site)}` : undefined;
   },
+  // The company GUID of recruiting.paylocity.com/Recruiting/Jobs/All/{guid}
+  paylocity: (b) => (/^[0-9a-f-]{36}$/i.test(b) ? `https://recruiting.paylocity.com/Recruiting/Jobs/All/${b}` : undefined),
   personio: (b) => (plain(b) ? `https://${b}.jobs.personio.com` : undefined),
   pinpoint: (b) => (plain(b) ? `https://${b}.pinpointhq.com` : undefined),
   recruitee: (b) => (plain(b) ? `https://${b}.recruitee.com` : undefined),

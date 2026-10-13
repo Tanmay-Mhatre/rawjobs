@@ -51,6 +51,7 @@ const SYSTEMS = [
   "HiBob",
   "Freshteam",
   "JOIN",
+  "Paylocity",
   "Comeet",
   "Oracle Recruiting",
   "SAP SuccessFactors",
