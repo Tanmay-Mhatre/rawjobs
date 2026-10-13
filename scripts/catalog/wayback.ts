@@ -101,6 +101,18 @@ const QUERIES: { url: string; matchType: "prefix" | "domain" }[] = [
   { url: "workforcenow.adp.com/mascsr/default/mdf/recruitment/", matchType: "prefix" },
   { url: "applicantpro.com", matchType: "domain" },
   { url: "isolvedhire.com", matchType: "domain" },
+  { url: "recruitingbypaycor.com/career/", matchType: "prefix" },
+  { url: "hiringthing.com", matchType: "domain" },
+  { url: "prismhr-hire.com", matchType: "domain" },
+  { url: "oasisrecruit.com", matchType: "domain" },
+  { url: "www.careers-page.com/", matchType: "prefix" },
+  { url: "hire.trakstar.com", matchType: "domain" },
+  { url: "factorialhr.com", matchType: "domain" },
+  { url: "factorial.es", matchType: "domain" },
+  { url: "jobs.gem.com/", matchType: "prefix" },
+  { url: "hrmdirect.com", matchType: "domain" },
+  { url: "career.softgarden.de", matchType: "domain" },
+  { url: "csod.com", matchType: "domain" },
 ];
 
 type Progress = { pages?: number; next: number };

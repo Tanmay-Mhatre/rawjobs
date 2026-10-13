@@ -102,6 +102,18 @@ const QUERIES: { url: string; matchType?: "domain" }[] = [
   { url: "workforcenow.adp.com/mascsr/default/mdf/recruitment/*" },
   { url: "applicantpro.com", matchType: "domain" },
   { url: "isolvedhire.com", matchType: "domain" },
+  { url: "recruitingbypaycor.com/career/*" },
+  { url: "hiringthing.com", matchType: "domain" },
+  { url: "prismhr-hire.com", matchType: "domain" },
+  { url: "oasisrecruit.com", matchType: "domain" },
+  { url: "www.careers-page.com/*" },
+  { url: "hire.trakstar.com", matchType: "domain" },
+  { url: "factorialhr.com", matchType: "domain" },
+  { url: "factorial.es", matchType: "domain" },
+  { url: "jobs.gem.com/*" },
+  { url: "hrmdirect.com", matchType: "domain" },
+  { url: "career.softgarden.de", matchType: "domain" },
+  { url: "csod.com", matchType: "domain" },
 ];
 
 /**

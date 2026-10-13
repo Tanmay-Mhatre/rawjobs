@@ -28,6 +28,8 @@ export const BOARD_URL: Record<string, (b: string) => string | undefined> = {
     const [cid, ccId] = b.split(":");
     return cid && ccId && plain(cid) && plain(ccId) ? `https://workforcenow.adp.com/mascsr/default/mdf/recruitment/recruitment.html?cid=${cid}&ccId=${ccId}` : undefined;
   },
+  // The tenant subdomain of {tenant}.csod.com
+  cornerstone: (b) => (plain(b) && !b.includes(".") ? `https://${b}.csod.com/ux/ats/careersite/1/home?c=${b}` : undefined),
   // "{tenant}/{site}[/{culture}]" on jobs.dayforcehcm.com
   dayforce: (b) => {
     const [tenant, site, culture] = b.split("/");
@@ -35,17 +37,27 @@ export const BOARD_URL: Record<string, (b: string) => string | undefined> = {
   },
   // "{host}/{tenant domain}"; kept as a board directly in freehireBoards (custom hosts included).
   eightfold: () => undefined,
+  // The careers site host ({tenant}.factorial.es, .factorialhr.com…)
+  factorial: (b) => (plain(b) && b.includes(".") ? `https://${b}/` : undefined),
   freshteam: (b) => (plain(b) ? `https://${b}.freshteam.com/jobs` : undefined),
+  // The board name of jobs.gem.com/{board}
+  gem: (b) => (plain(b) && !b.includes(".") ? `https://jobs.gem.com/${b}` : undefined),
   greenhouse: (b) => `https://job-boards.greenhouse.io/${enc(b)}`,
   // The tenant slug of careers.hireology.com/{slug}
   hireology: (b) => (plain(b) && !b.includes(".") ? `https://careers.hireology.com/${b}` : undefined),
+  // The careers site host ({tenant}.hiringthing.com or a reseller domain)
+  hiringthing: (b) => (plain(b) && b.includes(".") ? `https://${b}/` : undefined),
   hibob: (b) => (plain(b) ? `https://${b}.careers.hibob.com` : undefined),
   // A bare id is the careers-{id}.icims.com portal; full hosts are companies' own domains (not detectable yet).
+  // The account subdomain of {account}.hrmdirect.com
+  hrmdirect: (b) => (plain(b) && !b.includes(".") ? `https://${b}.hrmdirect.com/employment/` : undefined),
   icims: (b) => (plain(b) && !b.includes(".") ? `https://careers-${b}.icims.com/jobs` : undefined),
   jazzhr: (b) => (plain(b) ? `https://${b}.applytojob.com/apply` : undefined),
   jobvite: (b) => `https://jobs.jobvite.com/${enc(b)}`,
   lever: (b) => `https://jobs.lever.co/${enc(b)}`,
   // "{host}/{siteNumber}"
+  // The careers page name of www.careers-page.com/{slug}
+  manatal: (b) => (plain(b) && !b.includes(".") ? `https://www.careers-page.com/${b}` : undefined),
   oracle: (b) => {
     const [host, site] = b.split("/");
     return host && site && plain(host) ? `https://${host}/hcmUI/CandidateExperience/en/sites/${enc(site)}` : undefined;
@@ -56,15 +68,21 @@ export const BOARD_URL: Record<string, (b: string) => string | undefined> = {
   paylocity: (b) => (/^[0-9a-f-]{36}$/i.test(b) ? `https://recruiting.paylocity.com/Recruiting/Jobs/All/${b}` : undefined),
   // The careers site's host; kept as a board directly in freehireBoards.
   phenom: () => undefined,
+  // The 32-hex clientId of recruitingbypaycor.com/career/CareerHome.action?clientId={id}
+  paycor: (b) => (/^[0-9a-f]{32}$/i.test(b) ? `https://recruitingbypaycor.com/career/CareerHome.action?clientId=${b}` : undefined),
   personio: (b) => (plain(b) ? `https://${b}.jobs.personio.com` : undefined),
   pinpoint: (b) => (plain(b) ? `https://${b}.pinpointhq.com` : undefined),
   recruitee: (b) => (plain(b) ? `https://${b}.recruitee.com` : undefined),
   rippling: (b) => `https://ats.rippling.com/${enc(b)}/jobs`,
   smartrecruiters: (b) => `https://jobs.smartrecruiters.com/${enc(b)}`,
   // The SAP SuccessFactors career-site host (RMK); kept as the board in freehireBoards.
+  // The account subdomain of {account}.career.softgarden.de
+  softgarden: (b) => (plain(b) && !b.includes(".") ? `https://${b}.career.softgarden.de/` : undefined),
   successfactors: (b) => (plain(b) ? `https://${b}` : undefined),
   // The career-site host: {x}.teamtailor.com, or the company's own domain (handled in freehireBoards).
   teamtailor: (b) => (plain(b) ? `https://${b}` : undefined),
+  // The account subdomain of {account}.hire.trakstar.com
+  trakstar: (b) => (plain(b) && !b.includes(".") ? `https://${b}.hire.trakstar.com/` : undefined),
   // "{host}/{company code}/{board GUID}" of UKG Pro Recruiting
   ukg: (b) => {
     const [host, code, guid] = b.split("/");
