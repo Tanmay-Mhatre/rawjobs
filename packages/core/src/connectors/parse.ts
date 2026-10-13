@@ -25,6 +25,69 @@ export function countryName(code?: string | null): string | undefined {
 }
 
 /** Distinct non-empty parts joined with ", ". */
+/** ISO 3166 alpha-3 -> alpha-2, for the countries job boards list most. */
+const ISO3: Record<string, string> = {
+  USA: "US",
+  CAN: "CA",
+  MEX: "MX",
+  PRI: "PR",
+  BRA: "BR",
+  ARG: "AR",
+  COL: "CO",
+  CHL: "CL",
+  PER: "PE",
+  GBR: "GB",
+  IRL: "IE",
+  DEU: "DE",
+  FRA: "FR",
+  ESP: "ES",
+  PRT: "PT",
+  ITA: "IT",
+  NLD: "NL",
+  BEL: "BE",
+  CHE: "CH",
+  AUT: "AT",
+  SWE: "SE",
+  NOR: "NO",
+  DNK: "DK",
+  FIN: "FI",
+  POL: "PL",
+  CZE: "CZ",
+  ROU: "RO",
+  HUN: "HU",
+  GRC: "GR",
+  UKR: "UA",
+  TUR: "TR",
+  ISR: "IL",
+  ARE: "AE",
+  SAU: "SA",
+  EGY: "EG",
+  ZAF: "ZA",
+  NGA: "NG",
+  KEN: "KE",
+  IND: "IN",
+  PAK: "PK",
+  SGP: "SG",
+  MYS: "MY",
+  IDN: "ID",
+  PHL: "PH",
+  THA: "TH",
+  VNM: "VN",
+  CHN: "CN",
+  HKG: "HK",
+  TWN: "TW",
+  JPN: "JP",
+  KOR: "KR",
+  AUS: "AU",
+  NZL: "NZ",
+};
+
+/** "GBR" -> "United Kingdom"; codes it doesn't know come back as given. */
+export function iso3Country(code?: string | null): string | undefined {
+  if (!code) return undefined;
+  return countryName(ISO3[code.toUpperCase()] ?? code);
+}
+
 export function joinParts(...parts: (string | null | undefined)[]): string {
   const out: string[] = [];
   for (const p of parts) {

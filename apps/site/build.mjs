@@ -66,6 +66,7 @@ const SYSTEMS = [
   "Manatal",
   "Trakstar Hire",
   "Factorial",
+  "Gem",
   "Comeet",
   "Oracle Recruiting",
   "SAP SuccessFactors",

@@ -55,6 +55,8 @@ export async function checkBoard(http: HttpClient, b: Board): Promise<CheckResul
           ...(b.site ? { site: b.site } : {}),
         };
         const n = (await connector.fetch(ref, { http, now: new Date() })).length;
+        // Gem answers any made-up board with an empty list, like SmartRecruiters: empty means dead.
+        if (!n && b.ats === "gem") return { status: "dead", jobs: 0 };
         return { status: n ? "live" : "dormant", jobs: n };
       }
     }

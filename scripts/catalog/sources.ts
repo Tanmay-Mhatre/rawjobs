@@ -21,6 +21,7 @@ const KALIL = [
   "breezy",
   "dayforce",
   "eightfold",
+  "gem",
   "greenhouse",
   "icims",
   "jazzhr",
