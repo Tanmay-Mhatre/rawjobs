@@ -17,7 +17,7 @@ import { pinpoint } from "./pinpoint";
 import { recruitee } from "./recruitee";
 import { rippling } from "./rippling";
 import { smartrecruiters } from "./smartrecruiters";
-import { successfactors } from "./successfactors";
+import { isCareerSiteHost, successfactors } from "./successfactors";
 import { taleo } from "./taleo";
 import { teamtailor, teamtailorBase } from "./teamtailor";
 import { arbeitnow } from "./arbeitnow";
@@ -163,6 +163,7 @@ export function careersUrl(c: DetectedCompany): string {
     case "oracle":
       return c.shard ? `https://${c.slug}.fa.${c.shard}.oraclecloud.com/hcmUI/CandidateExperience/en/sites/${c.site ?? "CX_1"}` : "";
     case "successfactors":
+      if (isCareerSiteHost(c)) return `https://${c.slug.toLowerCase()}/search/`;
       return c.shard ? `https://${c.shard}/career?company=${encodeURIComponent(c.slug)}` : "";
     default:
       return "";

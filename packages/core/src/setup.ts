@@ -3,7 +3,7 @@ import { join, resolve } from "node:path";
 import { parse as parseYaml } from "yaml";
 import { z } from "zod";
 import { CONFIG_CANDIDATES, LEGACY_CONFIG_CANDIDATES } from "./config";
-import { careersUrl, companyKey, detectCompany, getConnector, type DetectResult } from "./connectors";
+import { careersUrl, companyKey, detectCompany, getConnector, guessName, type DetectResult } from "./connectors";
 import { isTeamtailorFeed, isTeamtailorHost } from "./connectors/teamtailor";
 import { HttpClient, HttpError } from "./http";
 import { RESUME_PATH } from "./resume";
@@ -80,8 +80,8 @@ export type CheckOptions = {
 };
 
 /**
- * A careers site on a company's own domain, which its URL can't reveal: one request for the
- * host's /jobs.rss, accepted only when it is Teamtailor's feed.
+ * A careers site on a company's own domain, which its URL can't reveal: a look at the host's
+ * /jobs.rss (Teamtailor's feed) and, failing that, its /search/ page (a SuccessFactors career site).
  */
 async function detectByFeed(input: string, http: HttpClient): Promise<DetectResult | null> {
   let host: string;
@@ -93,12 +93,21 @@ async function detectByFeed(input: string, http: HttpClient): Promise<DetectResu
   if (!isTeamtailorHost(host)) return null;
   try {
     const xml = await http.getText(`https://${host}/jobs.rss`);
-    if (!isTeamtailorFeed(xml)) return null;
-    const title = xml.match(/<channel>\s*<title>([^<]*)<\/title>/)?.[1]?.trim();
-    return { ats: "teamtailor", slug: host, name: title || host, supported: true };
+    if (isTeamtailorFeed(xml)) {
+      const title = xml.match(/<channel>\s*<title>([^<]*)<\/title>/)?.[1]?.trim();
+      return { ats: "teamtailor", slug: host, name: title || host, supported: true };
+    }
   } catch {
-    return null;
+    // not a Teamtailor site
   }
+  // A SuccessFactors career site (RMK) loads SAP's j2w scripts on its search page.
+  try {
+    const html = await http.getText(`https://${host}/search/?q=&startrow=0`);
+    if (/\/platform\/js\/j2w\//.test(html)) return { ats: "successfactors", slug: host, name: guessName(host.split(".").at(-2) ?? host), supported: true };
+  } catch {
+    // not one either
+  }
+  return null;
 }
 
 /**

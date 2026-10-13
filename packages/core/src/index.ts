@@ -34,6 +34,7 @@ export { htmlToText, inferWorkplace, isPlaceholderBoard, matchesTerm, termRegex 
 export { companyLabel, displayName, NAME_OVERRIDES } from "./display-name";
 export { careersUrl, companyKey, companyOfJobId, connectors, currentJobId, jobCompanyKey, getConnector, detectCompany, guessName, type DetectResult } from "./connectors";
 export type { Connector, Ctx, DetectedCompany } from "./connectors";
+export { isCareerSiteHost } from "./connectors/successfactors";
 export { isTeamtailorHost } from "./connectors/teamtailor";
 export * from "./employers";
 export * from "./scope";

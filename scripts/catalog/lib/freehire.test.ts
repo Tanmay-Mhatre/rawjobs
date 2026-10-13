@@ -32,6 +32,12 @@ describe("freehireBoards", () => {
     ]);
   });
 
+  it("keeps SuccessFactors career sites by host", () => {
+    expect(freehireBoards("successfactors", [{ company: "Tetra Pak", board: "jobs.tetrapak.com" }, { board: "career4.successfactors.com" }])).toEqual([
+      { ats: "successfactors", slug: "jobs.tetrapak.com", name: "Tetra Pak" },
+    ]);
+  });
+
   it("skips boards we can't read yet and anything that isn't a plain id", () => {
     expect(freehireBoards("icims", [{ board: "careers.docusign.com" }])).toEqual([]);
     expect(freehireBoards("bamboohr", [{ board: "evil.example/x" }, { board: "" }, { company: "No board" }])).toEqual([]);

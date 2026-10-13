@@ -1,6 +1,6 @@
 import type { NormalizedJob } from "../schema";
 import { htmlToText, inferWorkplace } from "../text";
-import { detectAs, xmlBlocks, xmlOne } from "./parse";
+import { detectAs, isoDate, xmlBlocks, xmlOne } from "./parse";
 import { jobId, type Connector } from "./types";
 
 /** One <Job> of SAP SuccessFactors' public listing feed (career?…&resultType=XML), descriptions included. */
@@ -10,7 +10,58 @@ export type SuccessFactorsJob = {
   description: string;
   /** The company's own filters ("Location", "Country", "Department"…), label -> value. */
   filters: Record<string, string>;
+  /** Career sites (RMK) only: the job page, and the date the search list shows. */
+  url?: string;
+  posted?: string;
 };
+
+/**
+ * SuccessFactors career sites ("RMK": jobs.acme.com, acme.jobs2web.com, acme.jobs.hr.cloud.sap) are
+ * keyed by their host. Their search pages list 25 jobs a row each: title, location, date, department.
+ */
+const HOST = /^[a-z0-9-]+(\.[a-z0-9-]+)+$/i;
+export const isCareerSiteHost = (ref: { slug: string; shard?: string }) => !ref.shard && ref.slug.includes(".") && HOST.test(ref.slug);
+/** Big employers list thousands of jobs; beyond this we stop paging. */
+const MAX_POSTINGS = 2000;
+
+const inlineHtml = (s: string | undefined) => (s ? htmlToText(s).replace(/\s+/g, " ").trim() : "");
+const cell = (row: string, cls: string) => inlineHtml(row.match(new RegExp(`class="${cls}[^"]*"[^>]*>([\\s\\S]*?)</span>`))?.[1]);
+
+/**
+ * One search page of a career site: its job rows, the total it reports ("Results 1 – 25 of 978"),
+ * and whether it is the classic template we read (newer ones render the list in the browser).
+ */
+export function parseCareerSitePage(html: string, host: string): { jobs: SuccessFactorsJob[]; total: number; readable: boolean } {
+  const total = Number(html.match(/Results\s*<b>[^<]*<\/b>\s*of\s*<b>([\d,.]+)<\/b>/)?.[1]?.replace(/[,.]/g, "") ?? 0);
+  const jobs: SuccessFactorsJob[] = [];
+  for (const row of html.split(/<tr class="data-row/).slice(1)) {
+    const link = row.match(/<a\b[^>]*class="jobTitle-link"[^>]*>([\s\S]*?)<\/a>/);
+    // Multi-brand sites put the brand first: /AEI/job/…
+    const path = link?.[0].match(/href="(\/(?:[^"/]+\/)?job\/[^"]+)"/)?.[1]?.replace(/&amp;/g, "&");
+    const title = inlineHtml(link?.[1]);
+    const reqId = path?.match(/\/(\d+)\/?$/)?.[1];
+    if (!path || !title || !reqId) continue;
+    const filters: Record<string, string> = {};
+    const location = cell(row, "jobLocation");
+    const department = cell(row, "jobDepartment");
+    if (location) filters.Location = location;
+    if (department) filters.Department = department;
+    jobs.push({ reqId, title, description: "", filters, url: `https://${host}${path}`, posted: cell(row, "jobDate") || undefined });
+  }
+  return { jobs, total, readable: jobs.length > 0 || /id="searchresults"/.test(html) };
+}
+
+/** The job page's description: the schema.org microdata span, nested spans included. */
+export function careerSiteDescription(html: string): string {
+  const start = html.search(/<span[^>]*itemprop="description"/);
+  if (start < 0) return "";
+  let depth = 0;
+  for (const m of html.slice(start).matchAll(/<(\/?)span\b[^>]*>/g)) {
+    depth += m[1] ? -1 : 1;
+    if (depth === 0) return htmlToText(html.slice(start, start + m.index! + m[0].length));
+  }
+  return htmlToText(html.slice(start));
+}
 
 export function parseSuccessFactors(xml: string): SuccessFactorsJob[] {
   return xmlBlocks(xml, "Job").map((j) => {
@@ -43,9 +94,30 @@ export const successfactors: Connector<SuccessFactorsJob> = {
   detect: detectAs("successfactors"),
 
   async fetch(ref, { http }) {
+    if (isCareerSiteHost(ref)) {
+      const site = ref.slug.toLowerCase();
+      const out: SuccessFactorsJob[] = [];
+      const seen = new Set<string>();
+      for (let start = 0, total = Infinity; start < Math.min(total, MAX_POSTINGS); ) {
+        const page = parseCareerSitePage(await http.getText(`https://${site}/search/?q=&startrow=${start}`), site);
+        if (!page.readable) throw new Error(`${site}: this SuccessFactors career site template isn't readable yet`);
+        if (start === 0) total = page.total || page.jobs.length;
+        const fresh = page.jobs.filter((j) => !seen.has(j.reqId));
+        if (!fresh.length) break;
+        for (const j of fresh) seen.add(j.reqId);
+        out.push(...fresh);
+        start += page.jobs.length;
+      }
+      return out;
+    }
     const xml = await http.getText(`https://${host(ref)}/career?company=${encodeURIComponent(ref.slug)}&career_ns=job_listing_summary&resultType=XML`);
     if (!/<Job-Listing/.test(xml)) throw new Error("unexpected SuccessFactors response: not a job listing feed");
     return parseSuccessFactors(xml);
+  },
+
+  async describe(raw, _ref, { http }) {
+    if (!raw.url) return raw.description ? htmlToText(raw.description) : "";
+    return careerSiteDescription(await http.getText(raw.url));
   },
 
   normalize(raw, ref): NormalizedJob {
@@ -60,7 +132,8 @@ export const successfactors: Connector<SuccessFactorsJob> = {
       country: pick(f, /country/i),
       workplace: inferWorkplace(`${location} ${pick(f, /remote|workplace/i) ?? ""}`),
       department: pick(f, /department|function|area|category/i),
-      url: `https://${host(ref)}/career?company=${encodeURIComponent(ref.slug)}&career_ns=job_listing&career_job_req_id=${raw.reqId}`,
+      ...(raw.posted ? { postedAt: isoDate(`${raw.posted} UTC`) } : {}),
+      url: raw.url ?? `https://${host(ref)}/career?company=${encodeURIComponent(ref.slug)}&career_ns=job_listing&career_job_req_id=${raw.reqId}`,
       description: htmlToText(raw.description),
     };
   },

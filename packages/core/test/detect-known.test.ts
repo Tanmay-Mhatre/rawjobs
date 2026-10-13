@@ -16,6 +16,8 @@ describe("detectKnownAts", () => {
     ["https://acme.bamboohr.com/careers", { ats: "bamboohr", slug: "acme" }],
     ["https://acme.breezy.hr/", { ats: "breezy", slug: "acme" }],
     ["https://career4.successfactors.com/career?company=acmecorp", { ats: "successfactors", slug: "acmecorp", shard: "career4.successfactors.com" }],
+    ["https://assaabloy.jobs2web.com/search/?q=", { ats: "successfactors", slug: "assaabloy.jobs2web.com" }],
+    ["https://careersacme.jobs.hr.cloud.sap/job/x/1/", { ats: "successfactors", slug: "careersacme.jobs.hr.cloud.sap" }],
     ["https://career15.sapsf.cn/career?company=acme09", { ats: "successfactors", slug: "acme09", shard: "career15.sapsf.cn" }],
     ["https://acme.teamtailor.com/jobs", { ats: "teamtailor", slug: "acme" }],
     ["https://www.comeet.com/jobs/acme/12.345", { ats: "comeet", slug: "12.345", site: "acme" }],

@@ -232,6 +232,36 @@ describe("feed connectors (XML and embedded data)", () => {
     });
   });
 
+  it("successfactors: a career site (RMK) is read from its search pages, descriptions from the job page", async () => {
+    const row = (id: number, title: string, place: string) =>
+      `<tr class="data-row"><td class="colTitle"><span class="jobTitle hidden-phone"><a href="/job/${place}-${title.replace(/ /g, "-")}/${id}/" class="jobTitle-link">${title}</a></span><span class="jobDate visible-phone">Oct 13, 2026
+</span></td><td class="colDepartment"><span class="jobDepartment">Engineering &amp; Science</span></td><td class="colLocation"><span class="jobLocation">
+${place}, NL</span></td></tr>`;
+    const page = (rows: string) => `<div class="searchResultsShell"><span class="paginationLabel">Results <b>1 – 25</b> of <b>27</b></span><table id="searchresults">${rows}</table></div>`;
+    const first = Array.from({ length: 25 }, (_, i) => row(100 + i, `Role ${i}`, "Delft")).join("");
+    const { jobs, calls, raws, c, ref, http } = await run("successfactors", { slug: "jobs.acme.com" }, (url) => {
+      if (url.includes("startrow=0")) return text(page(first));
+      if (url.includes("startrow=25")) return text(page(row(200, "Installatie monteur", "Heerhugowaard") + row(201, "Planner", "Delft").replace('href="/job/', 'href="/AEI/job/')));
+      return text('<div class="job"><span itemprop="description" class="jobdescription"><p>Fix <span>heat</span> pumps</p></span></div><span>after</span>');
+    });
+    expect(calls).toEqual(["https://jobs.acme.com/search/?q=&startrow=0", "https://jobs.acme.com/search/?q=&startrow=25"]);
+    expect(jobs).toHaveLength(27);
+    expect(jobs[26]!.url).toBe("https://jobs.acme.com/AEI/job/Delft-Planner/201/"); // a brand-prefixed path
+    expect(jobs[25]).toMatchObject({
+      id: "successfactors:jobs.acme.com:200",
+      title: "Installatie monteur",
+      location: "Heerhugowaard, NL",
+      department: "Engineering & Science",
+      postedAt: "2026-10-13T00:00:00.000Z",
+      url: "https://jobs.acme.com/job/Heerhugowaard-Installatie-monteur/200/",
+    });
+    expect(await c.describe!(raws[25]!, ref, { http, now: new Date() })).toBe("Fix heat pumps");
+  });
+
+  it("successfactors: a career site on a newer template is refused, not read as empty", async () => {
+    await expect(run("successfactors", { slug: "jobs.acme.com" }, () => text("<html><div id='app'></div></html>"))).rejects.toThrow(/template isn't readable yet/);
+  });
+
   it("teamtailor: a site on the company's own domain is read there, and must be Teamtailor's feed", async () => {
     const ttFeed = `<rss version="2.0" xmlns:tt="https://teamtailor.com/locations"><channel><title>Acme </title><item><title>PM</title><link>https://careers.acme.com/jobs/1-pm</link><guid>g-1</guid></item></channel></rss>`;
     const { jobs, calls } = await run("teamtailor", { slug: "careers.acme.com" }, () => text(ttFeed, "application/rss+xml"));
