@@ -4,6 +4,7 @@ import { parse as parseYaml } from "yaml";
 import { z } from "zod";
 import { CONFIG_CANDIDATES, LEGACY_CONFIG_CANDIDATES } from "./config";
 import { careersUrl, companyKey, detectCompany, getConnector, guessName, type DetectResult } from "./connectors";
+import { isPhenomSite } from "./connectors/phenom";
 import { isTeamtailorFeed, isTeamtailorHost } from "./connectors/teamtailor";
 import { HttpClient, HttpError } from "./http";
 import { RESUME_PATH } from "./resume";
@@ -99,6 +100,12 @@ async function detectByFeed(input: string, http: HttpClient): Promise<DetectResu
     }
   } catch {
     // not a Teamtailor site
+  }
+  // A Phenom careers site answers its own widgets call.
+  try {
+    if (await isPhenomSite(host, http)) return { ats: "phenom", slug: host, name: guessName(host.split(".").at(-2) ?? host), supported: true };
+  } catch {
+    // not Phenom
   }
   // A SuccessFactors career site (RMK) loads SAP's j2w scripts on its search page.
   try {
