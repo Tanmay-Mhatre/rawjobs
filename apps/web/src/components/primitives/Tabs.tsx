@@ -1,7 +1,9 @@
+import { Check } from "lucide-react";
 import { useRef, type KeyboardEvent } from "react";
 import { cx } from "../../lib/cx";
 
-export type TabItem<T extends string> = { id: T; label: string; count?: number };
+/** `done`: a check in place of the count, named for screen readers by this text ("all in My companies"). */
+export type TabItem<T extends string> = { id: T; label: string; count?: number; done?: string };
 
 /**
  * design/components/Tabs: views of one list. Roving tabindex (only the selected tab is in the tab
@@ -65,7 +67,7 @@ export function Tabs<T extends string>({
             onClick={() => onChange(t.id)}
           >
             {t.label}
-            {t.count != null && <span className="rj-tab__count">{t.count}</span>}
+            {t.done ? <Check className="size-3.5 shrink-0" role="img" aria-label={t.done} /> : t.count != null && <span className="rj-tab__count">{t.count}</span>}
           </button>
         );
       })}

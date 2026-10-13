@@ -1,5 +1,5 @@
 import { Check, Plus, Undo2 } from "lucide-react";
-import { useState } from "react";
+import { type ReactNode, useState } from "react";
 import { keyOf, SUPPORTED, type CompanyRef } from "../lib/companies";
 import { Button } from "./ui";
 
@@ -45,6 +45,7 @@ export function AddAll({
   onRemoveMany,
   primary,
   label,
+  done,
 }: {
   items: CompanyRef[];
   watched: Set<string>;
@@ -52,6 +53,8 @@ export function AddAll({
   onRemoveMany: (keys: string[]) => void;
   primary?: boolean;
   label?: (n: number) => string;
+  /** Shown in the button's place once every company is in My companies (else nothing). */
+  done?: ReactNode;
 }) {
   const [last, setLast] = useState<{ keys: string[]; soon: number } | null>(null);
   const todo = items.filter((c) => !watched.has(keyOf(c)));
@@ -77,7 +80,7 @@ export function AddAll({
       </span>
     );
   }
-  if (todo.length === 0) return null;
+  if (todo.length === 0) return done ?? null;
   return (
     <Button
       size="sm"

@@ -1,7 +1,7 @@
 import { companyLabel, displayName } from "@rawjobs/core/display-name";
 import { isPlaceholderBoard } from "@rawjobs/core/text";
-import { Briefcase, Check, ChevronRight, History, Info, LoaderCircle, Package, Plus, RefreshCw, Undo2, X } from "lucide-react";
-import { useEffect, useId, useMemo, useState, type ReactNode } from "react";
+import { Briefcase, Check, ChevronRight, CircleCheck, History, Info, LoaderCircle, Package, Plus, RefreshCw, Undo2, X } from "lucide-react";
+import { useEffect, useId, useMemo, useRef, useState, type ReactNode } from "react";
 import { keyOf, type CompanyRef } from "../../lib/companies";
 import { companyReasons, groupSuggestions, refOf, type SuggestionGroup, visible, type CompanySuggestion, type CompanySuggestions, type SuggestState } from "../../lib/companySuggest";
 import { canRunLocally } from "../../lib/data";
@@ -42,6 +42,10 @@ type Props = {
   packActions?: PackActions;
   /** How many companies a match checks, for the loading line; left out while unknown. */
   poolSize?: number | null;
+  /** Opens My companies: the next step once a lens is all added. */
+  onSeeMine?: () => void;
+  /** Opens Browse all: the next step once Not hiring yet is all added. */
+  onBrowse?: () => void;
 };
 
 export const DISMISSED_KEY = "rawjobs.goBackDismissed";
@@ -50,8 +54,15 @@ const OFF_GRACE_MS = 1000;
 const PAGE = 9;
 /** "Add top 10": the bulk add in Hiring for you now and Not hiring yet, in your industries only. */
 const TOP = 10;
+/** After Add all, the same button turns into See My companies: presses this soon after are the same double press. */
+export const DOUBLE_PRESS_MS = 300;
+const andList = (xs: string[]) => (xs.length < 2 ? (xs[0] ?? "") : `${xs.slice(0, -1).join(", ")} and ${xs.at(-1)}`);
 
 type Pack = { industry: string; items: CompanySuggestion[]; more: CompanySuggestion[] };
+/** A pack with nothing left to suggest: its companies (keys) are all in My companies. */
+type Finished = { industry: string; keys: string[] };
+/** Screen readers hear this where a lens that's all added shows a check in place of its count. */
+const ALL_IN = "all in My companies";
 
 /** Suggestions to show: not in My companies or hidden, and never a sandbox or test board. */
 const real = <T extends CompanySuggestion>(list: readonly T[], skip: ReadonlySet<string>) => visible(list, skip).filter((s) => !isPlaceholderBoard(s.name));
@@ -78,6 +89,8 @@ export function ForYou({
   industries,
   packActions,
   poolSize,
+  onSeeMine,
+  onBrowse,
 }: Props) {
   const ids = useTabIds("suggest");
   // "Off" only counts once it has lasted a moment: the first render and profile changes pass through it.
@@ -97,19 +110,48 @@ export function ForYou({
 
   const lists = useMemo(() => {
     if (!data) return null;
+    const packs = data.packs.map((p): Pack => ({ industry: p.industry, items: real(p.items, muted), more: real(p.more ?? [], muted) })).filter((p) => p.items.length);
+    // What the answer left out because it's in My companies (older answers don't say).
+    const added = data.added;
+    const finished = Object.entries(added?.packs ?? {})
+      .filter(([industry, keys]) => keys.length && !packs.some((p) => p.industry === industry))
+      .map(([industry, keys]): Finished => ({ industry, keys }));
     return {
       hiring: real(data.hiringNow, muted),
       watching: real(data.worthWatching, muted),
       soon: real(data.notScannable, muted),
       like: data.lookalikes.map((r) => ({ ...r, items: real(r.items, muted) })).filter((r) => r.items.length),
-      packs: data.packs.map((p): Pack => ({ industry: p.industry, items: real(p.items, muted), more: real(p.more ?? [], muted) })).filter((p) => p.items.length),
+      packs,
+      finished,
+      added: {
+        hiring: added?.hiring ?? 0,
+        watching: added?.watching ?? 0,
+        soon: added?.soon ?? 0,
+        likeOf: Object.entries(added?.like ?? {})
+          .filter(([, n]) => n > 0)
+          .map(([seed]) => seed),
+      },
     };
   }, [data, muted]);
+  // Finished packs while their companies are still yours (Remove pack takes the card away; the tray can undo it).
+  const finished = (lists?.finished ?? []).map((f) => ({ ...f, keys: f.keys.filter((k) => watched.has(k)) })).filter((f) => f.keys.length);
+  /** A lens with nothing left to suggest because you've added all of it: it says so, rather than "nothing found". */
+  const allIn: Record<Lens, boolean> | null = lists
+    ? {
+        packs: !lists.packs.length && finished.length > 0,
+        hiring: !lists.hiring.length && lists.added.hiring > 0,
+        like: !lists.like.length && lists.added.likeOf.length > 0,
+        watching: !lists.watching.length && lists.added.watching > 0,
+        soon: !lists.soon.length && lists.added.soon > 0,
+      }
+    : null;
 
   /** No industries, so no packs: the lens stays, saying how to get them. */
-  const needIndustries = industries === 0 && !lists?.packs.length;
-  // Open on packs (the quickest way to add many; at 0 companies also when they need industries), else the most useful list.
-  const current: Lens = lens ?? (lists?.packs.length || (needIndustries && watched.size === 0) ? "packs" : lists && lists.hiring.length < 3 ? (lists.like.length ? "like" : "watching") : "hiring");
+  const needIndustries = industries === 0 && !lists?.packs.length && !finished.length;
+  // Open on packs (the quickest way to add many, or where you finished them; at 0 companies also when
+  // they need industries), else the most useful list.
+  const current: Lens =
+    lens ?? (lists?.packs.length || finished.length || (needIndustries && watched.size === 0) ? "packs" : lists && lists.hiring.length < 3 ? (lists.like.length ? "like" : "watching") : "hiring");
   // biome-ignore lint/correctness/useExhaustiveDependencies: switching lists starts the new one at its first page
   useEffect(() => setShown(compact ? 6 : PAGE), [current, compact]);
 
@@ -133,21 +175,45 @@ export function ForYou({
     <div className={cx("grid gap-3", compact ? "sm:grid-cols-2" : "sm:grid-cols-2 xl:grid-cols-3")}>{items.map((s) => card(s, { note: note?.(s) }))}</div>
   );
 
-  type Tab = { id: Lens; label: string; count?: number };
-  const tabs: Tab[] = lists
-    ? (
-        [
-          { id: "packs", label: "Starter packs", count: lists.packs.length },
-          { id: "hiring", label: "Hiring for you now", count: lists.hiring.length },
-          { id: "like", label: "Like your past employers", count: lists.like.reduce((n, r) => n + r.items.length, 0) },
-          { id: "watching", label: "Not hiring yet", count: lists.watching.length },
-          { id: "soon", label: "Not supported yet", count: lists.soon.length },
-        ] satisfies Tab[]
-      )
-        .filter((t) => t.count || t.id === "hiring" || t.id === "like" || t.id === current || (t.id === "packs" && needIndustries))
-        // No "0" on a lens: an empty one says why when opened.
-        .map((t) => ({ ...t, count: t.count || undefined }))
-    : [];
+  type Tab = { id: Lens; label: string; count?: number; done?: string };
+  const tabs: Tab[] =
+    lists && allIn
+      ? (
+          [
+            { id: "packs", label: "Starter packs", count: lists.packs.length + finished.length },
+            { id: "hiring", label: "Hiring for you now", count: lists.hiring.length },
+            { id: "like", label: "Like your past employers", count: lists.like.reduce((n, r) => n + r.items.length, 0) },
+            { id: "watching", label: "Not hiring yet", count: lists.watching.length },
+            { id: "soon", label: "Not supported yet", count: lists.soon.length },
+          ] satisfies Tab[]
+        )
+          // A lens you've added all of stays, with a check in place of its count.
+          .map((t) => ({ ...t, done: allIn[t.id] ? ALL_IN : undefined }))
+          .filter((t) => t.count || t.done || t.id === "hiring" || t.id === "like" || t.id === current || (t.id === "packs" && needIndustries))
+          // No "0" on a lens: an empty one says why when opened.
+          .map((t) => ({ ...t, count: t.count || undefined }))
+      : [];
+  /** "Try Hiring for you now": the next lens that has something to add. */
+  const tryNext = (from: Lens) => {
+    if (!lists) return null;
+    const order: [Lens, string, number][] = [
+      ["hiring", "Hiring for you now", lists.hiring.length],
+      ["like", "Like your past employers", lists.like.length],
+      ["watching", "Not hiring yet", lists.watching.length],
+      ["packs", "Starter packs", lists.packs.length],
+    ];
+    const next = order.find(([id, , n]) => id !== from && n > 0);
+    return next ? (
+      <Button key="try" size="sm" variant="ghost" onClick={() => setLens(next[0])}>
+        Try {next[1]}
+      </Button>
+    ) : null;
+  };
+  const seeMine = onSeeMine && (
+    <Button key="mine" size="sm" onClick={onSeeMine}>
+      See My companies
+    </Button>
+  );
 
   const goBack = (data?.pastEmployers ?? []).filter((p) => p.company && !dismissed.includes(p.company.key) && !muted.has(p.company.key) && !isPlaceholderBoard(p.company.name));
 
@@ -249,11 +315,24 @@ export function ForYou({
             {current === "packs" ? (
               needIndustries ? (
                 <NeedIndustries />
+              ) : allIn?.packs ? (
+                <AllAdded title="Every starter pack is in My companies" actions={[seeMine, tryNext("packs")]}>
+                  {packsDone(finished)} New companies in your industries show up here when the directory updates.
+                </AllAdded>
               ) : (
-                <PacksHeader packs={shownPacks} watched={watched} actions={packActs} />
+                <PacksHeader packs={shownPacks} finished={finished} watched={watched} actions={packActs} onSeeMine={onSeeMine} />
               )
             ) : current === "soon" ? (
-              <LensHeader items={lists.soon} watched={watched} onAddMany={onAddMany} onRemoveMany={onRemoveMany} />
+              allIn?.soon ? (
+                <AllAdded
+                  title={lists.added.soon === 1 ? "The not-yet-supported company is in My companies" : `All ${lists.added.soon} not-yet-supported companies are in My companies`}
+                  actions={[seeMine]}
+                >
+                  {lists.added.soon === 1 ? "RawJobs starts checking it once its job site is supported." : "RawJobs starts checking them once their job sites are supported."}
+                </AllAdded>
+              ) : (
+                <LensHeader items={lists.soon} watched={watched} onAddMany={onAddMany} onRemoveMany={onRemoveMany} />
+              )
             ) : current === "like" ? (
               <PastEmployers names={pastEmployers} suggested={data?.pastEmployers.map((p) => p.name)} onChange={onPastEmployers} />
             ) : null}
@@ -295,10 +374,39 @@ export function ForYou({
                   shown={shown}
                   onMore={() => setShown((n) => n + PAGE)}
                 />
+              ) : allIn?.hiring ? (
+                <AllAdded title="Every company hiring for you is in My companies" actions={[seeMine, tryNext("hiring")]}>
+                  {inYourList(lists.added.hiring)} New matches show up here when the directory updates.
+                </AllAdded>
               ) : (
-                <Empty>No company has an opening that passes your filters today. Try the Not hiring yet list, or widen your places.</Empty>
+                <Empty
+                  title="No company is hiring for you today"
+                  actions={[
+                    <a key="places" href={`#${settingsHash("locations")}`} className={buttonClass("secondary", "sm")}>
+                      Widen your places
+                    </a>,
+                    tryNext("hiring"),
+                  ]}
+                >
+                  {data?.scanned ? `None of the ${data.scanned.toLocaleString()} companies has` : "No company has"} an opening that passes your title and place filters.
+                </Empty>
               ))}
-            {current === "watching" && (
+            {current === "watching" && allIn?.watching && (
+              <AllAdded
+                title="Every company worth watching is in My companies"
+                actions={[
+                  seeMine,
+                  onBrowse && (
+                    <Button key="browse" size="sm" variant="ghost" onClick={onBrowse}>
+                      Browse all companies
+                    </Button>
+                  ),
+                ]}
+              >
+                {inYourList(lists.added.watching)} New ones show up here when the directory updates.
+              </AllAdded>
+            )}
+            {current === "watching" && !allIn?.watching && (
               <Grouped
                 lens="watching"
                 items={lists.watching}
@@ -318,6 +426,13 @@ export function ForYou({
                 rows={lists.like}
                 goBack={goBack}
                 hasEmployers={pastEmployers.length > 0 || !!data?.pastEmployers.length}
+                allAdded={
+                  allIn?.like && (
+                    <AllAdded title={`Every company like ${andList(lists.added.likeOf)} is in My companies`} actions={[seeMine]}>
+                      Add another past employer above to see companies like it.
+                    </AllAdded>
+                  )
+                }
                 cards={cards}
                 compact={compact}
                 watched={watched}
@@ -330,7 +445,7 @@ export function ForYou({
                 }}
               />
             )}
-            {current === "packs" && !needIndustries && <Packs packs={shownPacks} nextUp={nextUp} watched={watched} actions={packActs} onPick={pick} />}
+            {current === "packs" && !needIndustries && !allIn?.packs && <Packs packs={shownPacks} finished={finished} nextUp={nextUp} watched={watched} actions={packActs} onPick={pick} />}
           </TabPanel>
         </div>
       )}
@@ -469,6 +584,7 @@ function Grouped({
           onRemoveMany={onRemoveMany}
           primary={watched.size === 0}
           label={(n) => (n >= TOP ? `Add top ${TOP}` : `Add all ${n}`)}
+          done={inside.length > 0 && <AllInMine n={inside.length} />}
         />
       </div>
       <GroupList groups={groupSuggestions(inside.slice(0, shown), lens)} counts={counts} cards={cards} />
@@ -502,39 +618,112 @@ function Outside({ items, lens, cards }: { items: CompanySuggestion[]; lens: "hi
 /**
  * "13 packs from your industries" and one button for all of them: "Add all 54" counts each company
  * once, even when it sits in two packs, then "Add 20 more". Orange only as the way to start, at 0
- * companies. The button stays put once everything is in, so focus never drops.
+ * companies. Once every pack is in, the line says so and the same button opens My companies (it
+ * ignores presses for a moment after an add, so a double press doesn't jump away). One button
+ * throughout, so focus never drops.
  */
-function PacksHeader({ packs, watched, actions }: { packs: { industry: string; items: CompanySuggestion[] }[]; watched: Set<string>; actions: PackActions }) {
+function PacksHeader({
+  packs,
+  finished,
+  watched,
+  actions,
+  onSeeMine,
+}: {
+  packs: { industry: string; items: CompanySuggestion[] }[];
+  finished: Finished[];
+  watched: Set<string>;
+  actions: PackActions;
+  onSeeMine?: () => void;
+}) {
+  const lastAdd = useRef(0);
   const all = uniqueMembers(packs);
   if (!all.length) return null;
   const { kind, todo } = packState(all, watched);
   const packOf = (r: CompanyRef) => packs.find((p) => p.items.some((s) => keyOf(s) === keyOf(r)))?.industry ?? null;
-  const n = packs.length;
+  const n = packs.length + finished.length;
+  const done = kind === "done";
+  const total = new Set([...all.map((s) => s.key), ...finished.flatMap((f) => f.keys)]).size;
   return (
     <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
-      <p className="min-w-0 flex-1 type-small text-muted">
-        {n} {n === 1 ? "pack" : "packs"} from your industries
-      </p>
-      <Button
-        size="sm"
-        variant={watched.size === 0 ? "primary" : "outline"}
-        aria-disabled={kind === "done"}
-        className="aria-disabled:cursor-default aria-disabled:opacity-60"
-        onClick={() => {
-          if (kind === "done") return;
-          const refs = all.filter((s) => !isAdded(watched, s)).map(refOf);
-          actions.add(refs, (k) => `Added ${k} from ${n} ${n === 1 ? "pack" : "packs"}`, packOf);
-        }}
-      >
-        {kind === "done" ? <Check className="size-3.5" /> : <Plus className="size-3.5" />}
-        {kind === "all" ? `Add all ${todo}` : kind === "more" ? `Add ${todo} more` : "Every pack added"}
-      </Button>
+      {done ? (
+        <p className="flex min-w-0 flex-1 items-center gap-1.5 type-small text-ink">
+          <CircleCheck className="size-4 shrink-0 text-success-text" aria-hidden />
+          {total === 1 ? "The starter-pack company is in My companies" : `All ${total} starter-pack companies are in My companies`}
+        </p>
+      ) : (
+        <p className="min-w-0 flex-1 type-small text-muted">
+          {n} {n === 1 ? "pack" : "packs"} from your industries
+        </p>
+      )}
+      {(!done || onSeeMine) && (
+        <Button
+          size="sm"
+          variant={watched.size === 0 ? "primary" : "outline"}
+          onClick={() => {
+            if (done) {
+              if (Date.now() - lastAdd.current >= DOUBLE_PRESS_MS) onSeeMine?.();
+              return;
+            }
+            lastAdd.current = Date.now();
+            const refs = all.filter((s) => !isAdded(watched, s)).map(refOf);
+            actions.add(refs, (k) => `Added ${k} from ${n} ${n === 1 ? "pack" : "packs"}`, packOf);
+          }}
+        >
+          {!done && <Plus className="size-3.5" />}
+          {done ? "See My companies" : kind === "all" ? `Add all ${todo}` : `Add ${todo} more`}
+        </Button>
+      )}
     </div>
   );
 }
 
-function Empty({ children }: { children: ReactNode }) {
-  return <p className="rounded-md border border-dashed border-line p-4 type-small text-muted">{children}</p>;
+/** "You've added all 19 companies from your 3 packs." */
+function packsDone(finished: Finished[]) {
+  const n = new Set(finished.flatMap((f) => f.keys)).size;
+  const packs = finished.length === 1 ? "your pack" : `your ${finished.length} packs`;
+  return n === 1 ? `You've added the company from ${packs}.` : `You've added all ${n} companies from ${packs}.`;
+}
+
+/** "All 30 are in your list." */
+const inYourList = (n: number) => (n === 1 ? "It's in your list." : `All ${n} are in your list.`);
+
+/** In the bulk add's place once a list is all in: "All 30 in My companies". */
+function AllInMine({ n }: { n: number }) {
+  return (
+    <span className="inline-flex items-center gap-1.5 whitespace-nowrap type-small text-muted">
+      <Check className="size-3.5 shrink-0" aria-hidden />
+      {n === 1 ? "In My companies" : `All ${n} in My companies`}
+    </span>
+  );
+}
+
+/**
+ * A lens you've added everything from: a check, what's done and what comes next, on a solid border so
+ * it never reads as the dashed "nothing found".
+ */
+function AllAdded({ title, children, actions }: { title: string; children: ReactNode; actions: ReactNode[] }) {
+  const shown = actions.filter(Boolean);
+  return (
+    <div className="grid grid-cols-[auto_minmax(0,1fr)] gap-x-3 gap-y-1 rounded-md border border-hairline bg-canvas p-4 type-small motion-safe:animate-[rj-fade_var(--duration-quick)_var(--ease-enter)]">
+      <CircleCheck className="row-span-3 mt-px size-5 text-success-text" aria-hidden />
+      <p className="font-semibold text-balance">{title}</p>
+      <p className="text-muted">{children}</p>
+      {shown.length > 0 && <div className="mt-2 flex flex-wrap gap-2">{shown}</div>}
+    </div>
+  );
+}
+
+/** Nothing found: a dashed border and no icon. With a title, it says why and offers ways on. */
+function Empty({ title, actions, children }: { title?: string; actions?: ReactNode[]; children: ReactNode }) {
+  if (!title) return <p className="rounded-md border border-dashed border-line p-4 type-small text-muted">{children}</p>;
+  const shown = (actions ?? []).filter(Boolean);
+  return (
+    <div className="grid gap-1 rounded-md border border-dashed border-line p-4 type-small">
+      <p className="font-semibold">{title}</p>
+      <p className="text-muted">{children}</p>
+      {shown.length > 0 && <div className="mt-2 flex flex-wrap gap-2">{shown}</div>}
+    </div>
+  );
 }
 
 /** What only this lookalike says: "Like Careem: Mobility · hires Product Management" without the name the header has. */
@@ -547,6 +736,7 @@ function LikeLens({
   rows,
   goBack,
   hasEmployers,
+  allAdded,
   cards,
   compact,
   watched,
@@ -557,6 +747,8 @@ function LikeLens({
   rows: { seed: string; in_directory: boolean; items: CompanySuggestion[] }[];
   goBack: CompanySuggestions["pastEmployers"];
   hasEmployers: boolean;
+  /** Shown in place of "no close match" when every lookalike is in My companies. */
+  allAdded?: ReactNode;
   cards: (items: CompanySuggestion[], note?: (s: CompanySuggestion) => string | undefined) => ReactNode;
   compact?: boolean;
   watched: Set<string>;
@@ -574,7 +766,7 @@ function LikeLens({
     );
   return (
     <div className="space-y-5">
-      {rows.length === 0 && <Empty>No close match yet for your past employers among companies that fit your roles and places.</Empty>}
+      {rows.length === 0 && (allAdded || <Empty>No close match yet for your past employers among companies that fit your roles and places.</Empty>)}
       {rows.map((r) => (
         <section key={r.seed} className="space-y-2.5">
           <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
@@ -627,12 +819,14 @@ function LikeLens({
  */
 function Packs({
   packs,
+  finished,
   nextUp,
   watched,
   actions,
   onPick,
 }: {
   packs: { industry: string; items: CompanySuggestion[] }[];
+  finished: Finished[];
   nextUp: NextUp;
   watched: Set<string>;
   actions: PackActions;
@@ -643,7 +837,39 @@ function Packs({
       {packs.map((p) => (
         <PackCard key={p.industry} pack={p} next={nextUp[p.industry]} watched={watched} actions={actions} onPick={(s) => onPick(p.industry, s)} />
       ))}
+      {finished.map((f) => (
+        <FinishedPack key={f.industry} pack={f} actions={actions} />
+      ))}
     </div>
+  );
+}
+
+/**
+ * A pack with nothing left to suggest (its industry has no more companies for you): a short card at
+ * the end, so it doesn't vanish without a word, still with Remove pack.
+ */
+function FinishedPack({ pack: f, actions }: { pack: Finished; actions: PackActions }) {
+  const headingId = useId();
+  const label = packLabel(f.industry);
+  const n = f.keys.length;
+  return (
+    <section aria-labelledby={headingId} className="flex min-w-0 flex-col gap-2 rounded-md border border-line p-4">
+      <header className="flex items-start gap-2">
+        <h3 id={headingId} className="flex min-w-0 flex-1 items-start gap-2 pt-1 type-small font-semibold">
+          <Package className="mt-0.5 size-4 shrink-0 text-muted" aria-hidden />
+          {label}
+        </h3>
+        <Button size="sm" variant="ghost" aria-label={`Remove the ${label} pack`} onClick={() => actions.remove(f.keys, (k) => `Removed ${k} from ${label}`)}>
+          Remove pack
+        </Button>
+      </header>
+      <div className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-2">
+        <span className="h-1 bg-ink" aria-hidden />
+        <span className="inline-flex items-center gap-1 whitespace-nowrap type-meta text-muted">
+          <Check className="size-3.5" aria-hidden /> {n === 1 ? "In My companies" : `All ${n} in My companies`}
+        </span>
+      </div>
+    </section>
   );
 }
 

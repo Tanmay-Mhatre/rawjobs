@@ -132,6 +132,8 @@ Stopped after ${Math.round(timeoutMs / 1000)} s without finishing.`.trim(),
    * and on disk so the first visit after a restart doesn't wait. Identical requests in flight share
    * one run. (The CLI keeps its slow step on disk too, for bodies not seen before.)
    */
+  /** Bump when the answer's shape changes, so answers saved by an older version aren't served (2: `added`). */
+  const ANSWER_FORMAT = 2;
   const suggestCache = new Map<string, Promise<string>>();
   /**
    * Suggestion runs one at a time: a page request that comes while the background run ranks
@@ -176,7 +178,7 @@ Stopped after ${Math.round(timeoutMs / 1000)} s without finishing.`.trim(),
 
   function suggestions(body: string): Promise<string> {
     const inputs = [...["index.json", "directory.json", "additions.json"].map((f) => resolve(dataDir, "catalog", f)), resolve(home, "profile/resume.md")];
-    const stamp = [codeStamp(), new Date().toISOString().slice(0, 10), ...inputs.map(fileStamp), configKey()].join("|");
+    const stamp = [ANSWER_FORMAT, codeStamp(), new Date().toISOString().slice(0, 10), ...inputs.map(fileStamp), configKey()].join("|");
     const key = `${stamp}|${body}`;
     let hit = suggestCache.get(key);
     if (!hit) {

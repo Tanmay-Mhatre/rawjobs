@@ -91,7 +91,12 @@ export type SuggestResult = {
   /** In the user's industries, but on a hiring system we can't scan yet. */
   notScannable: CompanySuggestion[];
   scanned: number;
+  /** With PickOptions.mine: what each list left out because it's in your companies (best first, uncut). */
+  mine?: YourSuggestions;
 };
+
+/** Suggestions that are your companies already, per list. */
+export type YourSuggestions = Pick<SuggestResult, "hiringNow" | "worthWatching" | "notScannable">;
 
 const GCC = ["united arab emirates", "saudi arabia", "qatar", "bahrain", "kuwait", "oman"];
 const gccTerms = GCC.flatMap((n) => countryTerms(COUNTRIES.find((c) => c.name === n)!, true)).filter((t) => t !== "emirates");
@@ -151,6 +156,11 @@ export type RankOptions = {
 
 export type PickOptions = {
   exclude?: ReadonlySet<string>;
+  /**
+   * Your companies, not counting hidden ones (all in `exclude` too): the ones left out for this are kept in `mine`, best first and
+   * not cut to `limit`, so the page can tell "you've added them all" from "nothing found".
+   */
+  mine?: ReadonlySet<string>;
   limit?: number;
   now?: Date;
   indexGeneratedAt?: Date;
@@ -183,11 +193,13 @@ export function pickSuggestions(ranked: RankedSuggestions, companies: readonly I
     return where ? { ...s, hires_in: where } : s;
   };
   const order = (list: readonly CompanySuggestion[]) => rerankForDiversity(list.filter(keep)).slice(0, limit).map(withPlaces);
+  const yours = (list: readonly CompanySuggestion[]) => list.filter((s) => opts.mine?.has(s.key));
   return {
     hiringNow: order(ranked.hiringNow),
     worthWatching: order(ranked.worthWatching),
     notScannable: order(ranked.notScannable),
     scanned: ranked.scanned,
+    ...(opts.mine ? { mine: { hiringNow: yours(ranked.hiringNow), worthWatching: yours(ranked.worthWatching), notScannable: yours(ranked.notScannable) } } : {}),
   };
 }
 
