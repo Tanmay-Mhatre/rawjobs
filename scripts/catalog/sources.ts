@@ -19,6 +19,7 @@ const KALIL = [
   "ashby",
   "bamboohr",
   "breezy",
+  "cornerstone",
   "dayforce",
   "eightfold",
   "gem",

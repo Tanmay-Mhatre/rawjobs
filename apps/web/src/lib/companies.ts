@@ -45,6 +45,7 @@ export const ATS_LABEL: Record<string, string> = {
   gem: "Gem",
   hrmdirect: "HRMDirect",
   softgarden: "softgarden",
+  cornerstone: "Cornerstone",
   // Job boards: credited by name (Remote OK's terms ask for it), linked back on every job.
   hackernews: "Hacker News",
   remotive: "Remotive",
