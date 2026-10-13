@@ -61,7 +61,7 @@ export const eightfold: Connector<EightfoldJob> = {
     return { ats: "eightfold", slug: host, ...(domain && DOMAIN.test(domain) ? { shard: domain.toLowerCase() } : {}) };
   },
 
-  async fetch(ref, { http }) {
+  async fetch(ref, { http, partial }) {
     if (!HOST.test(ref.slug)) throw new Error(`Eightfold careers site should be a host name, got "${ref.slug}"`);
     const host = ref.slug.toLowerCase();
     const domain = await tenantDomain(ref, http);
@@ -109,6 +109,8 @@ export const eightfold: Connector<EightfoldJob> = {
       page = await read(start);
       out.push(...page.jobs);
     }
+    // Stopped at the cap (or the API stopped early) well short of the total it reports.
+    if (page.total - out.length >= PAGE) partial?.();
     return out;
   },
 

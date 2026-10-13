@@ -44,19 +44,23 @@ export const phenom: Connector<PhenomJob> = {
   // Phenom sites live on the companies' own domains: found by Add by link's probe and the lists.
   detect: () => null,
 
-  async fetch(ref, { http }) {
+  async fetch(ref, { http, partial }) {
     const url = `${base(ref.slug)}/widgets`;
     const out: PhenomJob[] = [];
     const seen = new Set<string>();
+    let total = 0;
     for (let from = 0; from < MAX_POSTINGS; from += PAGE) {
       const res = await http.postJson<{ refineSearch?: { totalHits?: number; data?: { jobs?: PhenomJob[] } } }>(url, { deviceType: "desktop", ddoKey: "refineSearch", jobs: true, from, size: PAGE });
       const jobs = res.refineSearch?.data?.jobs;
       if (!Array.isArray(jobs)) throw new Error(`${ref.slug} is not a Phenom careers site (no job list from its widgets)`);
+      total = res.refineSearch?.totalHits ?? 0;
       const fresh = jobs.filter((j) => j.jobSeqNo && !seen.has(j.jobSeqNo));
       for (const j of fresh) seen.add(j.jobSeqNo);
       out.push(...fresh);
       if (jobs.length < PAGE || !fresh.length) break;
     }
+    // Stopped at the cap (or the API stopped early) well short of the total it reports.
+    if (total - out.length >= PAGE) partial?.();
     return out;
   },
 

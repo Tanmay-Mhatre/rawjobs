@@ -38,17 +38,20 @@ export const icims: Connector<IcimsJob> = {
   ats: "icims",
   detect: detectAs("icims"),
 
-  async fetch(ref, { http }) {
+  async fetch(ref, { http, partial }) {
     const out = new Map<string, IcimsJob>();
+    let pages = 1;
     for (let pr = 0; pr < MAX_PAGES; pr++) {
       const html = await http.getText(`${host(ref)}/jobs/search?ss=1&in_iframe=1&pr=${pr}`);
       if (pr === 0 && !/iCIMS/.test(html)) throw new Error("unexpected iCIMS response: not a job portal");
       const page = parseIcimsPage(html, host(ref));
       const before = out.size;
       for (const j of page) out.set(j.id, j);
-      const pages = Number(html.match(/Page\s+\d+\s+of\s+(\d+)/i)?.[1] ?? 1);
+      pages = Number(html.match(/Page\s+\d+\s+of\s+(\d+)/i)?.[1] ?? 1);
       if (out.size === before || pr + 1 >= pages) break;
     }
+    // The portal has more pages than we read.
+    if (pages > MAX_PAGES) partial?.();
     return [...out.values()];
   },
 

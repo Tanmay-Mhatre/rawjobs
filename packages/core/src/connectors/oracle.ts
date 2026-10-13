@@ -34,9 +34,10 @@ export const oracle: Connector<OracleRequisition> = {
   ats: "oracle",
   detect: detectAs("oracle"),
 
-  async fetch(ref, { http }) {
+  async fetch(ref, { http, partial }) {
     if (!ref.shard) throw new Error('oracle needs "shard" (the data centre, e.g. "ocs") from the careers URL');
     const out: OracleRequisition[] = [];
+    let total = 0;
     for (let offset = 0; offset < MAX_POSTINGS; offset += PAGE) {
       const finder = `findReqs;siteNumber=${siteOf(ref)},limit=${PAGE},offset=${offset},sortBy=POSTING_DATES_DESC`;
       const data = await http.getJson<Page>(
@@ -45,8 +46,11 @@ export const oracle: Connector<OracleRequisition> = {
       const page = data.items?.[0];
       if (!page || !Array.isArray(page.requisitionList)) throw new Error("unexpected Oracle response: no requisitionList");
       out.push(...page.requisitionList);
+      total = page.TotalJobsCount ?? 0;
       if (offset + PAGE >= (page.TotalJobsCount ?? 0) || page.requisitionList.length === 0) break;
     }
+    // Stopped at the cap (or the API stopped early) well short of the total it reports.
+    if (total - out.length >= PAGE) partial?.();
     return out;
   },
 

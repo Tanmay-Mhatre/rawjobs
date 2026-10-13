@@ -47,15 +47,19 @@ export const smartrecruiters: Connector<SmartRecruitersPosting> = {
     return api?.[1] ? { ats: "smartrecruiters", slug: decodeURIComponent(api[1]) } : null;
   },
 
-  async fetch(ref, { http }) {
+  async fetch(ref, { http, partial }) {
     const out: SmartRecruitersPosting[] = [];
+    let total = 0;
     for (let offset = 0; offset < MAX_POSTINGS; offset += PAGE) {
       const page = await http.getJson<Page>(`${API}/${encodeURIComponent(ref.slug)}/postings?limit=${PAGE}&offset=${offset}`);
       if (!Array.isArray(page.content)) throw new Error("unexpected SmartRecruiters response: no content array");
       out.push(...page.content);
+      total = page.totalFound;
       // An unknown company id answers 200 with totalFound 0, so an empty result is not proof the board exists.
       if (offset + PAGE >= page.totalFound || page.content.length === 0) break;
     }
+    // Stopped at the cap (or the API stopped early) well short of the total it reports.
+    if (total - out.length >= PAGE) partial?.();
     return out;
   },
 

@@ -4,6 +4,11 @@ import type { AtsType, CompanyRef, NormalizedJob } from "../schema";
 export type Ctx = {
   http: HttpClient;
   now: Date;
+  /**
+   * fetch() calls this when it stopped before the end of the list (a page or posting cap): the
+   * jobs it didn't reach aren't gone, so the run closes none of the company's unseen jobs.
+   */
+  partial?: () => void;
 };
 
 /** What detect() can read off a careers URL. */

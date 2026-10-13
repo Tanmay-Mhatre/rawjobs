@@ -30,9 +30,14 @@ export const jobvite: Connector<JobviteJob> = {
   ats: "jobvite",
   detect: detectAs("jobvite"),
 
-  async fetch(ref, { http }) {
+  async fetch(ref, { http, partial }) {
     const out = new Map<string, JobviteJob>();
-    for (let p = 0; p < MAX_PAGES; p++) {
+    for (let p = 0; ; p++) {
+      // Still a next page after the last one we read: the list was cut short.
+      if (p === MAX_PAGES) {
+        partial?.();
+        break;
+      }
       const html = await http.getText(`${BASE}/${encodeURIComponent(ref.slug)}/search?p=${p}`);
       const before = out.size;
       for (const j of parseJobvitePage(html, ref.slug)) out.set(j.id, j);

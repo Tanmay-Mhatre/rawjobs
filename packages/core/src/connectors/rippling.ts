@@ -25,14 +25,18 @@ export const rippling: Connector<RipplingJob> = {
   ats: "rippling",
   detect: detectAs("rippling"),
 
-  async fetch(ref, { http }) {
+  async fetch(ref, { http, partial }) {
     const out: RipplingJob[] = [];
+    let pages = 0;
     for (let page = 0; page < MAX_PAGES; page++) {
       const data = await http.getJson<Page>(`${API}/${encodeURIComponent(ref.slug)}/jobs?page=${page}&pageSize=${PAGE}`);
       if (!Array.isArray(data.items)) throw new Error("unexpected Rippling response: no items array");
       out.push(...data.items);
+      pages = data.totalPages ?? 0;
       if (page + 1 >= (data.totalPages ?? 0) || data.items.length === 0) break;
     }
+    // The board has more pages than we read.
+    if (pages > MAX_PAGES) partial?.();
     return out;
   },
 
