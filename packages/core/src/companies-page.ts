@@ -7,7 +7,7 @@ import type { CompanyCheck } from "./protocol";
 import { readResume } from "./resume";
 import { ATS_TYPES, type Profile } from "./schema";
 import type { DirectoryEntry } from "./scope";
-import type { CompanySuggestion, IndexedCompany, SuggestResult } from "./suggest";
+import type { CompanySuggestion, IndexedCompany, SuggestResult, YourSuggestions } from "./suggest";
 
 /**
  * The Companies page's data beyond the suggestion lists: boards added here (kept until the shared
@@ -129,12 +129,12 @@ function employerSeeds(profile: Profile, directory: readonly DirectoryEntry[], r
 /**
  * What each list left out because it's in My companies, so the page can tell "you've added them
  * all" from "nothing found": how many per list and per past employer, and per pack the companies
- * themselves (a finished pack offers Remove pack). `mine` is suggestCompanies run on your companies
- * alone; each list is picked the way the page's lists are.
+ * themselves (a finished pack offers Remove pack). `mine` is your companies
+ * as pickSuggestions left them out (PickOptions.mine); each list is picked the way the page's lists are.
  */
 export type AddedCounts = { hiring: number; watching: number; soon: number; like: Record<string, number>; packs: Record<string, string[]> };
 
-export function addedCounts(profile: Profile, mine: SuggestResult, indexed: readonly IndexedCompany[], directory: readonly DirectoryEntry[], resumeText = readResume().text ?? ""): AddedCounts {
+export function addedCounts(profile: Profile, mine: YourSuggestions, indexed: readonly IndexedCompany[], directory: readonly DirectoryEntry[], resumeText = readResume().text ?? ""): AddedCounts {
   const candidates = [...mine.hiringNow, ...mine.worthWatching];
   const rowsByKey = new Map(indexed.map((c) => [c.key, c]));
   const dirByKey = new Map(directory.map((c) => [c.key, c]));

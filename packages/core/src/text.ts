@@ -76,12 +76,23 @@ export function matchesTerm(text: string, term: string): boolean {
 const anyCache = new Map<string, RegExp | null>();
 
 /**
- * True if any term matches (same whole-word rules as matchesTerm). The terms are compiled into
- * one cached pattern, so this is one regex test instead of one per term: it matters when scoring
- * hundreds of thousands of job titles.
+ * A value worked out from a list of terms, remembered by the list itself. The hot callers (scoring
+ * the whole index) pass the same profile arrays hundreds of thousands of times, and joining one
+ * into a string key each time costs more than the regex test. The terms are kept and compared, so
+ * a list changed in place is worked out again.
  */
-export function matchesAny(text: string, terms: readonly string[]): boolean {
-  if (!terms.length) return false;
+function byList<T>(make: (terms: readonly string[]) => T): (terms: readonly string[]) => T {
+  const known = new WeakMap<readonly string[], { terms: string[]; value: T }>();
+  return (terms) => {
+    const k = known.get(terms);
+    if (k && k.terms.length === terms.length && k.terms.every((t, i) => t === terms[i])) return k.value;
+    const value = make(terms);
+    known.set(terms, { terms: [...terms], value });
+    return value;
+  };
+}
+
+const anyPattern = byList((terms) => {
   const key = terms.join("\u0000");
   let re = anyCache.get(key);
   if (re === undefined) {
@@ -89,6 +100,17 @@ export function matchesAny(text: string, terms: readonly string[]): boolean {
     re = parts.length ? new RegExp(parts.map((t) => `(?:${termRegex(t).source})`).join("|"), "iu") : null;
     anyCache.set(key, re);
   }
+  return re;
+});
+
+/**
+ * True if any term matches (same whole-word rules as matchesTerm). The terms are compiled into
+ * one cached pattern, so this is one regex test instead of one per term: it matters when scoring
+ * hundreds of thousands of job titles.
+ */
+export function matchesAny(text: string, terms: readonly string[]): boolean {
+  if (!terms.length) return false;
+  const re = anyPattern(terms);
   return re ? re.test(text) : false;
 }
 
@@ -262,7 +284,8 @@ const anchorCache = new Map<string, Set<string>>();
  * term, as written and in every equivalent form, its most telling word; plus the abbreviations and
  * other spellings that read as one of those words ("pm", "swe", "front end", "eng").
  */
-function titleAnchors(terms: readonly string[]): Set<string> {
+const titleAnchors = byList(titleAnchorsOf);
+function titleAnchorsOf(terms: readonly string[]): Set<string> {
   const key = terms.join("\u0000");
   let raw = anchorCache.get(key);
   if (raw) return raw;

@@ -11,6 +11,7 @@ const dir = mkdtempSync(join(tmpdir(), "rawjobs-suggest-"));
 afterAll(() => rmSync(dir, { recursive: true, force: true }));
 
 type Answer = {
+  cached: boolean;
   hiringNow: { key: string }[];
   packs: { industry: string; items: { key: string }[] }[];
   added: { hiring: number; watching: number; soon: number; like: Record<string, number>; packs: Record<string, string[]> };
@@ -65,6 +66,14 @@ describe("companies suggest: what it left out because it's in My companies", () 
     expect(a.packs).toEqual([]);
     expect(a.added.hiring).toBe(6);
     expect(a.added.packs.fintech).toEqual(keys);
+  });
+
+  it("counts the same from a ranking kept on disk", () => {
+    const first = suggest({ watched: keys.slice(0, 4) });
+    const again = suggest({ watched: keys.slice(0, 4) });
+    expect(again.cached).toBe(true);
+    expect(again.added).toEqual(first.added);
+    expect(again.added.hiring).toBe(4);
   });
 
   it("never counts a company you hid", () => {
