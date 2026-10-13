@@ -28,6 +28,8 @@ export const BOARD_URL: Record<string, (b: string) => string | undefined> = {
     const [cid, ccId] = b.split(":");
     return cid && ccId && plain(cid) && plain(ccId) ? `https://workforcenow.adp.com/mascsr/default/mdf/recruitment/recruitment.html?cid=${cid}&ccId=${ccId}` : undefined;
   },
+  // The tenant subdomain of {tenant}.csod.com
+  cornerstone: (b) => (plain(b) && !b.includes(".") ? `https://${b}.csod.com/ux/ats/careersite/1/home?c=${b}` : undefined),
   // "{tenant}/{site}[/{culture}]" on jobs.dayforcehcm.com
   dayforce: (b) => {
     const [tenant, site, culture] = b.split("/");
