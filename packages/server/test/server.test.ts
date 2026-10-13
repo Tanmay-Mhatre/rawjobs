@@ -1,4 +1,4 @@
-import { existsSync, mkdirSync, mkdtempSync, realpathSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { createServer, request, type IncomingMessage, type Server } from "node:http";
 import type { AddressInfo } from "node:net";
 import { tmpdir } from "node:os";
@@ -120,7 +120,29 @@ console.log(JSON.stringify({ type: "done", scope: args[args.indexOf("--scope") +
   it("answers health with the version", async () => {
     const { port } = await start();
     const r = await call(port, "GET", "/api/health");
-    expect(JSON.parse(r.text)).toEqual({ ok: true, version: "9.9.9", scanning: false, update: null, startLink: false, platform: process.platform });
+    expect(JSON.parse(r.text)).toEqual({
+      ok: true,
+      version: "9.9.9",
+      scanning: false,
+      background: false,
+      dataVersion: null,
+      update: null,
+      startLink: false,
+      platform: process.platform,
+    });
+  });
+
+  it("says when a scheduled scan is running and when a scan wrote new results", async () => {
+    const { port, dataDir } = await start();
+    const health = async () => JSON.parse((await call(port, "GET", "/api/health")).text) as { background: boolean; dataVersion: string | null };
+    // Another process (a scheduled scan) holds the scan lock.
+    writeFileSync(join(dataDir, "scan.lock"), String(process.ppid));
+    expect(await health()).toMatchObject({ background: true, dataVersion: null });
+    rmSync(join(dataDir, "scan.lock"));
+    writeFileSync(join(dataDir, "meta.json"), JSON.stringify({ version: 1, generatedAt: "2026-10-13T06:00:00.000Z" }));
+    expect(await health()).toMatchObject({ background: false, dataVersion: "2026-10-13T06:00:00.000Z" });
+    writeFileSync(join(dataDir, "meta.json"), JSON.stringify({ version: 1, generatedAt: "2026-10-13T18:00:00.000Z", runs: [] }));
+    expect((await health()).dataVersion).toBe("2026-10-13T18:00:00.000Z");
   });
 
   it("runs the CLI in your RawJobs folder", async () => {

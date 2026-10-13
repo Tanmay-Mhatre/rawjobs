@@ -53,7 +53,8 @@ function fromFile(file: DashboardJobsFile | JobsFile): Job[] {
 export function useData() {
   const [state, setState] = useState<DataState>({ kind: "loading" });
 
-  const reload = useCallback(async () => {
+  /** Reads the files again; answers with the meta.json now shown (null: no data, or it couldn't be read). */
+  const reload = useCallback(async (): Promise<DataMeta | null> => {
     try {
       const [jobsFile, meta, discover] = await Promise.all([
         getJson<DashboardJobsFile | JobsFile>("./jobs.json"),
@@ -65,15 +66,18 @@ export function useData() {
       descriptions = undefined;
       dataGeneration++;
       legacy = null;
-      if (!jobsFile || !meta) setState({ kind: "empty" });
-      else {
-        const live = fromFile(jobsFile);
-        const ids = new Set(live.map((j) => j.id));
-        const estimated = (discover?.jobs ?? []).filter((j) => !ids.has(j.id)).map(upgrade);
-        setState({ kind: "ready", jobs: [...live, ...estimated], meta, indexGeneratedAt: discover?.indexGeneratedAt });
+      if (!jobsFile || !meta) {
+        setState({ kind: "empty" });
+        return null;
       }
+      const live = fromFile(jobsFile);
+      const ids = new Set(live.map((j) => j.id));
+      const estimated = (discover?.jobs ?? []).filter((j) => !ids.has(j.id)).map(upgrade);
+      setState({ kind: "ready", jobs: [...live, ...estimated], meta, indexGeneratedAt: discover?.indexGeneratedAt });
+      return meta;
     } catch (err) {
       setState({ kind: "error", message: (err as Error).message });
+      return null;
     }
   }, []);
 

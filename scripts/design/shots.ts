@@ -89,6 +89,8 @@ type Screen = {
   act?: (page: Page) => Promise<void>;
   /** Modal screens: the viewport only (a full-page shot would show the page running on below the fixed dialog). */
   viewportOnly?: boolean;
+  /** What GET /api/health answers, given the ms since the page first asked; without it, health isn't answered. */
+  health?: (ms: number) => Record<string, unknown>;
 };
 
 const strong = demo.STRONG_JOB.title;
@@ -261,6 +263,27 @@ const SCREENS: Screen[] = [
     },
   },
   { id: "components", what: "Component gallery (design.html, dev only)", scenario: "demo", path: "design.html", hash: "", ready: "Score breakdown" },
+  {
+    id: "radar-scheduled-scan",
+    viewportOnly: true,
+    what: "Radar while a scheduled scan runs: the Scan button says so",
+    scenario: "demo",
+    hash: "#radar",
+    widths: [1280],
+    health: () => ({ ok: true, background: true, dataVersion: demo.META.generatedAt }),
+    ready: "Scheduled scan running…",
+  },
+  {
+    id: "radar-scheduled-done",
+    viewportOnly: true,
+    what: "Radar right after a scheduled scan: its new jobs are on screen and a toast says how many",
+    scenario: "demo",
+    hash: "#radar",
+    widths: [1280],
+    // Running when the page opens (several checks ask then), done by the scan watcher's next look.
+    health: (ms) => (ms < 3000 ? { ok: true, background: true, dataVersion: demo.META.generatedAt } : { ok: true, background: false, dataVersion: "a newer scan" }),
+    ready: "Scheduled scan done",
+  },
   { id: "radar-empty", what: "Radar before the first scan (set up, no jobs.json)", scenario: "empty", hash: "#radar" },
   { id: "radar-not-set-up", what: "Radar with no config yet (Welcome already seen)", scenario: "fresh", hash: "#radar", storage: { [WELCOME_KEY]: true } },
   { id: "setup-0-welcome", what: "Setup wizard: Welcome (first visit)", scenario: "fresh", hash: "#setup" },
@@ -308,12 +331,14 @@ const json = (route: Route, body: unknown, status = 200) => route.fulfill({ stat
 /** Requests the mock didn't know (so missing fixtures show up in the log). */
 const unmocked = new Set<string>();
 
-function api(scenario: Scenario) {
+function api(scenario: Scenario, health?: Screen["health"]) {
+  let firstAsked: number | undefined;
   return async (route: Route) => {
     const req = route.request();
     const path = new URL(req.url()).pathname;
     const m = req.method();
     const configured = scenario !== "fresh";
+    if (path === "/api/health" && m === "GET" && health) return json(route, health(Date.now() - (firstAsked ??= Date.now())));
     if (path === "/api/setup" && m === "GET") return json(route, configured ? { ...demo.SETUP_STATUS, hasData: scenario === "demo" } : demo.SETUP_STATUS_FRESH);
     if (path === "/api/setup/config" && m === "POST") return json(route, { ok: true, path: demo.SETUP_STATUS.configPath });
     if (path === "/api/setup/resume" && m === "GET") return json(route, { path: "profile/resume.md", text: demo.RESUME_TEXT, updatedAt: demo.NOW.toISOString() });
@@ -434,7 +459,7 @@ async function capture(browser: Browser, baseUrl: string, screen: Screen, theme:
       (url) => !url.href.startsWith(baseUrl),
       (route) => route.abort(),
     );
-    await page.route(/\/api\//, api(screen.scenario));
+    await page.route(/\/api\//, api(screen.scenario, screen.health));
     if (screen.scenario !== "demo") await page.route(DATA_FILES, (route) => route.fulfill({ status: 404, body: "" }));
     await page.addInitScript(initScript(storageFor(screen, theme)));
     const errors: string[] = [];
