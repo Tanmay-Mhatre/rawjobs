@@ -35,6 +35,8 @@ case "$SET" in
       # use to confirm boards (feashliaa, upstreamit) are never republished, so they aren't kept.
       raw/latmay/*.csv
       raw/kalil0321/*.csv
+      raw/openingsmcp/*.yaml
+      raw/freehire/*.yml
       raw/conorscode/*.json
       raw/lastround/*.csv
     )
