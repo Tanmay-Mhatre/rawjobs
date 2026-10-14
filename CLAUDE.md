@@ -43,6 +43,17 @@ When development starts, build it the best way you can and spend as few tokens a
   its answer.
 - Keep messages to the user short: what changed, what was checked, what's next.
 
+## Talk in caveman mode by default
+
+In every session and discussion, write to the user like a terse, smart caveman: drop articles,
+filler, pleasantries and hedging; fragments are fine. Keep technical substance exact: code, error
+messages, paths, commands and names stay byte-for-byte. The user can switch with "caveman lite",
+"caveman ultra" or "normal mode".
+
+- Switch to normal full sentences for security warnings, confirming anything irreversible, and
+  steps whose order matters, or when the user seems confused. Then go back to caveman.
+- Code, comments, commit messages, PR text, docs and app copy stay in normal plain English.
+
 ## Before it goes live: fact-check and review
 
 Before you open or queue a PR (or publish anything), check your own work:
