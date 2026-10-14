@@ -1,14 +1,15 @@
 /**
- * Hiring activity (packages/core/src/activity.ts): record today's new roles per company from the job
+ * Hiring activity (packages/core/src/activity.ts): record this run's new roles per company from the job
  * feed's change file, and publish jobs-activity-<seq>.json.br next to the feed, listed in
- * jobs-v2-manifest.json. Runs after jobs.ts and before the manifest is signed:
+ * jobs-v3-manifest.json and jobs-v2-manifest.json. Runs after jobs.ts merge and before the manifests
+ * are signed:
  *
  *   pnpm exec tsx scripts/catalog/activity.ts [--out out/jobs]
  *
- * Reads, in <out>: the feed's second format (manifest, today's full copy and change file) and
- * activity-state.json (the days recorded so far, carried by state.sh). Writes the state, the file,
- * and last the manifest with its `activity` entry. Anything going wrong leaves the manifest as it was,
- * so the feed publishes without activity that day (lib/activity.ts).
+ * Reads, in <out>: the feed's third format (every hiring system; else the second): manifest, full copy
+ * and change file; and activity-state.json (the days recorded so far, carried by state.sh). Writes the
+ * state, the file, and last the manifests' `activity` entries. Anything going wrong leaves the
+ * manifests as they were, so the feed publishes without activity that run (lib/activity.ts).
  */
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";

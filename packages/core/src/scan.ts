@@ -1,19 +1,19 @@
 import { appendFileSync, existsSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { isChronic, planBoards, pruneBoards, readBoardHealth, recordBoards, writeBoardHealth } from "./board-health";
+import { isChronic, knownFirstPages, planBoards, pruneBoards, readBoardHealth, recordBoards, writeBoardHealth } from "./board-health";
 import { companyIndustries } from "./catalog/industries";
-import { companyKey, jobCompanyKey } from "./connectors";
+import { companyKey, companyOfJobId, jobCompanyKey } from "./connectors";
 import { mergeHistory, type MergeResult } from "./diff";
 import { keptChecked, readLedger, recordChecks, writeLedger } from "./discover";
 import { HttpClient, type HttpStats } from "./http";
 import { FileHttpCache } from "./http-cache";
 import { readLocationCache, writeLocationCache } from "./location-cache";
-import { feedMatches, jobFeedStatus } from "./job-feed";
+import { FEED_MAX_AGE_DAYS, feedMatches, jobFeedStatus } from "./job-feed";
 import { checkStillOpen, jobsToRecheck } from "./liveness";
 import { alertJobs } from "./notify";
 import { runRadar, type RunResult } from "./run";
 import type { BoardMove, CompanyHealth, CompanyRef, Config, Job, RunSummary } from "./schema";
-import { estimateScan, findMoves, readDirectory, readDirectoryMoves, readSpeeds, recordSpeeds, refOfEntry, scopeCompanies, type ScanEstimate, type ScanScope } from "./scope";
+import { byMatchChance, estimateScan, findMoves, readDirectory, readDirectoryMoves, readSpeeds, recordSpeeds, refOfEntry, scopeCompanies, type ScanEstimate, type ScanScope } from "./scope";
 import { fetchedSince, quickPicks } from "./stages";
 import { readJobs, saveRun } from "./store";
 import type { ScanSource } from "./protocol";
@@ -96,6 +96,12 @@ export type ScanStats = {
   http: HttpStats;
   /** Every company fetched this run: milliseconds, by jobCompanyKey(). Kept for the latest run only. */
   companies?: Record<string, number>;
+  /** Directory boards left alone by their record (board-health.ts): resting after failures, or quiet. */
+  skippedByHealth?: number;
+  /** Paged boards whose first page was as last time: only that page was read. */
+  unchanged?: number;
+  /** The shared job feed's age when the scan started, in hours. */
+  feedAgeHours?: number;
 };
 const KEEP_STATS = 20;
 
@@ -111,6 +117,49 @@ export function readScanStats(dataDir: string): ScanStats[] {
 function writeScanStats(dataDir: string, stats: ScanStats): void {
   const runs = [stats, ...readScanStats(dataDir).map(({ companies: _, ...r }) => r)].slice(0, KEEP_STATS);
   writeFileSync(join(dataDir, "scan-stats.json"), JSON.stringify({ version: 1, runs }));
+}
+
+/** Past this many hours, the job feed's "nothing for you" is checked live for the likeliest companies (liveDespiteFeed). */
+export const FEED_RECHECK_HOURS = 12;
+
+/**
+ * Whether a directory company the shared job feed shows nothing for you at is fetched live anyway, by
+ * the feed's age: once it's over FEED_RECHECK_HOURS old, companies that matched before and ones in
+ * your industries are; once it's over FEED_MAX_AGE_DAYS, every one is (the feed no longer counts).
+ */
+export function liveDespiteFeed(feedAgeHours: number, c: { matchedBefore: boolean; inIndustry: boolean }): boolean {
+  if (feedAgeHours > FEED_MAX_AGE_DAYS * 24) return true;
+  return feedAgeHours > FEED_RECHECK_HOURS && (c.matchedBefore || c.inIndustry);
+}
+
+/** Companies (jobCompanyKey()) with a job that matched you in history. */
+function pastMatchers(jobs: readonly Job[]): Set<string> {
+  const keys = new Set<string>();
+  for (const j of jobs) if (!j.why?.gate) keys.add(companyOfJobId(j.id));
+  return keys;
+}
+
+/** The directory companies the feed leaves to a live fetch: those it doesn't cover, has something for you at, or (by its age) liveDespiteFeed. */
+function feedLeaves<T extends CompanyRef>(
+  companies: readonly T[],
+  feed: { covered: ReadonlySet<string>; matching: ReadonlySet<string> },
+  ageHours: number,
+  hints: { matchedBefore: (c: T) => boolean; inIndustry: (c: T) => boolean },
+): T[] {
+  return companies.filter((c) => {
+    const key = jobCompanyKey(c);
+    return !feed.covered.has(key) || feed.matching.has(key) || liveDespiteFeed(ageHours, { matchedBefore: hints.matchedBefore(c), inIndustry: hints.inIndustry(c) });
+  });
+}
+
+/** How a scan tells which directory companies are likeliest to have something for you (byMatchChance, liveDespiteFeed). */
+function matchHints(config: Config, previous: readonly Job[], industriesOf: (c: CompanyRef) => readonly string[] | undefined) {
+  const matched = pastMatchers(previous);
+  const wanted = new Set(config.profile.industries);
+  return {
+    matchedBefore: (c: CompanyRef) => matched.has(jobCompanyKey(c)),
+    inIndustry: (c: CompanyRef) => !!industriesOf(c)?.some((t) => wanted.has(t)),
+  };
 }
 
 /** The job feed's part of the last scans that used it (sync + match), for the next estimate. */
@@ -195,9 +244,11 @@ export function resumable(dataDir: string, scope: ScanScope, now = new Date()): 
 export function scanPlan(config: Config, dataDir: string, scope: ScanScope, directory = readDirectory(dataDir)) {
   const yours = config.companies.filter((c) => c.enabled);
   const feed = scope === "all" ? undefined : feedMatches(dataDir, config.profile);
+  const tagged = new Map(directory.map((c) => [c.key, companyIndustries(c)] as const));
+  const hints = matchHints(config, readJobs(dataDir), (c) => tagged.get(companyKey(c)));
   const candidates = scopeCompanies(config, directory, scope);
-  const quick = scope === "mine" ? quickPicks(candidates, { feed, ledger: readLedger(dataDir) }) : undefined;
-  const inScope = quick ? quick.picks : candidates;
+  const quick = scope === "mine" ? quickPicks(candidates, { feed, ledger: readLedger(dataDir), matchedBefore: hints.matchedBefore }) : undefined;
+  const inScope = quick ? quick.picks : feed ? feedLeaves(candidates, feed, jobFeedStatus(dataDir).ageDays * 24, hints) : candidates;
   // Resting and quiet directory boards aren't fetched, so they don't count towards the time.
   const extra = planBoards(inScope, readBoardHealth(dataDir), Date.now(), { yours: new Set(yours.map(jobCompanyKey)) }).fetch;
   const estimate = estimateScan([...yours, ...extra], { speeds: readSpeeds(dataDir), feed: !!feed && feed.covered.size > 0, feedSeconds: feedSecondsFrom(dataDir) });
@@ -233,14 +284,15 @@ export async function scan(config: Config, opts: ScanOptions): Promise<ScanResul
   const matchStarted = Date.now();
   const feed = fullScan && opts.feed !== false ? feedMatches(opts.dataDir, config.profile, now.getTime()) : undefined;
   const matchMs = Date.now() - matchStarted;
+  // An older feed leaves more to the live fetch: the likeliest companies past 12 h, all of them past 3 days.
+  const hints = matchHints(config, previous, industriesOf);
+  const feedAgeHours = feed ? jobFeedStatus(opts.dataDir, now.getTime()).ageDays * 24 : undefined;
   // Scan now: past matches and the feed's picks (every company when the feed is too old to pick).
-  const quick = fullScan && scope === "mine" ? quickPicks(inScope, { feed, ledger }) : undefined;
+  const quick = fullScan && scope === "mine" ? quickPicks(inScope, { feed, ledger, matchedBefore: hints.matchedBefore }) : undefined;
   const feedAge = fullScan ? jobFeedStatus(opts.dataDir, now.getTime()).ageDays : Infinity;
   let boards = readBoardHealth(opts.dataDir);
   const since = opts.skipFetchedSince;
-  const unfed = (quick ? quick.picks : feed ? inScope.filter((c) => !feed.covered.has(jobCompanyKey(c)) || feed.matching.has(jobCompanyKey(c))) : inScope).filter(
-    (c) => since === undefined || !fetchedSince(boards.boards[jobCompanyKey(c)], since),
-  );
+  const unfed = (quick ? quick.picks : feed ? feedLeaves(inScope, feed, feedAgeHours!, hints) : inScope).filter((c) => since === undefined || !fetchedSince(boards.boards[jobCompanyKey(c)], since));
   // Carry on a stopped scan of the same scope: skip what it fetched, keep what it found.
   const progressPath = join(opts.dataDir, progressFile(scope));
   const prior = fullScan && opts.resume !== false && !opts.dryRun ? readProgress(opts.dataDir, scope) : undefined;
@@ -251,11 +303,13 @@ export async function scan(config: Config, opts: ScanOptions): Promise<ScanResul
   // scan of chosen ones ("Check now", --only), and the stopped scan's count as done.
   const plan = { yours: new Set(config.companies.map(jobCompanyKey)), done };
   const directoryPlan = fullScan ? planBoards(unfed, boards, now.getTime(), plan) : { fetch: unfed, resting: [], quiet: [] };
-  const checks = directoryPlan.fetch;
+  // Likeliest matches first, so what a slow or stopped scan finds is most of what it would.
+  const checks = byMatchChance(directoryPlan.fetch, hints);
   // Saved responses: a board that hasn't changed since the last scan answers with an empty 304.
   const cache = opts.http || opts.dryRun ? undefined : new FileHttpCache(join(opts.dataDir, "cache", "http"));
   // A host that doesn't answer gives up after 8 s; one that answers gets 15 s for the body.
-  const http = opts.http ?? new HttpClient({ cache, connectTimeoutMs: 8_000, readTimeoutMs: 15_000, retries: 2, breakAfter: 3 });
+  // Each hiring system's API paced as a whole, faster while it keeps up (http.ts paceOf).
+  const http = opts.http ?? new HttpClient({ cache, connectTimeoutMs: 8_000, readTimeoutMs: 15_000, retries: 2, breakAfter: 3, adaptive: true });
   // Where "3 Locations" jobs really are, from earlier scans: their pages aren't fetched again for that.
   const locations = readLocationCache(opts.dataDir);
   const knownLocations = locations.size;
@@ -328,6 +382,8 @@ export async function scan(config: Config, opts: ScanOptions): Promise<ScanResul
     stopped: opts.stopped,
     industriesOf,
     locations,
+    // Your companies' first pages too: theirs are only reused when every job is there (run.ts).
+    firstPages: fullScan ? knownFirstPages(boards, now.getTime()) : undefined,
     onCompanyDone: opts.onCompanyDone,
     onCompanyResult: (h, jobs) => {
       pending.health.push(h);
@@ -372,7 +428,11 @@ export async function scan(config: Config, opts: ScanOptions): Promise<ScanResul
     wallMs: Date.now() - clock + (opts.syncMs ?? 0),
     http: { ...http.stats },
     companies: Object.fromEntries(run.health.map((h) => [h.key ?? jobCompanyKey(h), h.durationMs])),
+    ...(fullScan ? { skippedByHealth: resting.length + directoryPlan.quiet.length } : {}),
+    unchanged: run.health.filter((h) => h.unchanged).length,
+    ...(feedAgeHours !== undefined && Number.isFinite(feedAgeHours) ? { feedAgeHours: Math.round(feedAgeHours * 10) / 10 } : {}),
   });
+
   if (opts.dryRun) return { result, merged, checks, moves, stopped, ...boardNews, stats: statsOf() };
 
   // Jobs the alert would name that weren't just read live: checked once more. A closed one is saved

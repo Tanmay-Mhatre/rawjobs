@@ -1,17 +1,35 @@
-# Every day: read every live directory board's open jobs once, for everyone, and publish them as the
-# shared job feed (the "jobs" release of the directory repo). Scans use it to skip companies with
+# Every 6 hours: read every live directory board's open jobs once, for everyone, and publish them as
+# the shared job feed (the "jobs" release of the directory repo). Scans use it to skip companies with
 # nothing for the user and still fetch the rest live. Unchanged boards cost an empty 304.
-# Setup: docs/shared-directory.md ("Job feed")
-name: Jobs · daily feed
+# Setup: docs/shared-directory.md ("Job feed"). The file keeps its old name so its run history stays.
+#
+# Four crawl jobs (one per group of hiring systems, scripts/catalog/jobs.ts GROUPS) run side by side and
+# each saves its own state; the merge job alone writes, signs and publishes the feed. A group that fails
+# is replaced by its previous saved copy. GitHub's cron often starts hours late, so a Cloudflare cron
+# (services/feed-trigger) also starts this workflow; the guard skips a run when the feed is fresh.
+#
+# Test without publishing: gh workflow run jobs-daily.yml --ref <branch> -f publish=false -f force=true
+# A run publishes, saves state and opens issues only when publish is on AND it runs from main.
+name: Jobs · feed every 6 h
 
 on:
   schedule:
-    - cron: "23 4 * * *"
+    - cron: "23 */6 * * *"
   workflow_dispatch:
+    inputs:
+      publish:
+        description: "Publish the feed and save state (off: a test run that changes nothing)"
+        type: boolean
+        default: true
+      force:
+        description: "Run even if the feed was built less than 4 hours ago"
+        type: boolean
+        default: false
 
 # Its own group: the feed keeps its own state, so it never waits for or blocks the directory runs.
+# Test runs get their own group, so they never hold up (or get cancelled by) the real ones.
 concurrency:
-  group: jobs
+  group: ${{ (github.event_name == 'workflow_dispatch' && !inputs.publish) && format('jobs-test-{0}', github.ref_name) || 'jobs' }}
   cancel-in-progress: false
 
 permissions:
@@ -23,12 +41,54 @@ env:
   DATA_REPO: ${{ vars.DATA_REPO || 'Tanmay-Mhatre/rawjobs-directory' }}
 
 jobs:
-  feed:
+  guard:
     runs-on: ubuntu-24.04
-    timeout-minutes: 340
+    timeout-minutes: 5
+    outputs:
+      run: ${{ steps.check.outputs.run }}
+      publish: ${{ steps.check.outputs.publish }}
+      run_at: ${{ steps.check.outputs.run_at }}
     steps:
-      - id: checkout
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - id: check
+        name: Skip when the feed is under 4 hours old
+        env:
+          GH_TOKEN: ${{ secrets.DATA_REPO_TOKEN }}
+          PUBLISH: ${{ (github.event_name != 'workflow_dispatch' || inputs.publish) && github.ref == 'refs/heads/main' }}
+          FORCE: ${{ github.event_name == 'workflow_dispatch' && inputs.force }}
+        run: |
+          # Every group stamps its rows with this time, so one run's companies share one time.
+          run_at=$(date -u +%Y-%m-%dT%H:%M:%S.000Z)
+          echo "run_at=$run_at" >> "$GITHUB_OUTPUT"
+          echo "publish=$PUBLISH" >> "$GITHUB_OUTPUT"
+          echo "Publish: $PUBLISH"
+          run=true
+          if [ "$FORCE" != true ]; then
+            # The feed's time is when its run started, so a run every 6 hours is never skipped,
+            # but a second trigger (GitHub's cron and Cloudflare's) within 4 hours is.
+            generated=""
+            for m in jobs-v3-manifest.json jobs-manifest.json; do
+              generated=$(gh release download jobs -R "$DATA_REPO" -p "$m" -O - 2> /dev/null | jq -r '.generated_at // empty') && [ -n "$generated" ] && break
+            done
+            if [ -n "$generated" ]; then
+              age=$(( $(date -u +%s) - $(date -u -d "$generated" +%s) ))
+              echo "The feed was started $((age / 60)) minutes ago ($generated)."
+              if [ "$age" -lt 14400 ]; then run=false; echo "::notice::Skipped: the feed is under 4 hours old."; fi
+            fi
+          fi
+          echo "run=$run" >> "$GITHUB_OUTPUT"
+
+  crawl:
+    needs: guard
+    if: needs.guard.outputs.run == 'true'
+    runs-on: ubuntu-24.04
+    # The crawl stops starting boards after 4 h so the save steps always get to run.
+    timeout-minutes: 280
+    strategy:
+      fail-fast: false
+      matrix:
+        group: [sr, payroll, enterprise, rest]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
@@ -36,8 +96,14 @@ jobs:
           cache: pnpm
       - run: pnpm install --frozen-lockfile
 
-      - name: Restore yesterday's feed and ETags
+      - name: Restore the group's last shards and ETags
         id: state
+        env:
+          GH_TOKEN: ${{ secrets.DATA_REPO_TOKEN }}
+        run: bash scripts/catalog/state.sh restore jobs-${{ matrix.group }}
+
+      - name: Before the group's first saved copy, start from the published feed
+        if: steps.state.outputs.restored == 'false'
         env:
           GH_TOKEN: ${{ secrets.DATA_REPO_TOKEN }}
         run: bash scripts/catalog/state.sh restore jobs
@@ -53,29 +119,114 @@ jobs:
             echo '{"companies":[]}' > "$RUNNER_TEMP/denylist.json"
           fi
 
-      - name: Build the feed
+      - name: Read the group's boards
         env:
           DENYLIST_FILE: ${{ runner.temp }}/denylist.json
-        # Stops starting boards after 5 h so the publish and save steps always get to run.
-        run: pnpm exec tsx scripts/catalog/jobs.ts --directory "$RUNNER_TEMP/directory.json" --out scripts/catalog/out/jobs --max-minutes 300
+          NODE_OPTIONS: --max-old-space-size=6144
+        run: >-
+          pnpm exec tsx scripts/catalog/jobs.ts crawl --group ${{ matrix.group }}
+          --generated "${{ needs.guard.outputs.run_at }}" --directory "$RUNNER_TEMP/directory.json"
+          --out scripts/catalog/out/jobs --max-minutes 240
+
+      - name: Hand the shards to the merge job
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: ${{ matrix.group }}
+          path: scripts/catalog/out/jobs/groups/${{ matrix.group }}/
+          retention-days: 1
+          if-no-files-found: error
+
+      - name: Save the group's shards and ETags for the next run
+        if: needs.guard.outputs.publish == 'true' && steps.state.outcome == 'success'
+        env:
+          GH_TOKEN: ${{ secrets.DATA_REPO_TOKEN }}
+        run: bash scripts/catalog/state.sh save jobs-${{ matrix.group }}
+
+  merge:
+    needs: [guard, crawl]
+    # Also when a group failed: its previous saved copy stands in for it.
+    if: always() && needs.guard.outputs.run == 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - id: checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+
+      - name: Restore the last published feed
+        id: state
+        env:
+          GH_TOKEN: ${{ secrets.DATA_REPO_TOKEN }}
+        run: bash scripts/catalog/state.sh restore jobs
+
+      - name: Take this run's groups
+        # None at all (every group failed): the next step stands in for each.
+        continue-on-error: true
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          path: scripts/catalog/out/jobs/groups
+
+      - name: Stand in for a failed group with its previous copy
+        env:
+          GH_TOKEN: ${{ secrets.DATA_REPO_TOKEN }}
+        run: |
+          for g in sr payroll enterprise rest; do
+            if [ ! -f "scripts/catalog/out/jobs/groups/$g/group.json" ]; then
+              echo "::warning::Group $g has no shards from this run; using its previous copy."
+              bash scripts/catalog/state.sh restore "jobs-$g"
+            fi
+          done
+
+      - name: Merge the groups into the feed
+        env:
+          NODE_OPTIONS: --max-old-space-size=12288
+        run: pnpm exec tsx scripts/catalog/jobs.ts merge --generated "${{ needs.guard.outputs.run_at }}" --out scripts/catalog/out/jobs
 
       - name: Record hiring activity
-        # New roles per company from today's change file (scripts/catalog/activity.ts). Optional: if it
-        # fails or runs out of time, the manifest has no activity entry today and the feed publishes as usual.
+        # New roles per company from this run's change file (scripts/catalog/activity.ts), over every
+        # hiring system (the third format); listed in the third and second formats' manifests. Optional:
+        # if it fails or runs out of time, the manifests have no activity entry this run.
         continue-on-error: true
-        timeout-minutes: 15
+        timeout-minutes: 20
+        env:
+          NODE_OPTIONS: --max-old-space-size=12288
         run: pnpm exec tsx scripts/catalog/activity.ts --out scripts/catalog/out/jobs
 
-      - name: Sign the manifest
+      - name: Report per group and system
+        working-directory: scripts/catalog/out/jobs
+        run: |
+          {
+            echo "### Job feed (publish: ${{ needs.guard.outputs.publish }})"
+            echo
+            echo "| Group | Fresh | Minutes |"
+            echo "|---|---|---|"
+            jq -r '.groups | to_entries[] | "| \(.key) | \(.value.fresh) | \((.value.seconds // 0) / 60 | floor) |"' stats.json
+            echo
+            echo "| System | Companies | Jobs | Fetched | Unchanged | Failed | Skipped | Capped | Places looked up | Minutes |"
+            echo "|---|---|---|---|---|---|---|---|---|---|"
+            jq -r '.ats | to_entries[] | "| \(.key) | \(.value.companies) | \(.value.jobs) | \(.value.fetched) | \(.value.notModified) | \(.value.failed) | \(.value.skipped)\(if .value.tripped then " (stopped)" else "" end) | \(.value.partial) | \(.value.described) | \(.value.seconds / 60 | floor) |"' stats.json
+            echo
+            jq -r '.alerts[] | "- \(.text)"' stats.json
+          } >> "$GITHUB_STEP_SUMMARY"
+          jq '{generated_at, groups, alerts, v2, v3}' stats.json
+
+      - name: Sign the manifests
+        if: needs.guard.outputs.publish == 'true'
         timeout-minutes: 2
         env:
           RAWJOBS_DATA_SIGNING_KEY: ${{ secrets.RAWJOBS_DATA_SIGNING_KEY }}
         # Apps accept the data only with a valid signature (packages/core/src/data-signing.ts).
         run: |
           export RAWJOBS_DATA_PUBLIC_KEY="$(grep -o 'DATA_PUBLIC_KEY = "[^"]*"' packages/core/src/data-signing.ts | cut -d'"' -f2)"
-          node scripts/catalog/sign.mjs scripts/catalog/out/jobs/jobs-manifest.json scripts/catalog/out/jobs/jobs-v2-manifest.json
+          node scripts/catalog/sign.mjs scripts/catalog/out/jobs/jobs-manifest.json scripts/catalog/out/jobs/jobs-v2-manifest.json scripts/catalog/out/jobs/jobs-v3-manifest.json
 
-      - name: Publish (shards first, manifest last)
+      - name: Publish (files first, manifests last)
+        if: needs.guard.outputs.publish == 'true'
         env:
           GH_TOKEN: ${{ secrets.DATA_REPO_TOKEN }}
         working-directory: scripts/catalog/out/jobs
@@ -83,53 +234,61 @@ jobs:
           # Not --latest: the directory download uses releases/latest.
           gh release view jobs -R "$DATA_REPO" > /dev/null 2>&1 ||
             gh release create jobs -R "$DATA_REPO" --latest=false --title "Job feed" \
-              --notes "The shared job feed, rebuilt daily. Read jobs-manifest.json first; shards are checked against its SHA-256."
-          # First format: one shard per hiring system. Second: today's full copy, change file and hiring activity.
+              --notes "The shared job feed, rebuilt every 6 hours. Read jobs-v3-manifest.json (or jobs-manifest.json) first; files are checked against its SHA-256."
+          # First format: one shard per original hiring system. Second and third: this run's full copy and change file.
           shards=$(jq -r '.shards[].file' jobs-manifest.json)
-          v2new=$(ls jobs-v2-snapshot-*.json.br jobs-v2-diff-*.json.br 2> /dev/null || true)
-          v2new="$v2new $(jq -r '.activity.file // empty' jobs-v2-manifest.json)"
-          gh release upload jobs $shards $v2new -R "$DATA_REPO" --clobber
+          new=$(ls jobs-v2-snapshot-*.json.br jobs-v2-diff-*.json.br jobs-v3-snapshot-*.txt.br jobs-v3-diff-*.json.br 2> /dev/null || true)
+          new="$new $(jq -r '.activity.file // empty' jobs-v3-manifest.json)"
+          gh release upload jobs $shards $new -R "$DATA_REPO" --clobber
           # Each manifest together with its signature, so the pair changes as close to together as it can.
-          gh release upload jobs jobs-manifest.json jobs-manifest.json.sig -R "$DATA_REPO" --clobber
-          gh release upload jobs jobs-v2-manifest.json jobs-v2-manifest.json.sig -R "$DATA_REPO" --clobber
-          # Drop files no manifest points to any more (the second keeps 14 days of change files).
-          keep=$(printf '%s\n' $shards jobs-manifest.json jobs-manifest.json.sig jobs-v2-manifest.json jobs-v2-manifest.json.sig $(jq -r '.snapshot.file, .diffs[].file, (.activity.file // empty)' jobs-v2-manifest.json))
+          for m in jobs-manifest.json jobs-v2-manifest.json jobs-v3-manifest.json; do
+            gh release upload jobs "$m" "$m.sig" -R "$DATA_REPO" --clobber
+          done
+          # Drop files no manifest points to any more (change files: the last 56 runs), except the previous
+          # run's full copies and shards: an app may be part-way through downloading them.
+          keep=$(printf '%s\n' $shards jobs-manifest.json jobs-manifest.json.sig jobs-v2-manifest.json jobs-v2-manifest.json.sig jobs-v3-manifest.json jobs-v3-manifest.json.sig \
+            $(jq -r '.snapshot.file, .diffs[].file, (.activity.file // empty)' jobs-v2-manifest.json jobs-v3-manifest.json) \
+            $(jq -r '.v1.previous[]?, .v2.previousSnapshot // empty, .v3.previousSnapshot // empty' stats.json))
           for a in $(gh release view jobs -R "$DATA_REPO" --json assets -q '.assets[].name'); do
             grep -qx "$a" <<< "$keep" || gh release delete-asset jobs "$a" -R "$DATA_REPO" -y
           done
-          jq '{generated_at, alerts, http, ats, v2}' stats.json
 
-      - name: Save the feed and ETags for tomorrow
-        if: always() && steps.state.outcome == 'success'
+      - name: Save the published feed for the next run
+        if: always() && needs.guard.outputs.publish == 'true' && steps.state.outcome == 'success'
         env:
           GH_TOKEN: ${{ secrets.DATA_REPO_TOKEN }}
         run: bash scripts/catalog/state.sh save jobs
 
-      - name: Flag a large change since yesterday
+      - name: Open (or add to) an issue per hiring system that needs a look
+        if: needs.guard.outputs.publish == 'true'
         env:
           GH_TOKEN: ${{ github.token }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
         run: |
-          alerts=$(jq -r '.alerts | join("; ")' scripts/catalog/out/jobs/stats.json)
-          [ -n "$alerts" ] || exit 0
-          title="Job feed changed a lot: $(date -u +%Y-%m-%d)"
-          gh issue create -R "${{ github.repository }}" --title "$title" \
-            --body "The daily job feed moved more than 20% since yesterday ($alerts). A connector may be broken or a host may be blocking the runner. Run: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+          jq -c '.alerts[]' scripts/catalog/out/jobs/stats.json | while read -r a; do
+            what=$(jq -r '.ats // "the feed"' <<< "$a")
+            text=$(jq -r '.text' <<< "$a")
+            title="Job feed: $what needs a look"
+            body="$text. A connector may be broken or a host may be blocking the runner. Run: $RUN_URL"
+            n=$(gh issue list -R "${{ github.repository }}" --state open --search "\"$title\" in:title" --json number,title -q ".[] | select(.title == \"$title\") | .number" | head -1)
+            if [ -n "$n" ]; then gh issue comment "$n" -R "${{ github.repository }}" --body "$body"; else gh issue create -R "${{ github.repository }}" --title "$title" --body "$body"; fi
+          done
 
       - name: Report a failed run
-        if: failure()
+        if: failure() && needs.guard.outputs.publish == 'true'
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           title="Job feed run failed"
           if [ -z "$(gh issue list -R "${{ github.repository }}" --state open --search "\"$title\" in:title" --json number -q '.[].number')" ]; then
             gh issue create -R "${{ github.repository }}" --title "$title" \
-              --body "The daily job feed failed. Scans fall back to fetching every company live until it runs again. Run: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+              --body "The job feed failed. Apps keep the last feed and fetch stale companies live until it runs again. Run: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
           fi
 
       - name: Check the directory isn't stale
         # The weekly rebuild publishes a dated release (directory-YYYY-MM-DD); contributions publish
         # "-shared" ones in between, which don't count. More than 8 days old means a rebuild went missing.
-        if: always() && steps.checkout.outcome == 'success'
+        if: always() && steps.checkout.outcome == 'success' && needs.guard.outputs.publish == 'true'
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
@@ -150,14 +309,15 @@ jobs:
           fi
 
       - name: Start the weekly rebuild if it's overdue
-        if: always() && steps.checkout.outcome == 'success'
+        # watchdog.sh starts at most one a day, and none while one is queued or running.
+        if: always() && steps.checkout.outcome == 'success' && needs.guard.outputs.publish == 'true'
         env:
           GH_TOKEN: ${{ github.token }}
         run: bash scripts/catalog/watchdog.sh rebuild
 
       - name: Keep the schedules alive
         # GitHub turns off scheduled workflows after 60 days without repository activity.
-        if: always() && steps.checkout.outcome == 'success'
+        if: always() && steps.checkout.outcome == 'success' && needs.guard.outputs.publish == 'true'
         env:
           GH_TOKEN: ${{ github.token }}
         run: bash scripts/catalog/watchdog.sh keepalive

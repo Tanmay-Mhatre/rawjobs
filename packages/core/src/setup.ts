@@ -172,7 +172,14 @@ export async function checkCompanies(inputs: readonly string[], opts: CheckOptio
         );
         continue;
       }
-      const normalized = jobs.map((j) => connector.normalize(j, company));
+      // One malformed posting (a Workday one without a path, say) shouldn't fail the whole board's check.
+      const normalized = jobs.flatMap((j) => {
+        try {
+          return [connector.normalize(j, company)];
+        } catch {
+          return [];
+        }
+      });
       const places = new Map<string, number>();
       for (const j of normalized) {
         const place = j.location.split(/[,;|/]/)[0]!.trim();

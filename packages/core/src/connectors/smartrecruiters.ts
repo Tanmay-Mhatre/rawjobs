@@ -3,7 +3,7 @@ import type { CompanyRef, NormalizedJob, Workplace } from "../schema";
 import { htmlToText } from "../text";
 import { HttpError } from "../http";
 import { urlOf } from "./parse";
-import { firstPathSegment, jobId, SEARCH_MAX_POSTINGS, type Connector, type Ctx } from "./types";
+import { firstPageFingerprint, firstPathSegment, jobId, SEARCH_MAX_POSTINGS, type Connector, type Ctx } from "./types";
 
 /** https://developers.smartrecruiters.com/docs/posting-api (official, keyless for public postings) */
 export type SmartRecruitersPosting = {
@@ -38,8 +38,11 @@ function countryName(code?: string): string | undefined {
   }
 }
 
-/** The company's postings, or those the API's full-text `q` finds, up to `max`. */
-async function list(ref: CompanyRef, http: Ctx["http"], q: string, max: number) {
+/**
+ * The company's postings, or those the API's full-text `q` finds, up to `max`. With `firstPage`, a
+ * board of several pages whose first is as the last full read saw it stops there (unchanged).
+ */
+async function list(ref: CompanyRef, http: Ctx["http"], q: string, max: number, firstPage?: Ctx["firstPage"]) {
   const out: SmartRecruitersPosting[] = [];
   let total = 0;
   for (let offset = 0; offset < max; offset += PAGE) {
@@ -47,10 +50,22 @@ async function list(ref: CompanyRef, http: Ctx["http"], q: string, max: number) 
     if (!Array.isArray(page.content)) throw new Error("unexpected SmartRecruiters response: no content array");
     out.push(...page.content);
     total = page.totalFound;
+    if (
+      offset === 0 &&
+      total > PAGE &&
+      firstPage?.(
+        firstPageFingerprint(
+          total,
+          page.content.map((p) => p.id),
+        ),
+        total,
+      )
+    )
+      return { out, total, unchanged: true };
     // An unknown company id answers 200 with totalFound 0, so an empty result is not proof the board exists.
     if (offset + PAGE >= page.totalFound || page.content.length === 0) break;
   }
-  return { out, total };
+  return { out, total, unchanged: false };
 }
 
 export const smartrecruiters: Connector<SmartRecruitersPosting> = {
@@ -66,10 +81,11 @@ export const smartrecruiters: Connector<SmartRecruitersPosting> = {
     return api?.[1] ? { ats: "smartrecruiters", slug: decodeURIComponent(api[1]) } : null;
   },
 
-  async fetch(ref, { http, partial }) {
-    const { out, total } = await list(ref, http, "", MAX_POSTINGS);
+  async fetch(ref, { http, partial, firstPage }) {
+    const { out, total, unchanged } = await list(ref, http, "", MAX_POSTINGS, firstPage);
     // Stopped at the cap (or the API stopped early) well short of the total it reports.
-    if (total - out.length >= PAGE) partial?.();
+    if (!unchanged && total - out.length >= PAGE) partial?.();
+
     return out;
   },
 

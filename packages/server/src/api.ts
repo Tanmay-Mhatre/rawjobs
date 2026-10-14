@@ -88,7 +88,9 @@ export function createApi(opts: ApiOptions) {
 
   /** Run `rawjobs <args>` from the repo root (no shell, so no quoting issues). */
   function cli(args: string[], stdin?: string): ChildProcess {
-    const child = spawn(cliCmd.command, [...cliCmd.args, ...args], { cwd: home, windowsHide: true });
+    // Room for the job feed (a few hundred MB at peak) without letting a runaway scan take the laptop.
+    const env = { ...process.env, NODE_OPTIONS: `${process.env.NODE_OPTIONS ?? ""} --max-old-space-size=2048`.trim() };
+    const child = spawn(cliCmd.command, [...cliCmd.args, ...args], { cwd: home, env, windowsHide: true });
     if (stdin !== undefined) child.stdin!.end(stdin);
     else child.stdin!.end();
     return child;

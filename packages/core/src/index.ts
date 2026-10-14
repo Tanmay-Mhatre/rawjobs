@@ -9,6 +9,8 @@ export * from "./http-cache";
 export * from "./robots";
 export * from "./job-feed";
 export * from "./job-feed-diff";
+export * from "./job-feed-compact";
+export * from "./job-feed-store";
 export * from "./activity";
 export * from "./score";
 export * from "./dealbreakers";

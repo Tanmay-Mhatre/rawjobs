@@ -20,7 +20,10 @@ import type { CompanyRef } from "./schema";
  * enough to pick from (none, or older than FEED_MAX_AGE_DAYS: `covered` is empty), every company is
  * checked instead (`fallback`), as the feed can't say which ones have nothing for you.
  */
-export function quickPicks<T extends CompanyRef>(candidates: readonly T[], o: { feed?: FeedMatches; ledger: DiscoveryLedger }): { picks: T[]; sources: Map<string, ScanSource>; fallback: boolean } {
+export function quickPicks<T extends CompanyRef>(
+  candidates: readonly T[],
+  o: { feed?: FeedMatches; ledger: DiscoveryLedger /** Also a past match: a company with a matching job in your history. */; matchedBefore?: (c: T) => boolean },
+): { picks: T[]; sources: Map<string, ScanSource>; fallback: boolean } {
   const sources = new Map<string, ScanSource>();
   const fallback = !o.feed || o.feed.covered.size === 0;
   if (fallback) return { picks: [...candidates], sources, fallback };
@@ -28,7 +31,7 @@ export function quickPicks<T extends CompanyRef>(candidates: readonly T[], o: { 
   const feed: T[] = [];
   for (const c of candidates) {
     const key = jobCompanyKey(c);
-    if ((o.ledger.companies[companyKey(c)]?.matches ?? 0) > 0) {
+    if ((o.ledger.companies[companyKey(c)]?.matches ?? 0) > 0 || o.matchedBefore?.(c)) {
       past.push(c);
       sources.set(key, "past");
     } else if (o.feed!.matching.has(key)) {
