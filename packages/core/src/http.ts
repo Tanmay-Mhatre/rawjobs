@@ -64,6 +64,11 @@ export type HttpOptions = {
   breakAfter?: number;
   /** For getJson(): conditional requests against saved responses. */
   cache?: HttpCache;
+  /**
+   * Pace each hiring system's API as a whole (paceOf), not just each host: start at the usual pace,
+   * speed up a little with every answer and halve when the API pushes back (AIMD). For the app's scans.
+   */
+  adaptive?: boolean;
   fetchImpl?: typeof fetch;
   sleep?: (ms: number) => Promise<void>;
 };
@@ -83,6 +88,48 @@ export const HOST_DELAYS: Record<string, number> = {
   "api.ashbyhq.com": 250,
 };
 
+/**
+ * An API's pace in requests a second: where it starts, the most it's ever asked, and whether each of
+ * its hosts also keeps its own gap (Workday: one host per employer, many employers per wdN shard).
+ */
+export type PaceSpec = { key: string; start: number; ceiling: number; hostGap: boolean; hostGapMs?: number };
+const shared = (key: string, ceiling: number, start = 1): PaceSpec => ({ key, start, ceiling, hostGap: false });
+/** Hosts that serve every employer on a hiring system, paced as one. Any other host keeps its own gap only. */
+const PACES: Record<string, PaceSpec> = {
+  "api.smartrecruiters.com": shared("smartrecruiters", 5),
+  "boards-api.greenhouse.io": shared("greenhouse", 8, 4),
+  // Ashby already ran at 4/s without a 429: that stays its pace.
+  "api.ashbyhq.com": shared("ashby", 4, 4),
+  "api.lever.co": shared("lever", 3),
+  "api.eu.lever.co": shared("lever-eu", 3),
+  "apply.workable.com": shared("workable", 3),
+  "recruiting.paylocity.com": shared("paylocity", 3),
+  "www.paycomonline.net": shared("paycom", 3),
+  "jobs.dayforcehcm.com": shared("dayforce", 3),
+  "ats.rippling.com": shared("rippling", 3),
+  "www.comeet.com": shared("comeet", 3),
+};
+/** Each Workday shard (wd1, wd5…) as a whole, on top of every employer's own gap (shorter than elsewhere: one big employer pages through up to 100 pages). */
+const WORKDAY_SHARD_PACE = { start: 4, ceiling: 8, hostGapMs: 400 };
+/** The slowest an API is ever paced at, after halving. */
+const MIN_RATE = 0.25;
+/** After a halving, the requests already in flight land before another one counts. */
+const DOWN_EVERY_MS = 2_000;
+/** An answer this many times slower than the API's usual (and at least SPIKE_MS) means it's straining. */
+const SPIKE_FACTOR = 4;
+const SPIKE_MS = 3_000;
+
+/** The API pace a host belongs to, if any. */
+export function paceOf(host: string): PaceSpec | undefined {
+  const known = PACES[host];
+  if (known) return known;
+  const shard = host.match(/^[^.]+\.(wd\d+)\.myworkdayjobs\.com$/)?.[1];
+  return shard ? { key: `workday:${shard}`, ...WORKDAY_SHARD_PACE, hostGap: true } : undefined;
+}
+
+/** One API's pace as it goes: requests a second, its next free slot, and how fast it usually answers. */
+type Pace = { spec: PaceSpec; rate: number; next: number; latency?: number; samples: number; downAt: number; downs: number };
+
 /** What a client did, for logs and time estimates. */
 export type HttpStats = {
   requests: number;
@@ -94,6 +141,8 @@ export type HttpStats = {
   timeouts: number;
   slowedHosts: string[];
   brokenHosts: string[];
+  /** With adaptive pacing: each API's pace at the end (requests a second) and how often it was halved. */
+  paces?: Record<string, { rate: number; downs: number }>;
 };
 
 /**
@@ -103,6 +152,8 @@ export type HttpStats = {
  */
 export class HttpClient {
   private readonly opts: Required<Omit<HttpOptions, "cache">> & Pick<HttpOptions, "cache">;
+  /** Adaptive pacing per API, by paceOf()'s key. */
+  private readonly paces = new Map<string, Pace>();
   /** Earliest time (ms) the next request to each host may start. */
   private readonly nextSlot = new Map<string, number>();
   /** Current gap per host, where it differs from hostDelayMs. */
@@ -123,6 +174,7 @@ export class HttpClient {
       backoffMs: opts.backoffMs ?? 2_000,
       breakAfter: opts.breakAfter ?? Infinity,
       cache: opts.cache,
+      adaptive: opts.adaptive ?? false,
       fetchImpl: opts.fetchImpl ?? fetch,
       sleep: opts.sleep ?? realSleep,
     };
@@ -203,6 +255,8 @@ export class HttpClient {
       hostPaused = false;
       await this.waitForHost(host);
       this.stats.requests++;
+      const pace = this.paceFor(host);
+      const sent = Date.now();
       let res: Response;
       let body: string | undefined;
       // Two clocks: one for the headers (a host that doesn't answer fails fast), then one for the body.
@@ -217,6 +271,7 @@ export class HttpClient {
           signal: ctrl.signal,
         });
         clearTimeout(timer);
+        if (pace) this.paced(pace, res.status, Date.now() - sent);
         waited = this.opts.readTimeoutMs;
         timer = expire(waited);
         // The timeout covers the body too: read it here, so a stalled body is retried like a stalled answer.
@@ -226,6 +281,8 @@ export class HttpClient {
         const e = err as Error;
         const timedOut = e.name === "TimeoutError" || (ctrl.signal.reason as Error | undefined)?.name === "TimeoutError";
         if (timedOut) this.stats.timeouts++;
+        // An API that stops answering in time is straining as much as one that says 429.
+        if (pace && timedOut) this.paceDown(pace);
         const reason = timedOut ? `timed out after ${waited / 1000}s` : e.message;
         lastError = new HttpError(`${reason} (${url})`, url);
         continue;
@@ -235,12 +292,14 @@ export class HttpClient {
       else timer.unref?.();
       if (res.ok || res.status === 304) return { res, body };
       lastError = new HttpError(`HTTP ${res.status} (${url})`, url, res.status);
-      if (res.status !== 429 && res.status < 500) {
+      // Paylocity says "slow down" with a 403: retried like a 429 when pacing.
+      const pushback = res.status === 429 || (pace?.spec.key === "paylocity" && res.status === 403);
+      if (!pushback && res.status < 500) {
         // 4xx won't fix itself; free the connection now rather than when it's collected.
         await res.body?.cancel().catch(() => {});
         throw lastError;
       }
-      if (res.status === 429) {
+      if (pushback) {
         this.stats.rateLimited++;
         this.slowDown(host, parseRetryAfter(res.headers.get("retry-after")) ?? backoffMs * 2 ** attempt);
         hostPaused = true;
@@ -250,12 +309,58 @@ export class HttpClient {
     throw lastError ?? new HttpError(`request failed (${url})`, url);
   }
 
-  /** Reserve the next free slot for this host, then wait for it. Safe for parallel callers. */
+  /**
+   * Reserve the next free slot for this host (and for its API, when pacing), then wait for it. Safe
+   * for parallel callers. A host paced as part of its API keeps no gap of its own, only pauses.
+   */
   private async waitForHost(host: string): Promise<void> {
     const now = Date.now();
-    const slot = Math.max(now, this.nextSlot.get(host) ?? 0);
-    this.nextSlot.set(host, slot + (this.delays.get(host) ?? this.opts.hostDelayMs));
+    const pace = this.paceFor(host);
+    const slot = Math.max(now, this.nextSlot.get(host) ?? 0, pace?.next ?? 0);
+    this.nextSlot.set(host, slot + (pace && !pace.spec.hostGap ? 0 : (this.delays.get(host) ?? pace?.spec.hostGapMs ?? this.opts.hostDelayMs)));
+    if (pace) pace.next = slot + 1000 / pace.rate;
     if (slot > now) await this.opts.sleep(slot - now);
+  }
+
+  private paceFor(host: string): Pace | undefined {
+    if (!this.opts.adaptive) return undefined;
+    const spec = paceOf(host);
+    if (!spec) return undefined;
+    let pace = this.paces.get(spec.key);
+    if (!pace) {
+      pace = { spec, rate: spec.start, next: 0, samples: 0, downAt: 0, downs: 0 };
+      this.paces.set(spec.key, pace);
+    }
+    return pace;
+  }
+
+  /**
+   * An answer came: a push-back (429, 503, Paylocity's 403) or an answer far slower than usual halves
+   * the API's pace; any other answer raises it by a twentieth of its ceiling.
+   */
+  private paced(pace: Pace, status: number, ms: number): void {
+    const usual = pace.latency;
+    pace.latency = usual === undefined ? ms : usual * 0.8 + ms * 0.2;
+    pace.samples++;
+    const spike = usual !== undefined && pace.samples > 5 && ms > Math.max(usual * SPIKE_FACTOR, SPIKE_MS);
+    if (status === 429 || status === 503 || (status === 403 && pace.spec.key === "paylocity") || spike) this.paceDown(pace);
+    else if (status < 500) pace.rate = Math.min(pace.spec.ceiling, pace.rate + pace.spec.ceiling / 20);
+    this.notePace(pace);
+  }
+
+  private paceDown(pace: Pace): void {
+    const now = Date.now();
+    if (now - pace.downAt < DOWN_EVERY_MS) return;
+    pace.downAt = now;
+    pace.downs++;
+    pace.rate = Math.max(MIN_RATE, pace.rate / 2);
+    pace.next = Math.max(pace.next, now + 1000 / pace.rate);
+    this.notePace(pace);
+  }
+
+  private notePace(pace: Pace): void {
+    this.stats.paces ??= {};
+    this.stats.paces[pace.spec.key] = { rate: Math.round(pace.rate * 100) / 100, downs: pace.downs };
   }
 
   /** A 429: every request to the host waits out the pause, and the host's pace halves from now on. */

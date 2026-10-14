@@ -1,7 +1,7 @@
 import type { CompanyRef, NormalizedJob, Workplace } from "../schema";
 import { htmlToText, inferWorkplace } from "../text";
 import { detectAs, isoDate, openByStatus, relativePosted, urlOf } from "./parse";
-import { jobCompanyKey, SEARCH_MAX_POSTINGS, workdayJobKey, type Connector, type Ctx } from "./types";
+import { firstPageFingerprint, jobCompanyKey, SEARCH_MAX_POSTINGS, workdayJobKey, type Connector, type Ctx } from "./types";
 
 /** The careers site's own JSON API (/wday/cxs/{tenant}/{site}/jobs), keyless. */
 export type WorkdayPosting = {
@@ -37,20 +37,28 @@ const WORKPLACE: Record<string, Workplace> = { remote: "remote", hybrid: "hybrid
 const host = (ref: { slug: string; shard?: string }) => `https://${ref.slug}.${ref.shard}.myworkdayjobs.com`;
 const api = (ref: { slug: string; shard?: string; site?: string }) => `${host(ref)}/wday/cxs/${encodeURIComponent(ref.slug)}/${encodeURIComponent(ref.site ?? "")}`;
 
-/** The careers site's job list, or its search results for `searchText`, up to `max` postings. */
-async function list(ref: CompanyRef, { http, now }: Ctx, searchText: string, max: number) {
+/**
+ * The careers site's job list, or its search results for `searchText`, up to `max` postings. With
+ * `firstPage`, a board whose first page is as the last full read saw it stops there (unchanged).
+ */
+async function list(ref: CompanyRef, { http, now }: Ctx, searchText: string, max: number, firstPage?: Ctx["firstPage"]) {
   if (!ref.shard || !ref.site) throw new Error('workday needs "shard" and "site" from the careers URL');
   const out: WorkdayPosting[] = [];
   let total = Infinity;
   for (let offset = 0; offset < Math.min(total, max); offset += PAGE) {
     const page = await http.postJson<Page>(`${api(ref)}/jobs`, { appliedFacets: {}, limit: PAGE, offset, searchText });
     if (!Array.isArray(page.jobPostings)) throw new Error("unexpected Workday response: no jobPostings array");
-    // Only the first page carries the total; later pages say 0.
-    if (offset === 0) total = page.total ?? 0;
     out.push(...page.jobPostings.map((p) => ({ ...p, postedAt: relativePosted(p.postedOn, now) })));
+    // Only the first page carries the total; later pages say 0.
+    if (offset === 0) {
+      total = page.total ?? 0;
+      const ids = page.jobPostings.map((p) => (p.externalPath ? workdayJobKey(p.externalPath) : ""));
+      // A one-page board costs the same either way: only longer ones are worth comparing.
+      if (total > PAGE && firstPage?.(firstPageFingerprint(total, ids), total)) return { out, total, unchanged: true };
+    }
     if (page.jobPostings.length < PAGE) break;
   }
-  return { out, total };
+  return { out, total, unchanged: false };
 }
 
 export const workday: Connector<WorkdayPosting> = {
@@ -58,9 +66,9 @@ export const workday: Connector<WorkdayPosting> = {
   detect: detectAs("workday"),
 
   async fetch(ref, ctx) {
-    const { out, total } = await list(ref, ctx, "", MAX_POSTINGS);
+    const { out, total, unchanged } = await list(ref, ctx, "", MAX_POSTINGS, ctx.firstPage);
     // Stopped at the cap (or the API stopped early) well short of the total it reports.
-    if (total - out.length >= PAGE) ctx.partial?.();
+    if (!unchanged && total - out.length >= PAGE) ctx.partial?.();
     return out;
   },
 
@@ -69,7 +77,10 @@ export const workday: Connector<WorkdayPosting> = {
   },
 
   normalize(raw, ref): NormalizedJob {
+    // Without its path a posting has no id or link (seen on some boards): it's left out, the rest still count.
+    if (!raw.externalPath) throw new Error("Workday posting without a path");
     const location = raw.locationsText ?? "";
+
     return {
       id: `${jobCompanyKey(ref)}:${workdayJobKey(raw.externalPath)}`,
       ats: "workday",

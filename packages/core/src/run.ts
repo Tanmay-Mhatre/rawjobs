@@ -107,6 +107,11 @@ export type RunOptions = {
   industriesOf?: (c: CompanyRef) => readonly string[] | undefined;
   /** Locations resolved by earlier scans (read, and added to as jobs are described). */
   locations?: LocationCache;
+  /**
+   * Paged boards' first pages from recent full reads (board-health.ts knownFirstPages), by
+   * jobCompanyKey(). A board whose first page is the same is read no further: its jobs from then are kept.
+   */
+  firstPages?: ReadonlyMap<string, string>;
 };
 
 /**
@@ -115,8 +120,9 @@ export type RunOptions = {
  * queue for it, while companies on their own hosts (Workday tenants, Recruitee, BambooHR…) run side by side.
  */
 export const laneOf = (c: Pick<CompanyRef, "ats" | "region" | "shard">) => `${c.ats}:${c.region ?? ""}:${c.ats === "workday" ? c.shard : ""}`;
-/** Companies in flight per lane. */
+/** Companies in flight per lane: more where the API's own pace (http.ts paceOf) is the limit, not the lane. */
 const LANE_WORKERS = 4;
+const LANE_WORKERS_BY_ATS: Partial<Record<CompanyRef["ats"], number>> = { greenhouse: 8, workday: 8, smartrecruiters: 6 };
 
 /**
  * One pass over every enabled company (then any extra `checks`). A failing company never stops the
@@ -137,10 +143,21 @@ export async function runRadar(config: Config, opts: RunOptions = {}): Promise<R
   const health: CompanyHealth[] = [];
   const todo = [...companies.map((c) => [c, false] as const), ...checks.map((c) => [c, true] as const)].filter(([c]) => !opts.skip?.has(jobCompanyKey(c)));
   for (const [i, [c]] of todo.entries()) order.set(`${c.ats}:${c.slug}`, i);
+  // Each company's open jobs from earlier runs, gathered once (a scan of the whole directory has thousands of companies).
+  const openBefore = new Map<string, Job[]>();
+  for (const j of previous.values()) {
+    if (j.status !== "open") continue;
+    const key = companyOfJobId(j.id);
+    const list = openBefore.get(key);
+    if (list) list.push(j);
+    else openBefore.set(key, [j]);
+  }
+  // A first page is only the same for the same profile: a new one could match jobs the last read didn't keep.
+  const profileSalt = hashIds([JSON.stringify(config.profile)]);
 
   /** A company's open jobs from the last fetch, if that was less than `hours` ago. */
   const recentJobs = (key: string, hours: number): Job[] | undefined => {
-    const last = [...previous.values()].filter((j) => j.status === "open" && companyOfJobId(j.id) === key);
+    const last = openBefore.get(key) ?? [];
     const lastSeen = Math.max(0, ...last.map((j) => Date.parse(j.lastSeen)));
     return last.length && now.getTime() - lastSeen < hours * 3_600_000 ? last : undefined;
   };
@@ -158,13 +175,12 @@ export async function runRadar(config: Config, opts: RunOptions = {}): Promise<R
         throw new Error(`${company.ats} support is coming soon`);
       }
       // Boards that ask for few requests a day: between fetches, keep the jobs from the last one.
-      const recent = connector.minIntervalHours ? recentJobs(jobCompanyKey(company), connector.minIntervalHours) : undefined;
-      for (const j of recent ?? []) {
-        const { score, why } = scoreJob(j, config.profile, fit);
-        // These all come from history, so they're all kept (see below).
-        kept.push({ ...j, score, why });
-        if (!why.gate) h.matches++;
-      }
+      const recent = connector.minIntervalHours ? recentJobs(h.key!, connector.minIntervalHours) : undefined;
+      // A paged board whose first page is as the last full read saw it: that read's jobs are kept. Your
+      // companies keep every job, so theirs must all be there; a directory board keeps only matches.
+      const known = opts.firstPages?.get(h.key!);
+      const before = openBefore.get(h.key!) ?? [];
+      let total = 0;
       const raws = recent
         ? []
         : await connector.fetch(company, {
@@ -173,7 +189,22 @@ export async function runRadar(config: Config, opts: RunOptions = {}): Promise<R
             partial: () => {
               h.partial = true;
             },
+            firstPage: (fingerprint, n) => {
+              h.fingerprint = `${profileSalt}/${fingerprint}`;
+              total = n;
+              h.unchanged = h.fingerprint === known && (extra || before.length === n);
+              return h.unchanged;
+            },
           });
+      if (!h.unchanged) delete h.unchanged;
+      const reused = recent ?? (h.unchanged ? before.map((j) => ({ ...j, lastSeen: nowIso })) : undefined);
+      if (h.unchanged) raws.length = 0;
+      for (const j of reused ?? []) {
+        const { score, why } = scoreJob(j, config.profile, fit);
+        // These all come from history, so they're all kept (see below).
+        kept.push({ ...j, score, why });
+        if (!why.gate) h.matches++;
+      }
       // A list cut short at its cap: ask the board's own search for your titles, so the jobs past the
       // cap that fit you are still seen. The company stays partial: its other unseen jobs aren't gone.
       if (h.partial && connector.search && terms.length) {
@@ -272,9 +303,9 @@ export async function runRadar(config: Config, opts: RunOptions = {}): Promise<R
         }
         if (!why.gate) h.matches++;
       }
-      h.jobsFound = recent?.length ?? raws.length - (h.skipped ?? 0);
+      h.jobsFound = h.unchanged ? total : (recent?.length ?? raws.length - (h.skipped ?? 0));
       // Only a list read in full says whether the board's jobs changed (board-health.ts).
-      if (!recent && !h.partial) h.idsHash = hashIds(ids);
+      if (!reused && !h.partial) h.idsHash = hashIds(ids);
       h.ok = true;
     } catch (err) {
       h.error = err instanceof HttpError && err.status === 404 ? `board not found (404): check the slug "${company.slug}" against the careers URL` : (err as Error).message;
@@ -304,7 +335,7 @@ export async function runRadar(config: Config, opts: RunOptions = {}): Promise<R
           await fetchOne(company, extra);
         }
       };
-      return Array.from({ length: Math.min(LANE_WORKERS, lane.length) }, worker);
+      return Array.from({ length: Math.min(LANE_WORKERS_BY_ATS[lane[0]![0].ats] ?? LANE_WORKERS, lane.length) }, worker);
     }),
   );
   health.sort((a, b) => (order.get(`${a.ats}:${a.slug}`) ?? 0) - (order.get(`${b.ats}:${b.slug}`) ?? 0));

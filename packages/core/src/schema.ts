@@ -174,6 +174,10 @@ export type CompanyHealth = {
   failure?: "gone" | "timeout" | "server" | "network" | "parse" | "other";
   /** A hash of the board's job ids, when its whole list was read: board-health.ts notes when it changes. */
   idsHash?: string;
+  /** A paged board's first page (Ctx.firstPage), with the profile it was read for: the next scan compares against it. */
+  fingerprint?: string;
+  /** The first page was as the last full read saw it: only that page was read, and the jobs from then kept. */
+  unchanged?: boolean;
 };
 
 export type RunSummary = {
