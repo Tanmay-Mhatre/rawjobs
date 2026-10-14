@@ -22,38 +22,44 @@ const job = (title: string, score: number, extra: Partial<Job> = {}): Job =>
 
 describe("digest", () => {
   it("says nothing when there's nothing new", () => {
-    expect(digest([], { minScore: 70 })).toBeUndefined();
+    expect(digest([], { minScore: 70, scope: "mine" })).toBeUndefined();
   });
 
   it("is a header, the counts and what to do, a blank line apart: no jobs, scores or links", () => {
-    expect(digest([job("PM", 60), job("Head of Product", 85), job("<b>", 90)], { minScore: 70 })).toBe(
-      "💼 <b>New jobs</b>\n\n<b>3</b> new jobs · <b>2</b> strong fits\n\n👉 <i>Open RawJobs on your computer to see them.</i>",
+    expect(digest([job("PM", 60), job("Head of Product", 85), job("<b>", 90)], { minScore: 70, scope: "mine" })).toBe(
+      "💼 <b>New jobs · My companies</b>\n\n<b>3</b> new jobs · <b>2</b> strong fits\n\n👉 <i>Open RawJobs on your computer to see them.</i>",
     );
   });
 
   it("uses the singular for one, and never a 0", () => {
-    expect(digest([job("Head of Product", 85)], { minScore: 70 })).toBe("💼 <b>New jobs</b>\n\n<b>1</b> new job · <b>1</b> strong fit\n\n👉 <i>Open RawJobs on your computer to see it.</i>");
-    expect(digest([job("PM", 60), job("PO", 50)], { minScore: 70 })).toContain("\n<b>2</b> new jobs · no strong fits\n");
+    expect(digest([job("Head of Product", 85)], { minScore: 70, scope: "mine" })).toBe(
+      "💼 <b>New jobs · My companies</b>\n\n<b>1</b> new job · <b>1</b> strong fit\n\n👉 <i>Open RawJobs on your computer to see it.</i>",
+    );
+    expect(digest([job("PM", 60), job("PO", 50)], { minScore: 70, scope: "mine" })).toContain("\n<b>2</b> new jobs · no strong fits\n");
   });
 
   it("counts strong fits, not new jobs, with only_new off", () => {
-    expect(digest([job("A", 80), job("B", 90)], { minScore: 70, onlyNew: false })).toBe("💼 <b>Strong fits</b>\n\n<b>2</b> strong fits\n\n👉 <i>Open RawJobs on your computer to see them.</i>");
+    expect(digest([job("A", 80), job("B", 90)], { minScore: 70, onlyNew: false, scope: "all" })).toBe(
+      "💼 <b>Strong fits · All companies</b>\n\n<b>2</b> strong fits\n\n👉 <i>Open RawJobs on your computer to see them.</i>",
+    );
   });
 });
 
 describe("finishedMessage", () => {
   it("says the scan finished, with the same counts as the digest", () => {
-    expect(finishedMessage({ newJobs: [job("A", 80), job("B", 50)], minScore: 70 })).toBe(
-      "✅ <b>Scan finished</b>\n\n<b>2</b> new jobs · <b>1</b> strong fit\n\n👉 <i>Open RawJobs on your computer to see them.</i>",
+    expect(finishedMessage({ newJobs: [job("A", 80), job("B", 50)], minScore: 70, scope: "mine" })).toBe(
+      "✅ <b>My companies scan finished</b>\n\n<b>2</b> new jobs · <b>1</b> strong fit\n\n👉 <i>Open RawJobs on your computer to see them.</i>",
     );
-    expect(finishedMessage({ newJobs: [], minScore: 70 })).toBe("✅ <b>Scan finished</b>\n\nNo new jobs\n\n👉 <i>Open RawJobs on your computer to see your matches.</i>");
+    expect(finishedMessage({ newJobs: [], minScore: 70, scope: "all" })).toBe("✅ <b>All companies scan finished</b>\n\nNo new jobs\n\n👉 <i>Open RawJobs on your computer to see your matches.</i>");
   });
 
   it("says a scan stopped, and to finish it", () => {
-    expect(finishedMessage({ newJobs: [job("A", 50)], minScore: 70, stopped: true })).toBe(
-      "⏸ <b>Scan stopped</b>\n\n<b>1</b> new job · no strong fits\n\n👉 <i>Open RawJobs on your computer to see it and finish the scan.</i>",
+    expect(finishedMessage({ newJobs: [job("A", 50)], minScore: 70, stopped: true, scope: "mine" })).toBe(
+      "⏸ <b>My companies scan stopped</b>\n\n<b>1</b> new job · no strong fits\n\n👉 <i>Open RawJobs on your computer to see it and finish the scan.</i>",
     );
-    expect(finishedMessage({ newJobs: [], minScore: 70, stopped: true })).toBe("⏸ <b>Scan stopped</b>\n\nNo new jobs yet\n\n👉 <i>Open RawJobs on your computer to finish the scan.</i>");
+    expect(finishedMessage({ newJobs: [], minScore: 70, stopped: true, scope: "mine" })).toBe(
+      "⏸ <b>My companies scan stopped</b>\n\nNo new jobs yet\n\n👉 <i>Open RawJobs on your computer to finish the scan.</i>",
+    );
   });
 });
 
