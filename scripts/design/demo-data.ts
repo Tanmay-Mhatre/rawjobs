@@ -103,6 +103,8 @@ type Spec = {
   desc?: string;
   /** Second posting of the same role. */
   id?: string;
+  /** What the hiring system says (Lever's commitment, Ashby's employmentType…). */
+  employment?: Job["employmentType"];
 };
 
 const SCAN_AT = NOW.getTime() - 3 * HOUR;
@@ -150,6 +152,7 @@ const LIVE: Spec[] = [
     salary: { min: 95000, max: 115000, currency: "GBP", period: "year" },
     department: "Product",
     desc: DESC.payments,
+    employment: "full-time",
   },
   {
     company: "Northwind Payments",
@@ -174,8 +177,20 @@ const LIVE: Spec[] = [
     seen: "new",
     salary: { min: 150000, max: 175000, currency: "GBP", period: "year" },
     desc: DESC.openBanking,
+    employment: "full-time",
   },
-  { company: "TideWave", title: "Product Manager, Developer Platform", location: "Remote (EMEA)", workplace: "remote", posted: 6, seen: 6, desc: DESC.devPlatform },
+  {
+    company: "TideWave",
+    title: "Product Manager, Developer Platform",
+    location: "Remote (EMEA)",
+    workplace: "remote",
+    posted: 6,
+    seen: 6,
+    desc: DESC.devPlatform,
+    // An hourly contract in another currency: the salary sort puts it after the pounds and euros, by its yearly figure.
+    salary: { min: 85, max: 110, currency: "USD", period: "hour" },
+    employment: "contract",
+  },
   { company: "TideWave", title: "Senior Product Manager, Growth", location: "London, United Kingdom", workplace: "hybrid", posted: 20, seen: 20, desc: DESC.growth },
   { company: "TideWave", title: "Product Manager, Payments", location: "Remote (US)", workplace: "remote", posted: 5, seen: 5, desc: DESC.payments },
   // Acme Ledger
@@ -240,6 +255,7 @@ function fullJob(s: Spec, n: number): Job {
     workplace: s.workplace,
     ...(s.department ? { department: s.department } : {}),
     ...(s.salary ? { salary: s.salary } : {}),
+    ...(s.employment ? { employmentType: s.employment } : {}),
     postedAt: iso(postedAt),
     url: `${careers(c.slug)}/jobs/${atsId}-${slugify(s.title)}`,
     description: s.desc,
@@ -252,9 +268,24 @@ function fullJob(s: Spec, n: number): Job {
 }
 
 const liveFull = LIVE.map(fullJob);
-const liveDash = liveFull.map((j) => {
-  const visa = companyOf(j.company).visa;
-  return { ...toDashboardJob(j), ...(visa ? { visa } : {}) };
+/**
+ * A job board's copy of TideWave's Head of Product role, under the company's legal name: one company has
+ * that name and posts that role in London, so the Radar shows TideWave's own posting with "Also on Remotive".
+ */
+const tidewaveLead = liveFull.find((j) => j.title === "Head of Product, Open Banking")!;
+const remotiveCopy: Job = {
+  ...tidewaveLead,
+  id: "remotive:remotive:90001",
+  ats: "remotive",
+  company: "TideWave Ltd",
+  title: "Head of Product - Open Banking",
+  url: "https://remotive.example/jobs/90001",
+  score: tidewaveLead.score - 1,
+};
+const liveDash = [...liveFull, remotiveCopy].map((j) => {
+  const c = companyOf(j.company);
+  const visa = c?.visa;
+  return { ...toDashboardJob(j), companyKey: c ? companyKey(c) : "remotive:remotive", ...(visa ? { visa } : {}) };
 });
 /** Jobs that pass your filters (jobs.json), and the rest (jobs-other.json). */
 const passing = liveDash.filter((j) => !j.why.gate);
