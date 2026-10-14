@@ -3,7 +3,8 @@ import { cx } from "../../lib/cx";
 import { Kbd } from "./Kbd";
 import { useClosing } from "./useClosing";
 
-export type MenuItem = { id: string; label: string; icon?: ReactNode; shortcut?: string; danger?: boolean; onSelect: () => void } | { separator: true; id: string };
+/** `hint`: a second, quieter line under the label (what the item does, how long it takes). */
+export type MenuItem = { id: string; label: string; hint?: string; icon?: ReactNode; shortcut?: string; danger?: boolean; onSelect: () => void } | { separator: true; id: string };
 
 const isAction = (i: MenuItem): i is Extract<MenuItem, { onSelect: () => void }> => !("separator" in i);
 
@@ -127,7 +128,7 @@ export function Menu({
                 role="menuitem"
                 tabIndex={i === active ? 0 : -1}
                 aria-keyshortcuts={item.shortcut}
-                className={cx("rj-menu__item", item.danger && "rj-menu__item--danger")}
+                className={cx("rj-menu__item", item.danger && "rj-menu__item--danger", item.hint && "rj-menu__item--hint")}
                 onClick={() => {
                   close();
                   item.onSelect();
@@ -135,7 +136,14 @@ export function Menu({
                 onFocus={() => setActive(i)}
               >
                 {item.icon}
-                {item.label}
+                {item.hint ? (
+                  <span className="min-w-0">
+                    <span className="block">{item.label}</span>
+                    <span className="block type-meta font-normal text-muted">{item.hint}</span>
+                  </span>
+                ) : (
+                  item.label
+                )}
                 {item.shortcut && <Kbd hidden>{item.shortcut}</Kbd>}
               </button>
             );

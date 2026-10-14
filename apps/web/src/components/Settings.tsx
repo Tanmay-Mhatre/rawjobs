@@ -1,6 +1,6 @@
 import { INDUSTRY_BY_ID } from "@rawjobs/core/catalog/industries";
 import { groupPlaces } from "@rawjobs/core/catalog/places";
-import { ArrowRight, Check, ChevronLeft, ChevronRight, Download, RefreshCw, RotateCcw, Save, Upload, X } from "lucide-react";
+import { ArrowRight, Check, ChevronLeft, ChevronRight, Download, Layers, RefreshCw, RotateCcw, Save, Upload, X } from "lucide-react";
 import { Fragment, useEffect, useRef, useState, type MouseEvent, type ReactNode } from "react";
 import { canRunLocally, useDirectorySize } from "../lib/data";
 import { DealbreakersStep } from "./Dealbreakers";
@@ -14,7 +14,7 @@ import { MAX_AGE_CHOICES, setDensityChoice, setMaxAgeChoice, useDensity, useMaxA
 import { exportState, readStateFile, type UserState } from "../lib/userState";
 import { IndustriesStep, KeywordsStep, LocationsStep, RolesStep, ThresholdPicker } from "../setup/steps";
 import { Dialog } from "./Dialog";
-import { ScanPrefsPicker } from "./ScanButton";
+import { ScanPrefsPicker, scanHints, useScanPlan } from "./ScanButton";
 import { ScheduledScans } from "./ScheduledScans";
 import { TelegramAlerts } from "./TelegramAlerts";
 import { Button, Card, cx, IconButton, Segmented, Toggle } from "./ui";
@@ -57,6 +57,8 @@ type Props = {
   onStartOver?: () => Promise<string | null>;
   /** R scans now (for the shortcut list). */
   canScan?: boolean;
+  /** "Check every company now" (Settings > Scans). */
+  onCheckEvery?: () => void;
 };
 
 /** "a, b, c +2", or "" when empty. */
@@ -95,7 +97,9 @@ export function Settings({
   toCompanies,
   onStartOver,
   canScan = false,
+  onCheckEvery,
 }: Props) {
+  const scanPlanNow = useScanPlan(scanning);
   const [status, setStatus] = useState<{ tone: "ok" | "bad"; text: string; detail?: string; retry?: boolean } | null>(null);
   const [saving, setSaving] = useState(false);
   const lastSave = useRef(false);
@@ -104,7 +108,7 @@ export function Settings({
   const instant = canRunLocally && setupSaved;
   const same = (a: Draft, b: Draft) => JSON.stringify(draftToConfig(a)) === JSON.stringify(draftToConfig(b));
   /** The draft without the edits that save on their own. */
-  const waiting = { ...draft, directory: saved.directory, alerts: { ...draft.alerts, only_new: saved.alerts.only_new } };
+  const waiting = { ...draft, directory: saved.directory, scans: saved.scans, alerts: { ...draft.alerts, only_new: saved.alerts.only_new } };
   const dirty = anyDirty && (!instant || !same(waiting, saved));
   /** The page holding the unsaved edits: Matching when only the threshold changed. */
   const dirtyPage: SettingsPageId = same({ ...waiting, minScore: saved.minScore }, saved) ? "matching" : "profile";
@@ -114,13 +118,12 @@ export function Settings({
   /** Save one switch now: written on top of the saved setup, leaving Profile and Matching edits unsaved. */
   const saveSwitch = async (key: InstantSwitch, on: boolean) => {
     // Both directory switches may be saving at once, so each save carries the other's latest value.
-    const patch: Partial<Draft> = key === "only_new" ? { alerts: { ...draft.alerts, only_new: on } } : { directory: { ...draft.directory, [key]: on } };
-    update(patch);
+    update(switchPatch(draft, key, on));
     if (!instant) return;
     const note = (state: FieldSave) => setSwitchSave((s) => ({ ...s, [key]: state }));
     note({ kind: "saving" });
     try {
-      const next = key === "only_new" ? { ...saved, alerts: { ...saved.alerts, only_new: on } } : { ...saved, directory: patch.directory! };
+      const next = { ...saved, ...switchPatch(saved, key, on) };
       const res = await saveConfig(draftToConfig(next));
       if (!res.ok) return note({ kind: "error", retry: () => void saveSwitch(key, on) });
       await onSaved();
@@ -364,33 +367,49 @@ export function Settings({
           "scans",
           <>
             <Section id="scope" title="What to scan" hint={canRunLocally ? "What Scan now does. Saved on this computer, right away." : "What Scan now does. Saved in this browser, right away."}>
-              <div className="space-y-3">
-                <ScanPrefsPicker />
-                <details className="type-small">
-                  <summary className="cursor-pointer font-medium text-ink">How long each one takes</summary>
-                  <ul className="mt-2 space-y-1.5">
-                    <li>
-                      <b>{draft.industries.length ? "My companies + my industries" : "My companies"}</b>
-                      <span className="text-muted">
-                        {draft.industries.length
-                          ? ": My companies, plus every company in the directory tagged with your industries. A few minutes."
-                          : ": the companies you've added. Add industries under Profile to scan more. A few minutes."}
-                      </span>
-                    </li>
-                    <li>
-                      <b>All companies</b>
-                      <span className="text-muted">
-                        : every company in the directory that RawJobs can scan. The shared job feed skips companies with nothing for you, so usually minutes; a few hours without it. Stop any time and
-                        it carries on later.
-                      </span>
-                    </li>
-                  </ul>
-                </details>
+              <div className="space-y-4">
+                <ScanPrefsPicker plan={scanPlanNow} />
+                <SettingCheck
+                  checked={draft.scans.background}
+                  onChange={(v) => void saveSwitch("background", v)}
+                  label="Then check every other company in the background"
+                  hint="Quiet: you only hear about it if it finds a match. Picks up where it stopped, and pauses while this computer is on battery."
+                  state={switchSave.background}
+                />
+                <div>
+                  <p className="type-label">Industries</p>
+                  <SettingCheck
+                    className="mt-1.5"
+                    checked={draft.scans.industry_boost}
+                    onChange={(v) => void saveSwitch("industry_boost", v)}
+                    label="Rank jobs in my industries higher"
+                    hint={
+                      draft.industries.length
+                        ? `${list(draft.industries.map((id) => INDUSTRY_BY_ID.get(id)?.label ?? id))}. Jobs elsewhere still show, just lower.`
+                        : "Pick your industries under Profile first. Jobs elsewhere still show, just lower."
+                    }
+                    state={switchSave.industry_boost}
+                  />
+                </div>
               </div>
             </Section>
             {shown.schedule && (
-              <Section id="schedule" title="Scheduled scans" hint="Scan automatically every day at the times you pick. Saved right away.">
+              <Section
+                id="schedule"
+                title="Scheduled scans"
+                hint={`Scan automatically every day at the times you pick. Each one runs the scan above${draft.scans.background ? ", then the background check" : ""}. Saved right away.`}
+              >
                 <ScheduledScans />
+              </Section>
+            )}
+            {canScan && (
+              <Section id="check-all" title="Check every company now" hint="Rarely needed: the background check already covers this.">
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                  <p className="type-small text-muted">{scanHints(scanPlanNow).all}</p>
+                  <Button size="sm" className="self-start sm:self-auto" onClick={onCheckEvery} disabled={scanning}>
+                    <Layers className="size-3.5" /> Check every company
+                  </Button>
+                </div>
               </Section>
             )}
             <Section
@@ -571,7 +590,30 @@ export function Settings({
 
 type FieldSave = { kind: "idle" | "saving" | "saved" } | { kind: "error"; retry: () => void };
 /** The switches outside Profile and Matching that are kept in the config file. */
-type InstantSwitch = "auto_update" | "share_additions" | "only_new";
+type InstantSwitch = "auto_update" | "share_additions" | "only_new" | "background" | "industry_boost";
+
+/** The part of the setup one switch changes, on top of `base`. */
+function switchPatch(base: Draft, key: InstantSwitch, on: boolean): Partial<Draft> {
+  if (key === "only_new") return { alerts: { ...base.alerts, only_new: on } };
+  if (key === "background" || key === "industry_boost") return { scans: { ...base.scans, [key]: on } };
+  return { directory: { ...base.directory, [key]: on } };
+}
+
+/** A checkbox with its label and a quieter line under it (Settings > Scans), saved on its own. */
+function SettingCheck({ checked, onChange, label, hint, state, className }: { checked: boolean; onChange: (v: boolean) => void; label: string; hint: string; state?: FieldSave; className?: string }) {
+  return (
+    <div className={cx("flex flex-wrap items-start gap-x-3 gap-y-1", className)}>
+      <label className="flex min-w-0 cursor-pointer items-start gap-2.5 type-small">
+        <input type="checkbox" checked={checked} onChange={(e) => onChange(e.target.checked)} className="mt-0.5 size-4 shrink-0 accent-ink" />
+        <span>
+          {label}
+          <span className="block text-muted">{hint}</span>
+        </span>
+      </label>
+      <SaveNote state={state} />
+    </div>
+  );
+}
 
 /** Bring back the tips you've closed; each shows again where it applies. */
 function ShowTipsAgain() {

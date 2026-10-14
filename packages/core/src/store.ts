@@ -63,6 +63,7 @@ export function summarize(run: RunResult, merged: MergeResult): RunSummary {
     checked: run.checked,
     health: run.health,
     ...(run.moves?.length ? { moves: run.moves } : {}),
+    ...(run.everyCompany ? { everyCompany: true } : {}),
   };
 }
 

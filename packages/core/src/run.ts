@@ -17,6 +17,8 @@ export type RunResult = {
   checked: number;
   /** Suggested new boards for your companies whose board is gone (see findMoves). */
   moves?: BoardMove[];
+  /** Every company in the directory was checked (a background check or a full scan that finished). */
+  everyCompany?: boolean;
 };
 
 /**

@@ -218,6 +218,33 @@ h3 {
   }
 }
 
+/* A menu item with a hint line under its label (the Scan now menu): as tall as its two lines, icon at the top. */
+.rj-menu__item.rj-menu__item--hint {
+  height: auto;
+  align-items: flex-start;
+  padding-top: 6px;
+  padding-bottom: 6px;
+}
+.rj-menu__item--hint > .rj-icon {
+  margin-top: 2px;
+  flex: none;
+}
+.rj-menu:has(.rj-menu__item--hint) {
+  width: 20rem;
+  max-width: calc(100vw - 2rem);
+}
+
+/* "Your industry" on a Radar row: a quiet outlined tag after the place. */
+.rj-ind {
+  display: inline-block;
+  margin-left: 2px;
+  padding: 0 4px;
+  border: 1px solid var(--border-subtle);
+  border-radius: 2px;
+  font: 500 12px/16px var(--font-sans);
+  color: var(--text-secondary);
+}
+
 /* bundle.css marks a focused menu item with its hover fill only; design/README.md (Interaction) asks for the
    2px ring on every interactive element, so the ring stays, inset to fit the menu. */
 .rj-menu__item:focus-visible {

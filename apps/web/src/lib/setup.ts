@@ -2,10 +2,10 @@ import { useCallback, useEffect, useState } from "react";
 import { ROLE_FAMILIES } from "@rawjobs/core/catalog/roles";
 import { careersUrl, companyKey, connectors, detectCompany } from "@rawjobs/core/detect";
 import type { AiProfile } from "@rawjobs/core/resume-parse";
-import type { CompanyCheck, RunEvent, SaveResult, ScanPlan, ScanScope, SetupStatus } from "@rawjobs/core/protocol";
+import type { CompanyCheck, RunEvent, SaveResult, ScanPlan, ScanScope, ScanSource, SetupStatus } from "@rawjobs/core/protocol";
 import type { AtsType, Config } from "@rawjobs/core/schema";
 
-export type { CompanyCheck, RunEvent, SaveResult, ScanPlan, ScanScope, SetupStatus };
+export type { CompanyCheck, RunEvent, SaveResult, ScanPlan, ScanScope, ScanSource, SetupStatus };
 import { canRunLocally } from "./data";
 
 // ---------- API (dev server only, see apps/web/vite.config.ts) ----------
@@ -114,7 +114,8 @@ export async function followScan(started: (scope: ScanScope) => void, onEvent: (
     return false;
   }
   if (res.status !== 200 || !res.body) return false;
-  started(res.headers.get("x-rawjobs-scope") === "all" ? "all" : "mine");
+  const scope = res.headers.get("x-rawjobs-scope");
+  started(scope === "all" || scope === "yours" ? scope : "mine");
   await readEvents(res.body, onEvent);
   return true;
 }
@@ -183,6 +184,8 @@ export type Draft = {
   alerts: Config["alerts"];
   /** Shared company directory: auto-update, share companies you add. */
   directory: Config["directory"];
+  /** How scans run: the background check after Scan now, and your industries ranking higher. */
+  scans: Config["scans"];
   /** Companies never shown ("ats:slug" keys). */
   muted: string[];
   /** Furthest wizard step visited, so "Continue setup" can resume there. */
@@ -216,6 +219,7 @@ export function emptyDraft(): Draft {
     minScore: 70,
     alerts: { telegram: false, email: false, only_new: true },
     directory: { auto_update: true, share_additions: true },
+    scans: { background: true, industry_boost: true },
     muted: [],
     furthestStep: 0,
   };
@@ -256,6 +260,7 @@ export function draftFromConfig(input: unknown): Draft {
   });
   const alerts = obj(c.alerts);
   const directory = obj(c.directory);
+  const scans = obj(c.scans);
   return {
     name: typeof p.name === "string" ? p.name : d.name,
     include: strings(t.include),
@@ -280,6 +285,7 @@ export function draftFromConfig(input: unknown): Draft {
       only_new: alerts.only_new !== false,
     },
     directory: { auto_update: directory.auto_update !== false, share_additions: directory.share_additions !== false },
+    scans: { background: scans.background !== false, industry_boost: scans.industry_boost !== false },
     muted: strings(c.companies_muted).map((k) => k.toLowerCase()),
     furthestStep: STEPS.length,
     family: inferFamily(strings(t.include)),
@@ -358,6 +364,7 @@ export function draftToConfig(d: Draft): Config {
     companies_muted: d.muted,
     alerts: d.alerts,
     directory: d.directory,
+    scans: d.scans ?? { background: true, industry_boost: true },
   };
 }
 

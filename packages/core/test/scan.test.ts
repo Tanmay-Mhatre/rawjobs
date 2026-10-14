@@ -52,13 +52,16 @@ const routes = (url: string) => {
 describe("scopeCompanies", () => {
   const cfg = config(`companies_muted: ["ashby:mutedco"]`);
 
-  it("mine: live directory companies in your industries that we can read, not yours or muted", () => {
-    expect(scopeCompanies(cfg, DIRECTORY, "mine").map((c) => `${c.ats}:${c.slug}`)).toEqual(["lever:leverco"]);
+  it("mine: live directory companies we can read, not yours or muted; industries never leave one out (they only rank)", () => {
+    expect(
+      scopeCompanies(cfg, DIRECTORY, "mine")
+        .map((c) => `${c.ats}:${c.slug}`)
+        .sort(),
+    ).toEqual(["ashby:quiet", "lever:leverco"]);
   });
 
-  it("mine: also companies only their job titles put in your industries", () => {
-    const dir = [entry("ashby:byTitles", { name: "By Titles", title_tags: ["crypto"] }), entry("ashby:other", { name: "Other", title_tags: ["healthtech"] })];
-    expect(scopeCompanies(cfg, dir, "mine").map((c) => `${c.ats}:${c.slug}`)).toEqual(["ashby:byTitles"]);
+  it("yours: no directory companies", () => {
+    expect(scopeCompanies(cfg, DIRECTORY, "yours")).toEqual([]);
   });
 
   it("all: every live company we can read", () => {
@@ -81,7 +84,11 @@ describe("scopeCompanies", () => {
       entry("ashby:sandboxvr", { name: "Sandbox VR", tags: ["crypto"] }),
       entry("ashby:mysandbox", { name: "Acme Sandbox", origin: "user" }),
     ];
-    expect(scopeCompanies(cfg, dir, "mine").map((c) => c.slug)).toEqual(["sandboxvr"]);
+    expect(
+      scopeCompanies(cfg, dir, "mine")
+        .map((c) => c.slug)
+        .sort(),
+    ).toEqual(["mysandbox", "sandboxvr"]);
     expect(
       scopeCompanies(cfg, dir, "all")
         .map((c) => c.slug)
@@ -145,15 +152,15 @@ describe("estimateSeconds", () => {
 describe("scan", () => {
   const read = <T>(dir: string, f: string) => JSON.parse(readFileSync(join(dir, f), "utf8")) as T;
 
-  it("mine: fetches your companies and your industries' companies live, keeping only matches from the directory ones", async () => {
+  it("mine without a job feed: fetches your companies and every directory company live, keeping only matches from the directory ones", async () => {
     const dir = setup();
     const { http, calls } = fakeHttp(routes);
     const starts: ScanStart[] = [];
     const r = await scan(config(`companies_muted: ["ashby:mutedco"]`), { dataDir: dir, http, now, onStart: (s) => starts.push(s) });
 
-    expect(starts[0]).toMatchObject({ yours: ["GH Co"], extra: 1, total: 2, resumed: 0, scope: "mine", byAts: { greenhouse: 1, lever: 1 }, resumedByAts: {} });
+    expect(starts[0]).toMatchObject({ yours: ["GH Co"], extra: 2, total: 3, resumed: 0, scope: "mine", fallback: true, byAts: { greenhouse: 1, lever: 1, ashby: 1 }, resumedByAts: {} });
     expect(calls.some((u) => u.includes("leverco"))).toBe(true);
-    expect(calls.some((u) => u.includes("quiet"))).toBe(false);
+    expect(calls.some((u) => u.includes("quiet"))).toBe(true);
     const byCompany = (c: string) => r.merged.jobs.filter((j) => j.company === c);
     expect(byCompany("GH Co").length).toBe(3);
     expect(byCompany("leverco").length).toBe(1);
@@ -281,7 +288,34 @@ profile:
   industries: ["crypto"]
 `);
     const r = await scan(cfg, { dataDir: dir, http: fakeHttp(routes).http, now });
-    expect(r.checks.map((c) => c.slug).sort()).toEqual(["ghco", "leverco", "mutedco"]);
+    expect(r.checks.map((c) => c.slug).sort()).toEqual(["ghco", "leverco", "mutedco", "quiet"]);
     expect(r.summary?.matches).toBeGreaterThan(0);
+  });
+
+  it("yours: only your companies", async () => {
+    const dir = setup();
+    const { http, calls } = fakeHttp(routes);
+    const r = await scan(config(), { dataDir: dir, http, now, scope: "yours" });
+    expect(r.checks).toEqual([]);
+    expect(calls.some((u) => u.includes("leverco"))).toBe(false);
+    expect(r.result.everyCompany).toBeUndefined();
+  });
+
+  it("with your industries' boost off, a job's industry doesn't count", async () => {
+    const dir = setup();
+    // leverco is crypto; this profile wants payments.
+    const cfg = (extra: string) =>
+      parseConfig(`
+profile:
+  titles: { include: ["product manager", "head of product"] }
+  locations: { include: ["dubai", "abu dhabi"], remote_ok: ["emea"] }
+  industries: ["payments"]
+${extra}`);
+    const on = await scan(cfg(""), { dataDir: dir, http: fakeHttp(routes).http, now, scope: "all", dryRun: true });
+    const off = await scan(cfg("scans: { industry_boost: false }"), { dataDir: dir, http: fakeHttp(routes).http, now, scope: "all", dryRun: true });
+    const lever = (r: typeof on) => r.result.jobs.find((j) => j.company === "leverco" && !j.why.gate);
+    expect(lever(on)?.why.industry).toBe(0);
+    expect(lever(off)?.why.industry).toBe(10);
+    expect(off.result.jobs.length).toBe(on.result.jobs.length);
   });
 });

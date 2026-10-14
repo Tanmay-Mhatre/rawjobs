@@ -91,7 +91,67 @@ type Screen = {
   viewportOnly?: boolean;
   /** What GET /api/health answers, given the ms since the page first asked; without it, health isn't answered. */
   health?: (ms: number) => Record<string, unknown>;
+  /** A scan's progress lines, streamed by POST /api/run one by one; the stream stays open unless it ends with { type: "__close" }. */
+  scan?: Record<string, unknown>[];
 };
+
+/** Scan now with its sources, part way (the details popover splits it into the shared feed, yours, past matches, feed picks). */
+const QUICK_START = {
+  type: "start",
+  stage: "quick",
+  scope: "mine",
+  companies: demo.MY_COMPANIES.map((c) => c.name),
+  total: 300,
+  seconds: 180,
+  feedAgeDays: 0.4,
+  bySource: { yours: demo.MY_COMPANIES.length, past: 52, feed: 300 - 52 - demo.MY_COMPANIES.length },
+  doneBySource: { yours: 0, past: 0, feed: 0 },
+};
+const QUICK_RUNNING = [
+  QUICK_START,
+  { type: "progress", done: 126, doneBySource: { yours: demo.MY_COMPANIES.length, past: 38, feed: 126 - 38 - demo.MY_COMPANIES.length } },
+  { type: "jobs", jobs: demo.JOBS.jobs.slice(0, 3) },
+];
+const QUICK_DONE = { type: "done", stage: "quick", jobsFound: 1312, matches: 214, strong: 20, newMatches: 12, failed: 0, checked: 259 };
+const BACKGROUND = [
+  QUICK_START,
+  QUICK_DONE,
+  { type: "background" },
+  { type: "start", stage: "background", scope: "all", companies: [], total: 6_500, resumed: 0, seconds: 3_600 },
+  { type: "progress", done: 1_170 },
+];
+const clickByLabel = (label: string) => async (page: Page) => {
+  await page.getByRole("button", { name: label }).first().click();
+};
+
+/** POST /api/run answered from the page itself, so the stream can stay open (a running scan) while the shot is taken. */
+function scanScript(events: Record<string, unknown>[]) {
+  return `(() => {
+    const events = ${JSON.stringify(events)};
+    const real = window.fetch.bind(window);
+    window.fetch = (input, init) => {
+      const url = typeof input === "string" ? input : input.url;
+      if (String(url).endsWith("/api/run") && init && init.method === "POST") {
+        const enc = new TextEncoder();
+        const body = new ReadableStream({
+          start(c) {
+            let i = 0;
+            const next = () => {
+              if (i >= events.length) return;
+              const e = events[i++];
+              if (e.type === "__close") return c.close();
+              c.enqueue(enc.encode(JSON.stringify(e) + String.fromCharCode(10)));
+              setTimeout(next, 20);
+            };
+            next();
+          },
+        });
+        return Promise.resolve(new Response(body, { status: 200, headers: { "content-type": "application/x-ndjson" } }));
+      }
+      return real(input, init);
+    };
+  })();`;
+}
 
 const strong = demo.STRONG_JOB.title;
 const DRAFT_KEY = "rawjobs.setupDraft.v1";
@@ -321,6 +381,81 @@ const SCREENS: Screen[] = [
     health: (ms) => (ms < 3000 ? { ok: true, background: true, dataVersion: demo.META.generatedAt } : { ok: true, background: false, dataVersion: "a newer scan" }),
     ready: "Scheduled scan done",
   },
+  {
+    id: "scan-menu",
+    viewportOnly: true,
+    what: "Scan now's arrow menu: Scan now, Only my companies, Check every company now (each with how long), Scan settings",
+    scenario: "demo",
+    hash: "#radar",
+    ready: strong,
+    act: clickByLabel("More scan options"),
+  },
+  {
+    id: "scan-running",
+    viewportOnly: true,
+    what: "Scan now running: matches stream in; the details split it into the shared feed, your companies, past matches and feed picks",
+    scenario: "demo",
+    hash: "#radar",
+    ready: strong,
+    scan: QUICK_RUNNING,
+    act: async (page) => {
+      await page.getByRole("button", { name: "Scan now", exact: true }).click();
+      await page.getByText("42%").waitFor();
+      await page.getByRole("button", { name: /^Scan 42% done/ }).click();
+      await page.getByText("Feed picks").waitFor();
+    },
+  },
+  {
+    id: "scan-background",
+    viewportOnly: true,
+    what: "Scan now done, the background check running: the Scan button is back, the quiet pill with its details and Pause, the toast",
+    scenario: "demo",
+    hash: "#radar",
+    ready: strong,
+    scan: BACKGROUND,
+    act: async (page) => {
+      await page.getByRole("button", { name: "Scan now", exact: true }).click();
+      await page.getByRole("button", { name: /^Background check/ }).click();
+      await page.getByRole("button", { name: "Pause" }).waitFor();
+    },
+  },
+  {
+    id: "scan-background-found",
+    viewportOnly: true,
+    what: "The background check found more: a toast with Show; the feed header says every company was checked",
+    scenario: "demo",
+    hash: "#radar",
+    ready: strong,
+    scan: [...BACKGROUND, { type: "done", stage: "background", jobsFound: 9, matches: 3, strong: 1, newMatches: 3, failed: 0, everyCompany: true }, { type: "__close" }],
+    act: async (page) => {
+      await page.getByRole("button", { name: "Scan now", exact: true }).click();
+      await page.getByText("Background check found 3 more matches.").waitFor();
+    },
+  },
+  {
+    id: "scan-stale-feed",
+    viewportOnly: true,
+    what: "Scan now with a 4-day-old job feed: the amber notice says it checks every company (about 60 to 70 min) and offers Only my companies",
+    scenario: "demo",
+    hash: "#radar",
+    ready: strong,
+    scan: [
+      { ...QUICK_START, bySource: undefined, doneBySource: undefined, fallback: true, feedAgeDays: 4.2, total: 6_800, seconds: 3_900 },
+      { type: "progress", done: 210 },
+    ],
+    act: async (page) => {
+      await page.getByRole("button", { name: "Scan now", exact: true }).click();
+      await page.getByText("The shared job feed is 4 days old.").waitFor();
+      await page.mouse.move(5, 700);
+    },
+  },
+  {
+    id: "settings-scans",
+    what: "Settings, Scans: Scan or Only my companies, the background check, industries as a ranking boost, Check every company",
+    scenario: "demo",
+    hash: "#settings/scans",
+    ready: "When I click Scan now",
+  },
   { id: "radar-empty", what: "Radar before the first scan (set up, no jobs.json)", scenario: "empty", hash: "#radar" },
   { id: "radar-not-set-up", what: "Radar with no config yet (Welcome already seen)", scenario: "fresh", hash: "#radar", storage: { [WELCOME_KEY]: true } },
   { id: "setup-0-welcome", what: "Setup wizard: Welcome (first visit)", scenario: "fresh", hash: "#setup" },
@@ -499,6 +634,7 @@ async function capture(browser: Browser, baseUrl: string, screen: Screen, theme:
     await page.route(/\/api\//, api(screen.scenario, screen.health));
     if (screen.scenario !== "demo") await page.route(DATA_FILES, (route) => route.fulfill({ status: 404, body: "" }));
     await page.addInitScript(initScript(storageFor(screen, theme)));
+    if (screen.scan) await page.addInitScript(scanScript(screen.scan));
     const errors: string[] = [];
     page.on("pageerror", (e) => errors.push(e.message));
 

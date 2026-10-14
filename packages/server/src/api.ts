@@ -22,7 +22,7 @@ import {
   suggestCacheDir,
   writeCacheFile,
 } from "@rawjobs/core";
-import { readTracking, saveTracking, suggestPoolSize } from "@rawjobs/core";
+import { readTracking, saveTracking, suggestPoolSize, type ScanScope } from "@rawjobs/core";
 import { refuse } from "./guard";
 import type { Updater } from "./updater";
 
@@ -67,7 +67,8 @@ type Line = string;
  *                             is off, or 400 { ok: false, errors } for a body that isn't a move
  *   POST /api/companies/suggest  companies that fit a profile ({ profile?, watched?, hidden? }), with lookalikes of past employers
  *   GET  /api/companies/suggest/size  { companies }: how many companies a suggestion request checks (null when unknown)
- *   POST /api/run             scan ({ scope: "mine" | "all", fresh? }); streams NDJSON progress
+ *   POST /api/run             scan ({ scope: "mine" | "yours" | "all", fresh? }); streams NDJSON progress. A background
+ *                             check (after Scan now) is stopped first: it carries on after the new scan
  *   GET  /api/run             follow the running scan from the start (204 when none is running)
  *   POST /api/run/stop        stop the running scan after the companies in progress (it can be resumed)
  *   POST /api/run/notify      send a Telegram message when the running scan finishes
@@ -229,7 +230,7 @@ Stopped after ${Math.round(timeoutMs / 1000)} s without finishing.`.trim(),
 
   // ---------- the running scan ----------
   /** The scan the server is running: its scope, every progress line so far, and the tabs following it. */
-  let scan: { scope: string; lines: Line[]; partial: string; followers: Set<ServerResponse>; child: ChildProcess } | null = null;
+  let scan: { scope: string; lines: Line[]; partial: string; followers: Set<ServerResponse>; child: ChildProcess; background?: boolean } | null = null;
   /** "Check now" runs: they share the one-at-a-time rule with scans. */
   let checking = false;
   const busy = () => scan !== null || checking;
@@ -267,12 +268,15 @@ Stopped after ${Math.round(timeoutMs / 1000)} s without finishing.`.trim(),
 
   function broadcast(line: Line) {
     if (!scan) return;
+    // Scan now is done: what runs from here is the quiet background check, which a new scan may stop.
+    if (line.startsWith('{"type":"background"')) scan.background = true;
     scan.lines.push(line);
     for (const res of scan.followers) if (!res.writableEnded) res.write(`${line}\n`);
   }
 
-  function startScan(scope: "mine" | "all", fresh: boolean) {
-    const child = cli(["scan", "--progress", "ndjson", "--scope", scope, ...(fresh ? ["--fresh"] : []), "--data", dataDir]);
+  function startScan(scope: ScanScope, fresh: boolean) {
+    // "Check every company now" fetches every company live: the job feed doesn't pick for it.
+    const child = cli(["scan", "--progress", "ndjson", "--scope", scope, ...(fresh ? ["--fresh"] : []), ...(scope === "all" ? ["--full"] : []), "--data", dataDir]);
     scan = { scope, lines: [], partial: "", followers: new Set(), child };
     const current = scan;
     let stderr = "";
@@ -452,13 +456,20 @@ Stopped after ${Math.round(timeoutMs / 1000)} s without finishing.`.trim(),
       return;
     }
     if (url === "/api/run" && req.method === "POST") {
+      // The background check gives way: stopped (its progress is saved), it carries on after this scan.
+      const current = scan;
+      if (current?.background && !checking) {
+        const closed = new Promise<void>((done) => (current.child.exitCode !== null ? done() : current.child.once("close", () => done())));
+        writeFileSync(resolve(dataDir, "scan-stop"), "");
+        await Promise.race([closed, new Promise((done) => setTimeout(done, 60_000))]);
+      }
       if (busy()) {
         res.setHeader("content-type", "application/x-ndjson");
         res.end(`${JSON.stringify({ type: "error", message: "A scan is already running." })}\n`);
         return;
       }
       const body = (JSON.parse((await readBody(req)) || "{}") ?? {}) as { scope?: unknown; fresh?: unknown };
-      startScan(body.scope === "all" ? "all" : "mine", body.fresh === true);
+      startScan(body.scope === "all" || body.scope === "yours" ? body.scope : "mine", body.fresh === true);
       follow(res);
       return;
     }

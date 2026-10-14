@@ -29,7 +29,13 @@ import {
   type Job,
   type ScanStats,
   toDashboardJob,
+  onBattery,
+  sourceCounts,
+  type AlertScope,
+  type ScanOptions,
+  type ScanResult,
 } from "@rawjobs/core";
+import type { ScanSource } from "@rawjobs/core/protocol";
 import type { RunEvent } from "@rawjobs/core/protocol";
 
 export type RunValues = {
@@ -42,11 +48,13 @@ export type RunValues = {
   offline: boolean;
   fresh: boolean;
   full: boolean;
+  /** Skip the background check of every other company after a "mine" scan. */
+  "no-background"?: boolean;
 };
 
 export const parseScope = (v: string | undefined): ScanScope => {
-  if (v === undefined || v === "mine" || v === "all") return v ?? "mine";
-  throw new Error(`--scope must be "mine" (your companies + your industries) or "all" (every company in the directory), not "${v}".`);
+  if (v === undefined || v === "mine" || v === "all" || v === "yours") return v ?? "mine";
+  throw new Error(`--scope must be "mine" (your companies, past matches and the job feed's picks), "yours" (only your companies) or "all" (every company in the directory), not "${v}".`);
 };
 
 /** Stop a scan from outside: Ctrl+C here, or the dashboard's Stop button (it creates this file). */
@@ -63,6 +71,55 @@ export function stopSignal(dataDir: string): () => boolean {
   });
   return () => interrupted || existsSync(stopFile(dataDir));
 }
+
+/** How often the background check asks whether the computer is on battery. */
+const POWER_POLL_MS = 60_000;
+const sleep = (ms: number) => new Promise((done) => setTimeout(done, ms));
+
+/**
+ * After Scan now ("mine", run to the end, not a fallback that checked every company already): the
+ * quiet check of every other company, when it's on (Settings > Scans).
+ */
+export function wantsBackground(config: Config, values: RunValues, scope: ScanScope, stage1: { stopped: boolean; fallback?: boolean }): boolean {
+  return scope === "mine" && config.scans.background && !values["no-background"] && !values["dry-run"] && !values.only?.length && !values.check?.length && !stage1.stopped && !stage1.fallback;
+}
+
+/**
+ * The background check: every company Scan now didn't just fetch (`since`: when it started), live,
+ * resumable. On battery it stops starting companies, waits until the computer is plugged in, then
+ * carries on where it stopped; where the power state can't be told, it just runs. Undefined when it
+ * was stopped while paused.
+ */
+export async function backgroundCheck(
+  config: Config,
+  base: ScanOptions & { stopped: () => boolean },
+  since: number,
+  hooks: { onPaused?: () => void; onResumed?: () => void } = {},
+  power: () => Promise<boolean | undefined> = onBattery,
+  pollMs = POWER_POLL_MS,
+): Promise<ScanResult | undefined> {
+  const userStopped = base.stopped;
+  let battery = (await power()) === true;
+  const timer = setInterval(() => void power().then((b) => (battery = b === true)), pollMs);
+  try {
+    for (;;) {
+      if (battery) {
+        hooks.onPaused?.();
+        while (battery && !userStopped()) await sleep(Math.min(1_000, pollMs));
+        if (userStopped()) return undefined;
+        hooks.onResumed?.();
+      }
+      const r = await scan(config, { ...base, scope: "all", feed: false, resume: true, skipFetchedSince: since, stopped: () => userStopped() || battery });
+      if (r.stopped && battery && !userStopped()) continue;
+      return r;
+    }
+  } finally {
+    clearInterval(timer);
+  }
+}
+
+/** The background check's alert: only jobs new to you (never ones already sent), whatever "only new" says. */
+const newOnly = (config: Config): Config => ({ ...config, alerts: { ...config.alerts, only_new: true } });
 
 export const duration = (s: number) => (s < 90 ? `${Math.max(1, Math.round(s / 60))} min` : s < 5400 ? `${Math.round(s / 60)} min` : `${(s / 3600).toFixed(1)} h`);
 
@@ -125,6 +182,8 @@ export async function cmdRun(args: string[]): Promise<number> {
       notify: { type: "boolean", default: false },
       /** Run by the computer's scheduler: logged in data/schedule-runs.json. */
       scheduled: { type: "boolean", default: false },
+      /** After a "mine" scan, don't run the background check of every other company. */
+      "no-background": { type: "boolean", default: false },
     },
   });
   if (values.plan) return printPlan(values);
@@ -149,15 +208,21 @@ export async function cmdRun(args: string[]): Promise<number> {
   };
   try {
     return await scanSession(values, dataDir, { busy, sync }, async (syncMs) => {
+      const stage1Started = Date.now();
+      let fallback = false;
+      const session = sessionOptions(values, dataDir, scope);
       const { result, merged, summary, checks, moves, stopped, resting, quiet, chronic, openCheck, stats } = await scan(config, {
-        ...sessionOptions(values, dataDir, scope),
+        ...session,
         syncMs,
         // Only when an alert will go out: the check costs requests the alert-less scan doesn't need.
         checkBeforeAlert: values.notify && alertsOn(config),
-        onStart: (s) =>
+        onStart: (s) => {
+          fallback = !!s.fallback;
+          if (s.fallback) console.error(`The shared job feed is ${s.feedAgeDays === undefined ? "missing" : `${Math.floor(s.feedAgeDays)} days old`}, so this scan checks every company itself.`);
           console.error(
-            `Checking ${values.only?.length ? values.only.join(", ") : `${s.yours.length} of your companies`}${s.extra ? ` and ${s.extra.toLocaleString()} ${s.scope === "all" ? "more from the directory" : "in your industries"}` : ""}${s.resumed ? ` (resuming: ${s.resumed.toLocaleString()} done already)` : ""}${s.skippedByFeed ? ` (${s.skippedByFeed.toLocaleString()} skipped: nothing for you in the shared job feed)` : ""}${s.resting ? ` (${s.resting.toLocaleString()} resting after failing)` : ""}${s.quiet ? ` (${s.quiet.toLocaleString()} quiet: unchanged for weeks)` : ""}, about ${duration(s.seconds)}...\n`,
-          ),
+            `Checking ${values.only?.length ? values.only.join(", ") : `${s.yours.length} of your companies`}${s.extra ? ` and ${s.extra.toLocaleString()} ${s.scope === "all" || s.fallback ? "more from the directory" : "past matches and job-feed picks"}` : ""}${s.resumed ? ` (resuming: ${s.resumed.toLocaleString()} done already)` : ""}${s.skippedByFeed ? ` (${s.skippedByFeed.toLocaleString()} skipped: nothing for you in the shared job feed)` : ""}${s.resting ? ` (${s.resting.toLocaleString()} resting after failing)` : ""}${s.quiet ? ` (${s.quiet.toLocaleString()} quiet: unchanged for weeks)` : ""}, about ${duration(s.seconds)}...\n`,
+          );
+        },
         onCompanyDone: (h) => {
           // A whole-directory scan prints your companies, matches and failures, not 17,000 lines.
           if (checks_quiet(h)) return;
@@ -213,7 +278,22 @@ export async function cmdRun(args: string[]): Promise<number> {
       const notified = values.notify && !values["dry-run"] ? await notifyScan(config, result, merged, scope) : undefined;
       if (notified)
         console.error(`Telegram: ${notified === "sent" ? "sent the new jobs" : notified === "nothing-new" ? "nothing new to send" : notified === "off" ? "not set up (Settings → Alerts)" : notified}`);
-      log({ ok: true, matches: matches.length, newMatches: fresh, notified, stopped });
+      let newMatches = fresh;
+      if (wantsBackground(config, values, scope, { stopped, fallback })) {
+        const bg = await backgroundCheck(config, session, stage1Started, {
+          onPaused: () => console.error("\nBackground check paused: this computer is on battery. It carries on when it's plugged in."),
+          onResumed: () => console.error("Plugged in: carrying on with the background check."),
+        });
+        if (bg) {
+          const found = bg.result.jobs.filter((j) => !j.why.gate && bg.merged.newIds.has(j.id)).length;
+          newMatches += found;
+          console.log(
+            `\nBackground check: ${bg.checks.length.toLocaleString()} more companies, ${found} new match${found === 1 ? "" : "es"}${bg.stopped ? " (stopped; the next one carries on where it stopped)" : ""}.`,
+          );
+          if (values.notify && found) await notifyScan(newOnly(config), bg.result, bg.merged, "background");
+        }
+      }
+      log({ ok: true, matches: matches.length, newMatches, notified, stopped });
       return 0;
     });
   } catch (err) {
@@ -234,7 +314,7 @@ export function printPlan(values: { config?: string; data: string }): number {
   const plans = Object.fromEntries(
     SCAN_SCOPES.map((scope) => {
       const p = scanPlan(config, dataDir, scope, directory);
-      return [scope, { yours: p.yours.length, extra: p.extra.length, seconds: p.seconds, stages: p.stages, resumable: resumable(dataDir, scope) ?? null }];
+      return [scope, { yours: p.yours.length, extra: p.extra.length, seconds: p.seconds, stages: p.stages, fallback: p.fallback, resumable: resumable(dataDir, scope) ?? null }];
     }),
   );
   console.log(JSON.stringify(plans));
@@ -248,7 +328,7 @@ export const emit = (event: RunEvent) => process.stdout.write(`${JSON.stringify(
 export async function runNdjson(values: RunValues): Promise<number> {
   try {
     const scope = parseScope(values.scope);
-    const { config, path } = loadConfig(values.config);
+    const { config } = loadConfig(values.config);
     const dataDir = resolve(values.data);
     const busy = () => {
       emit({ type: "error", message: "A scheduled scan is running right now. Its results show up here when it's done." });
@@ -260,66 +340,121 @@ export async function runNdjson(values: RunValues): Promise<number> {
     };
     return await scanSession(values, dataDir, { busy, sync }, async (syncMs) => {
       const yours = new Set(config.companies.map((c) => `${c.ats}:${c.slug}`));
-      let done = 0;
-      /** Companies done per hiring system, including ones a resumed scan already did. */
-      let doneByAts: Record<string, number> = {};
-      const { result, merged, summary, checks, moves, stopped, stats } = await scan(config, {
-        ...sessionOptions(values, dataDir, scope),
-        syncMs,
-        onStart: (s) => {
-          done = s.resumed;
-          doneByAts = { ...s.resumedByAts };
-          emit({
-            type: "start",
-            companies: s.yours,
-            total: s.total,
-            extra: s.extra,
-            resumed: s.resumed,
-            scope: s.scope,
-            seconds: s.seconds,
-            stages: s.stages,
-            skippedByFeed: s.skippedByFeed,
-            byAts: s.byAts,
-            doneByAts,
-          });
-        },
-        onCompanyDone: (h) => {
-          done++;
-          doneByAts[h.ats] = (doneByAts[h.ats] ?? 0) + 1;
-          // Every one of yours, and directory companies that matched or failed; the rest only as a count.
-          if (yours.has(`${h.ats}:${h.slug}`) || h.matches > 0 || (!h.ok && !h.unsupported)) emit({ type: "company", done, doneByAts, ...h });
-          else if (done % 25 === 0) emit({ type: "progress", done, ats: h.ats, doneByAts });
-        },
-        // Matches as each company finishes, so the Radar shows them before the scan ends.
-        onCompanyResult: (_h, jobs) => {
-          const matches = jobs.filter((j) => !j.why.gate);
-          if (matches.length) emit({ type: "jobs", jobs: matches.map(toDashboardJob) });
-        },
-      });
-      const matches = result.jobs.filter((j) => !j.why.gate);
-      emit({
-        type: "done",
-        jobsFound: result.jobs.length,
-        matches: matches.length,
-        strong: matches.filter((j) => j.score >= config.profile.min_score).length,
-        newMatches: summary?.newMatches ?? matches.filter((j) => merged.newIds.has(j.id)).length,
-        failed: result.health.filter((h) => !h.ok && !h.unsupported).length,
-        checked: checks.length,
-        stopped,
-        moves: moves.map((m) => ({ name: m.name, from: `${m.from.ats}:${m.from.slug}`, to: `${m.to.ats}:${m.to.slug}` })),
-        stats: { stages: stats.stages, wallMs: stats.wallMs, requests: stats.http.requests, notModified: stats.http.notModified, rateLimited: stats.http.rateLimited, timeouts: stats.http.timeouts },
-      });
+      const session = sessionOptions(values, dataDir, scope);
+      const stage1Started = Date.now();
+      let fallback = false;
+      /** One stage's progress lines: start, a line per company (or a count), its matches as they come. */
+      const hooks = (stage: "quick" | "background"): Pick<ScanOptions, "onStart" | "onCompanyDone" | "onCompanyResult"> => {
+        let done = 0;
+        /** Companies done per hiring system, including ones a resumed scan already did. */
+        let doneByAts: Record<string, number> = {};
+        /** Scan now's companies by where they come from (yours, past matches, feed picks), and how many are done. */
+        let sourceOf = new Map<string, ScanSource>();
+        let doneBySource: Record<ScanSource, number> | undefined;
+        return {
+          onStart: (s) => {
+            done = s.resumed;
+            doneByAts = { ...s.resumedByAts };
+            if (stage === "quick") fallback = !!s.fallback;
+            if (s.sources) {
+              sourceOf = new Map(Object.entries(s.sources));
+              doneBySource = sourceCounts();
+            }
+            const bySource = s.sources ? sourceCounts() : undefined;
+            if (bySource) {
+              bySource.yours = s.yours.length;
+              for (const src of sourceOf.values()) bySource[src]++;
+            }
+            emit({
+              type: "start",
+              companies: s.yours,
+              total: s.total,
+              extra: s.extra,
+              resumed: s.resumed,
+              scope: s.scope,
+              stage,
+              seconds: s.seconds,
+              stages: s.stages,
+              skippedByFeed: s.skippedByFeed,
+              byAts: s.byAts,
+              doneByAts,
+              ...(bySource ? { bySource, doneBySource } : {}),
+              ...(s.fallback ? { fallback: true } : {}),
+              feedAgeDays: s.feedAgeDays ?? null,
+            });
+          },
+          onCompanyDone: (h) => {
+            done++;
+            doneByAts[h.ats] = (doneByAts[h.ats] ?? 0) + 1;
+            const mine = yours.has(`${h.ats}:${h.slug}`);
+            if (doneBySource) {
+              const src = mine ? "yours" : sourceOf.get(h.key ?? "");
+              if (src) doneBySource[src]++;
+            }
+            const counts = { doneByAts, ...(doneBySource ? { doneBySource } : {}) };
+            // Every one of yours, and directory companies that matched or failed; the rest only as a count.
+            if (mine || h.matches > 0 || (!h.ok && !h.unsupported)) emit({ type: "company", done, ...counts, ...h });
+            else if (done % 25 === 0) emit({ type: "progress", done, ats: h.ats, ...counts });
+          },
+          // Matches as each company finishes, so the Radar shows them before the scan ends.
+          onCompanyResult: (_h, jobs) => {
+            const matches = jobs.filter((j) => !j.why.gate);
+            if (matches.length) emit({ type: "jobs", jobs: matches.map(toDashboardJob) });
+          },
+        };
+      };
+      const doneEvent = (r: ScanResult, stage: "quick" | "background") => {
+        const matches = r.result.jobs.filter((j) => !j.why.gate);
+        const newMatches = r.summary?.newMatches ?? matches.filter((j) => r.merged.newIds.has(j.id)).length;
+        emit({
+          type: "done",
+          stage,
+          jobsFound: r.result.jobs.length,
+          matches: matches.length,
+          strong: matches.filter((j) => j.score >= config.profile.min_score).length,
+          newMatches,
+          failed: r.result.health.filter((h) => !h.ok && !h.unsupported).length,
+          checked: r.checks.length,
+          stopped: r.stopped,
+          ...(r.result.everyCompany ? { everyCompany: true } : {}),
+          moves: r.moves.map((m) => ({ name: m.name, from: `${m.from.ats}:${m.from.slug}`, to: `${m.to.ats}:${m.to.slug}` })),
+          stats: {
+            stages: r.stats.stages,
+            wallMs: r.stats.wallMs,
+            requests: r.stats.http.requests,
+            notModified: r.stats.http.notModified,
+            rateLimited: r.stats.http.rateLimited,
+            timeouts: r.stats.http.timeouts,
+          },
+        });
+        return { matches, newMatches };
+      };
+
+      const first = await scan(config, { ...session, syncMs, ...hooks("quick") });
+      const { matches } = doneEvent(first, "quick");
       if (existsSync(notifyFile(dataDir))) {
         rmSync(notifyFile(dataDir), { force: true });
         emit({
           type: "notified",
           result: await notifyFinished(
             config,
-            matches.filter((j) => merged.newIds.has(j.id)),
-            stopped,
+            matches.filter((j) => first.merged.newIds.has(j.id)),
+            first.stopped,
             scope,
           ),
         });
+      }
+      if (wantsBackground(config, values, scope, { stopped: first.stopped, fallback })) {
+        emit({ type: "background" });
+        const bg = await backgroundCheck(config, session, stage1Started, {
+          onPaused: () => emit({ type: "paused", reason: "battery" }),
+          onResumed: () => emit({ type: "resumed" }),
+        });
+        if (bg) {
+          const { newMatches } = doneEvent(bg, "background");
+          // Quiet: a Telegram message only when it found something new (and never a job already sent).
+          if (newMatches && alertsOn(config)) await notifyScan(newOnly(config), bg.result, bg.merged, "background");
+        }
       }
       return 0;
     });
@@ -336,7 +471,7 @@ function alertsOn(config: Config): boolean {
 }
 
 /** Send how many new matches the scan found (or, with only_new off, how many strong ones) to Telegram. Never throws. */
-export async function notifyScan(config: Config, result: RunResult, merged: MergeResult, scope: ScanScope): Promise<string> {
+export async function notifyScan(config: Config, result: RunResult, merged: MergeResult, scope: AlertScope): Promise<string> {
   const secrets = telegramSecrets();
   if (!alertsOn(config)) return "off";
   const jobs = alertJobs(config, result.jobs, merged.newIds);

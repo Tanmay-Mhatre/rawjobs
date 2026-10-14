@@ -7,6 +7,7 @@ import { afterAll, afterEach, describe, expect, it } from "vitest";
 import { parseConfig } from "../src/config";
 import { feedMatches, JOB_FEED_SCHEMA, jobFeedStatus, syncJobFeed, type JobFeedManifest, type JobFeedShard } from "../src/job-feed";
 import { writeBoardHealth } from "../src/board-health";
+import { writeLedger } from "../src/discover";
 import { scan, type ScanStart } from "../src/scan";
 import { fakeHttp, fixture, json, testDataKey } from "./helpers";
 
@@ -161,6 +162,50 @@ describe("feedMatches", () => {
     expect(calls.some((u) => u.includes("leverco"))).toBe(true);
     expect(calls.some((u) => u.includes("unknown"))).toBe(true);
     expect(calls.some((u) => u.includes("nothing"))).toBe(false);
+  });
+
+  it("Scan now fetches yours, past matches and the feed's picks; the background check then does the rest", async () => {
+    const dir = tmp();
+    mkdirSync(join(dir, "catalog"), { recursive: true });
+    const entry = (slug: string) => ({ key: `lever:${slug}`, name: slug, ats: "lever", slug, careers_url: "", open_jobs: 3, status: "live" });
+    writeFileSync(join(dir, "catalog", "directory.json"), JSON.stringify({ companies: [entry("leverco"), entry("nothing"), entry("unknown"), entry("past")] }));
+    write(
+      dir,
+      shard({
+        "lever:leverco": { fetched_at: at(0), jobs: [["1", "Product Manager", "Dubai", "onsite", null]] },
+        "lever:nothing": { fetched_at: at(0), jobs: [["2", "Engineer", "Dubai", "onsite", null]] },
+        "lever:past": { fetched_at: at(0), jobs: [["3", "Engineer", "Dubai", "onsite", null]] },
+      }),
+    );
+    // Matched you at the last check, though the feed shows nothing for you there now.
+    writeLedger(dir, { version: 1, companies: { "lever:past": { name: "past", ats: "lever", slug: "past", lastChecked: at(1), matches: 2 } } });
+    const routes = (url: string) => (url.includes("lever.co/v0/postings/leverco") ? json(fixture("lever.json")) : url.includes("greenhouse") ? json({ jobs: [] }) : json([]));
+    const quick = fakeHttp(routes);
+    let start: ScanStart | undefined;
+    await scan(config, { dataDir: dir, scope: "mine", http: quick.http, now: new Date(NOW), onStart: (s) => (start = s) });
+    expect(start).toMatchObject({ scope: "mine", extra: 2, sources: { "lever:past": "past", "lever:leverco": "feed" } });
+    expect(start?.fallback).toBeUndefined();
+    expect(quick.calls.some((u) => u.includes("/mine/"))).toBe(true);
+    expect(quick.calls.some((u) => u.includes("unknown") || u.includes("nothing"))).toBe(false);
+
+    // The background check: every company Scan now didn't just fetch, live, without the feed choosing.
+    const rest = fakeHttp(routes);
+    const r = await scan(config, { dataDir: dir, scope: "all", feed: false, skipFetchedSince: NOW, http: rest.http, now: new Date(NOW) });
+    expect(r.checks.map((c) => c.slug).sort()).toEqual(["nothing", "unknown"]);
+    expect(rest.calls.some((u) => u.includes("/mine/") || u.includes("leverco") || u.includes("/past"))).toBe(false);
+    expect(r.result.everyCompany).toBe(true);
+  });
+
+  it("Scan now checks every company when the feed is too old to pick", async () => {
+    const dir = tmp();
+    mkdirSync(join(dir, "catalog"), { recursive: true });
+    const entry = (slug: string) => ({ key: `lever:${slug}`, name: slug, ats: "lever", slug, careers_url: "", open_jobs: 3, status: "live" });
+    writeFileSync(join(dir, "catalog", "directory.json"), JSON.stringify({ companies: [entry("leverco"), entry("nothing")] }));
+    write(dir, shard({ "lever:leverco": { fetched_at: at(5), jobs: [["1", "Product Manager", "Dubai", "onsite", null]] } }));
+    let start: ScanStart | undefined;
+    const r = await scan(config, { dataDir: dir, scope: "mine", http: fakeHttp(() => json([])).http, now: new Date(NOW), onStart: (s) => (start = s) });
+    expect(start).toMatchObject({ fallback: true, extra: 2 });
+    expect(r.result.everyCompany).toBe(true);
   });
 
   it("quiet boards are skipped on top of the feed's, each counted once", async () => {

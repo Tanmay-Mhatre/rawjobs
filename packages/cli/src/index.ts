@@ -17,7 +17,7 @@ Usage:
   rawjobs uninstall [--keep-data|--delete-data]   Remove an installed copy (your data is kept unless you say)
   rawjobs shortcuts [--desktop]   Make or repair the RawJobs shortcut (--desktop: also on the Desktop)
   rawjobs scan [options]      Sync the directory, fetch your companies (and more, by scope) live, score them
-  rawjobs schedule <status|install|remove>   Scan on a schedule on this computer (--time 08:00 [--time 20:00] [--scope mine|all], default mine)
+  rawjobs schedule <status|install|remove>   Scan on a schedule on this computer (--time 08:00 [--time 20:00] [--scope mine|yours|all], default mine)
   rawjobs alerts telegram <status|token|connect|test|on|off|forget>   Telegram alerts
   rawjobs detect <url>...     Turn careers URLs into config lines
   rawjobs validate            Check your config file
@@ -33,8 +33,11 @@ Options for companies suggest:
       --stdin           Read {"profile"?, "watched"?: ["ats:slug"], "hidden"?: ["ats:slug"]} from stdin (the profile being edited, companies to leave out)
 
 Options for scan (alias: run):
-  -s, --scope <type>    mine: your companies + every directory company in your industries (default)
-                        all:  your companies + every company in the directory (about 2 h)
+  -s, --scope <type>    mine:  Scan now: your companies, past matches and the shared job feed's picks (default),
+                               then a quiet background check of every other company (Settings > Scans)
+                        yours: only your companies
+                        all:   your companies + every company in the directory
+      --no-background   After a mine scan, skip the background check of every other company
       --offline         Don't sync the company directory first
       --full            Fetch every directory company live (don't let the shared job feed skip any)
       --fresh           Start over instead of resuming a stopped scan (Ctrl+C stops and saves progress)

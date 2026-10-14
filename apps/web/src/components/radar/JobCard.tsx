@@ -22,6 +22,8 @@ type Props = {
   onStatus: (s: Status) => void;
   /** At one of your companies. */
   yours?: boolean;
+  /** At a company in one of your industries (they rank higher; the tag says why). */
+  yourIndustry?: boolean;
 };
 
 /** Where the role is, across all its postings: "Berlin +3" (cities when recognised, else the raw location). */
@@ -60,7 +62,7 @@ function Meta({ parts }: { parts: ReactNode[] }) {
  * where the job came from. The title is a real button whose click area stretches over the whole row;
  * Save and Not interested sit above it and show on hover or focus (always on touch screens and phones).
  */
-export const JobCard = forwardRef<HTMLLIElement, Props>(function JobCard({ group, entry, min, isNew, selected, onSelect, onStatus, yours }, ref) {
+export const JobCard = forwardRef<HTMLLIElement, Props>(function JobCard({ group, entry, min, isNew, selected, onSelect, onStatus, yours, yourIndustry }, ref) {
   const job = group.lead;
   const salary = formatSalary(job.salary);
   const status = entry?.status;
@@ -68,6 +70,12 @@ export const JobCard = forwardRef<HTMLLIElement, Props>(function JobCard({ group
 
   const meta: ReactNode[] = [displayName(job.company), placeLine(group)];
   if (WORKPLACE[job.workplace]) meta.push(WORKPLACE[job.workplace]);
+  if (yourIndustry)
+    meta[meta.length - 1] = (
+      <>
+        {meta[meta.length - 1]} <span className="rj-ind">Your industry</span>
+      </>
+    );
   // Before the salary: a long salary would cut it off the line.
   const sponsor = sponsorOf(group.jobs);
   if (sponsor)

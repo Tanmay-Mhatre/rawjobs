@@ -19,18 +19,19 @@ const count = (n: number, one: string, many: string) => `${n.toLocaleString()} $
 
 /**
  * What your usual scan covers right now, in one line, from GET /api/scan/plan (the saved config):
- * "Right now: your 12 companies plus 175 in your 3 industries." `yours` are your companies a scan
- * always fetches; `extra` the directory ones it adds (by scope, minus those the shared job feed
- * shows nothing for you at). `hasJobs`: the Radar still holds jobs from earlier scans, so with
- * nothing covered it doesn't "stay empty", it just gets nothing new.
+ * "Right now: your 12 companies plus 175 with likely matches." `yours` are your companies a scan
+ * always fetches; `extra` the directory ones Scan now adds (companies that matched you before, and
+ * the ones the shared job feed has new jobs for you at). `hasJobs`: the Radar still holds jobs from
+ * earlier scans, so with nothing covered it doesn't "stay empty", it just gets nothing new.
+ * (`industries` is kept for older callers: your industries only rank jobs now.)
  */
-export function coverageLine({ plan, scope, industries, hasJobs }: { plan: ScanPlan; scope: ScanScope; industries: number; hasJobs: boolean }): string {
-  const { yours, extra } = plan[scope];
+export function coverageLine({ plan, scope, hasJobs }: { plan: ScanPlan; scope: ScanScope; industries?: number; hasJobs: boolean }): string {
+  const { yours, extra } = plan[scope] ?? plan.mine;
   const mine = count(yours, "company", "companies");
   if (scope === "all") return yours ? `Right now: your ${mine} plus ${extra.toLocaleString()} more from the directory.` : `Right now: ${count(extra, "company", "companies")} from the directory.`;
-  const inIndustries = industries === 1 ? "in your industry" : `in your ${count(industries, "industry", "industries")}`;
-  if (yours && extra) return `Right now: your ${mine} plus ${extra.toLocaleString()} ${inIndustries}.`;
+  const more = scope === "yours" ? 0 : extra;
+  if (yours && more) return `Right now: your ${mine} plus ${more.toLocaleString()} with likely matches.`;
   if (yours) return `Right now: your ${mine}.`;
-  if (extra) return `Right now: ${count(extra, "company", "companies")} ${inIndustries}. Add companies to cover any outside them.`;
+  if (more) return `Right now: ${count(more, "company", "companies")} with likely matches. Add companies to always check them.`;
   return hasJobs ? "Right now: 0 companies, so scans find no new jobs." : "Right now: 0 companies, so your Radar stays empty.";
 }

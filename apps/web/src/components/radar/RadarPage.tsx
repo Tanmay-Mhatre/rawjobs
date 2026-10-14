@@ -344,6 +344,7 @@ export function RadarPage(p: Props) {
       onSelect={() => select(g.lead)}
       onStatus={(st) => p.onStatus(g.lead, st)}
       yours={p.isYours(g.lead)}
+      yourIndustry={!p.isYours(g.lead) && (industriesByCompany.get(g.lead.company) ?? []).some((i) => profile.industries.includes(i))}
     />
   );
 
@@ -599,7 +600,7 @@ export function RadarPage(p: Props) {
                     </button>
                   </>
                 )}
-                {p.meta.runs[0] && ` · checked ${timeAgo(p.meta.runs[0].finishedAt)}`}
+                {p.meta.runs[0] && ` · ${p.meta.runs[0].everyCompany ? "every company checked" : "checked"} ${timeAgo(p.meta.runs[0].finishedAt)}`}
               </span>
               {/* Laptops show the sort control just above, and keep your profile line in the Filters panel:
                   this opens it, so what's being matched is one click away. Phones sort in the filter

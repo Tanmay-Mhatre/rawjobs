@@ -51,7 +51,7 @@ export function validateSchedule(s: Partial<ScheduleSettings>): ScheduleSettings
   const times = [...new Set(s.times ?? [])].sort();
   if (!times.length || times.length > 4) throw new Error("Pick one to four times a day.");
   for (const t of times) if (!TIME.test(t)) throw new Error(`"${t}" isn't a time like 08:00.`);
-  if (s.scope !== "mine" && s.scope !== "all") throw new Error('Scope must be "mine" or "all".');
+  if (s.scope !== "mine" && s.scope !== "all" && s.scope !== "yours") throw new Error('Scope must be "mine", "yours" or "all".');
   return { times, scope: s.scope };
 }
 
@@ -103,8 +103,8 @@ export function scanCommand(ctx: ScheduleContext, scope: ScanScope): string[] {
   return [launch.command, ...launch.args, "scan", "--scope", scope, "--notify", "--scheduled", "--data", resolve(ctx.dataDir)];
 }
 
-/** Hours a scan may run before the scheduler stops it: "all" takes about 2 h. */
-const timeLimitHours = (scope: ScanScope) => (scope === "all" ? 4 : 1);
+/** Hours a scan may run before the scheduler stops it: "all", and "mine" with its background check, take an hour or more. */
+const timeLimitHours = (scope: ScanScope) => (scope === "all" ? 4 : scope === "mine" ? 3 : 1);
 
 // ---------- Windows: Task Scheduler ----------
 
