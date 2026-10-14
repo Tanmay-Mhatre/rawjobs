@@ -34,7 +34,9 @@ function placeOnly(piece: string): boolean {
     .split(/[^\p{L}]+/u)
     .filter(Boolean);
   if (!words.length || words.length > 5 || words.some((w) => TITLE_HEADS.has(w))) return false;
-  return countriesIn(piece).length > 0 || citiesIn(piece).length > 0;
+  // citiesIn() also returns words it doesn't know ("Payments", "Growth"); a known city comes back with
+  // its country ("Manchester, United Kingdom"). Counting unknown words as places merged different roles.
+  return countriesIn(piece).length > 0 || citiesIn(piece).some((city) => city.includes(", "));
 }
 
 /**

@@ -35,6 +35,13 @@ describe("groupKey", () => {
     apart(["Acme", "Senior Software Engineer"], ["Acme", "Staff Software Engineer"]);
   });
 
+  it("leaves out pieces that name a place, and only those", () => {
+    same(["Bybit", "Product Manager - Manchester, United Kingdom"], ["Bybit", "Product Manager – Dubai"]);
+    same(["Bybit", "Product Manager (Remote)"], ["Bybit", "Product Manager | Abu Dhabi"]);
+    apart(["Bybit", "Senior Product Manager – Trading & Onchain"], ["Bybit", "Senior Product Manager – Payments"]);
+    apart(["Bybit", "Senior Growth Product Manager - User Activation"], ["Bybit", "Senior Growth Product Manager"]);
+  });
+
   it("never reduces a name to nothing", () => {
     apart(["The Company", "Analyst"], ["Company", "Analyst"]);
     apart(["AS", "Analyst"], ["AB", "Analyst"]);
