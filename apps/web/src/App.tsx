@@ -34,6 +34,7 @@ import { buildSuggestions } from "./lib/suggest";
 import { load, save } from "./lib/storage";
 import { timeAgo } from "./lib/format";
 import { hasNewTag } from "./lib/filters";
+import { roleOf } from "./lib/identity";
 import { ignoreShortcut, useGoToKeys } from "./lib/keys";
 import { useSavedAppearance, useTheme } from "./lib/theme";
 import { useUserState, type Status } from "./lib/userState";
@@ -532,7 +533,7 @@ export function App() {
             })()}
             entry={user.state[openJob.id]}
             profile={meta.profile}
-            postings={jobs.filter((j) => j.group === openJob.group)}
+            postings={jobs.filter((j) => roleOf(j) === roleOf(openJob))}
             industries={meta.companies.find((c) => c.name === openJob.company)?.industries ?? openJob.industries}
             yours={isYours(openJob)}
             indexGeneratedAt={state.kind === "ready" ? state.indexGeneratedAt : undefined}

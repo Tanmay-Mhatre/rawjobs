@@ -1,3 +1,4 @@
+import type { EmploymentType } from "./catalog/employment";
 import type { VisaInfo } from "./catalog/visa";
 import { z } from "zod";
 
@@ -107,6 +108,8 @@ export type Job = {
   workplace: Workplace;
   department?: string;
   salary?: Salary;
+  /** Full-time, part-time, contract, internship or temporary, when the hiring system says (catalog/employment.ts). */
+  employmentType?: EmploymentType;
   /** From the ATS when available (ISO 8601). */
   postedAt?: string;
   /** Apply / job page on the company's own careers site. */
@@ -223,6 +226,11 @@ export type DashboardJob = Omit<Job, "description" | "missedRuns"> & {
   estimated?: boolean;
   /** Directory key of the job's company ("ats:slug"); set on index jobs. */
   companyKey?: string;
+  /**
+   * The company's key when the directory knows this board is one of several boards of the same company
+   * (`same_as`: same name and the same job titles, or an accepted move). The Radar groups by it.
+   */
+  identity?: string;
   /** Industry ids the company directory puts the job's company in. */
   industries?: string[];
   /** Visa sponsor registers the job's company is on (country code -> list), from the company directory. */
