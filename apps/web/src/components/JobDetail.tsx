@@ -1,6 +1,7 @@
 import { displayName } from "@rawjobs/core/display-name";
 import { INDUSTRY_BY_ID } from "@rawjobs/core/catalog/industries";
 import { SENIORITY_LEVELS } from "@rawjobs/core/catalog/seniority";
+import { fromJobBoard } from "@rawjobs/core/dashboard";
 import { sponsorOf, sponsorSentence, sponsorTitle, VISA_REGISTERS } from "@rawjobs/core/catalog/visa";
 import { matchesTitle, safeUrl } from "@rawjobs/core/text";
 import { ArrowLeft, Bookmark, Check, ChevronDown, ChevronUp, CircleCheck, Copy, ExternalLink, Info, LoaderCircle, Maximize2, Plus, RefreshCw, Star, StickyNote, X } from "lucide-react";
@@ -122,6 +123,8 @@ export function JobDetail(p: JobDetailProps) {
   }, []);
 
   const postings = p.postings && p.postings.length > 1 ? p.postings : null;
+  // A job board's copy of the role is a posting, not another place.
+  const placeCount = postings ? new Set(postings.map((j) => j.location || "Location not listed")).size : 0;
   const places = postings
     ? placeSummary(postings.flatMap((j) => (j.cities.length ? j.cities : j.location ? [j.location] : [])))
     : placeSummary(job.cities.length ? job.cities : job.location ? [job.location] : []);
@@ -287,12 +290,13 @@ export function JobDetail(p: JobDetailProps) {
 
           {postings && (
             <section className="rj-drawer__section">
-              <h3 className="rj-h">Posted in {postings.length} locations</h3>
+              <h3 className="rj-h">{placeCount > 1 ? `Posted in ${placeCount} locations` : `Posted ${postings.length} times`}</h3>
               <ul className="divide-y divide-line rounded-md border border-line">
                 {postings.map((j) => (
                   <li key={j.id} className={cx("flex items-center gap-2 px-3 py-2 type-small", j.id === job.id && "bg-active")}>
                     <button type="button" className="min-w-0 flex-1 truncate text-left hover:underline" onClick={() => p.onOpenJob?.(j)} aria-current={j.id === job.id || undefined}>
                       {j.location || "Location not listed"}
+                      {fromJobBoard(j) && <span className="text-muted"> · via {atsLabel(j.ats)}</span>}
                     </button>
                     <span className="tabular text-muted">{j.score}</span>
                     <a href={safeUrl(j.url)} target="_blank" rel="noreferrer" onClick={() => p.onApply?.(j)} className="text-muted hover:text-ink" aria-label={`Open the ${j.location} posting`}>

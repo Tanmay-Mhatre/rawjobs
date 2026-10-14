@@ -6,7 +6,8 @@ import { gzipSync } from "node:zlib";
 import { afterAll, afterEach, describe, expect, it } from "vitest";
 import { parseConfig } from "../src/config";
 import { feedMatches, JOB_FEED_SCHEMA, jobFeedStatus, syncJobFeed, type JobFeedManifest, type JobFeedShard } from "../src/job-feed";
-import { scan } from "../src/scan";
+import { writeBoardHealth } from "../src/board-health";
+import { scan, type ScanStart } from "../src/scan";
 import { fakeHttp, fixture, json, testDataKey } from "./helpers";
 
 const key = testDataKey();
@@ -160,5 +161,29 @@ describe("feedMatches", () => {
     expect(calls.some((u) => u.includes("leverco"))).toBe(true);
     expect(calls.some((u) => u.includes("unknown"))).toBe(true);
     expect(calls.some((u) => u.includes("nothing"))).toBe(false);
+  });
+
+  it("quiet boards are skipped on top of the feed's, each counted once", async () => {
+    const dir = tmp();
+    mkdirSync(join(dir, "catalog"), { recursive: true });
+    const entry = (slug: string) => ({ key: `lever:${slug}`, name: slug, ats: "lever", slug, careers_url: "", open_jobs: 3, status: "live" });
+    writeFileSync(join(dir, "catalog", "directory.json"), JSON.stringify({ companies: [entry("leverco"), entry("nothing"), entry("unknown"), entry("other")] }));
+    write(
+      dir,
+      shard({
+        "lever:leverco": { fetched_at: at(0), jobs: [["1", "Product Manager", "Dubai", "onsite", null]] },
+        "lever:nothing": { fetched_at: at(0), jobs: [["2", "Engineer", "Dubai", "onsite", null]] },
+      }),
+    );
+    // Unchanged for 20 days and fetched an hour ago: quiet (the feed already rules out "nothing").
+    const steady = { okAt: NOW - 3_600_000, ids: "abcd1234", changedAt: NOW - 20 * 86_400_000 };
+    writeBoardHealth(dir, { version: 1, boards: { "lever:nothing": steady, "lever:unknown": steady } });
+    const { http, calls } = fakeHttp((url) => (url.includes("lever.co/v0/postings/leverco") ? json(fixture("lever.json")) : url.includes("greenhouse") ? json({ jobs: [] }) : json([])));
+    let start: ScanStart | undefined;
+    await scan(config, { dataDir: dir, scope: "all", http, now: new Date(NOW), onStart: (s) => (start = s) });
+    expect(start).toMatchObject({ skippedByFeed: 1, quiet: 1, extra: 2 });
+    expect(calls.some((u) => u.includes("leverco"))).toBe(true);
+    expect(calls.some((u) => u.includes("other"))).toBe(true);
+    expect(calls.some((u) => u.includes("unknown") || u.includes("nothing"))).toBe(false);
   });
 });

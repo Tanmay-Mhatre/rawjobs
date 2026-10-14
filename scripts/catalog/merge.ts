@@ -26,6 +26,8 @@ const SOURCES = {
   wayback: { family: "wayback", publishable: true },
   // Boards found by trying known company names on other hiring systems (crossprobe.ts).
   probe: { family: "probe", publishable: true },
+  // Boards the public job boards' jobs link to (feed-boards.ts): only the board, never the feed's jobs.
+  feeds: { family: "feeds", publishable: true },
   latmay: { family: "latmay", publishable: true },
   kalil: { family: "kalil", publishable: true },
   // amikai/openings-mcp companies.yaml lists (MIT, attribution in the directory repo's NOTICE.md).
@@ -149,6 +151,12 @@ if (existsSync(raw("wayback", "boards.json"))) {
   for (const b of wb.boards) add("wayback", b);
   count("wayback", wb.boards.length);
 } else console.error("! wayback/boards.json missing (run wayback.ts first)");
+if (existsSync(raw("feeds", "boards.json"))) {
+  const fb = JSON.parse(readFileSync(raw("feeds", "boards.json"), "utf8")) as { boards: { ats: string; slug: string; region?: string; shard?: string; site?: string }[] };
+  // Board fields only: the file holds nothing else from the feeds that could be published.
+  for (const b of fb.boards) add("feeds", { ats: b.ats, slug: b.slug, region: b.region, shard: b.shard, site: b.site });
+  count("feeds", fb.boards.length);
+}
 {
   // crossprobe.ts keeps every attempt; only live boards whose name matched are listed in found.
   const file = join(catalogDir, "out", "probe-found.json");

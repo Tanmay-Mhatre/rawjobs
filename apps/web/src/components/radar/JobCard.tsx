@@ -27,7 +27,9 @@ function placeLine(group: JobGroup): string {
   const cities = group.jobs.flatMap((j) => j.cities);
   if (cities.length) return placeSummary(cities);
   const lead = group.lead.location || "Location not listed";
-  return group.jobs.length > 1 ? `${lead} +${group.jobs.length - 1}` : lead;
+  // A job board's copy of the same posting isn't another place.
+  const others = new Set(group.jobs.map((j) => j.location || "Location not listed")).size - 1;
+  return others > 0 ? `${lead} +${others}` : lead;
 }
 
 const WORKPLACE: Record<string, string> = { remote: "Remote", hybrid: "Hybrid", onsite: "On-site" };

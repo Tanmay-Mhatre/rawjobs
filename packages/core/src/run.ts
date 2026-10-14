@@ -1,6 +1,8 @@
 import { companyOfJobId, getConnector, jobCompanyKey } from "./connectors";
-import { HttpClient, HttpError } from "./http";
-import type { BoardMove, CompanyHealth, CompanyRef, Config, Job, NormalizedJob } from "./schema";
+import { hashIds } from "./board-health";
+import { BoardClosedError } from "./connectors/parse";
+import { HostSkippedError, HttpClient, HttpError } from "./http";
+import type { BoardMove, CompanyHealth, CompanyRef, Config, Job, NormalizedJob, Profile } from "./schema";
 import { scoreJob } from "./score";
 import { safeUrl } from "./text";
 
@@ -19,6 +21,47 @@ export type RunResult = {
 
 /** Description fetches per company per run, for ATSs that need one request per job. */
 const MAX_DESCRIBE_PER_COMPANY = 40;
+
+/** Title searches per capped company: each is a few more requests to the same board. */
+const MAX_SEARCH_TERMS = 5;
+
+/** Level words that narrow a search without changing the role: "Senior Product Manager" searches as "product manager". */
+const LEVEL = /^(?:(?:senior|sr\.?|junior|jr\.?|lead|principal|staff|associate|group|mid[- ]level|entry[- ]level)\s+)+/i;
+/** One-word titles that would match most of a big employer's list, so a search for them finds nothing new. */
+const GENERIC = new Set([
+  "manager",
+  "director",
+  "head",
+  "lead",
+  "engineer",
+  "developer",
+  "analyst",
+  "specialist",
+  "consultant",
+  "associate",
+  "officer",
+  "executive",
+  "coordinator",
+  "assistant",
+  "administrator",
+  "intern",
+  "senior",
+  "staff",
+]);
+
+/**
+ * What to search a capped board for: your titles without level words, most specific first, at most
+ * MAX_SEARCH_TERMS. A title that contains another one is left out ("product manager" already finds
+ * "technical product manager"), as are lone generic words and short forms ("PM"), which search poorly.
+ */
+export function searchTerms(profile: Pick<Profile, "titles">): string[] {
+  const cleaned = profile.titles.include.map((t) => t.toLowerCase().replace(/\s+/g, " ").trim().replace(LEVEL, "").trim());
+  const usable = [...new Set(cleaned)].filter((t) => (t.includes(" ") ? true : t.length >= 4 && !GENERIC.has(t)));
+  const words = (t: string) => ` ${t} `;
+  const broadest = usable.filter((t) => !usable.some((o) => o !== t && words(t).includes(words(o))));
+  // Multi-word titles first: they're the specific ones a big board's search answers best.
+  return [...broadest.filter((t) => t.includes(" ")), ...broadest.filter((t) => !t.includes(" "))].slice(0, MAX_SEARCH_TERMS);
+}
 
 /**
  * A posting's date only ever moves earlier. Boards that give relative dates ("Posted 30+ Days Ago")
@@ -71,6 +114,7 @@ export async function runRadar(config: Config, opts: RunOptions = {}): Promise<R
   const companies = config.companies.filter((c) => c.enabled && (!only?.length || only.includes(c.name.toLowerCase()) || only.includes(c.slug.toLowerCase())));
   const previous = new Map((opts.previous ?? []).map((j) => [j.id, j]));
   const checks = opts.checks ?? [];
+  const terms = searchTerms(config.profile);
 
   const jobs: Job[] = [];
   const order = new Map<string, number>();
@@ -113,7 +157,34 @@ export async function runRadar(config: Config, opts: RunOptions = {}): Promise<R
               h.partial = true;
             },
           });
+      // A list cut short at its cap: ask the board's own search for your titles, so the jobs past the
+      // cap that fit you are still seen. The company stays partial: its other unseen jobs aren't gone.
+      if (h.partial && connector.search && terms.length) {
+        const idOf = (raw: unknown) => {
+          try {
+            return connector.normalize(raw, company).id;
+          } catch {
+            return undefined;
+          }
+        };
+        const seen = new Set(raws.map(idOf));
+        let found = 0;
+        for (const term of terms) {
+          if (opts.stopped?.()) break;
+          // A failed search loses only its own extra jobs, never the list already fetched.
+          const more = await connector.search(company, term, { http, now }).catch(() => []);
+          for (const raw of more) {
+            const id = idOf(raw);
+            if (!id || seen.has(id)) continue;
+            seen.add(id);
+            raws.push(raw);
+            found++;
+          }
+        }
+        h.searchFound = found;
+      }
       let described = 0;
+      const ids: string[] = [];
       for (const raw of raws) {
         let base: NormalizedJob;
         try {
@@ -124,6 +195,7 @@ export async function runRadar(config: Config, opts: RunOptions = {}): Promise<R
           continue;
         }
         base.url = safeUrl(base.url) ?? "";
+        ids.push(base.id);
         const prev = previous.get(base.id);
         const firstSeen = prev?.firstSeen ?? nowIso;
         let { score, why } = scoreJob(base, config.profile, fit);
@@ -155,9 +227,12 @@ export async function runRadar(config: Config, opts: RunOptions = {}): Promise<R
         if (!why.gate) h.matches++;
       }
       h.jobsFound = recent?.length ?? raws.length - (h.skipped ?? 0);
+      // Only a list read in full says whether the board's jobs changed (board-health.ts).
+      if (!recent && !h.partial) h.idsHash = hashIds(ids);
       h.ok = true;
     } catch (err) {
       h.error = err instanceof HttpError && err.status === 404 ? `board not found (404): check the slug "${company.slug}" against the careers URL` : (err as Error).message;
+      if (!h.unsupported) h.failure = failureOf(err);
     }
     h.durationMs = Date.now() - started;
     jobs.push(...kept);
@@ -197,6 +272,21 @@ export async function runRadar(config: Config, opts: RunOptions = {}): Promise<R
     partial: companies.length < config.companies.filter((c) => c.enabled).length || !!opts.stopped?.(),
     checked: checks.length,
   };
+}
+
+/**
+ * What kind of failure a fetch had, for resting the board (board-health.ts). Only a definite answer
+ * is "gone": a timeout, a 5xx or a dropped connection says nothing about the board. Undefined when
+ * no request was made (the host was skipped after failing for other boards).
+ */
+export function failureOf(err: unknown): CompanyHealth["failure"] {
+  if (err instanceof HostSkippedError) return undefined;
+  if (err instanceof BoardClosedError) return "gone";
+  if (!(err instanceof HttpError)) return "other";
+  if (err.status === 404 || err.status === 410) return "gone";
+  if (err.status !== undefined) return err.status === 429 || err.status >= 500 ? "server" : "other";
+  if (/^timed out/.test(err.message)) return "timeout";
+  return /^not JSON/.test(err.message) ? "other" : "network";
 }
 
 export function byScore(a: Job, b: Job): number {

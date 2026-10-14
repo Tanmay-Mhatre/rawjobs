@@ -1,5 +1,6 @@
 import { existsSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
+import { isChronic, planBoards, pruneBoards, readBoardHealth, recordBoards, writeBoardHealth } from "./board-health";
 import { companyIndustries } from "./catalog/industries";
 import { companyKey, jobCompanyKey } from "./connectors";
 import { mergeHistory, type MergeResult } from "./diff";
@@ -25,6 +26,10 @@ export type ScanStart = {
   resumed: number;
   /** Directory companies skipped because the shared job feed shows nothing for you there. */
   skippedByFeed?: number;
+  /** Boards left alone this scan: their last fetch failed and their rest isn't over (board-health.ts). */
+  resting?: number;
+  /** Directory boards left alone this scan: their jobs haven't changed for weeks and they were fetched recently. */
+  quiet?: number;
   scope?: ScanScope;
   /** About how long the rest takes. */
   seconds: number;
@@ -76,6 +81,12 @@ export type ScanResult = {
   stopped: boolean;
   /** With checkBeforeAlert: jobs checked again before the alert, and how many of them had closed. */
   openCheck?: { checked: number; closed: number };
+  /** Boards this scan left alone because they're resting after failures. */
+  resting: number;
+  /** Directory boards this scan left alone because they're quiet (unchanged for weeks, fetched recently). */
+  quiet: number;
+  /** This scan's boards with no fetch that worked for 30 days or more, as "Name (ats:slug)". */
+  chronic: string[];
 };
 
 /** A scan in progress, saved as it goes so a stopped (or crashed) scan carries on where it was. */
@@ -105,8 +116,12 @@ export function resumable(dataDir: string, scope: ScanScope, now = new Date()): 
 export function scanPlan(config: Config, dataDir: string, scope: ScanScope) {
   const yours = config.companies.filter((c) => c.enabled);
   const feed = feedMatches(dataDir, config.profile);
-  const extra = scopeCompanies(config, readDirectory(dataDir), scope).filter((c) => !feed.covered.has(jobCompanyKey(c)) || feed.matching.has(jobCompanyKey(c)));
-  return { yours, extra, seconds: estimateSeconds([...yours, ...extra], readSpeeds(dataDir)) };
+  const inScope = scopeCompanies(config, readDirectory(dataDir), scope).filter((c) => !feed.covered.has(jobCompanyKey(c)) || feed.matching.has(jobCompanyKey(c)));
+  // Resting and quiet boards aren't fetched, so they don't count towards the time.
+  const boards = readBoardHealth(dataDir);
+  const extra = planBoards(inScope, boards, Date.now()).fetch;
+  const live = planBoards(yours, boards, Date.now(), { yours: new Set(yours.map(jobCompanyKey)) }).fetch;
+  return { yours, extra, seconds: estimateSeconds([...live, ...extra], readSpeeds(dataDir)) };
 }
 
 /**
@@ -133,13 +148,19 @@ export async function scan(config: Config, opts: ScanOptions): Promise<ScanResul
   // Yesterday's shared feed says which directory companies have jobs that could be yours: only those
   // (and ones it doesn't cover) are fetched live, so what's shown is still checked live.
   const feed = fullScan && opts.feed !== false ? feedMatches(opts.dataDir, config.profile, now.getTime()) : undefined;
-  const checks = feed ? inScope.filter((c) => !feed.covered.has(jobCompanyKey(c)) || feed.matching.has(jobCompanyKey(c))) : inScope;
-
+  const unfed = feed ? inScope.filter((c) => !feed.covered.has(jobCompanyKey(c)) || feed.matching.has(jobCompanyKey(c))) : inScope;
   // Carry on a stopped scan of the same scope: skip what it fetched, keep what it found.
   const progressPath = join(opts.dataDir, progressFile(scope));
   const prior = fullScan && opts.resume !== false && !opts.dryRun ? readProgress(opts.dataDir, scope) : undefined;
   const resumed = prior && prior.scope === scope && now.getTime() - Date.parse(prior.startedAt) <= RESUME_WITHIN_MS ? prior : undefined;
   const done = new Set((resumed?.health ?? []).map((h) => h.key ?? jobCompanyKey(h)));
+  // Boards whose last fetch failed rest for a while, and directory boards whose jobs haven't changed
+  // for weeks are fetched less often (board-health.ts); a scan of chosen companies
+  // ("Check now", --only) fetches them anyway, and ones the stopped scan did count as done.
+  let boards = readBoardHealth(opts.dataDir);
+  const plan = { yours: new Set(config.companies.map(jobCompanyKey)), done };
+  const directoryPlan = fullScan ? planBoards(unfed, boards, now.getTime(), plan) : { fetch: unfed, resting: [], quiet: [] };
+  const checks = directoryPlan.fetch;
   const progress: Progress = { version: 1, scope, startedAt: resumed?.startedAt ?? now.toISOString(), health: [...(resumed?.health ?? [])], jobs: [...(resumed?.jobs ?? [])] };
   // Saved responses: a board that hasn't changed since the last scan answers with an empty 304.
   const cache = opts.http || opts.dryRun ? undefined : new FileHttpCache(join(opts.dataDir, "cache", "http"));
@@ -153,7 +174,10 @@ export async function scan(config: Config, opts: ScanOptions): Promise<ScanResul
   };
 
   const only = opts.only?.map((s) => s.toLowerCase());
-  const yours = checkOnly ? [] : config.companies.filter((c) => c.enabled && (!only?.length || only.includes(c.name.toLowerCase()) || only.includes(c.slug.toLowerCase())));
+  const chosen = checkOnly ? [] : config.companies.filter((c) => c.enabled && (!only?.length || only.includes(c.name.toLowerCase()) || only.includes(c.slug.toLowerCase())));
+  const yoursPlan = fullScan ? planBoards(chosen, boards, now.getTime(), plan) : { fetch: chosen, resting: [], quiet: [] };
+  const yours = yoursPlan.fetch;
+  const resting = [...yoursPlan.resting, ...directoryPlan.resting];
   const left = [...yours, ...checks].filter((c) => !done.has(jobCompanyKey(c)));
   const byAts: Record<string, number> = {};
   const resumedByAts: Record<string, number> = {};
@@ -167,7 +191,9 @@ export async function scan(config: Config, opts: ScanOptions): Promise<ScanResul
     total: yours.length + checks.length,
     resumed: done.size,
     ...(fullScan ? { scope } : {}),
-    ...(feed ? { skippedByFeed: inScope.length - checks.length } : {}),
+    ...(feed ? { skippedByFeed: inScope.length - unfed.length } : {}),
+    ...(resting.length ? { resting: resting.length } : {}),
+    ...(directoryPlan.quiet.length ? { quiet: directoryPlan.quiet.length } : {}),
     seconds: estimateSeconds(left, readSpeeds(opts.dataDir)),
     byAts,
     resumedByAts,
@@ -180,7 +206,8 @@ export async function scan(config: Config, opts: ScanOptions): Promise<ScanResul
     only: opts.only,
     previous,
     checks,
-    skip: done,
+    // Resting companies of yours are skipped like done ones (runRadar fetches every enabled one otherwise).
+    skip: new Set([...done, ...yoursPlan.resting.map(jobCompanyKey)]),
     stopped: opts.stopped,
     industriesOf,
     onCompanyDone: opts.onCompanyDone,
@@ -208,7 +235,13 @@ export async function scan(config: Config, opts: ScanOptions): Promise<ScanResul
   const kept = keptChecked(ledger, now).filter((c) => !tracked.has(companyKey(c)) && !muted.has(companyKey(c)));
   const merged = mergeHistory(previous, result, [...config.companies, ...kept]);
   cache?.save();
-  if (opts.dryRun) return { result, merged, checks, moves, stopped };
+
+  // This run's fetches only: a resumed scan's earlier ones were recorded when it stopped.
+  boards = recordBoards(boards, run.health, now.getTime());
+  if (fullScan) boards = pruneBoards(boards, new Set([...config.companies, ...inScope].map(jobCompanyKey)), now.getTime());
+  const chronic = [...chosen, ...inScope].filter((c) => isChronic(boards.boards[jobCompanyKey(c)], now.getTime())).map((c) => `${c.name} (${c.ats}:${c.slug})`);
+  const boardNews = { resting: resting.length, quiet: directoryPlan.quiet.length, chronic };
+  if (opts.dryRun) return { result, merged, checks, moves, stopped, ...boardNews };
 
   // Jobs the alert would name that weren't just read live: checked once more. A closed one is saved
   // closed (as mergeHistory closes them) and leaves this run's jobs, so it's neither alerted nor counted new.
@@ -232,12 +265,13 @@ export async function scan(config: Config, opts: ScanOptions): Promise<ScanResul
   const health = result.health.filter((h) => yourKeys.has(companyKey(h)) || h.matches > 0 || (!h.ok && !h.unsupported));
   const summary = saveRun(opts.dataDir, config, { ...result, health, checked: checks.length, ...(moves.length ? { moves } : {}) }, merged, { record: !checkOnly });
   writeLedger(opts.dataDir, ledger);
+  writeBoardHealth(opts.dataDir, boards);
   if (!checkOnly) recordSpeeds(opts.dataDir, run.health);
   // The Radar shows only jobs fetched live; the shared index is for suggestions on the Companies page.
   if (fullScan) writeFileSync(join(opts.dataDir, "discover.json"), JSON.stringify({ version: 1, generatedAt: result.finishedAt, indexGeneratedAt: result.finishedAt, jobs: [] }));
   if (stopped) saveProgress(true);
   else if (fullScan) rmSync(progressPath, { force: true });
-  return { result, merged, summary, checks, moves, stopped, ...(openCheck ? { openCheck } : {}) };
+  return { result, merged, summary, checks, moves, stopped, ...boardNews, ...(openCheck ? { openCheck } : {}) };
 }
 
 /**
