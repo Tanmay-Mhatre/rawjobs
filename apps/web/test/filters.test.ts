@@ -329,6 +329,16 @@ describe("your companies and directory jobs", () => {
     expect(fromQuery(toQuery(f({ visaOnly: true }), "best"))!.filters.visaOnly).toBe(true);
   });
 
+  it("keeps only companies with a hiring surge, when asked, without changing the order", () => {
+    const surging = job({ id: "surge", score: 60, surge: { n: 14, usual: 5 } });
+    const calm = job({ id: "calm", score: 80 });
+    expect(applyFilters([surging, calm], f(), ctx).map((j) => j.id)).toEqual(["surge", "calm"]);
+    expect(applyFilters([surging, calm], f({ surgeOnly: true }), ctx).map((j) => j.id)).toEqual(["surge"]);
+    expect(surging.score).toBe(60);
+    expect(activeChips(f({ surgeOnly: true }), ctx)).toEqual([{ key: "surge", label: "Hiring surge", remove: { surgeOnly: false } }]);
+    expect(fromQuery(toQuery(f({ surgeOnly: true }), "best"))!.filters.surgeOnly).toBe(true);
+  });
+
   it("ranks jobs that may be stale lower, and No talent pools or stale jobs hides them", () => {
     const stale = job({ id: "stale", score: 85, repostedAt: daysAgo(3), repostCount: 2 });
     const real = job({ id: "real", score: 80 });

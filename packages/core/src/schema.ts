@@ -235,6 +235,8 @@ export type DashboardJob = Omit<Job, "description" | "missedRuns"> & {
   industries?: string[];
   /** Visa sponsor registers the job's company is on (country code -> list), from the company directory. */
   visa?: VisaInfo;
+  /** The company is opening far more roles than usual (activity.ts isSurge): new roles in the last 30 days, and its usual 30 days. */
+  surge?: { n: number; usual: number };
 };
 
 /** data/jobs.json (jobs that pass your filters) and data/jobs-other.json (the rest). */
@@ -248,6 +250,8 @@ export type DataMeta = {
   companies: { name: string; ats: AtsType; slug: string; enabled: boolean; careers_url?: string /** Industry ids from the company directory. */; industries?: string[] }[];
   /** Newest first, capped. */
   runs: RunSummary[];
+  /** Some company has enough hiring records to compare with (data/activity.json `ready`): the surge filter shows. */
+  hiringReady?: boolean;
   /**
    * Your companies whose board is failing, by companyKey(), with when the failures started
    * (board-health.json): the streak outlasts the capped runs above.
