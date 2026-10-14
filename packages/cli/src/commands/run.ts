@@ -327,7 +327,9 @@ export async function notifyFinished(config: Config, newJobs: Job[], stopped: bo
 
 export function healthLine(h: CompanyHealth): string {
   if (!h.ok) return h.error ?? "failed";
-  return `${String(h.jobsFound).padStart(4)} jobs, ${h.matches} match${h.matches === 1 ? "" : "es"} (${(h.durationMs / 1000).toFixed(1)}s)`;
+  // Past a board's cap, the jobs its search for your titles found (counted in jobsFound too).
+  const searched = h.searchFound ? ` (${h.searchFound} past the cap, from searching your titles)` : "";
+  return `${String(h.jobsFound).padStart(4)} jobs${searched}, ${h.matches} match${h.matches === 1 ? "" : "es"} (${(h.durationMs / 1000).toFixed(1)}s)`;
 }
 
 export function printJobs(jobs: Job[], min: number): void {

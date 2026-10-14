@@ -159,6 +159,8 @@ export type CompanyHealth = {
   describeFailed?: number;
   /** The list was cut short (a page cap): its unseen jobs stay open instead of counting as gone. */
   partial?: boolean;
+  /** On a partial list: jobs past the cap that the board's search for your titles found (see searchTerms in run.ts). */
+  searchFound?: number;
   /**
    * What kind of failure, for resting the board (board-health.ts): "gone" only for a definite answer
    * (404, 410 or the hiring system saying the board is closed). Absent when no request was made.
