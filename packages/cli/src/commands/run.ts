@@ -210,7 +210,7 @@ export async function cmdRun(args: string[]): Promise<number> {
         console.error(`\nWrote ${out}`);
       }
 
-      const notified = values.notify && !values["dry-run"] ? await notifyScan(config, result, merged) : undefined;
+      const notified = values.notify && !values["dry-run"] ? await notifyScan(config, result, merged, scope) : undefined;
       if (notified)
         console.error(`Telegram: ${notified === "sent" ? "sent the new jobs" : notified === "nothing-new" ? "nothing new to send" : notified === "off" ? "not set up (Settings → Alerts)" : notified}`);
       log({ ok: true, matches: matches.length, newMatches: fresh, notified, stopped });
@@ -317,6 +317,7 @@ export async function runNdjson(values: RunValues): Promise<number> {
             config,
             matches.filter((j) => merged.newIds.has(j.id)),
             stopped,
+            scope,
           ),
         });
       }
@@ -335,11 +336,11 @@ function alertsOn(config: Config): boolean {
 }
 
 /** Send how many new matches the scan found (or, with only_new off, how many strong ones) to Telegram. Never throws. */
-export async function notifyScan(config: Config, result: RunResult, merged: MergeResult): Promise<string> {
+export async function notifyScan(config: Config, result: RunResult, merged: MergeResult, scope: ScanScope): Promise<string> {
   const secrets = telegramSecrets();
   if (!alertsOn(config)) return "off";
   const jobs = alertJobs(config, result.jobs, merged.newIds);
-  const text = digest(jobs, { minScore: config.profile.min_score, onlyNew: config.alerts.only_new });
+  const text = digest(jobs, { minScore: config.profile.min_score, onlyNew: config.alerts.only_new, scope });
   if (!text) return "nothing-new";
   try {
     await sendTelegram(text, secrets);
@@ -350,11 +351,11 @@ export async function notifyScan(config: Config, result: RunResult, merged: Merg
 }
 
 /** "Tell me when it's done": sent whether or not there's anything new, and whatever the alerts switch says. */
-export async function notifyFinished(config: Config, newJobs: Job[], stopped: boolean): Promise<string> {
+export async function notifyFinished(config: Config, newJobs: Job[], stopped: boolean, scope: ScanScope): Promise<string> {
   const secrets = telegramSecrets();
   if (!secrets.token || !secrets.chatId) return "off";
   try {
-    await sendTelegram(finishedMessage({ newJobs, minScore: config.profile.min_score, stopped }), secrets);
+    await sendTelegram(finishedMessage({ newJobs, minScore: config.profile.min_score, stopped, scope }), secrets);
     return "sent";
   } catch (err) {
     return `failed: ${(err as Error).message}`;

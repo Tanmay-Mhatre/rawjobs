@@ -59,6 +59,13 @@ jobs:
         # Stops starting boards after 5 h so the publish and save steps always get to run.
         run: pnpm exec tsx scripts/catalog/jobs.ts --directory "$RUNNER_TEMP/directory.json" --out scripts/catalog/out/jobs --max-minutes 300
 
+      - name: Record hiring activity
+        # New roles per company from today's change file (scripts/catalog/activity.ts). Optional: if it
+        # fails or runs out of time, the manifest has no activity entry today and the feed publishes as usual.
+        continue-on-error: true
+        timeout-minutes: 15
+        run: pnpm exec tsx scripts/catalog/activity.ts --out scripts/catalog/out/jobs
+
       - name: Sign the manifest
         timeout-minutes: 2
         env:
@@ -77,15 +84,16 @@ jobs:
           gh release view jobs -R "$DATA_REPO" > /dev/null 2>&1 ||
             gh release create jobs -R "$DATA_REPO" --latest=false --title "Job feed" \
               --notes "The shared job feed, rebuilt daily. Read jobs-manifest.json first; shards are checked against its SHA-256."
-          # First format: one shard per hiring system. Second: today's full copy and change file.
+          # First format: one shard per hiring system. Second: today's full copy, change file and hiring activity.
           shards=$(jq -r '.shards[].file' jobs-manifest.json)
           v2new=$(ls jobs-v2-snapshot-*.json.br jobs-v2-diff-*.json.br 2> /dev/null || true)
+          v2new="$v2new $(jq -r '.activity.file // empty' jobs-v2-manifest.json)"
           gh release upload jobs $shards $v2new -R "$DATA_REPO" --clobber
           # Each manifest together with its signature, so the pair changes as close to together as it can.
           gh release upload jobs jobs-manifest.json jobs-manifest.json.sig -R "$DATA_REPO" --clobber
           gh release upload jobs jobs-v2-manifest.json jobs-v2-manifest.json.sig -R "$DATA_REPO" --clobber
           # Drop files no manifest points to any more (the second keeps 14 days of change files).
-          keep=$(printf '%s\n' $shards jobs-manifest.json jobs-manifest.json.sig jobs-v2-manifest.json jobs-v2-manifest.json.sig $(jq -r '.snapshot.file, .diffs[].file' jobs-v2-manifest.json))
+          keep=$(printf '%s\n' $shards jobs-manifest.json jobs-manifest.json.sig jobs-v2-manifest.json jobs-v2-manifest.json.sig $(jq -r '.snapshot.file, .diffs[].file, (.activity.file // empty)' jobs-v2-manifest.json))
           for a in $(gh release view jobs -R "$DATA_REPO" --json assets -q '.assets[].name'); do
             grep -qx "$a" <<< "$keep" || gh release delete-asset jobs "$a" -R "$DATA_REPO" -y
           done

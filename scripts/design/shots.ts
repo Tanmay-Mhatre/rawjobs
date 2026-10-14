@@ -239,6 +239,43 @@ const SCREENS: Screen[] = [
     },
   },
   { id: "pipeline", what: "Pipeline", scenario: "demo", hash: "#pipeline", ready: strong },
+  {
+    id: "radar-salary",
+    what: "My companies sorted by salary (no folding): pounds first by yearly pay, then euros, then the hourly US-dollar contract, then no pay",
+    scenario: "demo",
+    hash: "#radar?sort=salary&mine=true",
+    ready: "Head of Product, Open Banking",
+  },
+  { id: "radar-type", what: "Radar filtered by Type: Contract (chip and the one contract role)", scenario: "demo", hash: "#radar?employment=contract", ready: "Product Manager, Developer Platform" },
+  {
+    id: "radar-merged",
+    viewportOnly: true,
+    what: "A role on the company's own board and on a job board (Remotive) under its legal name: one row, the company's posting leads, the drawer lists both",
+    scenario: "demo",
+    hash: "#radar",
+    widths: [1280],
+    ready: "Head of Product, Open Banking",
+    act: async (page) => {
+      await page.getByRole("button", { name: "Head of Product, Open Banking", exact: true }).first().click();
+      const via = page.getByText("· via Remotive").first();
+      await via.waitFor();
+      await via.scrollIntoViewIfNeeded();
+    },
+  },
+  {
+    id: "radar-type-menu",
+    viewportOnly: true,
+    what: "Radar filter row with the Type menu open (full-time, contract, … and Not stated)",
+    scenario: "demo",
+    hash: "#radar",
+    widths: [1280],
+    ready: strong,
+    act: async (page) => {
+      await page.getByRole("button", { name: /^Filters/ }).click();
+      await page.getByRole("button", { name: /^Type/ }).click();
+      await page.getByRole("group", { name: "Type" }).waitFor();
+    },
+  },
   { id: "companies-mine", what: "Companies, My companies tab", scenario: "demo", hash: "#companies", storage: { "rawjobs.companiesTab": "mine" }, ready: "Larkspur Labs" },
   {
     id: "companies-suggestions",

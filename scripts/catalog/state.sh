@@ -2,7 +2,7 @@
 # Working state the catalog workflows carry from one run to the next, kept as assets of the "state"
 # release of $DATA_REPO. Two sets, one asset each, so their workflows never overwrite each other:
 #   catalog  the directory runs (weekly rebuild, contributions), which take turns (one concurrency group)
-#   jobs     the daily job feed: yesterday's shards and ETags
+#   jobs     the daily job feed: yesterday's shards and ETags, and the hiring activity recorded so far
 #
 #   state.sh restore [catalog|jobs]   download and unpack; fails if it exists but can't be downloaded.
 #                                     Sets the step output restored=true|false.
@@ -50,7 +50,8 @@ case "$SET" in
     )
     ;;
   jobs)
-    FILES=(out/jobs/etags.json out/jobs/jobs-manifest.json out/jobs/jobs-v2-manifest.json out/jobs/stats.json)
+    # activity-state.json: each company's new roles by day and month (activity.ts); losing it restarts the records.
+    FILES=(out/jobs/etags.json out/jobs/jobs-manifest.json out/jobs/jobs-v2-manifest.json out/jobs/stats.json out/jobs/activity-state.json)
     # Yesterday's shards and full copy: today's change file is made against them.
     for f in out/jobs/jobs-*.json.gz out/jobs/jobs-v2-snapshot-*.json.br; do FILES+=("$f"); done
     ;;

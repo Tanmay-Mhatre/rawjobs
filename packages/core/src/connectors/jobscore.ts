@@ -1,3 +1,4 @@
+import { employmentType } from "../catalog/employment";
 import type { NormalizedJob, Salary } from "../schema";
 import { robotsAllows } from "../robots";
 import { htmlToText, inferWorkplace } from "../text";
@@ -78,6 +79,7 @@ export const jobscore: Connector<JobScoreJob> = {
       ...(salary ? { salary } : {}),
       postedAt: isoDate(raw.opened_date),
       url: raw.detail_url?.replace(/\?.*$/, "") || `https://careers.jobscore.com/careers/${ref.slug}/jobs/${raw.id}`,
+      employmentType: employmentType(raw.job_type),
       description: htmlToText(raw.description ?? ""),
     };
   },

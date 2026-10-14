@@ -1,3 +1,4 @@
+import { employmentType } from "../catalog/employment";
 import type { NormalizedJob } from "../schema";
 import { htmlToText, inferWorkplace } from "../text";
 import { detectAs, isoDate, xmlAll, xmlBlocks, xmlOne } from "./parse";
@@ -11,6 +12,10 @@ export type PersonioPosition = {
   department: string;
   createdAt: string;
   sections: { name: string; value: string }[];
+  /** "permanent", "intern", "trainee", "freelance", "temporary", "working_student". */
+  employmentType?: string;
+  /** "full-time", "part-time", "full-or-part-time". */
+  schedule?: string;
 };
 
 /** Parsed from the feed: Personio publishes XML only. */
@@ -26,6 +31,8 @@ export function parsePersonio(xml: string): PersonioPosition[] {
       department: xmlOne(p, "department"),
       createdAt: xmlOne(p, "createdAt"),
       sections: xmlBlocks(p, "jobDescription").map((d) => ({ name: xmlOne(d, "name"), value: xmlOne(d, "value") })),
+      employmentType: xmlOne(p, "employmentType") || undefined,
+      schedule: xmlOne(p, "schedule") || undefined,
     };
   });
 }
@@ -52,6 +59,7 @@ export const personio: Connector<PersonioPosition> = {
       department: raw.department || undefined,
       postedAt: isoDate(raw.createdAt),
       url: `https://${ref.slug}.jobs.personio.com/job/${raw.id}`,
+      employmentType: employmentType([raw.employmentType, raw.schedule]),
       description: raw.sections.map((s) => `${s.name}\n${htmlToText(s.value)}`).join("\n\n"),
     };
   },
