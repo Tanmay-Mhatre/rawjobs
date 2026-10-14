@@ -1,0 +1,247 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Scan progress pop-over</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600&family=Geist+Mono:wght@500&display=swap" rel="stylesheet">
+<style>
+/* Tokens copied from apps/web/src/design/tokens.css (light + dark), only what this mockup uses. */
+:root, [data-theme="light"] {
+  --bg-canvas: #f5f1e8; --bg-raised: #fffbf5; --bg-hover: #ede9e2; --bg-active: #e5e1db; --bg-inset: #ede9e2;
+  --border-subtle: #d4d0c9; --border-default: #c4c0ba; --border-control: #888681;
+  --text-primary: #151412; --text-secondary: #605d59; --text-disabled: #888681;
+  --success-solid: #007d3e; --success-text: #007137; --focus-ring: #a33100; --danger-text: #a12b46;
+  --progress-track: var(--bg-active); --progress-fill: var(--text-primary);
+  --skeleton-bg: var(--bg-inset); --skeleton-shine: var(--bg-raised);
+  --shadow-l3: 0 8px 24px rgba(21, 20, 18, 0.07);
+}
+[data-theme="dark"] {
+  --bg-canvas: #120f0b; --bg-raised: #181611; --bg-hover: #201d18; --bg-active: #27241f; --bg-inset: #120f0b;
+  --border-subtle: #37342e; --border-default: #45423c; --border-control: #6b6964;
+  --text-primary: #ecebe8; --text-secondary: #cac7c2; --text-disabled: #6b6964;
+  --success-solid: #5bcc80; --success-text: #89dea1; --focus-ring: #ff7a51; --danger-text: #ffaeb7;
+  --progress-track: var(--bg-active); --progress-fill: var(--text-primary);
+  --skeleton-bg: var(--bg-inset); --skeleton-shine: var(--bg-hover);
+  --shadow-l3: inset 0 1px 0 rgba(255,255,255,.06), 0 12px 32px rgba(0,0,0,.4);
+}
+:root {
+  --space-1: 4px; --space-2: 8px; --space-3: 12px; --space-4: 16px; --space-6: 24px; --space-8: 32px;
+  --radius-0: 0px; --radius-sm: 2px; --radius-md: 4px;
+  --duration-instant: 100ms; --duration-base: 200ms; --ease-enter: cubic-bezier(0.16, 1, 0.3, 1); --ease-standard: cubic-bezier(0.2, 0, 0, 1);
+  --control-sm: 28px;
+  --font-sans: "Geist", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-mono: "Geist Mono", ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  --text-small: 400 0.875rem/1.3125rem var(--font-sans);
+  --text-label: 500 0.875rem/1.25rem var(--font-sans);
+  --text-meta: 400 0.75rem/1rem var(--font-sans);
+  --text-source: 500 0.75rem/1rem var(--font-mono);
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: #e9e5dc; color: #151412; font: var(--text-small); -webkit-font-smoothing: antialiased; }
+.page { max-width: 1320px; margin: 0 auto; padding: 32px 16px 64px; }
+.page > h1 { font: 600 1.5rem/1.875rem var(--font-sans); margin: 0 0 4px; }
+.page > p { margin: 0 0 24px; color: #605d59; max-width: 70ch; }
+.grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 420px), 1fr)); gap: 24px; align-items: start; }
+.frame { background: var(--bg-canvas); color: var(--text-primary); border: 1px solid var(--border-subtle); border-radius: 6px; padding: 12px 16px 24px; }
+.frame__cap { font: 600 13px/18px var(--font-sans); margin: 0 0 2px; }
+.frame__note { font: var(--text-meta); color: var(--text-secondary); margin: 0 0 12px; min-height: 32px; }
+.tag { display: inline-block; font: 600 11px/16px var(--font-sans); padding: 0 6px; border-radius: 2px; margin-right: 6px; vertical-align: 1px; }
+.tag--bad { background: #ffe1e4; color: #a12b46; } .tag--good { background: #d3f3da; color: #007137; }
+.viewport { position: relative; overflow: hidden; }
+.viewport--clip { height: 560px; border-bottom: 2px dashed #b11f47; }
+.phone { width: 375px; max-width: 100%; margin: 0 auto; border: 1px solid var(--border-default); border-radius: 18px; padding: 10px 16px 16px; background: var(--bg-canvas); }
+
+/* Header bar imitation */
+.hdr { display: flex; justify-content: flex-end; align-items: center; gap: 4px; padding: 8px 0; border-bottom: 1px solid var(--border-subtle); margin-bottom: 8px; }
+.hdr__logo { margin-right: auto; font: 600 15px/20px var(--font-sans); }
+.btn { display: inline-flex; align-items: center; gap: 8px; height: var(--control-sm); padding: 0 var(--space-3); font: var(--text-label); border-radius: var(--radius-md); border: 1px solid var(--border-control); background: var(--bg-raised); color: var(--text-primary); white-space: nowrap; }
+.btn--icon { width: var(--control-sm); padding: 0; justify-content: center; }
+.btn--quiet { border-color: transparent; background: transparent; color: var(--text-secondary); padding: 0 var(--space-3); margin-left: calc(-1 * var(--space-3)); cursor: pointer; }
+.btn--quiet:hover { background: var(--bg-hover); color: var(--text-primary); }
+.btn:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 2px; }
+.muted { color: var(--text-secondary); }
+.tabular { font-variant-numeric: tabular-nums; }
+.icon { width: 16px; height: 16px; flex: none; stroke: currentColor; fill: none; stroke-width: 1.5; stroke-linecap: round; stroke-linejoin: round; }
+.sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+
+/* Pop-over shell */
+.pop { margin-left: auto; width: 24rem; max-width: 100%; background: var(--bg-raised); border: 1px solid var(--border-subtle); border-radius: var(--radius-md); box-shadow: var(--shadow-l3); }
+.pop--old { padding: var(--space-4); }
+.pop--new { display: flex; flex-direction: column; max-height: min(36rem, calc(100dvh - 6rem)); }
+.pop__head { padding: var(--space-4) var(--space-4) 0; }
+.pop__body { padding: 0 var(--space-4) var(--space-3); flex: 1; min-height: 0; display: flex; flex-direction: column; }
+.pop__foot { padding: var(--space-3) var(--space-4); border-top: 1px solid var(--border-subtle); display: grid; gap: var(--space-2); }
+.headline { margin: 0; font: var(--text-small); font-weight: 600; }
+.small { margin: 0; font: var(--text-small); color: var(--text-secondary); }
+.small b { color: var(--text-primary); font-weight: 600; }
+.section { margin: var(--space-4) 0 var(--space-2); font: var(--text-meta); color: var(--text-secondary); }
+
+/* SourceTag */
+.rj-source { display: inline-flex; align-items: center; gap: var(--space-2); white-space: nowrap; font: var(--text-source); letter-spacing: 0.04em; text-transform: uppercase; color: var(--text-secondary); }
+
+/* ---- CURRENT (broken), copied from bundle.css ---- */
+.old .rj-progress { display: grid; gap: var(--space-2); }
+.old .rj-progress__row { display: grid; grid-template-columns: 128px minmax(0, 1fr) 64px; align-items: center; gap: var(--space-3); }
+.old .truncate { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+.old .rj-progress__track { height: 4px; background: var(--progress-track); overflow: hidden; }
+.old .rj-progress__fill { display: block; height: 100%; background: var(--progress-fill); transform-origin: left; }
+.old .rj-progress__count { font: var(--text-meta); color: var(--text-secondary); text-align: right; font-variant-numeric: tabular-nums; }
+
+/* ---- PROPOSED ---- */
+.new .rj-progress { display: grid; gap: var(--space-2); container-type: inline-size; margin: 0; padding: 0; list-style: none; }
+.new .rj-progress__row { display: grid; align-items: center; gap: var(--space-3); grid-template-columns: minmax(0, 8rem) minmax(2rem, 1fr) 6rem; grid-template-areas: "label track count"; }
+.new .rj-progress__row .rj-source { grid-area: label; display: block; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.new .rj-progress__track { grid-area: track; height: 4px; background: var(--progress-track); border-radius: var(--radius-0); overflow: hidden; }
+.new .rj-progress__track--overall { height: 6px; margin-top: var(--space-2); }
+.new .rj-progress__fill { display: block; height: 100%; background: var(--progress-fill); transform-origin: left; transition: transform var(--duration-base) var(--ease-enter); }
+.new .rj-progress__count { grid-area: count; display: inline-flex; justify-content: flex-end; align-items: center; gap: var(--space-1); font: var(--text-meta); color: var(--text-secondary); white-space: nowrap; font-variant-numeric: tabular-nums; }
+.new .rj-progress__row[data-done] .rj-progress__fill { background: var(--success-solid); }
+.new .rj-progress__row[data-done] .rj-progress__count { color: var(--success-text); }
+.new .rj-progress__count .icon { width: 14px; height: 14px; }
+.new .rj-progress--scroll { max-height: 15rem; overflow-y: auto; overscroll-behavior: contain; scrollbar-gutter: stable; padding-right: var(--space-1); }
+.new .rj-progress__done { display: flex; gap: var(--space-2); align-items: flex-start; margin-top: var(--space-3); font: var(--text-meta); color: var(--text-secondary); }
+.new .rj-progress__done .icon { width: 14px; height: 14px; color: var(--success-text); margin-top: 1px; }
+.new .rj-progress__done span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.new .rj-progress__done--all { margin-top: var(--space-4); font: var(--text-small); color: var(--text-primary); }
+.new .rj-progress__done--all .icon { width: 16px; height: 16px; margin-top: 2px; }
+.new .expander { align-self: flex-start; margin-top: var(--space-2); }
+@container (max-width: 20rem) {
+  .new .rj-progress__row { grid-template-columns: minmax(0, 1fr) auto; grid-template-areas: "label count" "track track"; row-gap: var(--space-1); }
+}
+.skel { display: block; height: 6px; margin-top: var(--space-2); background: var(--skeleton-bg); position: relative; overflow: hidden; }
+.skel::after { content: ""; position: absolute; inset: 0; transform: translateX(-100%); background: linear-gradient(90deg, transparent, var(--skeleton-shine), transparent); animation: shimmer 1.4s var(--ease-standard) infinite; }
+@keyframes shimmer { to { transform: translateX(100%); } }
+@media (prefers-reduced-motion: reduce) { .new .rj-progress__fill { transition: none; } .skel::after { animation: none; } }
+</style>
+</head>
+<body>
+<main class="page">
+  <h1>Scan progress pop-over</h1>
+  <p>Current pop-over next to the proposal. Spec: <code>docs/plans/scan-progress-popover.md</code>. Data: an "Every company" scan of 22 hiring systems, 20,751 of 122,651 companies checked.</p>
+  <div class="grid" id="grid"></div>
+</main>
+
+<template id="icons">
+  <svg data-i="ring" viewBox="0 0 16 16" class="icon" style="transform:rotate(-90deg)"><circle cx="8" cy="8" r="6" stroke="var(--progress-track)" stroke-width="2.5"/><circle cx="8" cy="8" r="6" stroke="var(--progress-fill)" stroke-width="2.5" stroke-dasharray="37.7" stroke-dashoffset="31.3"/></svg>
+</template>
+
+<script>
+const BIG = [
+  ["SmartRecruiters",142,12215],["BambooHR",326,10425],["Paylocity",611,9870],["Greenhouse",7715,7715],["Workday",1302,4834],
+  ["ADP Workforce Now",88,4812],["Zoho Recruit",205,4790],["UKG Pro",47,4740],["iCIMS",160,4700],["Lever",4670,4670],
+  ["Jobvite",93,4600],["Ashby",310,4580],["Recruitee",120,4560],["Personio",64,4540],["Workable",4520,4520],
+  ["Teamtailor",98,4500],["JazzHR",58,4480],["BreezyHR",77,4460],["Pinpoint",41,4440],["Rippling",30,4420],
+  ["Taleo",52,4400],["SuccessFactors",22,4380],
+].map(([label, done, total]) => ({ label, done, total }));
+const SMALL = [
+  { label: "Shared feed", done: 1, total: 1, feed: true },
+  { label: "Your companies", done: 41, total: 120 },
+  { label: "Past matches", done: 12, total: 38 },
+  { label: "Feed picks", done: 0, total: 64 },
+];
+const sum = (rows, k) => rows.reduce((n, r) => n + r[k], 0);
+const full = (n) => n.toLocaleString("en-US");
+const short = (n) => n < 10000 ? full(n) : new Intl.NumberFormat("en-US", { notation: "compact", maximumFractionDigits: 1 }).format(n);
+const esc = (s) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;");
+const ICON = {
+  check: '<svg viewBox="0 0 24 24" class="icon" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg>',
+  down: '<svg viewBox="0 0 24 24" class="icon" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg>',
+  up: '<svg viewBox="0 0 24 24" class="icon" aria-hidden="true"><path d="m18 15-6-6-6 6"/></svg>',
+  stop: '<svg viewBox="0 0 24 24" class="icon" aria-hidden="true" style="width:12px;height:12px;fill:currentColor"><rect x="4" y="4" width="16" height="16"/></svg>',
+  bell: '<svg viewBox="0 0 24 24" class="icon" aria-hidden="true"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/></svg>',
+};
+const ring = () => document.querySelector("#icons").content.querySelector("[data-i=ring]").outerHTML;
+
+function header(percent, phone) {
+  return `<div class="hdr"><span class="hdr__logo">RawJobs</span>
+    <span class="btn">${ring()}${phone ? "" : "<span>Scanning</span>"}${percent === null ? "" : `<span class="tabular muted">${percent}%</span>`}</span>
+    <span class="btn btn--icon" aria-hidden="true">${ICON.bell}</span><span class="btn btn--icon" aria-hidden="true">${ICON.stop}</span></div>`;
+}
+const footer = (matches, notify) => `<p class="small"><b class="tabular">${matches}</b> matches so far. Stop any time: the next scan carries on from here.</p>${notify ? `<p class="small">${notify}</p>` : ""}`;
+
+/* Current (broken) pop-over, as ScanStatus renders it today. */
+function oldPop(rows, headline) {
+  return `<div class="pop pop--old old"><p class="headline">${headline}</p>
+    <div class="rj-progress" style="margin-top:12px">${rows.map((b) => `<div class="rj-progress__row">
+      <span class="rj-source truncate">${esc(b.label)}</span>
+      <span class="rj-progress__track"><span class="rj-progress__fill" style="transform:scaleX(${b.done / b.total})"></span></span>
+      <span class="rj-progress__count">${full(b.done)} / ${full(b.total)}</span></div>`).join("")}</div>
+    <div style="margin-top:12px">${footer(34)}</div></div>`;
+}
+
+/* Proposed: overall bar, five unfinished rows (or every row when five or fewer), Done line, expander. */
+function rowHtml(b) {
+  const finished = b.feed || b.done >= b.total;
+  const count = finished ? `${ICON.check}Done` : `${short(b.done)} / ${short(b.total)}`;
+  const sr = finished ? `${b.label}: done` : `${b.label}: ${full(b.done)} of ${full(b.total)} companies`;
+  return `<li class="rj-progress__row"${finished ? " data-done" : ""} title="${sr}">
+    <span class="rj-source">${esc(b.label)}</span>
+    <span class="rj-progress__track" aria-hidden="true"><span class="rj-progress__fill" style="transform:scaleX(${b.total ? b.done / b.total : 0})"></span></span>
+    <span class="rj-progress__count"><span aria-hidden="true" style="display:inline-flex;align-items:center;gap:4px">${count}</span><span class="sr-only">${sr}</span></span></li>`;
+}
+let uid = 0;
+function newPop({ rows, headline, kind = "hiring system", section = "By hiring system", matches = 34, notify, expanded = false, starting = false }) {
+  const id = `list-${++uid}`;
+  const total = rows ? sum(rows, "total") : 0, done = rows ? sum(rows, "done") : 0;
+  let body = "";
+  if (starting) {
+    body = "";
+  } else {
+    const LIMIT = 5;
+    const inPlace = rows.length <= LIMIT;
+    const finished = rows.filter((r) => r.feed || r.done >= r.total);
+    const open = rows.filter((r) => !(r.feed || r.done >= r.total));
+    if (!inPlace && open.length === 0) {
+      body = `<p class="rj-progress__done rj-progress__done--all">${ICON.check}<span>All ${rows.length} ${kind}s checked</span></p>`;
+    } else if (inPlace) {
+      body = `<p class="section">${section}</p><ul class="rj-progress" id="${id}" aria-label="${section}">${rows.map(rowHtml).join("")}</ul>`;
+    } else {
+      const shown = expanded ? open : open.slice(0, LIMIT);
+      body = `<p class="section">${section}</p>
+        <ul class="rj-progress${expanded ? " rj-progress--scroll" : ""}" id="${id}" aria-label="${section}"${expanded ? ' tabindex="0"' : ""}>${shown.map(rowHtml).join("")}</ul>
+        ${finished.length ? `<p class="rj-progress__done" title="Done: ${finished.map((r) => r.label).join(", ")}">${ICON.check}<span>Done: ${finished.map((r) => esc(r.label)).join(", ")}</span></p>` : ""}
+        ${open.length > LIMIT ? `<button type="button" class="btn btn--quiet expander" aria-expanded="${expanded}" aria-controls="${id}" data-toggle>${expanded ? `Show fewer ${ICON.up}` : `Show all ${open.length} ${kind}s ${ICON.down}`}</button>` : ""}`;
+    }
+  }
+  const bar = starting
+    ? `<span class="skel" aria-hidden="true"></span>`
+    : `<span class="rj-progress__track rj-progress__track--overall" style="display:block" role="progressbar" aria-label="Scan progress" aria-valuemin="0" aria-valuemax="${total}" aria-valuenow="${done}" aria-valuetext="${full(done)} of ${full(total)} companies"><span class="rj-progress__fill" style="transform:scaleX(${done / total})"></span></span>`;
+  return `<div class="pop pop--new new">
+    <div class="pop__head"><p class="headline">${headline}</p>${bar}</div>
+    <div class="pop__body">${body}</div>
+    ${starting ? "" : `<div class="pop__foot">${footer(matches, notify)}</div>`}</div>`;
+}
+
+const allDone = BIG.map((r) => ({ ...r, done: r.total }));
+const HEAD_BIG = "Checking 20,751 of 122,651 companies · Every company · about 7.7 h left";
+const NOTIFY = "When it's done, Telegram gets one message with the new matches.";
+const frames = [
+  { theme: "light", cap: '<span class="tag tag--bad">Current</span>Every company, 22 systems', note: "Counts wrap to two lines, ADP WORKFORCE NOW clips with no ellipsis, the list runs past the window (dashed line = bottom of a laptop window).", html: `<div class="viewport viewport--clip">${header(16)}${oldPop(BIG, HEAD_BIG)}</div>` },
+  { theme: "light", cap: '<span class="tag tag--good">Proposed</span>Every company, collapsed', note: "Overall bar, the five biggest unfinished systems, finished ones on one line, the other 14 a click away. Same height for 6 or 60 systems.", html: header(16) + newPop({ rows: BIG, headline: HEAD_BIG, notify: NOTIFY }) },
+  { theme: "light", cap: '<span class="tag tag--good">Proposed</span>Every company, expanded', note: "All 19 unfinished systems in a 15rem scroll area; head and footer stay put. Clicking the button pins the pop-over.", html: header(16) + newPop({ rows: BIG, headline: HEAD_BIG, expanded: true }) },
+  { theme: "light", cap: '<span class="tag tag--good">Proposed</span>Scan (small, by source)', note: "Five rows or fewer: every row in place, finished ones marked Done. No Done line, no expander.", html: header(18) + newPop({ rows: SMALL, headline: "Checking 54 of 223 companies · about 3 min left", section: "By source", kind: "source", matches: 3 }) },
+  { theme: "light", cap: '<span class="tag tag--good">Proposed</span>Only my companies (small)', note: "Two hiring systems, hundreds of companies: exact numbers under 10,000.", html: header(57) + newPop({ rows: [{ label: "Greenhouse", done: 41, total: 120 }, { label: "Lever", done: 64, total: 64 }], headline: "Checking 106 of 184 companies · Only my companies · about 2 min left", matches: 5 }) },
+  { theme: "light", cap: '<span class="tag tag--good">Proposed</span>Every system finished', note: "Wrapping up: full bar, one line instead of 22 full bars.", html: header(99) + newPop({ rows: allDone, headline: "Checking 122,651 of 122,651 companies · Every company", matches: 212 }) },
+  { theme: "light", cap: '<span class="tag tag--good">Proposed</span>Starting', note: "No counts yet: headline and a skeleton bar only, no empty section.", html: header(null) + newPop({ headline: "Starting scan…", starting: true }) },
+  { theme: "light", cap: '<span class="tag tag--good">Proposed</span>Phone, 375px', note: "Under the 20rem container breakpoint rows go two-line: full-width names and bars.", phone: true, html: header(16, true) + newPop({ rows: BIG, headline: HEAD_BIG, notify: NOTIFY }) },
+  { theme: "dark", cap: '<span class="tag tag--good">Proposed</span>Dark, Every company', note: "Tokens only: progress-track/fill, success-solid/text, border-subtle, shadow-l3.", html: header(16) + newPop({ rows: BIG, headline: HEAD_BIG, notify: NOTIFY }) },
+  { theme: "dark", cap: '<span class="tag tag--good">Proposed</span>Dark, phone, small scan', phone: true, note: "", html: header(18, true) + newPop({ rows: SMALL, headline: "Checking 54 of 223 companies · about 3 min left", section: "By source", kind: "source", matches: 3 }) },
+];
+document.getElementById("grid").innerHTML = frames.map((f) => `<section class="frame" data-theme="${f.theme}">
+  <p class="frame__cap">${f.cap}</p><p class="frame__note">${f.note}</p>
+  ${f.phone ? `<div class="phone">${f.html}</div>` : f.html}</section>`).join("");
+
+/* The expander works in the mockup too. */
+document.addEventListener("click", (e) => {
+  const b = e.target.closest("[data-toggle]");
+  if (!b) return;
+  const pop = b.closest(".pop");
+  const head = pop.querySelector(".headline").textContent;
+  const open = b.getAttribute("aria-expanded") !== "true";
+  pop.outerHTML = newPop({ rows: BIG, headline: head, expanded: open });
+});
+</script>
+</body>
+</html>

@@ -4,7 +4,8 @@ import { atsLabel } from "../lib/filters";
 import { roughCount } from "../lib/format";
 import { aboutRange, backgroundLine, progressRows, scanLine, setScanPrefs, sourceRows, useScanPrefs, type ScanState } from "../lib/scan";
 import { scanPlan, type ScanPlan, type ScanScope } from "../lib/setup";
-import { IconButton as RjIconButton, Menu, SourceTag } from "./primitives";
+import { IconButton as RjIconButton, Menu } from "./primitives";
+import { ScanBars } from "./ScanBars";
 import { Button, cx } from "./ui";
 
 /** "About 3 min." for a menu or Settings hint. */
@@ -145,7 +146,9 @@ function useHoverDetails() {
       if (!root.current?.contains(e.target as Node)) setOpen(false);
     };
     const esc = (e: KeyboardEvent) => {
-      if (e.key === "Escape") setOpen(false);
+      if (e.key !== "Escape") return;
+      setOpen(false);
+      root.current?.querySelector<HTMLElement>("[aria-expanded]")?.focus();
     };
     document.addEventListener("pointerdown", away);
     document.addEventListener("keydown", esc);
@@ -201,36 +204,33 @@ export function ScanStatus({ scan, onStop, notify, notifyLine }: { scan: ScanSta
       </span>
 
       {open && (
-        <div id="scan-details" className="absolute right-0 top-full z-40 mt-2 w-[24rem] max-w-[calc(100vw-2rem)] rounded-md border border-line bg-raised p-4 shadow-l3">
+        <div
+          id="scan-details"
+          className="absolute right-0 top-full z-40 mt-2 flex max-h-[min(36rem,calc(100dvh-6rem))] w-[24rem] max-w-[calc(100vw-2rem)] flex-col rounded-md border border-line bg-raised p-4 shadow-l3 max-sm:fixed max-sm:inset-x-4 max-sm:top-16 max-sm:w-auto max-sm:max-w-none"
+        >
           <p className="type-small font-semibold">{scanLine(scan)}</p>
-          {(sources ?? bars ?? []).length > 0 && (
-            // biome-ignore lint/a11y/useSemanticElements: an ARIA role on purpose: the native element (fieldset, output, input, hr, ul) would change layout or behaviour here
-            <div className="rj-progress mt-3" role="group" aria-label="Scan progress">
-              {sources
-                ? sources.map((b) => (
-                    <div key={b.label} className="rj-progress__row">
-                      <SourceTag source={b.label} className="min-w-0 truncate" />
-                      <span className="rj-progress__track">
-                        <span className="rj-progress__fill" style={{ transform: `scaleX(${b.total ? b.done / b.total : 0})` }} />
-                      </span>
-                      <span className="rj-progress__count">{b.feed ? "done" : `${b.done.toLocaleString()} / ${b.total.toLocaleString()}`}</span>
-                    </div>
-                  ))
-                : bars?.map((b) => (
-                    <div key={b.ats || "all"} className="rj-progress__row">
-                      <SourceTag source={b.ats ? atsLabel(b.ats) : "All companies"} className="min-w-0 truncate" />
-                      <span className="rj-progress__track">
-                        <span className="rj-progress__fill" style={{ transform: `scaleX(${b.total ? b.done / b.total : 0})` }} />
-                      </span>
-                      <span className="rj-progress__count">
-                        {b.done.toLocaleString()} / {b.total.toLocaleString()}
-                      </span>
-                    </div>
-                  ))}
-            </div>
+          {value !== null && (
+            <span
+              className="rj-progress__track rj-progress__track--overall mt-2 block"
+              role="progressbar"
+              aria-label="Scan progress"
+              aria-valuemin={0}
+              aria-valuemax={scan.total}
+              aria-valuenow={done}
+              aria-valuetext={`${done.toLocaleString()} of ${scan.total.toLocaleString()} companies`}
+            >
+              <span className="rj-progress__fill" style={{ transform: `scaleX(${value})` }} />
+            </span>
           )}
+          <div className="min-h-0 flex-1">
+            <ScanBars
+              rows={sources ? sources.map((b) => ({ ...b, key: b.label })) : (bars ?? []).map((b) => ({ ...b, key: b.ats || "all", label: b.ats ? atsLabel(b.ats) : "All companies" }))}
+              noun={sources ? "source" : "hiring system"}
+              onExpand={() => setOpen("pinned")}
+            />
+          </div>
           {scan.total > 0 && (
-            <p className="mt-3 type-small text-muted">
+            <p className="mt-3 border-t border-line pt-3 type-small text-muted">
               <b className="tabular font-semibold text-ink">{found.toLocaleString()}</b> {found === 1 ? "match" : "matches"} so far. Stop any time: the next scan carries on from here.
             </p>
           )}
@@ -267,7 +267,7 @@ export function BackgroundPill({ bg, onPause }: { bg: NonNullable<ScanState["bg"
       {open && (
         <div
           id="background-details"
-          className="absolute right-0 top-full z-40 mt-2 w-[24rem] max-w-[calc(100vw-2rem)] rounded-md border border-line bg-raised p-4 shadow-l3 max-sm:fixed max-sm:inset-x-4 max-sm:top-14 max-sm:w-auto max-sm:max-w-none"
+          className="absolute right-0 top-full z-40 mt-2 w-[24rem] max-w-[calc(100vw-2rem)] rounded-md border border-line bg-raised p-4 shadow-l3 max-sm:fixed max-sm:inset-x-4 max-sm:top-16 max-sm:w-auto max-sm:max-w-none"
         >
           <p className="type-small font-semibold">{others ? `Checking the other ${others.toLocaleString()} companies` : "Checking every other company"}</p>
           <p className="mt-1 type-small text-muted">

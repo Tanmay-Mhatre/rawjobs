@@ -1,7 +1,7 @@
 import { companyLabel, displayName } from "@rawjobs/core/display-name";
 import { safeUrl } from "@rawjobs/core/text";
 import { Clock, ExternalLink, EyeOff, RefreshCw, Undo2, X } from "lucide-react";
-import { Fragment, useEffect, useId, useMemo, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
+import { Fragment, useEffect, useId, useMemo, useRef, useState, type ReactNode } from "react";
 import type { BoardMove } from "@rawjobs/core/schema";
 import { careersUrl } from "@rawjobs/core/detect";
 import { keyOf, type CompanyRef } from "../lib/companies";
@@ -9,6 +9,7 @@ import { nameRank } from "../lib/companySearch";
 import type { DataMeta } from "../lib/data";
 import { atsLabel, radarCompanyHash } from "../lib/filters";
 import { formatDateTime, timeAgo } from "../lib/format";
+import { useMedia } from "../lib/useMedia";
 import {
   barsOf,
   barsSummary,
@@ -680,19 +681,6 @@ function HiddenPanel({ hidden, onShowAgain, id }: { hidden: HiddenCompany[]; onS
         })}
       </ul>
     </Card>
-  );
-}
-
-/** Whether a media query matches, kept up to date (true where matchMedia doesn't exist). */
-function useMedia(query: string): boolean {
-  return useSyncExternalStore(
-    (on) => {
-      if (typeof matchMedia !== "function") return () => {};
-      const m = matchMedia(query);
-      m.addEventListener("change", on);
-      return () => m.removeEventListener("change", on);
-    },
-    () => typeof matchMedia !== "function" || matchMedia(query).matches,
   );
 }
 
