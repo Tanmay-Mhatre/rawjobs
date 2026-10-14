@@ -19,6 +19,8 @@ function rawjobs(...args: string[]) {
   return { code: r.status, out: r.stdout, err: r.stderr };
 }
 
+// Each case starts the real CLI (a cold tsx process, two in "validates"). With every test file
+// running at once that can pass the 20 s default, so these get more room.
 describe("the rawjobs command", () => {
   it("prints help and exits 0", () => {
     const r = rawjobs("--help");
@@ -50,4 +52,4 @@ describe("the rawjobs command", () => {
     expect(r.code).toBe(0);
     expect(r.out).toMatch(/ats: lever, slug: "acme"/);
   });
-});
+}, 60_000);
