@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { Job } from "../src/lib/data";
-import { isStale, staleReasons } from "../src/lib/stale";
+import { groupStale, isStale, staleReasons } from "../src/lib/stale";
 import { makeJob } from "./helpers";
 
 const NOW = Date.parse("2026-10-13T12:00:00Z");
@@ -58,5 +58,23 @@ describe("staleReasons and isStale", () => {
 
   it("a closed job is never tagged", () => {
     expect(staleReasons(job({ status: "closed", postedAt: daysAgo(200), repostedAt: daysAgo(5), repostCount: 3 }), ctx)).toEqual([]);
+  });
+});
+
+describe("groupStale", () => {
+  it("is false when any open posting of the role is fresh", () => {
+    const old = job({ postedAt: daysAgo(150) });
+    expect(groupStale([old, job()], ctx)).toEqual({ stale: false, reasons: [] });
+    // A closed fresh posting doesn't make the role live.
+    expect(groupStale([old, job({ status: "closed" })], ctx).stale).toBe(true);
+    expect(groupStale([job({ status: "closed" })], ctx).stale).toBe(false);
+  });
+
+  it("is true when every open posting is stale, with the least stale posting's reasons", () => {
+    const veryOld = job({ postedAt: daysAgo(200), repostedAt: daysAgo(5), repostCount: 3 });
+    const old = job({ postedAt: daysAgo(150) });
+    const g = groupStale([veryOld, old], ctx);
+    expect(g.stale).toBe(true);
+    expect(g.reasons).toEqual(["Posted 5 months ago"]);
   });
 });

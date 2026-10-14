@@ -10,7 +10,7 @@ import { copyText } from "../lib/clipboard";
 import { useDescription, type Job, type Profile } from "../lib/data";
 import { formatDate, formatSalary, placeSummary, postedOrSeen, timeAgo } from "../lib/format";
 import { atsLabel, evergreenReason, INDEX_MAX_AGE_DAYS, isOlder } from "../lib/filters";
-import { isStale, staleReasons } from "../lib/stale";
+import { groupStale, isStale, staleReasons } from "../lib/stale";
 import { load, save } from "../lib/storage";
 import { PIPELINE, STATUS_LABEL, type Entry, type Status } from "../lib/userState";
 import { Dialog } from "./Dialog";
@@ -135,7 +135,8 @@ export function JobDetail(p: JobDetailProps) {
   const sponsor = sponsorOf(postings ?? [job]);
   // The loaded description counts too, for data written before descriptionLength existed.
   const staleCtx = { descriptionLength: description ? description.trim().length : undefined };
-  const stale = isStale(job, staleCtx) ? staleReasons(job, staleCtx) : null;
+  // A role with a fresh posting elsewhere is live: the callout shows only when every open posting may be stale.
+  const stale = isStale(job, staleCtx) && (!postings || groupStale(postings).stale) ? staleReasons(job, staleCtx) : null;
   const meta: ReactNode[] = [
     job.company,
     places,
