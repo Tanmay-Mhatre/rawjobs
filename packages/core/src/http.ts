@@ -37,6 +37,11 @@ export class NotModifiedError extends HttpError {
   }
 }
 
+/** No request made: the host failed for other URLs too many times in a row this run. */
+export class HostSkippedError extends HttpError {
+  override name = "HostSkippedError";
+}
+
 export type HttpOptions = {
   userAgent?: string;
   timeoutMs?: number;
@@ -136,7 +141,7 @@ export class HttpClient {
 
   async request(url: string, init: RequestInit): Promise<Response> {
     const host = new URL(url).host;
-    if ((this.failures.get(host) ?? 0) >= this.opts.breakAfter) throw new HttpError(`skipped: ${host} failed ${this.opts.breakAfter} times in a row (${url})`, url);
+    if ((this.failures.get(host) ?? 0) >= this.opts.breakAfter) throw new HostSkippedError(`skipped: ${host} failed ${this.opts.breakAfter} times in a row (${url})`, url);
     try {
       const res = await this.attempt(url, init, host);
       this.failures.delete(host);

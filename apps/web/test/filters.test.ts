@@ -208,6 +208,20 @@ describe("your companies and directory jobs", () => {
     expect(g.map((x) => x.jobs.length)).toEqual([4, 1]);
   });
 
+  it("groups a job board's copy with the company's own posting, and shows the company's", () => {
+    const board = job({ id: "himalayas:acme:1", ats: "himalayas", company: "Acme Inc.", title: "Sr. Software Engineer", score: 90 });
+    const own = job({ id: "greenhouse:acme:1", ats: "greenhouse", company: "ACME", title: "Senior Software Engineer - Remote", score: 80 });
+    const other = job({ id: "greenhouse:acme:2", ats: "greenhouse", company: "Acme", title: "Senior Software Engineer II", score: 85 });
+    const g = groupJobs([board, other, own]);
+    expect(g.map((x) => [x.lead.id, x.jobs.length])).toEqual([
+      ["greenhouse:acme:1", 2],
+      ["greenhouse:acme:2", 1],
+    ]);
+    expect(roleCount([board, own, other])).toBe(2);
+    // A board's copy still leads when it's the only posting.
+    expect(groupJobs([board])[0]!.lead.id).toBe("himalayas:acme:1");
+  });
+
   it("folds a company's roles after the first two into one row, until opened", () => {
     const role = (company: string, n: number) => ({ key: `${company}${n}`, lead: job({ id: `${company}${n}`, company }), jobs: [] });
     const groups = [role("S", 1), role("S", 2), role("K", 1), role("S", 3), role("S", 4), role("K", 2)];

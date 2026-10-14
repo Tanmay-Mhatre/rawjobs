@@ -1,0 +1,54 @@
+# Once a day: does each hiring system's connector still read jobs? Most use endpoints the vendor
+# never documented, so a change on their side shows up as zero jobs, not as an error. Tries up to 3
+# known live boards per hiring system from the latest published directory, and each job board once
+# (scripts/catalog/connector-health.ts). A system where no board gave usable jobs opens (or updates)
+# one issue; once none fails it closes it. A few requests per system, at the usual polite pace.
+name: Connectors · health
+
+on:
+  schedule:
+    # Off the hour, and clear of the job feed (04:23), the data checks (:37), Common Crawl (13:40),
+    # the contributions runs (:17 every 3 hours) and Monday's rebuild.
+    - cron: "53 6 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+
+env:
+  DATA_REPO: ${{ vars.DATA_REPO || 'Tanmay-Mhatre/rawjobs-directory' }}
+  TITLE: "Hiring system checks failing"
+
+jobs:
+  check:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+
+      # Fails only when the check itself breaks; failing systems are counted in `failing`.
+      - name: Check every hiring system and job board
+        id: check
+        run: pnpm exec tsx scripts/catalog/connector-health.ts --report "$RUNNER_TEMP/report.md"
+
+      - name: Open, update or close the issue
+        env:
+          GH_TOKEN: ${{ github.token }}
+          FAILING: ${{ steps.check.outputs.failing }}
+        run: |
+          open="$(gh issue list -R "$GITHUB_REPOSITORY" --state open --search "\"$TITLE\" in:title" --json number -q '.[0].number')"
+          body="$(printf '%s\n\nRun: %s/%s/actions/runs/%s\n' "$(cat "$RUNNER_TEMP/report.md")" "$GITHUB_SERVER_URL" "$GITHUB_REPOSITORY" "$GITHUB_RUN_ID")"
+          if [ "$FAILING" = 0 ]; then
+            [ -z "$open" ] || gh issue close "$open" -R "$GITHUB_REPOSITORY" --comment "No hiring system failing: $GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
+          elif [ -n "$open" ]; then
+            gh issue comment "$open" -R "$GITHUB_REPOSITORY" --body "$body"
+          else
+            gh issue create -R "$GITHUB_REPOSITORY" --title "$TITLE" --body "$body"
+          fi

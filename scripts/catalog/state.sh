@@ -34,6 +34,8 @@ case "$SET" in
       out/probe-found.json
       raw/commoncrawl/boards.json
       raw/wayback/boards.json
+      # Boards the job boards' jobs linked to, and when each feed was last read (feed-boards.ts).
+      raw/feeds/boards.json
       # Last week's copies of the permissively licensed public lists (sources.ts only replaces a file
       # it downloaded), so one failed download doesn't shrink the directory. The lists we may only
       # use to confirm boards (feashliaa, upstreamit) are never republished, so they aren't kept.

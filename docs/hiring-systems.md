@@ -53,6 +53,15 @@ boards listed below. Paste a company's careers link into **Companies → Add by 
 
 iCIMS, Jobvite, JazzHR and several smaller systems (CareerPlug, Paycor, HiringThing, Factorial, HRMDirect) have no keyless feed, so their connectors read the public careers pages. If a company changes its page template, that connector may need an update.
 
+Most connectors use endpoints the vendor never documented, so a change on their side shows up as zero
+jobs rather than an error. Once a day the **Connectors · health** workflow
+(`.github/workflows/connector-health.yml`, script `scripts/catalog/connector-health.ts`, locally
+`pnpm connector:health [--only workday,lever]`) tries up to 3 live boards per hiring system from the
+latest published directory (most open jobs, spread over shards) and each job board once, with the real
+connector. A system fails when none of its boards gives jobs with a title, link and id, and warns when
+some don't; systems with no live board in the directory are skipped. Failures open one "Hiring system
+checks failing" issue, which closes itself once none fails; the full table is in the run's summary.
+
 Public job boards: Hacker News "Who is hiring", Remotive, Arbeitnow, Remote OK, Himalayas, Jobicy and We Work Remotely, added the same way,
 by pasting their link.
 
