@@ -40,6 +40,44 @@ describe("industriesFromTitles", () => {
     expect(industriesFromTitles(commodities)).not.toContain("crypto-exchange");
     expect(industriesFromTitles(commodities, ["crypto"])).toContain("crypto-exchange");
   });
+
+  it("doesn't put a company in the industry it sells to", () => {
+    // Toast: restaurant software with a retail product line.
+    const toast = [
+      "Account Executive, Retail",
+      "Business Development Representative - Retail",
+      "Mid Market Account Executive, Toast Retail",
+      "Retail Solutions Engineer",
+      "Retail Account Executive (Calgary, AB)",
+      "Territory Account Executive, Retail - Alaska",
+      "Senior Software Engineer, Retail",
+      "Sales to Retailers Lead",
+      ...pad(20),
+    ];
+    expect(industriesFromTitles(toast)).not.toContain("retail");
+    expect(industriesFromTitles(toast, [], "all")).toContain("retail");
+    expect(industriesFromTitles(["Account Executive, Healthcare", "Healthcare Solutions Consultant", "Engineer for Hospitals", ...pad(10)])).not.toContain("healthtech");
+  });
+
+  it("still reads a store, an agency or a team from its titles", () => {
+    expect(industriesFromTitles(["Store Manager", "Cashier", "Assistant Store Manager", ...pad(20)])).toContain("retail");
+    // Role words count anywhere, even in a sales title.
+    expect(industriesFromTitles(["Retail Sales Associate", "Store Manager - Account Executive Training", ...pad(10)])).toContain("retail");
+    // Store and agency sales sell the company's own product.
+    expect(industriesFromTitles(["Sales Associate - Apparel Shop", "Seasonal Sales Associate - Apparel Shop", ...pad(10)])).toContain("retail");
+    expect(industriesFromTitles(["Insurance Sales Agent", "Insurance Sales Producer", ...pad(10)])).toContain("insurtech");
+    // A team name after a comma still counts ("Engineer, Payments" at a payments company).
+    expect(industriesFromTitles(["Senior Software Engineer, Payments", "Product Manager - Payments", ...pad(10)])).toContain("payments");
+    expect(industriesFromTitles(["Senior Software Engineer, Healthcare", "Data Scientist - Healthcare", ...pad(10)])).toContain("healthtech");
+    // Product words in a sales title say what the company sells.
+    expect(industriesFromTitles(["SaaS Business Development Representative", "Account Executive, Enterprise SaaS", ...pad(10)])).toContain("saas");
+    expect(industriesFromTitles(["Account Executive - Crypto", "BDR, Web3", ...pad(10)])).toContain("crypto");
+  });
+
+  it("can count generic words nowhere, for measuring", () => {
+    expect(industriesFromTitles(["Senior Software Engineer, Payments", "Product Manager - Payments", ...pad(10)], [], "none")).not.toContain("payments");
+    expect(industriesFromTitles(["Senior Software Engineer, Payments", "Product Manager - Payments", ...pad(10)], [], "strict")).not.toContain("payments");
+  });
 });
 
 describe("industriesFromText", () => {
