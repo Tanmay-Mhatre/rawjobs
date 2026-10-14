@@ -26,6 +26,8 @@ export type ScanStart = {
   skippedByFeed?: number;
   /** Boards left alone this scan: their last fetch failed and their rest isn't over (board-health.ts). */
   resting?: number;
+  /** Directory boards left alone this scan: their jobs haven't changed for weeks and they were fetched recently. */
+  quiet?: number;
   scope?: ScanScope;
   /** About how long the rest takes. */
   seconds: number;
@@ -72,6 +74,8 @@ export type ScanResult = {
   stopped: boolean;
   /** Boards this scan left alone because they're resting after failures. */
   resting: number;
+  /** Directory boards this scan left alone because they're quiet (unchanged for weeks, fetched recently). */
+  quiet: number;
   /** This scan's boards with no fetch that worked for 30 days or more, as "Name (ats:slug)". */
   chronic: string[];
 };
@@ -104,7 +108,7 @@ export function scanPlan(config: Config, dataDir: string, scope: ScanScope) {
   const yours = config.companies.filter((c) => c.enabled);
   const feed = feedMatches(dataDir, config.profile);
   const inScope = scopeCompanies(config, readDirectory(dataDir), scope).filter((c) => !feed.covered.has(jobCompanyKey(c)) || feed.matching.has(jobCompanyKey(c)));
-  // Resting boards aren't fetched, so they don't count towards the time.
+  // Resting and quiet boards aren't fetched, so they don't count towards the time.
   const boards = readBoardHealth(dataDir);
   const extra = planBoards(inScope, boards, Date.now()).fetch;
   const live = planBoards(yours, boards, Date.now(), { yours: new Set(yours.map(jobCompanyKey)) }).fetch;
@@ -141,11 +145,12 @@ export async function scan(config: Config, opts: ScanOptions): Promise<ScanResul
   const prior = fullScan && opts.resume !== false && !opts.dryRun ? readProgress(opts.dataDir, scope) : undefined;
   const resumed = prior && prior.scope === scope && now.getTime() - Date.parse(prior.startedAt) <= RESUME_WITHIN_MS ? prior : undefined;
   const done = new Set((resumed?.health ?? []).map((h) => h.key ?? jobCompanyKey(h)));
-  // Boards whose last fetch failed rest for a while (board-health.ts); a scan of chosen companies
+  // Boards whose last fetch failed rest for a while, and directory boards whose jobs haven't changed
+  // for weeks are fetched less often (board-health.ts); a scan of chosen companies
   // ("Check now", --only) fetches them anyway, and ones the stopped scan did count as done.
   let boards = readBoardHealth(opts.dataDir);
   const plan = { yours: new Set(config.companies.map(jobCompanyKey)), done };
-  const directoryPlan = fullScan ? planBoards(unfed, boards, now.getTime(), plan) : { fetch: unfed, resting: [] };
+  const directoryPlan = fullScan ? planBoards(unfed, boards, now.getTime(), plan) : { fetch: unfed, resting: [], quiet: [] };
   const checks = directoryPlan.fetch;
   const progress: Progress = { version: 1, scope, startedAt: resumed?.startedAt ?? now.toISOString(), health: [...(resumed?.health ?? [])], jobs: [...(resumed?.jobs ?? [])] };
   // Saved responses: a board that hasn't changed since the last scan answers with an empty 304.
@@ -161,7 +166,7 @@ export async function scan(config: Config, opts: ScanOptions): Promise<ScanResul
 
   const only = opts.only?.map((s) => s.toLowerCase());
   const chosen = checkOnly ? [] : config.companies.filter((c) => c.enabled && (!only?.length || only.includes(c.name.toLowerCase()) || only.includes(c.slug.toLowerCase())));
-  const yoursPlan = fullScan ? planBoards(chosen, boards, now.getTime(), plan) : { fetch: chosen, resting: [] };
+  const yoursPlan = fullScan ? planBoards(chosen, boards, now.getTime(), plan) : { fetch: chosen, resting: [], quiet: [] };
   const yours = yoursPlan.fetch;
   const resting = [...yoursPlan.resting, ...directoryPlan.resting];
   const left = [...yours, ...checks].filter((c) => !done.has(jobCompanyKey(c)));
@@ -179,6 +184,7 @@ export async function scan(config: Config, opts: ScanOptions): Promise<ScanResul
     ...(fullScan ? { scope } : {}),
     ...(feed ? { skippedByFeed: inScope.length - unfed.length } : {}),
     ...(resting.length ? { resting: resting.length } : {}),
+    ...(directoryPlan.quiet.length ? { quiet: directoryPlan.quiet.length } : {}),
     seconds: estimateSeconds(left, readSpeeds(opts.dataDir)),
     byAts,
     resumedByAts,
@@ -225,7 +231,7 @@ export async function scan(config: Config, opts: ScanOptions): Promise<ScanResul
   boards = recordBoards(boards, run.health, now.getTime());
   if (fullScan) boards = pruneBoards(boards, new Set([...config.companies, ...inScope].map(jobCompanyKey)), now.getTime());
   const chronic = [...chosen, ...inScope].filter((c) => isChronic(boards.boards[jobCompanyKey(c)], now.getTime())).map((c) => `${c.name} (${c.ats}:${c.slug})`);
-  const boardNews = { resting: resting.length, chronic };
+  const boardNews = { resting: resting.length, quiet: directoryPlan.quiet.length, chronic };
   if (opts.dryRun) return { result, merged, checks, moves, stopped, ...boardNews };
 
   // Run history keeps your companies and the directory ones that matched or failed, not every board.

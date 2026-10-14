@@ -54,8 +54,8 @@ describe("rest after failures", () => {
     const h: BoardHealth = { version: 1, boards: { "greenhouse:a": failing(1), "greenhouse:b": { okAt: T } } };
     const a = company("greenhouse", { slug: "a" });
     const b = company("greenhouse", { slug: "b" });
-    expect(planBoards([a, b], h, T)).toEqual({ fetch: [b], resting: [a] });
-    expect(planBoards([a, b], h, T, { done: new Set(["greenhouse:a"]) })).toEqual({ fetch: [a, b], resting: [] });
+    expect(planBoards([a, b], h, T)).toEqual({ fetch: [b], resting: [a], quiet: [] });
+    expect(planBoards([a, b], h, T, { done: new Set(["greenhouse:a"]) })).toEqual({ fetch: [a, b], resting: [], quiet: [] });
   });
 });
 
@@ -179,7 +179,7 @@ companies:
     const only = fakeHttp(ok);
     await scan(config(), { dataDir: dir, http: only.http, now: at(HOUR + 40 * 60_000), only: ["GH Co"] });
     expect(only.calls.some((u) => u.includes("greenhouse"))).toBe(true);
-    expect(readBoardHealth(dir).boards["greenhouse:ghco"]).toEqual({ okAt: T + HOUR + 40 * 60_000 });
+    expect(readBoardHealth(dir).boards["greenhouse:ghco"]).toEqual({ okAt: T + HOUR + 40 * 60_000, ids: expect.any(String), changedAt: T });
   });
 
   it("tries again once the rest is over", async () => {
@@ -192,7 +192,7 @@ companies:
     expect(calls.some((u) => u.includes("leverco"))).toBe(false);
     expect(r.checks).toEqual([]);
     expect(r.resting).toBe(1);
-    expect(readBoardHealth(dir).boards["greenhouse:ghco"]).toEqual({ okAt: T });
+    expect(readBoardHealth(dir).boards["greenhouse:ghco"]).toMatchObject({ okAt: T });
   });
 
   it("names boards that haven't worked for 30 days", async () => {
