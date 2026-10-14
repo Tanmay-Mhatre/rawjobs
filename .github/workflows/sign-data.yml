@@ -66,7 +66,7 @@ jobs:
     if: inputs.what != 'directory'
     runs-on: ubuntu-24.04
     timeout-minutes: 10
-    # Never while the daily feed is publishing (same group as the feed workflow).
+    # Never while the job feed is publishing (same group as the feed workflow).
     concurrency:
       group: jobs
       cancel-in-progress: false
@@ -86,8 +86,11 @@ jobs:
           GH_TOKEN: ${{ secrets.DATA_REPO_TOKEN }}
           RAWJOBS_DATA_SIGNING_KEY: ${{ secrets.RAWJOBS_DATA_SIGNING_KEY }}
         run: |
-          gh release download jobs -R "$DATA_REPO" -p jobs-manifest.json -p jobs-v2-manifest.json -D "$RUNNER_TEMP/jobs"
+          # The third format's manifest exists only once the 6-hourly feed has published it.
+          names=$(gh release view jobs -R "$DATA_REPO" --json assets -q '.assets[].name' | grep -xE 'jobs-(v[23]-)?manifest\.json')
+          mkdir -p "$RUNNER_TEMP/jobs"
+          for n in $names; do gh release download jobs -R "$DATA_REPO" -p "$n" -D "$RUNNER_TEMP/jobs"; done
           export RAWJOBS_DATA_PUBLIC_KEY="$(grep -o 'DATA_PUBLIC_KEY = "[^"]*"' packages/core/src/data-signing.ts | cut -d'"' -f2)"
-          node scripts/catalog/sign.mjs "$RUNNER_TEMP/jobs/jobs-manifest.json" "$RUNNER_TEMP/jobs/jobs-v2-manifest.json"
-          gh release upload jobs "$RUNNER_TEMP/jobs/jobs-manifest.json.sig" "$RUNNER_TEMP/jobs/jobs-v2-manifest.json.sig" -R "$DATA_REPO" --clobber
+          node scripts/catalog/sign.mjs $(for n in $names; do echo "$RUNNER_TEMP/jobs/$n"; done)
+          gh release upload jobs $(for n in $names; do echo "$RUNNER_TEMP/jobs/$n.sig"; done) -R "$DATA_REPO" --clobber
           echo "Signed the job feed's manifests" >> "$GITHUB_STEP_SUMMARY"

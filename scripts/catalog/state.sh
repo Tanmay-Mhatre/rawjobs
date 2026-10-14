@@ -2,11 +2,13 @@
 # Working state the catalog workflows carry from one run to the next, kept as assets of the "state"
 # release of $DATA_REPO. Two sets, one asset each, so their workflows never overwrite each other:
 #   catalog  the directory runs (weekly rebuild, contributions), which take turns (one concurrency group)
-#   jobs     the daily job feed: yesterday's shards and ETags, and the hiring activity recorded so far
+#   jobs     the job feed's merge job: what it last published (the next change files are made against
+#            it), and the hiring activity recorded so far
+#   jobs-<group>  each feed group's last shards and ETags (sr, payroll, enterprise, rest; jobs.ts GROUPS)
 #
-#   state.sh restore [catalog|jobs]   download and unpack; fails if it exists but can't be downloaded.
-#                                     Sets the step output restored=true|false.
-#   state.sh save [catalog|jobs]      pack and upload; every run of a set saves the same files
+#   state.sh restore [catalog|jobs|jobs-<group>]   download and unpack; fails if it exists but can't be
+#                                     downloaded. Sets the step output restored=true|false.
+#   state.sh save [catalog|jobs|jobs-<group>]      pack and upload; every run of a set saves the same files
 #
 # Needs GH_TOKEN and DATA_REPO. Run from the repo root.
 set -euo pipefail
@@ -50,10 +52,17 @@ case "$SET" in
     )
     ;;
   jobs)
+    # The feed's merge job: what it last published. The next run's change files are made against it.
     # activity-state.json: each company's new roles by day and month (activity.ts); losing it restarts the records.
-    FILES=(out/jobs/etags.json out/jobs/jobs-manifest.json out/jobs/jobs-v2-manifest.json out/jobs/stats.json out/jobs/activity-state.json)
-    # Yesterday's shards and full copy: today's change file is made against them.
-    for f in out/jobs/jobs-*.json.gz out/jobs/jobs-v2-snapshot-*.json.br; do FILES+=("$f"); done
+    FILES=(out/jobs/jobs-manifest.json out/jobs/jobs-v2-manifest.json out/jobs/jobs-v3-manifest.json out/jobs/stats.json out/jobs/activity-state.json)
+    for f in out/jobs/jobs-*.json.gz out/jobs/jobs-v2-snapshot-*.json.br out/jobs/jobs-v3-snapshot-*.txt.br; do FILES+=("$f"); done
+    ;;
+  jobs-sr | jobs-payroll | jobs-enterprise | jobs-rest)
+    # One feed group (jobs.ts GROUPS): its last shards and ETags. Saved only by that group's job, so a
+    # failed group leaves its previous copy for the merge job to fall back on.
+    g="out/jobs/groups/${SET#jobs-}"
+    FILES=("$g/group.json" "$g/etags.json")
+    for f in "$g"/jobs-*.json.gz; do FILES+=("$f"); done
     ;;
   *)
     echo "unknown state set: $SET" >&2

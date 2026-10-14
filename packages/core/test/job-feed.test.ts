@@ -68,12 +68,12 @@ describe("syncJobFeed", () => {
     expect(jobFeedStatus(dir, NOW)).toMatchObject({ companies: 1, ageDays: 0 });
     server.calls.length = 0;
     expect(await syncJobFeed(dir, { fetchImpl: server.fetchImpl, now: NOW })).toMatchObject({ updated: false });
-    // No second-format feed here (404), so the first format is read: just its manifest.
+    // No third-format feed here (404), so the first format is read: just its manifest.
     expect(server.calls.sort()).toEqual([
       "https://feed.example/jobs/jobs-manifest.json",
       "https://feed.example/jobs/jobs-manifest.json.sig",
-      "https://feed.example/jobs/jobs-v2-manifest.json",
-      "https://feed.example/jobs/jobs-v2-manifest.json.sig",
+      "https://feed.example/jobs/jobs-v3-manifest.json",
+      "https://feed.example/jobs/jobs-v3-manifest.json.sig",
     ]);
   });
 
@@ -108,9 +108,9 @@ describe("syncJobFeed signatures", () => {
     const calls: string[] = [];
     const fetchImpl = (async (url: string) => {
       calls.push(url);
-      // A second-format manifest with a signature that isn't the data key's.
-      if (url.endsWith("jobs-v2-manifest.json")) return json({ schema: 2 });
-      if (url.endsWith("jobs-v2-manifest.json.sig")) return new Response("bm90IGEgc2lnbmF0dXJl");
+      // A third-format manifest with a signature that isn't the data key's.
+      if (url.endsWith("jobs-v3-manifest.json")) return json({ schema: 3 });
+      if (url.endsWith("jobs-v3-manifest.json.sig")) return new Response("bm90IGEgc2lnbmF0dXJl");
       return server.fetchImpl(url);
     }) as unknown as typeof fetch;
     expect(await syncJobFeed(dir, { fetchImpl, now: NOW })).toMatchObject({ updated: false, message: expect.stringMatching(/signature isn't valid/) });

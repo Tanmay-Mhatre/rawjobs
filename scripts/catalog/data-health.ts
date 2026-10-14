@@ -23,7 +23,7 @@ export type HealthOptions = {
   now?: number;
   /** The weekly rebuild publishes every 7 days; a day's grace. */
   maxDirectoryDays?: number;
-  /** The feed is rebuilt daily; apps stop using it after 3 days. */
+  /** The feed is rebuilt every 6 hours (a run takes ~2.5 h); apps fall back to live scans as it ages. */
   maxFeedDays?: number;
 };
 
@@ -78,16 +78,21 @@ export async function checkSharedData(o: HealthOptions): Promise<HealthReport> {
     checked.push(`directory: signed, ${age.toFixed(1)} days old, ${Object.keys(dir.files ?? {}).length} files`);
   }
 
-  // The job feed: the second format (what current apps read), then the first (older apps).
-  const v2 = await signedManifest<{ generated_at?: string; snapshot?: { file: string }; diffs?: { file: string }[] }>(o.feedUrl, "jobs-v2-manifest.json");
-  if (v2) {
-    const age = fresh("jobs-v2-manifest.json", v2.generated_at, o.maxFeedDays ?? 2);
-    const files = [...(v2.snapshot ? [v2.snapshot.file] : []), ...(v2.diffs ?? []).map((d) => d.file)];
-    for (const f of files) await present(o.feedUrl, f, "jobs-v2-manifest.json");
-    checked.push(`job feed: signed, ${age.toFixed(1)} days old, ${files.length} files`);
+  // The job feed: the third format (what current apps read), the second and the first (older apps).
+  const maxFeedDays = o.maxFeedDays ?? 0.5;
+  for (const [name, what] of [
+    ["jobs-v3-manifest.json", "job feed"],
+    ["jobs-v2-manifest.json", "job feed (second format)"],
+  ] as const) {
+    const m = await signedManifest<{ generated_at?: string; snapshot?: { file: string }; diffs?: { file: string }[] }>(o.feedUrl, name);
+    if (!m) continue;
+    const age = fresh(name, m.generated_at, maxFeedDays);
+    const files = [...(m.snapshot ? [m.snapshot.file] : []), ...(m.diffs ?? []).map((d) => d.file)];
+    for (const f of files) await present(o.feedUrl, f, name);
+    checked.push(`${what}: signed, ${age.toFixed(2)} days old, ${files.length} files`);
   }
   const v1 = await signedManifest<{ generated_at?: string }>(o.feedUrl, "jobs-manifest.json");
-  if (v1) checked.push(`job feed (first format): signed, ${fresh("jobs-manifest.json", v1.generated_at, o.maxFeedDays ?? 2).toFixed(1)} days old`);
+  if (v1) checked.push(`job feed (first format): signed, ${fresh("jobs-manifest.json", v1.generated_at, maxFeedDays).toFixed(2)} days old`);
 
   return { problems, checked };
 }
