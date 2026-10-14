@@ -149,7 +149,7 @@ export function RadarPage(p: Props) {
   const q = useDeferredValue(filters.q);
   const listFilters = useMemo(() => (q === filters.q ? filters : { ...filters, q }), [filters, q]);
   const visible = useMemo(() => sortJobs(applyFilters(pool, listFilters, ctx), sort, p.isYours, now), [pool, listFilters, ctx, sort, p.isYours, now]);
-  const groups = useMemo(() => groupJobs(visible), [visible]);
+  const groups = useMemo(() => groupJobs(visible, now), [visible, now]);
   // One company can't fill the page ("+N more at …"), except in Newest (a plain date order) and when you've
   // picked companies yourself.
   const [openCompanies, setOpenCompanies] = useState<ReadonlySet<string>>(() => new Set());

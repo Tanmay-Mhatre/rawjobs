@@ -81,6 +81,18 @@ describe("feed row (design/components/Feed)", () => {
     expect(screen.queryByText("May be stale")).toBeNull();
   });
 
+  it("tags a role posted in several places only when every posting may be stale", () => {
+    const reposted = { repostedAt: new Date(Date.now() - 5 * DAY).toISOString(), repostCount: 2 };
+    const dubai = job({ id: "greenhouse:acme:1", ...reposted });
+    const london = job({ id: "greenhouse:acme:2", location: "London", cities: ["London, United Kingdom"] });
+    renderRow({ group: { key: dubai.group, lead: london, jobs: [dubai, london] } });
+    expect(screen.queryByText("May be stale")).toBeNull();
+    cleanup();
+    const londonStale = { ...london, ...reposted };
+    renderRow({ group: { key: dubai.group, lead: dubai, jobs: [dubai, londonStale] } });
+    expect(screen.getByText("May be stale").title).toMatch(/^All 2 postings may be stale\. Taken down and posted again twice/);
+  });
+
   it("says which dealbreaker a job breaks, in the warning treatment", () => {
     const lead = job({
       score: 37,
