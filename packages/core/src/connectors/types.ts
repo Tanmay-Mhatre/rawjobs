@@ -1,5 +1,5 @@
 import type { HttpClient } from "../http";
-import type { AtsType, CompanyRef, NormalizedJob } from "../schema";
+import type { AtsType, CompanyRef, Job, NormalizedJob } from "../schema";
 
 export type Ctx = {
   http: HttpClient;
@@ -32,6 +32,11 @@ export interface Connector<Raw = unknown> {
    * describe() for the real one before the location gate, for jobs whose title already matches.
    */
   vagueLocation?(raw: Raw): boolean;
+  /**
+   * Is this one job still up? Asked before an alert (see liveness.ts), for jobs from this system or
+   * whose link is on it. One cheap request: true = open, false = taken down, undefined = can't tell.
+   */
+  isOpen?(job: Pick<Job, "id" | "url">, ctx: Ctx): Promise<boolean | undefined>;
   /** A job board (JOB_BOARDS): its name, used instead of one guessed from the slug. */
   label?: string;
   /**

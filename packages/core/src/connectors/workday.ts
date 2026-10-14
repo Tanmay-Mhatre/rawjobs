@@ -1,6 +1,6 @@
 import type { NormalizedJob, Workplace } from "../schema";
 import { htmlToText, inferWorkplace } from "../text";
-import { detectAs, isoDate, relativePosted } from "./parse";
+import { detectAs, isoDate, openByStatus, relativePosted, urlOf } from "./parse";
 import { jobCompanyKey, workdayJobKey, type Connector } from "./types";
 
 /** The careers site's own JSON API (/wday/cxs/{tenant}/{site}/jobs), keyless. */
@@ -84,5 +84,17 @@ export const workday: Connector<WorkdayPosting> = {
       country: d.country?.descriptor,
       postedAt: raw.postedAt ?? isoDate(d.startDate),
     };
+  },
+
+  /**
+   * The job's detail address (the one describe() reads) answers 404 once it's taken down. Links are
+   * {tenant}.wd5.myworkdayjobs.com/[en-US/]{site}/job/{place}/{title}_{req}.
+   */
+  async isOpen(job, { http }) {
+    const url = urlOf(job.url);
+    const board = url ? workday.detect(url) : null;
+    const at = url?.pathname.indexOf("/job/") ?? -1;
+    if (!board?.shard || !board.site || !url || at < 0) return undefined;
+    return openByStatus(http, `${api(board)}${url.pathname.slice(at)}`);
   },
 };

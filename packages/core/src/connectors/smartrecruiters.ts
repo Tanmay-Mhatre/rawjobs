@@ -1,5 +1,6 @@
 import type { NormalizedJob, Workplace } from "../schema";
 import { htmlToText } from "../text";
+import { openByStatus, urlOf } from "./parse";
 import { firstPathSegment, jobId, type Connector } from "./types";
 
 /** https://developers.smartrecruiters.com/docs/posting-api (official, keyless for public postings) */
@@ -92,5 +93,14 @@ export const smartrecruiters: Connector<SmartRecruitersPosting> = {
       .map((k) => htmlToText(sections[k]?.text))
       .filter(Boolean)
       .join("\n\n");
+  },
+
+  /** The posting's API address answers 404 once it's taken down. Links are jobs.smartrecruiters.com/Acme/{id}[-title]. */
+  async isOpen(job, { http }) {
+    const url = urlOf(job.url);
+    const board = url ? smartrecruiters.detect(url) : null;
+    const id = board ? url?.pathname.split("/").filter(Boolean)[1]?.match(/^\d+/)?.[0] : undefined;
+    if (!board || !id) return undefined;
+    return openByStatus(http, `${API}/${encodeURIComponent(board.slug)}/postings/${id}`);
   },
 };
