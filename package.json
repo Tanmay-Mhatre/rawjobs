@@ -49,7 +49,8 @@
     "catalog:compact": "tsx scripts/catalog/compact.ts",
     "catalog:release": "tsx scripts/catalog/release.ts",
     "directory:update": "tsx packages/cli/src/index.ts directory update",
-    "catalog:coverage": "tsx scripts/catalog/coverage.ts",
+    "connector:health": "tsx scripts/catalog/connector-health.ts",
+    "catalog:coverage":"tsx scripts/catalog/coverage.ts",
     "catalog:refresh": "tsx scripts/catalog/sources.ts && tsx scripts/catalog/resolve.ts && tsx scripts/catalog/merge.ts && tsx scripts/catalog/check.ts --recheck-days 30 && tsx scripts/catalog/build.ts && tsx scripts/catalog/index.ts --max-age-days 7 && tsx scripts/catalog/publish.ts && tsx scripts/catalog/coverage.ts"
   },
   "devDependencies": {
