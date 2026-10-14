@@ -61,12 +61,12 @@ async function list(ref: CompanyRef, http: Ctx["http"], keyword: string, maxPage
   const out: TaleoRequisition[] = [];
   let total = 0;
   for (let pageNo = 1; pageNo <= maxPages; pageNo++) {
-    const res = await http.request(`${base(ref)}/rest/jobboard/searchjobs?lang=en&portal=${portal}`, {
+    const { body } = await http.requestBody(`${base(ref)}/rest/jobboard/searchjobs?lang=en&portal=${portal}`, {
       method: "POST",
       headers: { accept: "application/json", "content-type": "application/json", tz: "GMT+00:00" },
       body: JSON.stringify(SEARCH(pageNo, keyword)),
     });
-    const data = (await res.json()) as Search;
+    const data = JSON.parse(body) as Search;
     if (!Array.isArray(data.requisitionList)) throw new Error("unexpected Taleo response: no requisitionList");
     out.push(...data.requisitionList);
     total = data.pagingData?.totalCount ?? 0;

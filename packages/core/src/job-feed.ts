@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import { existsSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { brotliCompressSync, brotliDecompressSync, constants, gunzipSync } from "node:zlib";
+import { ACTIVITY_SCHEMA, dayNumber, type ActivityFile } from "./activity";
 import { applyFeedDiff, feedStateHash, JOB_FEED_SCHEMA_V2, type FeedDiff, type FeedManifestV2, type FeedSnapshot, type FeedRow, type FeedState } from "./job-feed-diff";
 import { fetchSignedJson, FILE_TIMEOUT_MS } from "./data-signing";
 import { envSetting } from "./env";
@@ -75,7 +76,11 @@ export async function syncJobFeed(dataDir: string, opts: { fetchImpl?: typeof fe
     // A badly signed manifest stops here: falling back to the other format would let a tamperer pick.
     const badSignature = { updated: false, ageDays: stale(), message: "The job feed's signature isn't valid; scanning every company live." };
     const v2 = await fetchSignedJson<FeedManifestV2>(get, `${jobFeedUrl()}/${V2_MANIFEST}`);
-    if (v2.ok && v2.value.schema === JOB_FEED_SCHEMA_V2) return { ...(await syncV2(dir, v2.value, get)), ageDays: stale() };
+    if (v2.ok && v2.value.schema === JOB_FEED_SCHEMA_V2) {
+      const synced = await syncV2(dir, v2.value, get);
+      await syncActivity(dir, v2.value, get);
+      return { ...synced, ageDays: stale() };
+    }
     if (!v2.ok && v2.status === null) return badSignature;
     const res = await fetchSignedJson<JobFeedManifest>(get, `${jobFeedUrl()}/jobs-manifest.json`);
     if (!res.ok) return res.status ? { updated: false, ageDays: stale(), message: `Job feed unavailable (HTTP ${res.status}); scanning every company live.` } : badSignature;
@@ -194,6 +199,44 @@ async function syncV2(dir: string, m: FeedManifestV2, get: typeof fetch): Promis
   for (const f of readdirSync(dir)) if (f === "manifest.json" || f === "matches.json" || /^[a-z]+\.json$/.test(f)) rmSync(join(dir, f), { force: true });
   const size = `${(bytes / 1e6).toFixed(1)} MB`;
   return { updated: true, message: steps ? `Job feed updated with ${steps} day(s) of changes (${size}, ${when(m.generated_at)}).` : `Job feed downloaded (${size}, ${when(m.generated_at)}).` };
+}
+
+// ---------- hiring activity, published next to the second format (activity.ts) ----------
+
+/** The local copy of the feed's activity file, as downloaded (brotli). */
+const ACTIVITY_LOCAL = "activity.json.br";
+/** An activity file older than this isn't shown: its "last 30 days" would be out of date. */
+const ACTIVITY_MAX_AGE_DAYS = 7;
+
+/**
+ * Download the activity file the manifest lists, when the local copy isn't it. Optional: a manifest
+ * without one, or a failed download, keeps the local copy (readFeedActivity stops using it once it's old).
+ */
+async function syncActivity(dir: string, m: FeedManifestV2, get: typeof fetch): Promise<void> {
+  if (!m.activity) return;
+  const local = join(dir, ACTIVITY_LOCAL);
+  try {
+    if (existsSync(local) && createHash("sha256").update(readFileSync(local)).digest("hex") === m.activity.sha256) return;
+    const buf = await download(get, m.activity.file, m.activity.sha256);
+    mkdirSync(dir, { recursive: true });
+    writeFileSync(`${local}.tmp`, buf);
+    renameSync(`${local}.tmp`, local);
+  } catch {
+    // Only the "Hiring at …" block and the surge tag go without it.
+  }
+}
+
+/** The feed's hiring activity, if downloaded, readable and recent; undefined otherwise. */
+export function readFeedActivity(dataDir: string, now = Date.now()): ActivityFile | undefined {
+  try {
+    const path = join(feedDir(dataDir), ACTIVITY_LOCAL);
+    if (!existsSync(path)) return undefined;
+    const file = unbrotli<ActivityFile>(readFileSync(path));
+    if (file.schema !== ACTIVITY_SCHEMA || typeof file.date !== "string" || !file.companies) return undefined;
+    return Math.floor(now / 86_400_000) - dayNumber(file.date) > ACTIVITY_MAX_AGE_DAYS ? undefined : file;
+  } catch {
+    return undefined;
+  }
 }
 
 const when = (generatedAt: string) => {

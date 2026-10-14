@@ -502,6 +502,7 @@ export function RadarPage(p: Props) {
                 maxAgeDays={maxAgeDays}
                 hiddenCompanies={p.prefs.hiddenCompanies.length}
                 hideRules={p.prefs.hideRules.length}
+                hiringReady={p.meta.hiringReady}
               />
               <Button variant="ghost" size="sm" aria-expanded={moreFacets} onClick={() => setMoreFacets((o) => !o)}>
                 {moreFacets ? "Fewer filters" : "More filters"}
@@ -728,7 +729,7 @@ export function RadarPage(p: Props) {
             </SheetSection>
           )}
           <SheetSection label="More">
-            <MoreToggles filters={filters} setFilters={setFilters} olderCount={olderCount} maxAgeDays={maxAgeDays} />
+            <MoreToggles filters={filters} setFilters={setFilters} olderCount={olderCount} maxAgeDays={maxAgeDays} hiringReady={p.meta.hiringReady} />
           </SheetSection>
           {facet("ats").length > 1 && (
             <SheetSection label="Hiring system">

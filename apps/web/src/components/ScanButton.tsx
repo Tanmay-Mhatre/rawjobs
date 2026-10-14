@@ -270,7 +270,7 @@ export function ScanPrefsPicker() {
     ...(["mine", "all"] as const).map((s) => ({
       id: s,
       label: `Always: ${SCOPE_LABEL[s]}`,
-      hint: s === "mine" ? "Starts straight away, a few minutes." : "Starts straight away. Minutes with the daily job feed, up to 2 hours without it.",
+      hint: s === "mine" ? "Starts straight away, a few minutes." : "Starts straight away. Usually minutes with the shared job feed, a few hours without it.",
       on: !prefs.ask && prefs.scope === s,
       pick: () => setScanPrefs({ ask: false, scope: s }),
     })),

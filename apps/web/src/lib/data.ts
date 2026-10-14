@@ -1,3 +1,4 @@
+import { viewSummary, type ActivityView, type HiringSummary } from "@rawjobs/core/activity";
 import { employmentTypeOfTitle } from "@rawjobs/core/catalog/employment";
 import { citiesIn } from "@rawjobs/core/catalog/places";
 import { attachFeedJobs } from "./identity";
@@ -152,6 +153,34 @@ export function useDescription(job: Job | undefined): string | null | undefined 
     };
   }, [job]);
   return text && job && text.id === job.id ? text.value : undefined;
+}
+
+let activity: Promise<ActivityView | null> | undefined;
+let activityGeneration = -1;
+/** data/activity.json, fetched the first time a job is opened (and again after a rescan). Null for data without it. */
+function loadActivity(): Promise<ActivityView | null> {
+  if (activityGeneration !== dataGeneration) {
+    activityGeneration = dataGeneration;
+    activity = getJson<ActivityView>("./activity.json").catch(() => null);
+  }
+  return activity!;
+}
+
+/**
+ * Hiring at the job's company ("Hiring at …" in the drawer): undefined while loading, null when there's
+ * nothing for it (no records, data written before activity.json, a job board's copy).
+ */
+export function useHiring(job: Job | undefined): HiringSummary | null | undefined {
+  const [summary, setSummary] = useState<{ id: string; value: HiringSummary | null } | null>(null);
+  useEffect(() => {
+    if (!job) return;
+    let live = true;
+    void loadActivity().then((view) => live && setSummary({ id: job.id, value: viewSummary(view, job.companyKey) ?? null }));
+    return () => {
+      live = false;
+    };
+  }, [job]);
+  return summary && job && summary.id === job.id ? summary.value : undefined;
 }
 
 /**

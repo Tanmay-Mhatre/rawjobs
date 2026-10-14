@@ -1,3 +1,4 @@
+import { groupKey } from "./dashboard";
 import { seniorityCue } from "./catalog/seniority";
 import { matchesAny } from "./text";
 
@@ -30,6 +31,8 @@ export const SURGE_MIN_ROLES = 5;
 export const SURGE_FACTOR = 2;
 /** The drawer says "about 3× their usual pace" only from this ratio up. */
 export const PACE_SHOWN_FROM = 1.5;
+/** Companies with more open jobs than this can be mass posters (see toActivityFile in scripts/catalog/lib/activity.ts). */
+export const MASS_POSTER_OPEN_JOBS = 500;
 
 /** One company's activity in the published file. Arrays are per month, oldest first, `first_month` first. */
 export type CompanyActivity = {
@@ -141,6 +144,8 @@ export type HiringSummary = {
   surge: boolean;
   /** The last 12 months, oldest first: new roles, or null for a month before records started. */
   months: { month: string; count: number | null }[];
+  /** Where the numbers come from: the shared feed's daily read, or your own scans (viewSummary). */
+  source?: "feed" | "local";
 };
 
 /** Days recorded from `since` to `date`, both counted (0 before any). */
@@ -198,4 +203,107 @@ export function hiringSummary(c: CompanyActivity, ctx: Pick<ActivityFile, "date"
 export function paceLabel(pace: number): string {
   const r = pace < 3 ? Math.round(pace * 2) / 2 : Math.round(pace);
   return `${r}×`;
+}
+
+/** The "Hiring surge" tag's hover text: "Acme opened 14 roles in the last 30 days; usually about 5." */
+export function surgeTitle(company: string, surge: { n: number; usual: number }): string {
+  const usual = Math.round(surge.usual);
+  return `${company} opened ${surge.n} ${surge.n === 1 ? "role" : "roles"} in the last 30 days; ${usual ? `usually about ${usual}` : "usually none"}.`;
+}
+
+/** The drawer shows the block only with something to say: a count for the last 30 days, or a month with new roles. */
+export const hasHiringData = (s: HiringSummary): boolean => s.last30 !== undefined || s.months.some((m) => !!m.count);
+
+// ---------- your own companies: the same numbers from your scans ----------
+
+/** What localActivity reads of a job in your history (core Job has all of it). */
+export type LocalJob = { title: string; firstSeen: string; lastSeen: string; postedAt?: string; status: "open" | "closed" };
+
+/**
+ * The same numbers for a company the feed doesn't cover (your own companies on other hiring systems),
+ * from your scan history: its jobs' first-seen days, in order. Its records start the day it was first
+ * scanned (the earliest first-seen), and jobs found then are its starting point, not new roles. Reposts
+ * keep the first posting's first-seen day (diff.ts), so they never count again; a new id with a title
+ * listed in the last 60 days (one role posted per city) doesn't either. History drops closed jobs 60
+ * days after they close, so months further back can miss short-lived roles.
+ */
+export function localActivity(jobs: readonly LocalJob[], date: string): CompanyActivity | undefined {
+  if (!jobs.length) return undefined;
+  const d = dayNumber(date);
+  const ordered = [...jobs].sort((a, b) => (a.firstSeen < b.firstSeen ? -1 : a.firstSeen > b.firstSeen ? 1 : 0));
+  const firstScan = dayNumber(ordered[0]!.firstSeen);
+  const months = activityMonths(date);
+  const m = months.map(() => 0);
+  const i = months.map(() => 0);
+  const g = months.map(() => 0);
+  let n = 0;
+  let reposts = 0;
+  /** Title -> the last day a job with it was listed, among jobs found so far. */
+  const lastListed = new Map<string, number>();
+  for (const j of ordered) {
+    const first = dayNumber(j.firstSeen);
+    const title = groupKey("", j.title);
+    const before = lastListed.get(title);
+    lastListed.set(title, Math.max(before ?? 0, dayNumber(j.lastSeen)));
+    if (first <= firstScan) continue;
+    if (before !== undefined && first - before <= REPOST_DAYS) {
+      reposts++;
+      continue;
+    }
+    const at = monthsBetween(months[0]!, monthOf(j.firstSeen));
+    if (at < 0) continue;
+    m[at]!++;
+    const kind = roleKind(j.title);
+    if (kind === "internship") i[at]!++;
+    else if (kind === "graduate") g[at]!++;
+    if (d - first < WINDOW_DAYS) n++;
+  }
+  const open = jobs.filter((j) => j.status === "open");
+  const posted = new Set<string>();
+  let dated = false;
+  for (const j of open) {
+    if (!j.postedAt) continue;
+    dated = true;
+    const age = d - dayNumber(j.postedAt);
+    if (age >= 0 && age < WINDOW_DAYS) posted.add(groupKey("", j.title));
+  }
+  return {
+    ...(m.some(Boolean) ? { m } : {}),
+    ...(i.some(Boolean) ? { i } : {}),
+    ...(g.some(Boolean) ? { g } : {}),
+    n,
+    ...(dated ? { p: posted.size } : {}),
+    s: dayString(Math.min(firstScan, d)),
+    ...(open.length > MASS_POSTER_OPEN_JOBS && (reposts > n || n > open.length / 2) ? { e: 1 as const } : {}),
+  };
+}
+
+// ---------- data/activity.json: what the dashboard reads ----------
+
+/** A source's day, start and months (the feed's, or your own scans'). */
+export type ActivityCtx = Pick<ActivityFile, "date" | "since" | "first_month">;
+
+/**
+ * data/activity.json, written with each scan (store.ts): the companies on your Radar, from the shared
+ * feed's activity when it covers them, else from your own scans. By the job's companyKey.
+ */
+export type ActivityView = {
+  version: 1;
+  /**
+   * At least one company has enough records to compare with. Until then the "Hiring surge" tag and
+   * filter stay hidden: for the first 6 weeks the filter would only ever be empty.
+   */
+  ready: boolean;
+  feed?: ActivityCtx;
+  local?: ActivityCtx;
+  companies: Record<string, CompanyActivity & { src: "feed" | "local" }>;
+};
+
+/** One company's summary from data/activity.json; undefined when there's nothing for it. */
+export function viewSummary(view: ActivityView | null | undefined, companyKey: string | undefined): HiringSummary | undefined {
+  const c = companyKey ? view?.companies[companyKey] : undefined;
+  const ctx = c && (c.src === "feed" ? view!.feed : view!.local);
+  if (!c || !ctx) return undefined;
+  const s = hiringSummary(c, ctx);
+  return hasHiringData(s) ? { ...s, source: c.src } : undefined;
 }
