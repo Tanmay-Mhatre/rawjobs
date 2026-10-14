@@ -3,6 +3,8 @@ import { join } from "node:path";
 import { companyIndustries } from "./catalog/industries";
 import { companyKey, connectors } from "./connectors";
 import { companyWords } from "./employers";
+import { laneOf } from "./run";
+import { readJsonOnce } from "./json-once";
 import { isPlaceholderBoard } from "./text";
 import type { ScanScope } from "./protocol";
 import type { BoardMove, CompanyHealth, CompanyRef, Config } from "./schema";
@@ -27,18 +29,13 @@ export const boardKey = (c: { ats: string; slug: string; shard?: string; site?: 
 
 /** The shared directory's accepted moves (empty for a directory from before moves, or none downloaded). */
 export function readDirectoryMoves(dataDir: string): DirectoryMove[] {
-  const file = join(dataDir, "catalog", "directory.json");
-  if (!existsSync(file)) return [];
-  const moves = (JSON.parse(readFileSync(file, "utf8")) as { moves?: unknown }).moves;
+  const moves = readJsonOnce<{ moves?: unknown }>(join(dataDir, "catalog", "directory.json"))?.moves;
   return Array.isArray(moves) ? moves.filter((m): m is DirectoryMove => !!m && typeof m.from === "string" && typeof m.to === "string" && typeof m.accepted_at === "string") : [];
 }
 
 /** The local directory copy plus companies added by link (empty when not downloaded yet). */
 export function readDirectory(dataDir: string): DirectoryEntry[] {
-  const read = (name: string): DirectoryEntry[] => {
-    const file = join(dataDir, "catalog", name);
-    return existsSync(file) ? (JSON.parse(readFileSync(file, "utf8")) as { companies: DirectoryEntry[] }).companies : [];
-  };
+  const read = (name: string): DirectoryEntry[] => readJsonOnce<{ companies: DirectoryEntry[] }>(join(dataDir, "catalog", name))?.companies ?? [];
   const dir = read("directory.json");
   const known = new Set(dir.map((c) => c.key));
   return [
@@ -112,13 +109,32 @@ export function scopeCompanies(config: Config, directory: readonly DirectoryEntr
 }
 
 /**
- * Seconds a lane spends per company, by hiring system, before a scan has measured it: the shared
- * APIs of Greenhouse and Ashby take 4 requests a second, the rest 1, and Workday pages.
+ * Before a scan has measured a hiring system, its time comes from requests. Systems that serve every
+ * company from one API host queue for that host: a request every 0.25 s (Greenhouse, Ashby) or 1 s.
+ * The rest give each company its own host (Workday tenants, BambooHR…), so LANE_WORKERS run side by side.
  */
-const DEFAULT_SECONDS: Record<string, number> = { greenhouse: 0.35, ashby: 0.35, workday: 1.5 };
-const FALLBACK_SECONDS = 1.1;
+const SHARED_HOST_SECONDS: Record<string, number> = {
+  greenhouse: 0.25,
+  ashby: 0.25,
+  lever: 1,
+  smartrecruiters: 1,
+  workable: 1,
+  comeet: 1,
+  rippling: 1,
+  paylocity: 1,
+  paycom: 1,
+  dayforce: 1,
+};
+/** Requests per company: pages, sessions, and for Workday a few detail pages. One for the rest. */
+const REQUESTS: Record<string, number> = { workday: 3, smartrecruiters: 2, paycom: 2, oracle: 2, successfactors: 2, icims: 2, taleo: 3, cornerstone: 2, dayforce: 2 };
+/** One request on a company's own host: the 1 s spacing between requests to a host, plus some answer time. */
+const OWN_HOST_SECONDS = 1.2;
 /** Companies in flight per lane (run.ts LANE_WORKERS). */
 const LANE_WORKERS = 4;
+/** The shared job feed's part of a scan before one is measured: syncing it, then matching it against you. */
+const FEED_SECONDS = 25;
+/** scan-speed.json's model: files from before it measured with a mean that slow, failing boards blew up. */
+const SPEED_MODEL = 2;
 
 /** Measured seconds per company per lane, by hiring system (data/scan-speed.json, updated after each scan). */
 export type ScanSpeeds = Record<string, number>;
@@ -126,15 +142,25 @@ export type ScanSpeeds = Record<string, number>;
 export function readSpeeds(dataDir: string): ScanSpeeds {
   try {
     const file = join(dataDir, "scan-speed.json");
-    return existsSync(file) ? (JSON.parse(readFileSync(file, "utf8")) as ScanSpeeds) : {};
+    const saved = existsSync(file) ? (JSON.parse(readFileSync(file, "utf8")) as ScanSpeeds) : {};
+    if (saved._model !== SPEED_MODEL) return {};
+    const { _model, ...speeds } = saved;
+    return speeds;
   } catch {
     return {};
   }
 }
 
+const median = (xs: readonly number[]) => {
+  const s = [...xs].sort((a, b) => a - b);
+  const mid = Math.floor(s.length / 2);
+  return s.length % 2 ? s[mid]! : (s[mid - 1]! + s[mid]!) / 2;
+};
+
 /**
- * Learn from a scan: a lane's time is its companies' summed durations over the companies in flight, so
- * per company that's sum / (in flight × count). Averaged with what was known, so one slow day doesn't swing it.
+ * Learn from a scan: with LANE_WORKERS companies in flight, a lane spends a company's duration over
+ * the companies in flight on it. The median duration, so a few boards that time out don't make every
+ * scan look hours long. Averaged with what was known, so one slow day doesn't swing it.
  */
 export function recordSpeeds(dataDir: string, health: readonly CompanyHealth[]): ScanSpeeds {
   const speeds = readSpeeds(dataDir);
@@ -142,21 +168,42 @@ export function recordSpeeds(dataDir: string, health: readonly CompanyHealth[]):
   for (const h of health) if (!h.unsupported) byAts.set(h.ats, [...(byAts.get(h.ats) ?? []), h.durationMs]);
   for (const [ats, ms] of byAts) {
     if (ms.length < 3) continue;
-    const measured = ms.reduce((a, b) => a + b, 0) / 1000 / (Math.min(LANE_WORKERS, ms.length) * ms.length);
+    const measured = median(ms) / 1000 / Math.min(LANE_WORKERS, ms.length);
     speeds[ats] = Math.round((speeds[ats] === undefined ? measured : (speeds[ats] + measured) / 2) * 1000) / 1000;
   }
-  writeFileSync(join(dataDir, "scan-speed.json"), JSON.stringify(speeds, null, 1));
+  writeFileSync(join(dataDir, "scan-speed.json"), JSON.stringify({ _model: SPEED_MODEL, ...speeds }, null, 1));
   return speeds;
 }
 
-/** About how long a scan of these companies takes: hiring systems run in parallel, so the slowest lane. */
-export function estimateSeconds(companies: readonly Pick<CompanyRef, "ats" | "region">[], speeds: ScanSpeeds = {}): number {
+/** A lane's seconds per company for this hiring system: measured, or from its requests. */
+export function companySeconds(ats: string, speeds: ScanSpeeds = {}): number {
+  const measured = speeds[ats];
+  if (measured !== undefined) return measured;
+  const requests = REQUESTS[ats] ?? 1;
+  const shared = SHARED_HOST_SECONDS[ats];
+  return shared !== undefined ? requests * shared : (requests * OWN_HOST_SECONDS) / LANE_WORKERS;
+}
+
+/**
+ * About how long fetching these companies live takes: one lane per hiring system (and Workday shard,
+ * as run.ts runs them), all lanes at once, so the slowest lane.
+ */
+export function estimateSeconds(companies: readonly Pick<CompanyRef, "ats" | "region" | "shard">[], speeds: ScanSpeeds = {}): number {
   const lanes = new Map<string, number>();
   for (const c of companies) {
-    const lane = `${c.ats}:${c.region ?? ""}`;
-    lanes.set(lane, (lanes.get(lane) ?? 0) + (speeds[c.ats] ?? DEFAULT_SECONDS[c.ats] ?? FALLBACK_SECONDS));
+    const lane = laneOf(c);
+    lanes.set(lane, (lanes.get(lane) ?? 0) + companySeconds(c.ats, speeds));
   }
   return Math.ceil(Math.max(0, ...lanes.values()));
+}
+
+/** A scan's time in its two stages: the shared job feed (sync and match; 0 without it), then the live fetches. */
+export type ScanEstimate = { feed: number; live: number; seconds: number };
+
+export function estimateScan(companies: readonly Pick<CompanyRef, "ats" | "region" | "shard">[], o: { speeds?: ScanSpeeds; feed?: boolean; feedSeconds?: number } = {}): ScanEstimate {
+  const feed = o.feed ? Math.ceil(o.feedSeconds ?? FEED_SECONDS) : 0;
+  const live = estimateSeconds(companies, o.speeds);
+  return { feed, live, seconds: feed + live };
 }
 
 /**

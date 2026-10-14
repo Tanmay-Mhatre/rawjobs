@@ -1,4 +1,4 @@
-import { mkdirSync, readFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
 import { activityMonths, baselineReady, localActivity, viewSummary, type ActivityView } from "./activity";
 import type { BoardHealth } from "./board-health";
@@ -11,6 +11,14 @@ import { readFeedActivity } from "./job-feed";
 import type { RunResult } from "./run";
 import type { Config, DashboardJob, DashboardJobsFile, DataMeta, Job, JobsFile, RunSummary } from "./schema";
 import { readJsonOrSetAside, writeFileAtomic } from "./atomic";
+import { readJsonOnce } from "./json-once";
+
+/** Write the file unless it already says exactly this (same size first, so a changed file is rarely read). */
+export function writeIfChanged(path: string, text: string): boolean {
+  if (existsSync(path) && statSync(path).size === Buffer.byteLength(text) && readFileSync(path, "utf8") === text) return false;
+  writeFileAtomic(path, text);
+  return true;
+}
 
 /** How many run summaries meta.json keeps (the dashboard's health history). */
 export const KEEP_RUNS = 30;
@@ -64,8 +72,9 @@ type MoveRow = { from: Parameters<typeof companyKey>[0]; to: Parameters<typeof c
 /** The published directory's companies and accepted moves (data/catalog/directory.json), if built. */
 const readDirectory = (dir: string): { companies: DirectoryRow[]; moves: MoveRow[] } => {
   try {
-    const file = JSON.parse(readFileSync(join(dir, "catalog", "directory.json"), "utf8")) as { companies: DirectoryRow[]; moves?: MoveRow[] };
-    return { companies: file.companies ?? [], moves: Array.isArray(file.moves) ? file.moves : [] };
+    // Parsed once per scan: scope.ts reads the same file (json-once.ts).
+    const file = readJsonOnce<{ companies: DirectoryRow[]; moves?: MoveRow[] }>(join(dir, "catalog", "directory.json"));
+    return { companies: file?.companies ?? [], moves: Array.isArray(file?.moves) ? file.moves : [] };
   } catch {
     return { companies: [], moves: [] };
   }
@@ -187,7 +196,8 @@ export function saveRun(
   const file = (list: DashboardJob[]): DashboardJobsFile => ({ version: 2, generatedAt, jobs: list });
   writeFileAtomic(join(dir, "jobs.json"), JSON.stringify(file(dashboard.filter((j) => !j.why.gate))));
   writeFileAtomic(join(dir, "jobs-other.json"), JSON.stringify(file(dashboard.filter((j) => j.why.gate))));
-  writeFileAtomic(join(dir, "descriptions.json"), JSON.stringify(Object.fromEntries(jobs.filter((j) => j.description).map((j) => [j.id, j.description]))));
+  // The biggest file, and often unchanged: written only when a description changed.
+  writeIfChanged(join(dir, "descriptions.json"), JSON.stringify(Object.fromEntries(jobs.filter((j) => j.description).map((j) => [j.id, j.description]))));
 
   const prev = readMeta(dir);
   const prevRuns = prev?.runs ?? [];

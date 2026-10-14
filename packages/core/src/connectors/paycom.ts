@@ -42,8 +42,7 @@ async function session(key: string, http: Ctx["http"]): Promise<PaycomJob["sessi
 const headers = (s: PaycomJob["session"]) => ({ accept: "application/json", "content-type": "application/json", authorization: s.token, locale: "en-US" });
 
 async function json<T>(http: Ctx["http"], url: string, init: RequestInit): Promise<T> {
-  const res = await http.request(url, init);
-  return (await res.json()) as T;
+  return JSON.parse((await http.requestBody(url, init)).body) as T;
 }
 
 /** The portal's postings, or those matching `keywordSearchText`, up to `max`. */
