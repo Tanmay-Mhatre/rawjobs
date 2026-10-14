@@ -1,7 +1,7 @@
-import type { NormalizedJob } from "../schema";
+import type { CompanyRef, NormalizedJob } from "../schema";
 import { htmlToText, inferWorkplace } from "../text";
 import { detectAs, isoDate, xmlBlocks, xmlOne } from "./parse";
-import { jobId, type Connector } from "./types";
+import { jobId, SEARCH_MAX_POSTINGS, type Connector, type Ctx } from "./types";
 
 /** One <Job> of SAP SuccessFactors' public listing feed (career?…&resultType=XML), descriptions included. */
 export type SuccessFactorsJob = {
@@ -89,26 +89,32 @@ function host(ref: { shard?: string; careers_url?: string }): string {
   return "career4.successfactors.com";
 }
 
+/** A career site's search pages for `q` ("" lists every job), up to `max` jobs. */
+async function searchCareerSite(ref: CompanyRef, http: Ctx["http"], q: string, max: number) {
+  const site = ref.slug.toLowerCase();
+  const out: SuccessFactorsJob[] = [];
+  const seen = new Set<string>();
+  let total = Infinity;
+  for (let start = 0; start < Math.min(total, max); ) {
+    const page = parseCareerSitePage(await http.getText(`https://${site}/search/?q=${encodeURIComponent(q)}&startrow=${start}`), site);
+    if (!page.readable) throw new Error(`${site}: this SuccessFactors career site template isn't readable yet`);
+    if (start === 0) total = page.total || page.jobs.length;
+    const fresh = page.jobs.filter((j) => !seen.has(j.reqId));
+    if (!fresh.length) break;
+    for (const j of fresh) seen.add(j.reqId);
+    out.push(...fresh);
+    start += page.jobs.length;
+  }
+  return { out, total };
+}
+
 export const successfactors: Connector<SuccessFactorsJob> = {
   ats: "successfactors",
   detect: detectAs("successfactors"),
 
   async fetch(ref, { http, partial }) {
     if (isCareerSiteHost(ref)) {
-      const site = ref.slug.toLowerCase();
-      const out: SuccessFactorsJob[] = [];
-      const seen = new Set<string>();
-      let total = Infinity;
-      for (let start = 0; start < Math.min(total, MAX_POSTINGS); ) {
-        const page = parseCareerSitePage(await http.getText(`https://${site}/search/?q=&startrow=${start}`), site);
-        if (!page.readable) throw new Error(`${site}: this SuccessFactors career site template isn't readable yet`);
-        if (start === 0) total = page.total || page.jobs.length;
-        const fresh = page.jobs.filter((j) => !seen.has(j.reqId));
-        if (!fresh.length) break;
-        for (const j of fresh) seen.add(j.reqId);
-        out.push(...fresh);
-        start += page.jobs.length;
-      }
+      const { out, total } = await searchCareerSite(ref, http, "", MAX_POSTINGS);
       // Stopped at the cap well short of the total the site reports.
       if (Number.isFinite(total) && total - out.length >= 25) partial?.();
       return out;
@@ -116,6 +122,11 @@ export const successfactors: Connector<SuccessFactorsJob> = {
     const xml = await http.getText(`https://${host(ref)}/career?company=${encodeURIComponent(ref.slug)}&career_ns=job_listing_summary&resultType=XML`);
     if (!/<Job-Listing/.test(xml)) throw new Error("unexpected SuccessFactors response: not a job listing feed");
     return parseSuccessFactors(xml);
+  },
+
+  // Only career sites are capped; the XML feed always lists every job.
+  async search(ref, term, { http }) {
+    return isCareerSiteHost(ref) ? (await searchCareerSite(ref, http, term, SEARCH_MAX_POSTINGS)).out : [];
   },
 
   async describe(raw, _ref, { http }) {

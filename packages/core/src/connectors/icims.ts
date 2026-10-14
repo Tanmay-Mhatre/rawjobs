@@ -1,7 +1,7 @@
-import type { NormalizedJob } from "../schema";
+import type { CompanyRef, NormalizedJob } from "../schema";
 import { htmlToText, inferWorkplace } from "../text";
 import { detectAs, inlineText, isoDate, jobPostingLd, ldLocation } from "./parse";
-import { jobId, type Connector } from "./types";
+import { jobId, SEARCH_MAX_POSTINGS, type Connector, type Ctx } from "./types";
 
 /** A job card from an iCIMS portal's search page (iCIMS has no public feed; this is the page itself). */
 export type IcimsJob = { id: string; title: string; url: string; location: string; postedAt?: string };
@@ -34,25 +34,37 @@ export function parseIcimsPage(html: string, origin: string): IcimsJob[] {
   return [...out.values()];
 }
 
+/** The portal's search pages, all jobs or those matching `searchKeyword`, up to `maxPages`. */
+async function list(ref: CompanyRef, http: Ctx["http"], searchKeyword: string, maxPages: number) {
+  const out = new Map<string, IcimsJob>();
+  const keyword = searchKeyword ? `&searchKeyword=${encodeURIComponent(searchKeyword)}` : "";
+  let pages = 1;
+  for (let pr = 0; pr < maxPages; pr++) {
+    const html = await http.getText(`${host(ref)}/jobs/search?ss=1${keyword}&in_iframe=1&pr=${pr}`);
+    if (pr === 0 && !/iCIMS/.test(html)) throw new Error("unexpected iCIMS response: not a job portal");
+    const page = parseIcimsPage(html, host(ref));
+    const before = out.size;
+    for (const j of page) out.set(j.id, j);
+    pages = Number(html.match(/Page\s+\d+\s+of\s+(\d+)/i)?.[1] ?? 1);
+    if (out.size === before || pr + 1 >= pages) break;
+  }
+  return { out: [...out.values()], pages };
+}
+
 export const icims: Connector<IcimsJob> = {
   ats: "icims",
   detect: detectAs("icims"),
 
   async fetch(ref, { http, partial }) {
-    const out = new Map<string, IcimsJob>();
-    let pages = 1;
-    for (let pr = 0; pr < MAX_PAGES; pr++) {
-      const html = await http.getText(`${host(ref)}/jobs/search?ss=1&in_iframe=1&pr=${pr}`);
-      if (pr === 0 && !/iCIMS/.test(html)) throw new Error("unexpected iCIMS response: not a job portal");
-      const page = parseIcimsPage(html, host(ref));
-      const before = out.size;
-      for (const j of page) out.set(j.id, j);
-      pages = Number(html.match(/Page\s+\d+\s+of\s+(\d+)/i)?.[1] ?? 1);
-      if (out.size === before || pr + 1 >= pages) break;
-    }
+    const { out, pages } = await list(ref, http, "", MAX_PAGES);
     // The portal has more pages than we read.
     if (pages > MAX_PAGES) partial?.();
-    return [...out.values()];
+    return out;
+  },
+
+  async search(ref, term, { http }) {
+    // Pages of 20 on most portals.
+    return (await list(ref, http, term, Math.ceil(SEARCH_MAX_POSTINGS / 20))).out;
   },
 
   normalize(raw, ref): NormalizedJob {
