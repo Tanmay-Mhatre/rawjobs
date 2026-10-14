@@ -243,13 +243,13 @@ export function ScanStatus({ scan, onStop, notify, notifyLine }: { scan: ScanSta
 
 /**
  * The background check after Scan now: a small quiet pill ("Checking the rest 18%"). Hover, focus or
- * click it for the details and Pause; it picks up where it stopped. On battery it pauses by itself.
+ * click it for the details and Pause; it picks up where it stopped.
  */
 export function BackgroundPill({ bg, onPause }: { bg: NonNullable<ScanState["bg"]>; onPause: () => void }) {
   const { open, rootProps, triggerProps } = useHoverDetails();
   const value = bg.total ? Math.min(bg.done, bg.total) / bg.total : null;
   const percent = value === null ? null : Math.floor(value * 100);
-  const label = bg.pausing ? "Pausing…" : bg.paused ? "Paused: on battery" : "Checking the rest";
+  const label = bg.pausing ? "Pausing…" : "Checking the rest";
   const others = bg.total;
   return (
     <div {...rootProps} className="relative">
@@ -260,9 +260,9 @@ export function BackgroundPill({ bg, onPause }: { bg: NonNullable<ScanState["bg"
         aria-label={`Background check ${percent === null ? "starting" : `${percent}% done`}: show details`}
         className="inline-flex h-7 items-center gap-1.5 rounded-md border border-line bg-raised px-2 type-meta font-medium text-muted hover:text-ink"
       >
-        {bg.paused ? <Pause className="rj-icon" aria-hidden /> : <ProgressRing value={value} />}
+        <ProgressRing value={value} />
         <span className="max-sm:hidden">{label}</span>
-        {percent !== null && !bg.paused && <span className="tabular">{percent}%</span>}
+        {percent !== null && <span className="tabular">{percent}%</span>}
       </button>
       {open && (
         <div
@@ -270,17 +270,14 @@ export function BackgroundPill({ bg, onPause }: { bg: NonNullable<ScanState["bg"
           className="absolute right-0 top-full z-40 mt-2 w-[24rem] max-w-[calc(100vw-2rem)] rounded-md border border-line bg-raised p-4 shadow-l3 max-sm:fixed max-sm:inset-x-4 max-sm:top-16 max-sm:w-auto max-sm:max-w-none"
         >
           <p className="type-small font-semibold">{others ? `Checking the other ${others.toLocaleString()} companies` : "Checking every other company"}</p>
-          <p className="mt-1 type-small text-muted">
-            {bg.paused ? "Paused while this computer is on battery: it carries on when you plug it in." : `${backgroundLine(bg)}.`} We'll only tell you if it finds a match. Pause any time; it picks up
-            where it stopped.
-          </p>
+          <p className="mt-1 type-small text-muted">{backgroundLine(bg)}. We'll only tell you if it finds a match. Pause any time; it picks up where it stopped.</p>
           <Button size="sm" className="mt-3" onClick={onPause} disabled={bg.pausing}>
             {bg.pausing ? <LoaderCircle className="size-3.5 animate-spin" /> : <Pause className="size-3.5" />} Pause
           </Button>
         </div>
       )}
       <span className="sr-only" role="status">
-        {bg.paused ? "Background check paused: on battery" : "Background check running"}
+        Background check running
       </span>
     </div>
   );

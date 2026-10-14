@@ -29,7 +29,6 @@ import {
   type Job,
   type ScanStats,
   toDashboardJob,
-  onBattery,
   sourceCounts,
   type AlertScope,
   type ScanOptions,
@@ -72,10 +71,6 @@ export function stopSignal(dataDir: string): () => boolean {
   return () => interrupted || existsSync(stopFile(dataDir));
 }
 
-/** How often the background check asks whether the computer is on battery. */
-const POWER_POLL_MS = 60_000;
-const sleep = (ms: number) => new Promise((done) => setTimeout(done, ms));
-
 /**
  * After Scan now ("mine", run to the end, not a fallback that checked every company already): the
  * quiet check of every other company, when it's on (Settings > Scans).
@@ -84,39 +79,9 @@ export function wantsBackground(config: Config, values: RunValues, scope: ScanSc
   return scope === "mine" && config.scans.background && !values["no-background"] && !values["dry-run"] && !values.only?.length && !values.check?.length && !stage1.stopped && !stage1.fallback;
 }
 
-/**
- * The background check: every company Scan now didn't just fetch (`since`: when it started), live,
- * resumable. On battery it stops starting companies, waits until the computer is plugged in, then
- * carries on where it stopped; where the power state can't be told, it just runs. Undefined when it
- * was stopped while paused.
- */
-export async function backgroundCheck(
-  config: Config,
-  base: ScanOptions & { stopped: () => boolean },
-  since: number,
-  hooks: { onPaused?: () => void; onResumed?: () => void } = {},
-  power: () => Promise<boolean | undefined> = onBattery,
-  pollMs = POWER_POLL_MS,
-): Promise<ScanResult | undefined> {
-  const userStopped = base.stopped;
-  let battery = (await power()) === true;
-  const timer = setInterval(() => void power().then((b) => (battery = b === true)), pollMs);
-  try {
-    for (;;) {
-      if (battery) {
-        hooks.onPaused?.();
-        while (battery && !userStopped()) await sleep(Math.min(1_000, pollMs));
-        if (userStopped()) return undefined;
-        hooks.onResumed?.();
-      }
-      const r = await scan(config, { ...base, scope: "all", feed: false, resume: true, skipFetchedSince: since, stopped: () => userStopped() || battery });
-      if (r.stopped && battery && !userStopped()) continue;
-      return r;
-    }
-  } finally {
-    clearInterval(timer);
-  }
-}
+/** The background check: every company Scan now didn't just fetch (`since`: when it started), live, resumable. */
+export const backgroundCheck = (config: Config, base: ScanOptions & { stopped: () => boolean }, since: number): Promise<ScanResult> =>
+  scan(config, { ...base, scope: "all", feed: false, resume: true, skipFetchedSince: since });
 
 /** The background check's alert: only jobs new to you (never ones already sent), whatever "only new" says. */
 const newOnly = (config: Config): Config => ({ ...config, alerts: { ...config.alerts, only_new: true } });
@@ -280,18 +245,13 @@ export async function cmdRun(args: string[]): Promise<number> {
         console.error(`Telegram: ${notified === "sent" ? "sent the new jobs" : notified === "nothing-new" ? "nothing new to send" : notified === "off" ? "not set up (Settings → Alerts)" : notified}`);
       let newMatches = fresh;
       if (wantsBackground(config, values, scope, { stopped, fallback })) {
-        const bg = await backgroundCheck(config, session, stage1Started, {
-          onPaused: () => console.error("\nBackground check paused: this computer is on battery. It carries on when it's plugged in."),
-          onResumed: () => console.error("Plugged in: carrying on with the background check."),
-        });
-        if (bg) {
-          const found = bg.result.jobs.filter((j) => !j.why.gate && bg.merged.newIds.has(j.id)).length;
-          newMatches += found;
-          console.log(
-            `\nBackground check: ${bg.checks.length.toLocaleString()} more companies, ${found} new match${found === 1 ? "" : "es"}${bg.stopped ? " (stopped; the next one carries on where it stopped)" : ""}.`,
-          );
-          if (values.notify && found) await notifyScan(newOnly(config), bg.result, bg.merged, "background");
-        }
+        const bg = await backgroundCheck(config, session, stage1Started);
+        const found = bg.result.jobs.filter((j) => !j.why.gate && bg.merged.newIds.has(j.id)).length;
+        newMatches += found;
+        console.log(
+          `\nBackground check: ${bg.checks.length.toLocaleString()} more companies, ${found} new match${found === 1 ? "" : "es"}${bg.stopped ? " (stopped; the next one carries on where it stopped)" : ""}.`,
+        );
+        if (values.notify && found) await notifyScan(newOnly(config), bg.result, bg.merged, "background");
       }
       log({ ok: true, matches: matches.length, newMatches, notified, stopped });
       return 0;
@@ -446,15 +406,10 @@ export async function runNdjson(values: RunValues): Promise<number> {
       }
       if (wantsBackground(config, values, scope, { stopped: first.stopped, fallback })) {
         emit({ type: "background" });
-        const bg = await backgroundCheck(config, session, stage1Started, {
-          onPaused: () => emit({ type: "paused", reason: "battery" }),
-          onResumed: () => emit({ type: "resumed" }),
-        });
-        if (bg) {
-          const { newMatches } = doneEvent(bg, "background");
-          // Quiet: a Telegram message only when it found something new (and never a job already sent).
-          if (newMatches && alertsOn(config)) await notifyScan(newOnly(config), bg.result, bg.merged, "background");
-        }
+        const bg = await backgroundCheck(config, session, stage1Started);
+        const { newMatches } = doneEvent(bg, "background");
+        // Quiet: a Telegram message only when it found something new (and never a job already sent).
+        if (newMatches && alertsOn(config)) await notifyScan(newOnly(config), bg.result, bg.merged, "background");
       }
       return 0;
     });

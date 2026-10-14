@@ -373,7 +373,7 @@ export function Settings({
                   checked={draft.scans.background}
                   onChange={(v) => void saveSwitch("background", v)}
                   label="Then check every other company in the background"
-                  hint="Quiet: you only hear about it if it finds a match. Picks up where it stopped, and pauses while this computer is on battery."
+                  hint="Quiet: you only hear about it if it finds a match. Pause it any time; it picks up where it stopped."
                   state={switchSave.background}
                 />
                 <div>

@@ -25,33 +25,13 @@ describe("the background check", () => {
     expect(wantsBackground(config(), { ...values, "no-background": true }, "mine", { stopped: false })).toBe(false);
   });
 
-  it("waits while the computer is on battery, then carries on; runs when the power state can't be told", async () => {
+  it("runs to the end whatever the power state", async () => {
     const dir = mkdtempSync(join(tmpdir(), "jh-bg-"));
     mkdirSync(join(dir, "catalog"));
     writeFileSync(join(dir, "catalog", "directory.json"), JSON.stringify({ companies: [] }));
     const http = new HttpClient({ fetchImpl: (async () => new Response("[]")) as unknown as typeof fetch });
-    const states = [true, true, false];
-    const events: string[] = [];
-    const r = await backgroundCheck(
-      config(),
-      { dataDir: dir, http, stopped: () => false },
-      Date.now(),
-      { onPaused: () => events.push("paused"), onResumed: () => events.push("resumed") },
-      async () => states.shift() ?? false,
-      10,
-    );
-    expect(events).toEqual(["paused", "resumed"]);
-    expect(r?.stopped).toBe(false);
-    const free = await backgroundCheck(config(), { dataDir: dir, http, stopped: () => false }, Date.now(), {}, async () => undefined, 10);
-    expect(free?.stopped).toBe(false);
-  });
-
-  it("stopped while paused: ends without scanning", async () => {
-    const dir = mkdtempSync(join(tmpdir(), "jh-bg-"));
-    let stop = false;
-    setTimeout(() => (stop = true), 30);
-    const r = await backgroundCheck(config(), { dataDir: dir, stopped: () => stop }, Date.now(), {}, async () => true, 10);
-    expect(r).toBeUndefined();
+    const r = await backgroundCheck(config(), { dataDir: dir, http, stopped: () => false }, Date.now());
+    expect(r.stopped).toBe(false);
   });
 
   it("--scope still takes mine and all, and now yours", () => {

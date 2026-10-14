@@ -34,7 +34,7 @@ export type ScanState = {
   /** How old the shared job feed is, in days (null: none). */
   feedAgeDays?: number | null;
   /** The background check after Scan now: its progress, and what it found when it ended. */
-  bg?: { total: number; done: number; resumed: number; seconds?: number; found: number; paused?: "battery"; pausing?: boolean; summary?: Extract<RunEvent, { type: "done" }> };
+  bg?: { total: number; done: number; resumed: number; seconds?: number; found: number; pausing?: boolean; summary?: Extract<RunEvent, { type: "done" }> };
   /** About how long the scan takes, from the start. */
   seconds?: number;
   /** Health of your companies, and directory ones that matched or failed, by company name. */
@@ -117,10 +117,6 @@ export function applyScanEvent(s: ScanState, e: RunEvent): ScanState {
       return { ...s, summary: e };
     case "background":
       return { ...s, phase: "background", stopping: false, bg: { total: 0, done: 0, resumed: 0, found: 0 } };
-    case "paused":
-      return s.bg ? { ...s, bg: { ...s.bg, paused: e.reason } } : s;
-    case "resumed":
-      return s.bg ? { ...s, bg: { ...s.bg, paused: undefined } } : s;
     case "notified":
       return { ...s, notify: { asked: true, result: e.result } };
     default:

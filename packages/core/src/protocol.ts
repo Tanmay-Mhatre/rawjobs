@@ -110,9 +110,6 @@ export type RunEvent =
   | { type: "progress"; done: number; ats?: string; doneByAts?: Record<string, number>; doneBySource?: Record<ScanSource, number> }
   /** Scan now is done and saved; the background check of every other company starts (its own start … done follow). */
   | { type: "background" }
-  /** The background check paused because the computer is on battery; resumed once it's plugged in. */
-  | { type: "paused"; reason: "battery" }
-  | { type: "resumed" }
   | {
       type: "done";
       jobsFound: number;
