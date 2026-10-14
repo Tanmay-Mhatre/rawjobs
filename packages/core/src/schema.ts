@@ -48,6 +48,7 @@ export const ATS_TYPES = [
   "cornerstone",
   "keka",
   "taleobe",
+  "jobscore",
 ] as const;
 
 /**

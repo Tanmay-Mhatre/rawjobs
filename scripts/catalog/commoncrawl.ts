@@ -116,6 +116,7 @@ const QUERIES: { url: string; matchType?: "domain" }[] = [
   { url: "csod.com", matchType: "domain" },
   { url: "keka.com", matchType: "domain" },
   { url: "tbe.taleo.net", matchType: "domain" },
+  { url: "careers.jobscore.com/careers/*" },
 ];
 
 /**

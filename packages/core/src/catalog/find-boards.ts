@@ -81,6 +81,7 @@ const HINTS: [string, RegExp][] = [
   ["pinpoint", /pinpointhq/i],
   ["breezy", /breezy\.hr/i],
   ["zoho", /zohorecruit/i],
+  ["jobscore", /careers\.jobscore\.com|widgets\.jobscore\.com/i],
   ["taleobe", /\.tbe\.taleo\.net/i],
   ["keka", /\.keka\.com\/careers|cdn\.keka\.com/i],
   ["cornerstone", /csod\.com/i],

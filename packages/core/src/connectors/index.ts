@@ -27,6 +27,7 @@ import { softgarden } from "./softgarden";
 import { cornerstone } from "./cornerstone";
 import { keka } from "./keka";
 import { taleobe, taleoBeUrl } from "./taleobe";
+import { jobscore } from "./jobscore";
 import { greenhouse } from "./greenhouse";
 import { hibob } from "./hibob";
 import { icims } from "./icims";
@@ -102,6 +103,7 @@ export const connectors: Partial<Record<AtsType, Connector<any>>> = {
   cornerstone,
   keka,
   taleobe,
+  jobscore,
   // Job boards (JOB_BOARDS), last so a company's own board is always recognised first.
   hackernews,
   remotive,
@@ -259,6 +261,8 @@ export function careersUrl(c: DetectedCompany): string {
       return `https://${c.slug}.keka.com/careers`;
     case "taleobe":
       return taleoBeUrl(c);
+    case "jobscore":
+      return `https://careers.jobscore.com/careers/${c.slug}`;
     default:
       return "";
   }
