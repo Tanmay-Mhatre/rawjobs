@@ -47,6 +47,8 @@ export const ATS_LABEL: Record<string, string> = {
   softgarden: "softgarden",
   cornerstone: "Cornerstone",
   keka: "Keka",
+  taleobe: "Taleo Business Edition",
+  jobscore: "JobScore",
   // Job boards: credited by name (Remote OK's terms ask for it), linked back on every job.
   hackernews: "Hacker News",
   remotive: "Remotive",
@@ -55,6 +57,7 @@ export const ATS_LABEL: Record<string, string> = {
   himalayas: "Himalayas",
   jobicy: "Jobicy",
   weworkremotely: "We Work Remotely",
+  remotefirstjobs: "Remote First Jobs",
 };
 
 /** Hiring systems we can scan (every one we recognise). Anything else is kept as "not supported yet". */
