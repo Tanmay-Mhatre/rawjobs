@@ -2,6 +2,7 @@
 # the public directory repo's contributions.json, and publish an updated directory right away.
 # With nothing in the inbox, spend up to 30 minutes on the board-check backlog instead, so it
 # drains between weekly rebuilds (the results ship with the next release).
+# Each run also reads the public job boards for links to companies' own boards (feed-boards.ts).
 # Then review moved careers pages users reported (record-only: scripts/catalog/moves.ts).
 # Setup: docs/shared-directory.md
 name: Directory · contributions
@@ -77,6 +78,15 @@ jobs:
           GH_TOKEN: ${{ secrets.DATA_REPO_TOKEN }}
         # Without saved state, contributions are recorded now and published at the weekly rebuild.
         run: bash scripts/catalog/state.sh restore
+
+      # Boards the public job boards' jobs link to (apply links, links in posts): only the board is
+      # kept, never the jobs. Each feed is read at most as often as it allows; the merge below picks
+      # them up and new ones are checked live before they're published. Never stops the run.
+      - if: steps.state.outputs.restored == 'true'
+        name: Boards from job feeds
+        continue-on-error: true
+        timeout-minutes: 10
+        run: bash scripts/catalog/capped.sh "Boards from job feeds" 8 pnpm exec tsx scripts/catalog/feed-boards.ts --max-minutes 5
 
       - if: steps.inbox.outputs.count != '0'
         name: Accept contributions
