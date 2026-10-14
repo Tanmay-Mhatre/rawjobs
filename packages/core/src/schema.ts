@@ -166,6 +166,8 @@ export type CompanyHealth = {
    * (404, 410 or the hiring system saying the board is closed). Absent when no request was made.
    */
   failure?: "gone" | "timeout" | "server" | "network" | "other";
+  /** A hash of the board's job ids, when its whole list was read: board-health.ts notes when it changes. */
+  idsHash?: string;
 };
 
 export type RunSummary = {

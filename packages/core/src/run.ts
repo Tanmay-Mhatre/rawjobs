@@ -1,4 +1,5 @@
 import { companyOfJobId, getConnector, jobCompanyKey } from "./connectors";
+import { hashIds } from "./board-health";
 import { BoardClosedError } from "./connectors/parse";
 import { HostSkippedError, HttpClient, HttpError } from "./http";
 import type { BoardMove, CompanyHealth, CompanyRef, Config, Job, NormalizedJob, Profile } from "./schema";
@@ -183,6 +184,7 @@ export async function runRadar(config: Config, opts: RunOptions = {}): Promise<R
         h.searchFound = found;
       }
       let described = 0;
+      const ids: string[] = [];
       for (const raw of raws) {
         let base: NormalizedJob;
         try {
@@ -193,6 +195,7 @@ export async function runRadar(config: Config, opts: RunOptions = {}): Promise<R
           continue;
         }
         base.url = safeUrl(base.url) ?? "";
+        ids.push(base.id);
         const prev = previous.get(base.id);
         const firstSeen = prev?.firstSeen ?? nowIso;
         let { score, why } = scoreJob(base, config.profile, fit);
@@ -224,6 +227,8 @@ export async function runRadar(config: Config, opts: RunOptions = {}): Promise<R
         if (!why.gate) h.matches++;
       }
       h.jobsFound = recent?.length ?? raws.length - (h.skipped ?? 0);
+      // Only a list read in full says whether the board's jobs changed (board-health.ts).
+      if (!recent && !h.partial) h.idsHash = hashIds(ids);
       h.ok = true;
     } catch (err) {
       h.error = err instanceof HttpError && err.status === 404 ? `board not found (404): check the slug "${company.slug}" against the careers URL` : (err as Error).message;
