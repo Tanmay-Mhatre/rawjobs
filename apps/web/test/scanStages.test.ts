@@ -37,14 +37,12 @@ describe("Scan now's stages", () => {
       { type: "start", companies: [], total: 100, resumed: 10, stage: "background", seconds: 600 },
       { type: "company", done: 30, ...health("Beta", 2) },
       { type: "progress", done: 50 },
-      { type: "paused", reason: "battery" },
     ]);
     expect(s.phase).toBe("background");
     expect(s.summary?.newMatches).toBe(2);
-    expect(s.bg).toMatchObject({ total: 100, done: 50, resumed: 10, found: 2, paused: "battery" });
+    expect(s.bg).toMatchObject({ total: 100, done: 50, resumed: 10, found: 2 });
     expect(s.results.Beta).toBeUndefined();
-    const done = play([{ type: "resumed" }, { type: "done", stage: "background", jobsFound: 9, matches: 3, strong: 0, newMatches: 3, failed: 0, everyCompany: true }], s);
-    expect(done.bg?.paused).toBeUndefined();
+    const done = play([{ type: "done", stage: "background", jobsFound: 9, matches: 3, strong: 0, newMatches: 3, failed: 0, everyCompany: true }], s);
     expect(done.bg?.summary).toMatchObject({ newMatches: 3, everyCompany: true });
     expect(backgroundLine(done.bg!)).toBe("50 done · about 6 min left");
   });

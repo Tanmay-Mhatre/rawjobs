@@ -1,8 +1,5 @@
-import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-import { fetchedSince, linuxOnBattery, quickPicks, windowsOnBattery } from "../src/stages";
+import { fetchedSince, quickPicks } from "../src/stages";
 import type { CompanyRef } from "../src/schema";
 
 const ref = (slug: string): CompanyRef => ({ name: slug, ats: "lever", slug, enabled: true });
@@ -32,32 +29,5 @@ describe("fetchedSince", () => {
     expect(fetchedSince({ failedAt: 150 }, 100)).toBe(true);
     expect(fetchedSince({ okAt: 99 }, 100)).toBe(false);
     expect(fetchedSince(undefined, 100)).toBe(false);
-  });
-});
-
-describe("on battery", () => {
-  it("Windows: discharging, low or critical is battery; mains states aren't; no battery can't tell", () => {
-    expect(windowsOnBattery("1\r\n")).toBe(true);
-    expect(windowsOnBattery("4")).toBe(true);
-    expect(windowsOnBattery("2")).toBe(false);
-    expect(windowsOnBattery("6")).toBe(false);
-    expect(windowsOnBattery("")).toBeUndefined();
-    expect(windowsOnBattery(undefined)).toBeUndefined();
-  });
-
-  it("Linux: a mains supply that's offline, with a battery", () => {
-    const dir = mkdtempSync(join(tmpdir(), "jh-power-"));
-    const supply = (name: string, files: Record<string, string>) => {
-      mkdirSync(join(dir, name));
-      for (const [f, v] of Object.entries(files)) writeFileSync(join(dir, name, f), `${v}\n`);
-    };
-    expect(linuxOnBattery(dir)).toBeUndefined();
-    supply("AC", { type: "Mains", online: "0" });
-    expect(linuxOnBattery(dir)).toBeUndefined();
-    supply("BAT0", { type: "Battery" });
-    expect(linuxOnBattery(dir)).toBe(true);
-    writeFileSync(join(dir, "AC", "online"), "1\n");
-    expect(linuxOnBattery(dir)).toBe(false);
-    expect(linuxOnBattery(join(dir, "missing"))).toBeUndefined();
   });
 });
