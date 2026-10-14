@@ -51,13 +51,39 @@ describe("connector search requests", () => {
   it("smartrecruiters and oracle: the term goes in the API's own search parameter", async () => {
     const sr = fakeHttp(() => json({ totalFound: 1, content: [{ id: "1", name: "Product Manager" }] }));
     await getConnector("smartrecruiters")!.search!({ ...ref, ats: "smartrecruiters", slug: "Acme" }, "product manager", { http: sr.http, now });
-    expect(sr.calls).toEqual(["https://api.smartrecruiters.com/v1/companies/Acme/postings?limit=100&offset=0&q=product%20manager"]);
+    // Quoted: unquoted, SmartRecruiters matches any of the words.
+    expect(sr.calls).toEqual(["https://api.smartrecruiters.com/v1/companies/Acme/postings?limit=100&offset=0&q=%22product%20manager%22"]);
 
     const or = fakeHttp(() => json({ items: [{ TotalJobsCount: 0, requisitionList: [] }] }));
     await getConnector("oracle")!.search!({ ...ref, ats: "oracle", slug: "acme", shard: "ocs", site: undefined }, 'product "manager", ops', { http: or.http, now });
     // The finder's own separators and quotes can't appear inside the keyword.
     const finder = new URL(or.calls[0]!).searchParams.get("finder");
     expect(finder).toBe('findReqs;siteNumber=CX_1,keyword="product manager ops",limit=200,offset=0,sortBy=POSTING_DATES_DESC');
+  });
+
+  it("ukg, icims and dayforce: QueryString, searchKeyword and searchText", async () => {
+    const uk = fakeHttp((_u, init) => {
+      expect(JSON.parse(String(init?.body))).toEqual({ opportunitySearch: { Top: 50, Skip: 0, QueryString: "line cook" } });
+      return json({ totalCount: 0, opportunities: [] });
+    });
+    await getConnector("ukg")!.search!({ ...ref, ats: "ukg", slug: "acm1000acme", shard: "recruiting2.ultipro.com", site: "2b13054b-60bb-410d-9136-e52c1c7d9720" }, "line cook", {
+      http: uk.http,
+      now,
+    });
+    expect(uk.calls).toHaveLength(1);
+
+    const ic = fakeHttp(() => new Response("<html>iCIMS</html>", { status: 200, headers: { "content-type": "text/html" } }));
+    await getConnector("icims")!.search!({ ...ref, ats: "icims", slug: "careers-acme" }, "physical therapist", { http: ic.http, now });
+    expect(ic.calls).toEqual(["https://careers-acme.icims.com/jobs/search?ss=1&searchKeyword=physical%20therapist&in_iframe=1&pr=0"]);
+
+    const bodies: unknown[] = [];
+    const df = fakeHttp((url, init) => {
+      if (url.endsWith("/api/auth/csrf")) return new Response(JSON.stringify({ csrfToken: "t" }), { status: 200, headers: { "content-type": "application/json", "set-cookie": "c=1; Path=/" } });
+      bodies.push(JSON.parse(String(init?.body)));
+      return json({ maxCount: 0, jobPostings: [] });
+    });
+    await getConnector("dayforce")!.search!({ ...ref, ats: "dayforce", slug: "acme", site: "candidateportal" }, "nurse", { http: df.http, now });
+    expect(bodies).toEqual([{ clientNamespace: "acme", jobBoardCode: "candidateportal", cultureCode: "en-US", paginationStart: 0, searchText: "nurse" }]);
   });
 });
 

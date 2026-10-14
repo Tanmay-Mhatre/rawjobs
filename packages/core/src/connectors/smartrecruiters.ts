@@ -70,7 +70,10 @@ export const smartrecruiters: Connector<SmartRecruitersPosting> = {
   },
 
   async search(ref, term, { http }) {
-    return (await list(ref, http, term, SEARCH_MAX_POSTINGS)).out;
+    // Unquoted, q matches any of the words ("software engineer" finds every engineer, in no useful
+    // order); quoted, it matches the phrase.
+    const words = term.replace(/"/g, " ").trim().replace(/\s+/g, " ");
+    return (await list(ref, http, words.includes(" ") ? `"${words}"` : words, SEARCH_MAX_POSTINGS)).out;
   },
 
   normalize(raw, ref): NormalizedJob {
