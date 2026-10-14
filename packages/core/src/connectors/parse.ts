@@ -1,4 +1,5 @@
 import { decodeEntities, htmlToText } from "../text";
+import { HttpError, type HttpClient } from "../http";
 import type { AtsType } from "../schema";
 import { detectKnownAts } from "./detect-known";
 import type { DetectedCompany } from "./types";
@@ -236,5 +237,34 @@ export class BoardClosedError extends Error {
   override name = "BoardClosedError";
   constructor(system: string, slug: string, why: string) {
     super(`${system} board not found: "${slug}" ${why}`);
+  }
+}
+
+/** A job's link as a URL; undefined when it isn't one. */
+export function urlOf(link: string | undefined): URL | undefined {
+  try {
+    return link ? new URL(link) : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+/** The board slug and posting id in a job id ("ashby:acme:abc-123"), when the job came from that system. */
+export function postingOfId(id: string, ats: AtsType): { slug: string; posting: string } | undefined {
+  const [system, slug, ...rest] = id.split(":");
+  return system === ats && slug && rest.length ? { slug, posting: rest.join(":") } : undefined;
+}
+
+/**
+ * isOpen() for a posting's own API address: 200 = still open, 404 or 410 = taken down. Anything else
+ * (a timeout, a 5xx, a 403, a redirect somewhere else) can't say, so undefined.
+ */
+export async function openByStatus(http: HttpClient, url: string): Promise<boolean | undefined> {
+  try {
+    const res = await http.request(url, { headers: { accept: "application/json" } });
+    await res.body?.cancel().catch(() => {});
+    return res.status === 200 && !res.redirected ? true : undefined;
+  } catch (err) {
+    return err instanceof HttpError && (err.status === 404 || err.status === 410) ? false : undefined;
   }
 }

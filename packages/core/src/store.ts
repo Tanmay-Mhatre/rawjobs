@@ -35,7 +35,7 @@ function yourFailingBoards(config: Config, boards: BoardHealth): NonNullable<Dat
   const out: NonNullable<DataMeta["boardHealth"]> = {};
   for (const c of config.companies) {
     const r = boards.boards[jobCompanyKey(c)];
-    if (r?.fails) out[companyKey(c)] = { since: new Date(r.since).toISOString() };
+    if (r?.fails && r.since !== undefined) out[companyKey(c)] = { since: new Date(r.since).toISOString() };
   }
   return out;
 }

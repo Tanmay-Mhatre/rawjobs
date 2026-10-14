@@ -167,6 +167,8 @@ export type CompanyHealth = {
    * read the answer (not the board's fault). Absent when no request was made.
    */
   failure?: "gone" | "timeout" | "server" | "network" | "parse" | "other";
+  /** A hash of the board's job ids, when its whole list was read: board-health.ts notes when it changes. */
+  idsHash?: string;
 };
 
 export type RunSummary = {

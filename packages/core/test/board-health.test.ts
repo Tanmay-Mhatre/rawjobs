@@ -58,8 +58,8 @@ describe("rest after failures", () => {
     const a = company("greenhouse", { slug: "a" });
     const b = company("greenhouse", { slug: "b" });
     const c = company("greenhouse", { slug: "c" });
-    expect(planBoards([a, b, c], h, T)).toEqual({ fetch: [b], resting: [a, c] });
-    expect(planBoards([a, b, c], h, T, { yours: new Set(["greenhouse:c"]), done: new Set(["greenhouse:a"]) })).toEqual({ fetch: [a, b, c], resting: [] });
+    expect(planBoards([a, b, c], h, T)).toEqual({ fetch: [b], resting: [a, c], quiet: [] });
+    expect(planBoards([a, b, c], h, T, { yours: new Set(["greenhouse:c"]), done: new Set(["greenhouse:a"]) })).toEqual({ fetch: [a, b, c], resting: [], quiet: [] });
   });
 });
 
@@ -148,10 +148,19 @@ describe("board-health.json", () => {
     expect(readdirSync(dir)).toEqual(["board-health.json"]);
   });
 
-  it("drops the entries of boards that worked from an older file", () => {
+  it("drops an older file's bare entries for boards that worked (no failures, no job-list fingerprint)", () => {
     dir = mkdtempSync(join(tmpdir(), "rawjobs-boards-"));
-    writeFileSync(join(dir, "board-health.json"), JSON.stringify({ version: 1, boards: { "greenhouse:a": { okAt: T }, "greenhouse:b": { ...failing(2), okAt: T - DAY } } }));
-    expect(readBoardHealth(dir).boards).toEqual({ "greenhouse:b": failing(2) });
+    const quiet = { okAt: T, ids: "abcd1234", changedAt: T - 20 * DAY };
+    writeFileSync(join(dir, "board-health.json"), JSON.stringify({ version: 1, boards: { "greenhouse:a": { okAt: T }, "greenhouse:b": failing(2), "greenhouse:c": quiet } }));
+    expect(readBoardHealth(dir).boards).toEqual({ "greenhouse:b": failing(2), "greenhouse:c": quiet });
+  });
+
+  it("keeps a board's job-list fingerprint through failures, and keeps only that once it works again", () => {
+    let h: BoardHealth = { version: 1, boards: { "greenhouse:a": { okAt: T - DAY, ids: "abcd1234", changedAt: T - 20 * DAY } } };
+    h = recordBoards(h, [health("greenhouse:a", { ok: false, failure: "gone" })], T);
+    expect(h.boards["greenhouse:a"]).toEqual({ okAt: T - DAY, ids: "abcd1234", changedAt: T - 20 * DAY, fails: 1, since: T, failedAt: T, reason: "gone", goneSince: T });
+    h = recordBoards(h, [health("greenhouse:a", { idsHash: "abcd1234" })], T + HOUR);
+    expect(h.boards["greenhouse:a"]).toEqual({ okAt: T + HOUR, ids: "abcd1234", changedAt: T - 20 * DAY });
   });
 
   it("survives a crash mid-write: a leftover temp file is ignored, a damaged file is set aside", () => {
@@ -222,7 +231,7 @@ companies:
     expect(readMeta(dir)?.boardHealth).toEqual({ "greenhouse:ghco": { since: new Date(T + HOUR).toISOString() } });
 
     await scan(config(), { dataDir: dir, http: fakeHttp(ok).http, now: at(2 * HOUR), feed: false });
-    expect(readBoardHealth(dir).boards["greenhouse:ghco"]).toBeUndefined();
+    expect(readBoardHealth(dir).boards["greenhouse:ghco"]).not.toHaveProperty("fails");
     expect(readMeta(dir)?.boardHealth).toBeUndefined();
   });
 
@@ -239,7 +248,8 @@ companies:
     const now = fakeHttp(ok);
     await scan(config(), { dataDir: dir, http: now.http, now: at(60_000), checkKeys: ["lever:leverco"] });
     expect(now.calls.some((u) => u.includes("leverco"))).toBe(true);
-    expect(readBoardHealth(dir).boards).toEqual({});
+    // The failures are over; only the job-list fingerprint (for "quiet") stays.
+    expect(readBoardHealth(dir).boards["lever:leverco"]).toEqual({ okAt: T + 60_000, ids: expect.any(String), changedAt: T + 60_000 });
   });
 
   it("writes nothing on a dry run", async () => {
@@ -258,7 +268,7 @@ companies:
     expect(calls.some((u) => u.includes("leverco"))).toBe(false);
     expect(r.checks).toEqual([]);
     expect(r.resting).toBe(1);
-    expect(readBoardHealth(dir).boards["greenhouse:ghco"]).toBeUndefined();
+    expect(readBoardHealth(dir).boards["greenhouse:ghco"]).toEqual({ okAt: T, ids: expect.any(String), changedAt: T });
   });
 
   it("names boards that haven't worked for 30 days", async () => {

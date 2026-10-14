@@ -323,20 +323,27 @@ export type JobGroup = { key: string; lead: Job; jobs: Job[] };
 /**
  * Groups by role with the place left out of the title (groupKey), so older saved data groups the same way.
  * The row keeps the place of its best posting, but a job board's copy never leads when the company's own
- * posting is in the group: that's the one with the real apply link.
+ * posting is in the group: that's the one with the real apply link. Before that, a posting that may be stale
+ * (isStale) never leads when a fresh one of the same role is in the group: the row shows the live one.
+ * The groups keep the order of `sorted`; only who leads changes.
  */
-export function groupJobs(sorted: Job[]): JobGroup[] {
-  const groups = new Map<string, JobGroup>();
+export function groupJobs(sorted: Job[], now = Date.now()): JobGroup[] {
+  const groups = new Map<string, JobGroup & { leadStale: boolean }>();
   for (const j of sorted) {
     const key = roleOf(j);
     const g = groups.get(key);
-    if (!g) groups.set(key, { key, lead: j, jobs: [j] });
+    const stale = isStale(j, { now });
+    if (!g) groups.set(key, { key, lead: j, jobs: [j], leadStale: stale });
     else {
       g.jobs.push(j);
-      if (fromJobBoard(g.lead) && !fromJobBoard(j)) g.lead = j;
+      const better = g.leadStale !== stale ? !stale : fromJobBoard(g.lead) && !fromJobBoard(j);
+      if (better) {
+        g.lead = j;
+        g.leadStale = stale;
+      }
     }
   }
-  return [...groups.values()];
+  return [...groups.values()].map(({ leadStale: _, ...g }) => g);
 }
 
 /** Roles shown per company before the rest fold into one "+N more at …" row. */
