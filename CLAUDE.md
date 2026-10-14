@@ -23,6 +23,9 @@ no GitHub auto-merge (`mcp__ccd_pr__set_auto_merge`). Those skip the queue.
    or someone comments.
 2. Wait your turn. When your PR is at the front, Mergify merges `main` into it, waits for CI and
    merges it. Mergify pushes to your branch, so run `git pull` before you push again.
+   To add work to a queued PR, remove the `queue` label first, then pull, push, check the commit
+   is on the PR and add the label back. Pushing while it's queued can race the merge: the PR
+   merges without your last commit.
 3. If your PR leaves the queue (Mergify comments on why: a conflict or failing CI), fix it
    yourself. For a conflict, merge `origin/main` into your branch (in a desktop-app worktree, use
    `sync_with_base_branch`) and resolve it. Run `pnpm check`, push, then remove and add the `queue`
