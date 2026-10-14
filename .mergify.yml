@@ -2,6 +2,7 @@
 # merge one at a time, in the order they joined: Mergify merges main into the front one, waits for
 # CI, merges it, and moves on. A pull request that conflicts with main or fails CI leaves the
 # queue, and Mergify says why on the PR. Fix it, push, and add the label again to rejoin.
+# Dependabot's grouped minor and patch pull requests join on their own (the last rule below).
 #
 # main requires branches to be up to date, which Mergify supports only when it checks PRs in place:
 # one at a time, batches of one, and the same conditions to join the queue as to merge.
@@ -29,6 +30,17 @@ pull_request_rules:
   - name: Queue pull requests labelled `queue`
     conditions:
       - label = queue
+    actions:
+      queue:
+        name: default
+
+  # Dependabot's weekly grouped npm pull requests take only minor and patch updates
+  # (.github/dependabot.yml), so they queue themselves. Majors come on their own branches and the
+  # GitHub Actions group takes majors too; those still need a person to add the label.
+  - name: Queue Dependabot's grouped minor and patch updates
+    conditions:
+      - author = dependabot[bot]
+      - head ~= ^dependabot/npm_and_yarn/(dev-)?dependencies-
     actions:
       queue:
         name: default
