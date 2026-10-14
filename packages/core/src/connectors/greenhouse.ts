@@ -1,5 +1,6 @@
 import type { CompanyRef, NormalizedJob } from "../schema";
 import { htmlToText, inferWorkplace } from "../text";
+import { openByStatus, postingOfId, urlOf } from "./parse";
 import { firstPathSegment, jobId, type Connector } from "./types";
 
 /** https://developers.greenhouse.io/job-board.html */
@@ -54,6 +55,24 @@ export const greenhouse: Connector<GreenhouseJob> = {
   async describe(raw, ref, { http }) {
     const job = await http.getJson<GreenhouseJob>(`${API}/v1/boards/${encodeURIComponent(ref.slug)}/jobs/${raw.id}`);
     return htmlToText(job.content);
+  },
+
+  /**
+   * The posting's API address answers 404 once it's taken down. Links are boards.greenhouse.io/acme/jobs/123,
+   * or a company's own page with ?gh_jid=123 (then the board comes from the job's id).
+   */
+  async isOpen(job, { http }) {
+    const url = urlOf(job.url);
+    const own = postingOfId(job.id, "greenhouse");
+    const board = url ? greenhouse.detect(url) : null;
+    const slug = board?.slug ?? own?.slug;
+    // Only a Greenhouse link's own path is read: a company page's /jobs/5 is its own numbering.
+    const onBoard = board ? (url?.pathname.match(/\/jobs\/(\d+)/)?.[1] ?? url?.searchParams.get("token")) : undefined;
+    const id = onBoard ?? url?.searchParams.get("gh_jid") ?? own?.posting;
+    if (!slug || !id || !/^\d+$/.test(id)) return undefined;
+    const open = await openByStatus(http, `${API}/v1/boards/${encodeURIComponent(slug)}/jobs/${id}`);
+    // A slug read off the job's id is lowercased: a 404 for it could be the spelling, not the job.
+    return open === false && !board ? undefined : open;
   },
 
   normalize(raw, ref: CompanyRef): NormalizedJob {

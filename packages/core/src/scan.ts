@@ -8,6 +8,8 @@ import { keptChecked, readLedger, recordChecks, writeLedger } from "./discover";
 import { HttpClient } from "./http";
 import { FileHttpCache } from "./http-cache";
 import { feedMatches } from "./job-feed";
+import { checkStillOpen, jobsToRecheck } from "./liveness";
+import { alertJobs } from "./notify";
 import { runRadar, type RunResult } from "./run";
 import type { BoardMove, CompanyHealth, CompanyRef, Config, Job, RunSummary } from "./schema";
 import { estimateSeconds, findMoves, readDirectory, readDirectoryMoves, readSpeeds, recordSpeeds, refOfEntry, scopeCompanies, type ScanScope } from "./scope";
@@ -56,6 +58,11 @@ export type ScanOptions = {
   feed?: boolean;
   /** Stop starting new companies when this returns true; what's done is saved and can be resumed. */
   stopped?: () => boolean;
+  /**
+   * An alert follows this scan: before saving, check the doubtful jobs it would name are still open
+   * (liveness.ts). Closed ones are saved as closed and left out of the result, so the alert skips them.
+   */
+  checkBeforeAlert?: boolean;
   http?: HttpClient;
   now?: Date;
   onStart?: (info: ScanStart) => void;
@@ -72,6 +79,8 @@ export type ScanResult = {
   moves: BoardMove[];
   /** Stopped before the end: resumable. */
   stopped: boolean;
+  /** With checkBeforeAlert: jobs checked again before the alert, and how many of them had closed. */
+  openCheck?: { checked: number; closed: number };
   /** Boards this scan left alone because they're resting after failures. */
   resting: number;
   /** Directory boards this scan left alone because they're quiet (unchanged for weeks, fetched recently). */
@@ -234,6 +243,23 @@ export async function scan(config: Config, opts: ScanOptions): Promise<ScanResul
   const boardNews = { resting: resting.length, quiet: directoryPlan.quiet.length, chronic };
   if (opts.dryRun) return { result, merged, checks, moves, stopped, ...boardNews };
 
+  // Jobs the alert would name that weren't just read live: checked once more. A closed one is saved
+  // closed (as mergeHistory closes them) and leaves this run's jobs, so it's neither alerted nor counted new.
+  let openCheck: ScanResult["openCheck"];
+  if (opts.checkBeforeAlert) {
+    const doubtful = jobsToRecheck(alertJobs(config, result.jobs, merged.newIds), run.startedAt);
+    const { checked, closed } = await checkStillOpen(doubtful, { http, now, stopped: opts.stopped });
+    if (closed.size) {
+      merged.jobs = merged.jobs.map((j) => (closed.has(j.id) ? { ...j, status: "closed", closedAt: now.toISOString() } : j));
+      for (const id of closed) {
+        merged.closedIds.add(id);
+        merged.newIds.delete(id);
+      }
+      result.jobs = result.jobs.filter((j) => !closed.has(j.id));
+    }
+    openCheck = { checked, closed: closed.size };
+  }
+
   // Run history keeps your companies and the directory ones that matched or failed, not every board.
   const yourKeys = new Set(config.companies.map(companyKey));
   const health = result.health.filter((h) => yourKeys.has(companyKey(h)) || h.matches > 0 || (!h.ok && !h.unsupported));
@@ -245,7 +271,7 @@ export async function scan(config: Config, opts: ScanOptions): Promise<ScanResul
   if (fullScan) writeFileSync(join(opts.dataDir, "discover.json"), JSON.stringify({ version: 1, generatedAt: result.finishedAt, indexGeneratedAt: result.finishedAt, jobs: [] }));
   if (stopped) saveProgress(true);
   else if (fullScan) rmSync(progressPath, { force: true });
-  return { result, merged, summary, checks, moves, stopped, ...boardNews };
+  return { result, merged, summary, checks, moves, stopped, ...boardNews, ...(openCheck ? { openCheck } : {}) };
 }
 
 /**

@@ -39,5 +39,6 @@ export { isTeamtailorHost } from "./connectors/teamtailor";
 export * from "./employers";
 export * from "./scope";
 export * from "./notify";
+export * from "./liveness";
 export * from "./schedule";
 export * from "./companies-page";
