@@ -9,6 +9,7 @@
 import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { gunzipSync } from "node:zlib";
+import { readFeedV2 } from "./feed-v2";
 
 export type TagSource = "list" | "wikidata" | "titles";
 
@@ -98,11 +99,36 @@ export function readCheckTitles(outDir: string): Map<string, string[]> {
 /** Most titles read per company from the job feed (the job index keeps as many rows). */
 const FEED_TITLES = 300;
 
+/** The first `FEED_TITLES` non-empty titles of a company's feed rows ([id, title, …]). */
+const titlesOfRows = (rows: readonly unknown[][] | undefined) =>
+  (rows ?? [])
+    .slice(0, FEED_TITLES)
+    .map((row) => row[1])
+    .filter((t): t is string => typeof t === "string" && t.length > 0);
+
 /**
- * Job titles from the shared job feed's shards (the "jobs" release, downloaded into `feedDir` with its
- * jobs-manifest.json), by the feed's company key (jobCompanyKey). Missing or unreadable: none.
+ * Job titles from the shared job feed (the "jobs" release, downloaded into `feedDir` by feed.sh), by the
+ * feed's company key (jobCompanyKey). Read from the second format's full copy (jobs-v2-manifest.json and
+ * the snapshot it names); when that isn't there, from the first format's shards (jobs-manifest.json).
+ * Missing or unreadable: none.
  */
 export function readFeedTitles(feedDir: string): Map<string, string[]> {
+  const v2 = readFeedV2(feedDir);
+  if (v2) {
+    const out = new Map<string, string[]>();
+    for (const [key, rows] of Object.entries(v2.state.jobs)) {
+      const titles = titlesOfRows(rows);
+      if (titles.length) out.set(key, titles);
+    }
+    return out;
+  }
+  return readFeedTitlesV1(feedDir);
+}
+
+const V1_SHARD = /^jobs-[a-z0-9-]+-[0-9A-Za-z]+\.json\.gz$/;
+
+/** The first format: one gzipped shard per hiring system, named in jobs-manifest.json. */
+function readFeedTitlesV1(feedDir: string): Map<string, string[]> {
   const out = new Map<string, string[]>();
   const manifestPath = join(feedDir, "jobs-manifest.json");
   if (!existsSync(manifestPath)) return out;
@@ -113,15 +139,14 @@ export function readFeedTitles(feedDir: string): Map<string, string[]> {
     return out;
   }
   for (const { file } of Object.values(manifest.shards ?? {})) {
-    const path = join(feedDir, file.replace(/^.*[\\/]/, ""));
+    // Only plain shard file names, as feed.sh downloads them.
+    if (typeof file !== "string" || !V1_SHARD.test(file)) continue;
+    const path = join(feedDir, file);
     if (!existsSync(path)) continue;
     try {
       const shard = JSON.parse(gunzipSync(readFileSync(path)).toString("utf8")) as { companies?: Record<string, { jobs?: unknown[][] }> };
       for (const [key, c] of Object.entries(shard.companies ?? {})) {
-        const titles = (c.jobs ?? [])
-          .slice(0, FEED_TITLES)
-          .map((row) => row[1])
-          .filter((t): t is string => typeof t === "string" && t.length > 0);
+        const titles = titlesOfRows(c.jobs);
         if (titles.length) out.set(key, titles);
       }
     } catch (err) {

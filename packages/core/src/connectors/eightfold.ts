@@ -1,7 +1,7 @@
-import type { NormalizedJob, Workplace } from "../schema";
+import type { CompanyRef, NormalizedJob, Workplace } from "../schema";
 import { htmlToText, inferWorkplace } from "../text";
 import { HttpError } from "../http";
-import { jobId, type Connector, type Ctx } from "./types";
+import { jobId, SEARCH_MAX_POSTINGS, type Connector, type Ctx } from "./types";
 
 /**
  * Eightfold AI careers sites, used by large employers: {tenant}.eightfold.ai or the company's own
@@ -50,6 +50,58 @@ async function tenantDomain(ref: { slug: string; shard?: string }, http: Ctx["ht
 
 const isForbidden = (err: unknown) => err instanceof HttpError && err.status === 403;
 
+/** The tenant's positions, or those matching `query`, up to `max`. */
+async function list(ref: CompanyRef, http: Ctx["http"], query: string, max: number) {
+  if (!HOST.test(ref.slug)) throw new Error(`Eightfold careers site should be a host name, got "${ref.slug}"`);
+  const host = ref.slug.toLowerCase();
+  const domain = await tenantDomain(ref, http);
+  const q = (start: number) => `domain=${encodeURIComponent(domain)}&start=${start}${query ? `&query=${encodeURIComponent(query)}` : ""}`;
+  const pcsx = async (start: number): Promise<{ total: number; jobs: EightfoldJob[] }> => {
+    const page = await http.getJson<Pcsx>(`https://${host}/api/pcsx/search?${q(start)}`);
+    const jobs = (page.data?.positions ?? []).map((p) => ({
+      id: p.id,
+      name: p.name,
+      locations: p.locations,
+      department: p.department,
+      workLocationOption: p.workLocationOption,
+      postedTs: p.postedTs,
+      url: p.positionUrl ? `https://${host}${p.positionUrl}` : undefined,
+      api: "pcsx" as const,
+      domain,
+    }));
+    return { total: page.data?.count ?? 0, jobs };
+  };
+  const v2 = async (start: number): Promise<{ total: number; jobs: EightfoldJob[] }> => {
+    const page = await http.getJson<V2>(`https://${host}/api/apply/v2/jobs?${q(start)}`);
+    const jobs = (page.positions ?? []).map((p) => ({
+      id: p.id,
+      name: p.name,
+      locations: p.locations,
+      department: p.department,
+      workLocationOption: p.work_location_option,
+      postedTs: p.t_create,
+      url: p.canonicalPositionUrl,
+      description: p.job_description,
+      api: "v2" as const,
+      domain,
+    }));
+    return { total: page.count ?? 0, jobs };
+  };
+  // "PCSX is not enabled for this user" (403): this tenant serves the v2 API instead.
+  let read = pcsx;
+  let page = await pcsx(0).catch((err) => {
+    if (!isForbidden(err)) throw err;
+    read = v2;
+    return v2(0);
+  });
+  const out = [...page.jobs];
+  for (let start = PAGE; page.jobs.length && start < Math.min(page.total, max); start += PAGE) {
+    page = await read(start);
+    out.push(...page.jobs);
+  }
+  return { out, total: page.total };
+}
+
 export const eightfold: Connector<EightfoldJob> = {
   ats: "eightfold",
 
@@ -62,56 +114,14 @@ export const eightfold: Connector<EightfoldJob> = {
   },
 
   async fetch(ref, { http, partial }) {
-    if (!HOST.test(ref.slug)) throw new Error(`Eightfold careers site should be a host name, got "${ref.slug}"`);
-    const host = ref.slug.toLowerCase();
-    const domain = await tenantDomain(ref, http);
-    const q = (start: number) => `domain=${encodeURIComponent(domain)}&start=${start}`;
-    const pcsx = async (start: number): Promise<{ total: number; jobs: EightfoldJob[] }> => {
-      const page = await http.getJson<Pcsx>(`https://${host}/api/pcsx/search?${q(start)}`);
-      const jobs = (page.data?.positions ?? []).map((p) => ({
-        id: p.id,
-        name: p.name,
-        locations: p.locations,
-        department: p.department,
-        workLocationOption: p.workLocationOption,
-        postedTs: p.postedTs,
-        url: p.positionUrl ? `https://${host}${p.positionUrl}` : undefined,
-        api: "pcsx" as const,
-        domain,
-      }));
-      return { total: page.data?.count ?? 0, jobs };
-    };
-    const v2 = async (start: number): Promise<{ total: number; jobs: EightfoldJob[] }> => {
-      const page = await http.getJson<V2>(`https://${host}/api/apply/v2/jobs?${q(start)}`);
-      const jobs = (page.positions ?? []).map((p) => ({
-        id: p.id,
-        name: p.name,
-        locations: p.locations,
-        department: p.department,
-        workLocationOption: p.work_location_option,
-        postedTs: p.t_create,
-        url: p.canonicalPositionUrl,
-        description: p.job_description,
-        api: "v2" as const,
-        domain,
-      }));
-      return { total: page.count ?? 0, jobs };
-    };
-    // "PCSX is not enabled for this user" (403): this tenant serves the v2 API instead.
-    let read = pcsx;
-    let page = await pcsx(0).catch((err) => {
-      if (!isForbidden(err)) throw err;
-      read = v2;
-      return v2(0);
-    });
-    const out = [...page.jobs];
-    for (let start = PAGE; page.jobs.length && start < Math.min(page.total, MAX_POSTINGS); start += PAGE) {
-      page = await read(start);
-      out.push(...page.jobs);
-    }
+    const { out, total } = await list(ref, http, "", MAX_POSTINGS);
     // Stopped at the cap (or the API stopped early) well short of the total it reports.
-    if (page.total - out.length >= PAGE) partial?.();
+    if (total - out.length >= PAGE) partial?.();
     return out;
+  },
+
+  async search(ref, term, { http }) {
+    return (await list(ref, http, term, SEARCH_MAX_POSTINGS)).out;
   },
 
   async describe(raw, ref, { http }) {

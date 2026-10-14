@@ -142,11 +142,11 @@ export async function cmdRun(args: string[]): Promise<number> {
   };
   try {
     return await scanSession(values, dataDir, { busy, sync }, async () => {
-      const { result, merged, summary, checks, moves, stopped, resting, chronic } = await scan(config, {
+      const { result, merged, summary, checks, moves, stopped, resting, quiet, chronic } = await scan(config, {
         ...sessionOptions(values, dataDir, scope),
         onStart: (s) =>
           console.error(
-            `Checking ${values.only?.length ? values.only.join(", ") : `${s.yours.length} of your companies`}${s.extra ? ` and ${s.extra.toLocaleString()} ${s.scope === "all" ? "more from the directory" : "in your industries"}` : ""}${s.resumed ? ` (resuming: ${s.resumed.toLocaleString()} done already)` : ""}${s.skippedByFeed ? ` (${s.skippedByFeed.toLocaleString()} skipped: nothing for you in the shared job feed)` : ""}${s.resting ? ` (${s.resting.toLocaleString()} resting after failing)` : ""}, about ${duration(s.seconds)}...\n`,
+            `Checking ${values.only?.length ? values.only.join(", ") : `${s.yours.length} of your companies`}${s.extra ? ` and ${s.extra.toLocaleString()} ${s.scope === "all" ? "more from the directory" : "in your industries"}` : ""}${s.resumed ? ` (resuming: ${s.resumed.toLocaleString()} done already)` : ""}${s.skippedByFeed ? ` (${s.skippedByFeed.toLocaleString()} skipped: nothing for you in the shared job feed)` : ""}${s.resting ? ` (${s.resting.toLocaleString()} resting after failing)` : ""}${s.quiet ? ` (${s.quiet.toLocaleString()} quiet: unchanged for weeks)` : ""}, about ${duration(s.seconds)}...\n`,
           ),
         onCompanyDone: (h) => {
           // A whole-directory scan prints your companies, matches and failures, not 17,000 lines.
@@ -173,6 +173,10 @@ export async function cmdRun(args: string[]): Promise<number> {
         if (failed.length > 50) console.log(`  …and ${failed.length - 50} more`);
       }
       if (resting) console.log(`\n${resting.toLocaleString()} board${resting === 1 ? "" : "s"} left alone this scan: failed last time, tried again after a rest (up to a day; 6 hours for yours).`);
+      if (quiet)
+        console.log(
+          `${resting ? "" : "\n"}${quiet.toLocaleString()} quiet directory board${quiet === 1 ? "" : "s"} left alone: no jobs added or removed for 2 weeks or more, checked once a day (every 3 days after 45 days).`,
+        );
       if (chronic.length) {
         console.log(`\n${chronic.length} board${chronic.length === 1 ? " hasn't" : "s haven't"} worked for 30 days or more (tried once a day now; every 6 hours for yours):`);
         for (const name of chronic.slice(0, 20)) console.log(`  ${name}`);
@@ -327,7 +331,9 @@ export async function notifyFinished(config: Config, newJobs: Job[], stopped: bo
 
 export function healthLine(h: CompanyHealth): string {
   if (!h.ok) return h.error ?? "failed";
-  return `${String(h.jobsFound).padStart(4)} jobs, ${h.matches} match${h.matches === 1 ? "" : "es"} (${(h.durationMs / 1000).toFixed(1)}s)`;
+  // Past a board's cap, the jobs its search for your titles found (counted in jobsFound too).
+  const searched = h.searchFound ? ` (${h.searchFound} past the cap, from searching your titles)` : "";
+  return `${String(h.jobsFound).padStart(4)} jobs${searched}, ${h.matches} match${h.matches === 1 ? "" : "es"} (${(h.durationMs / 1000).toFixed(1)}s)`;
 }
 
 export function printJobs(jobs: Job[], min: number): void {

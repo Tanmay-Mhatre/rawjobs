@@ -1,7 +1,7 @@
-import type { NormalizedJob } from "../schema";
+import type { CompanyRef, NormalizedJob } from "../schema";
 import { htmlToText, inferWorkplace } from "../text";
 import { detectAs, isoDate } from "./parse";
-import { jobCompanyKey, type Connector } from "./types";
+import { jobCompanyKey, SEARCH_MAX_POSTINGS, type Connector, type Ctx } from "./types";
 
 /** A row of a Taleo career section's job board (the section's own REST search). */
 export type TaleoRequisition = {
@@ -21,10 +21,10 @@ const base = (ref: { slug: string }) => `https://${ref.slug}.taleo.net/careersec
 /** "2" is Taleo's default external section name. */
 const sectionOf = (ref: { site?: string }) => ref.site || "2";
 
-const SEARCH = (pageNo: number) => ({
+const SEARCH = (pageNo: number, keyword: string) => ({
   multilineEnabled: false,
   sortingSelection: { sortBySelectionParam: "3", ascendingSortingOrder: "false" },
-  fieldData: { fields: { KEYWORD: "", LOCATION: "" }, valid: true },
+  fieldData: { fields: { KEYWORD: keyword, LOCATION: "" }, valid: true },
   filterSelectionParam: { searchFilterSelections: [] },
   advancedSearchFiltersSelectionParam: { searchFilterSelections: [] },
   pageNo,
@@ -52,33 +52,43 @@ function decodeLoose(s: string): string {
   return out.replace(/\\(.)/g, "$1");
 }
 
+/** The section's job board, or its results for KEYWORD, up to `maxPages` pages. */
+async function list(ref: CompanyRef, http: Ctx["http"], keyword: string, maxPages: number) {
+  // The search needs the section's portal number, which only its search page shows.
+  const page = await http.getText(`${base(ref)}/${encodeURIComponent(sectionOf(ref))}/jobsearch.ftl?lang=en`);
+  const portal = page.match(/portal=(\d+)/)?.[1];
+  if (!portal) throw new Error(`Taleo career section "${sectionOf(ref)}" not found on ${ref.slug}.taleo.net`);
+  const out: TaleoRequisition[] = [];
+  let total = 0;
+  for (let pageNo = 1; pageNo <= maxPages; pageNo++) {
+    const res = await http.request(`${base(ref)}/rest/jobboard/searchjobs?lang=en&portal=${portal}`, {
+      method: "POST",
+      headers: { accept: "application/json", "content-type": "application/json", tz: "GMT+00:00" },
+      body: JSON.stringify(SEARCH(pageNo, keyword)),
+    });
+    const data = (await res.json()) as Search;
+    if (!Array.isArray(data.requisitionList)) throw new Error("unexpected Taleo response: no requisitionList");
+    out.push(...data.requisitionList);
+    total = data.pagingData?.totalCount ?? 0;
+    const size = data.pagingData?.pageSize || 25;
+    if (pageNo * size >= (data.pagingData?.totalCount ?? 0) || data.requisitionList.length === 0) break;
+  }
+  return { out, total };
+}
+
 export const taleo: Connector<TaleoRequisition> = {
   ats: "taleo",
   detect: detectAs("taleo"),
 
   async fetch(ref, { http, partial }) {
-    // The search needs the section's portal number, which only its search page shows.
-    const page = await http.getText(`${base(ref)}/${encodeURIComponent(sectionOf(ref))}/jobsearch.ftl?lang=en`);
-    const portal = page.match(/portal=(\d+)/)?.[1];
-    if (!portal) throw new Error(`Taleo career section "${sectionOf(ref)}" not found on ${ref.slug}.taleo.net`);
-    const out: TaleoRequisition[] = [];
-    let total = 0;
-    for (let pageNo = 1; pageNo <= MAX_PAGES; pageNo++) {
-      const res = await http.request(`${base(ref)}/rest/jobboard/searchjobs?lang=en&portal=${portal}`, {
-        method: "POST",
-        headers: { accept: "application/json", "content-type": "application/json", tz: "GMT+00:00" },
-        body: JSON.stringify(SEARCH(pageNo)),
-      });
-      const data = (await res.json()) as Search;
-      if (!Array.isArray(data.requisitionList)) throw new Error("unexpected Taleo response: no requisitionList");
-      out.push(...data.requisitionList);
-      total = data.pagingData?.totalCount ?? 0;
-      const size = data.pagingData?.pageSize || 25;
-      if (pageNo * size >= (data.pagingData?.totalCount ?? 0) || data.requisitionList.length === 0) break;
-    }
+    const { out, total } = await list(ref, http, "", MAX_PAGES);
     // Stopped at the cap (or the API stopped early) well short of the total it reports.
     if (total - out.length >= 25) partial?.();
     return out;
+  },
+
+  async search(ref, term, { http }) {
+    return (await list(ref, http, term, Math.ceil(SEARCH_MAX_POSTINGS / 25))).out;
   },
 
   normalize(raw, ref): NormalizedJob {
