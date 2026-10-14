@@ -48,6 +48,7 @@ import { hackernews } from "./hackernews";
 import { himalayas } from "./himalayas";
 import { jobicy } from "./jobicy";
 import { weworkremotely } from "./weworkremotely";
+import { remotefirstjobs } from "./remotefirstjobs";
 import { remoteok } from "./remoteok";
 import { remotive } from "./remotive";
 import type { Connector, DetectedCompany } from "./types";
@@ -112,6 +113,7 @@ export const connectors: Partial<Record<AtsType, Connector<any>>> = {
   himalayas,
   jobicy,
   weworkremotely,
+  remotefirstjobs,
 };
 
 export function getConnector(ats: AtsType): Connector<unknown> | undefined {

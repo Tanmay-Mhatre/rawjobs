@@ -64,7 +64,7 @@ connector. A system fails when none of its boards gives jobs with a title, link 
 some don't; systems with no live board in the directory are skipped. Failures open one "Hiring system
 checks failing" issue, which closes itself once none fails; the full table is in the run's summary.
 
-Public job boards: Hacker News "Who is hiring", Remotive, Arbeitnow, Remote OK, Himalayas, Jobicy and We Work Remotely, added the same way,
+Public job boards: Hacker News "Who is hiring", Remotive, Arbeitnow, Remote OK, Himalayas, Jobicy, We Work Remotely and Remote First Jobs, added the same way,
 by pasting their link.
 
 The connectors are in [`packages/core/src/connectors/`](../packages/core/src/connectors/). Each one
