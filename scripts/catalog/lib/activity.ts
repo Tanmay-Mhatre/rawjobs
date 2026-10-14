@@ -25,7 +25,7 @@ import {
   type FeedManifestV2,
   type FeedState,
 } from "@rawjobs/core";
-import { brotli, readFeedV2, sha } from "./feed-v2";
+import { brotli, readFeed, sha, type FeedFormat } from "./feed-v2";
 
 /** [day number, new roles, internships, graduate roles, reposts (new ids reusing a title)] */
 export type DayCounts = [number, number, number, number, number];
@@ -47,6 +47,8 @@ export type ActivityState = {
   schema: number;
   /** The feed version last recorded. */
   seq: number;
+  /** The feed format whose versions `seq` counts (absent: the second). */
+  feed?: FeedFormat;
   /** The day last recorded. */
   date: string;
   /** The first day whose new roles were counted (the second recorded run). */
@@ -191,7 +193,7 @@ export function toActivityFile(state: ActivityState, today: FeedState, generated
 
 /** The state carried between runs, in the feed's folder. */
 export const ACTIVITY_STATE = "activity-state.json";
-const MANIFEST = "jobs-v2-manifest.json";
+const MANIFEST = (f: FeedFormat) => `jobs-v${f}-manifest.json`;
 
 /** Write next to the file, then rename: a run cut short never leaves half a file. */
 const writeWhole = (path: string, body: string | Buffer) => {
@@ -202,12 +204,14 @@ const writeWhole = (path: string, body: string | Buffer) => {
 export type ActivityResult = { file: ActivityFile; bytes: number; stateBytes: number; notes: string[] };
 
 /**
- * Record today's run of the feed in `out` (its second format: manifest, full copy and change file) and
- * publish jobs-activity-<seq>.json.br. Writes the state, the file, and last the manifest with its
- * `activity` entry, so a failure anywhere leaves the manifest as jobs.ts wrote it.
+ * Record this run of the feed in `out` (manifest, full copy and change file: the third format, every
+ * hiring system, or else the second) and publish jobs-activity-<seq>.json.br. Writes the state, the
+ * file, and last each manifest with its `activity` entry (older apps read it from the second format's),
+ * so a failure anywhere leaves the manifests as jobs.ts wrote them.
  */
 export function writeActivity(out: string): ActivityResult {
-  const feed = readFeedV2(out);
+  const format: FeedFormat = existsSync(join(out, MANIFEST(3))) ? 3 : 2;
+  const feed = readFeed(out, format);
   if (!feed) throw new Error(`no feed in ${out}: run jobs.ts first`);
   const { manifest, state: today } = feed;
   const notes: string[] = [];
@@ -219,9 +223,14 @@ export function writeActivity(out: string): ActivityResult {
   const statePath = join(out, ACTIVITY_STATE);
   let state = existsSync(statePath) ? (JSON.parse(readFileSync(statePath, "utf8")) as ActivityState) : emptyActivityState();
   if (state.schema !== ACTIVITY_SCHEMA) state = emptyActivityState();
+  if ((state.feed ?? 2) !== format) {
+    // Another format numbers its versions afresh: keep the records and take this run as a starting point.
+    if (state.seq) notes.push(`now recording the feed's format ${format}; this run's new roles go uncounted`);
+    state = { ...state, seq: 0 };
+  }
   if (state.seq && state.seq < manifest.seq - 1) notes.push(`runs ${state.seq + 1}-${manifest.seq - 1} weren't recorded; their new roles go uncounted`);
   if (!diff) notes.push("no change file today; today's new roles go uncounted");
-  state = recordActivity(state, today, diff, { seq: manifest.seq, date: manifest.generated_at.slice(0, 10) });
+  state = { ...recordActivity(state, today, diff, { seq: manifest.seq, date: manifest.generated_at.slice(0, 10) }), feed: format };
   const stateJson = JSON.stringify(state);
   writeWhole(statePath, stateJson);
 
@@ -230,7 +239,12 @@ export function writeActivity(out: string): ActivityResult {
   const name = `jobs-activity-${manifest.seq}.json.br`;
   writeWhole(join(out, name), buf);
   for (const f of readdirSync(out)) if (/^jobs-activity-\d+\.json\.br$/.test(f) && f !== name) rmSync(join(out, f));
-  const next: FeedManifestV2 = { ...manifest, activity: { file: name, sha256: sha(buf), bytes: buf.length } };
-  writeWhole(join(out, MANIFEST), `${JSON.stringify(next, null, 2)}\n`);
+  const activity = { file: name, sha256: sha(buf), bytes: buf.length };
+  for (const f of [3, 2] as const) {
+    const path = join(out, MANIFEST(f));
+    if (!existsSync(path)) continue;
+    const next: FeedManifestV2 = { ...(JSON.parse(readFileSync(path, "utf8")) as FeedManifestV2), activity };
+    writeWhole(path, `${JSON.stringify(next, null, 2)}\n`);
+  }
   return { file, bytes: buf.length, stateBytes: stateJson.length, notes };
 }

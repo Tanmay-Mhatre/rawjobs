@@ -1,0 +1,18 @@
+# Starts the job feed workflow every 6 hours (src/index.ts). Not deployed by CI. To deploy:
+#   cd services/feed-trigger
+#   npx wrangler@4.149.0 secret put GITHUB_TOKEN    # fine-grained token, app repo, "Actions: read and write"
+#   npx wrangler@4.149.0 deploy
+# Test once: npx wrangler@4.149.0 dev --test-scheduled, then curl "http://localhost:8787/__scheduled"
+# (this really starts a run; the workflow skips it when the feed is under 4 hours old).
+name = "rawjobs-feed-trigger"
+main = "src/index.ts"
+compatibility_date = "2026-09-01"
+
+# 10 minutes before GitHub's own cron (23 */6), so this one usually starts the run.
+[triggers]
+crons = ["13 */6 * * *"]
+
+[vars]
+REPO = "Tanmay-Mhatre/rawjobs"
+WORKFLOW = "jobs-daily.yml"
+REF = "main"
