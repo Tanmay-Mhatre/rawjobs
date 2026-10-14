@@ -11,7 +11,7 @@
   },
   "dependencies": {
     "@rawjobs/core": "workspace:*",
-    "lucide-react": "^1.54.0",
+    "lucide-react": "^1.55.0",
     "mammoth": "^1.13.0",
     "minisearch": "^7.2.0",
     "pdfjs-dist": "^6.4.299",
