@@ -1,7 +1,7 @@
-import type { NormalizedJob, Workplace } from "../schema";
+import type { CompanyRef, NormalizedJob, Workplace } from "../schema";
 import { htmlToText, inferWorkplace } from "../text";
 import { isoDate } from "./parse";
-import { jobId, type Connector, type Ctx } from "./types";
+import { jobId, SEARCH_MAX_POSTINGS, type Connector, type Ctx } from "./types";
 
 /**
  * Paycom, payroll and HR for US employers. A company's careers portal is
@@ -46,6 +46,44 @@ async function json<T>(http: Ctx["http"], url: string, init: RequestInit): Promi
   return (await res.json()) as T;
 }
 
+/** The portal's postings, or those matching `keywordSearchText`, up to `max`. */
+async function list(ref: CompanyRef, http: Ctx["http"], keywordSearchText: string, max: number) {
+  if (!KEY.test(ref.slug)) throw new Error(`Paycom client key should be 32 hex characters, got "${ref.slug}"`);
+  const s = await session(ref.slug, http);
+  const out: PaycomJob[] = [];
+  const seen = new Set<number>();
+  let total = 0;
+  for (let skip = 0; skip < max; skip += PAGE) {
+    const body = {
+      skip,
+      take: PAGE,
+      filtersForQuery: {
+        distanceFrom: 0,
+        workEnvironments: [],
+        positionTypes: [],
+        educationLevels: [],
+        categories: [],
+        travelTypes: [],
+        shiftTypes: [],
+        otherFilters: [],
+        keywordSearchText,
+        location: "",
+        sortOption: "",
+      },
+    };
+    const page = await json<Search>(http, `${s.api}/job-posting-previews/search`, { method: "POST", headers: headers(s), body: JSON.stringify(body) });
+    if (!Array.isArray(page.jobPostingPreviews)) throw new Error("unexpected Paycom response: no jobPostingPreviews");
+    const fresh = page.jobPostingPreviews.filter((j) => !seen.has(j.jobId));
+    for (const j of fresh) {
+      seen.add(j.jobId);
+      out.push({ ...j, session: s });
+    }
+    total = page.jobPostingPreviewsCount ?? 0;
+    if (!fresh.length || out.length >= total) break;
+  }
+  return { out, total };
+}
+
 export const paycom: Connector<PaycomJob> = {
   ats: "paycom",
 
@@ -58,42 +96,14 @@ export const paycom: Connector<PaycomJob> = {
   },
 
   async fetch(ref, { http, partial }) {
-    if (!KEY.test(ref.slug)) throw new Error(`Paycom client key should be 32 hex characters, got "${ref.slug}"`);
-    const s = await session(ref.slug, http);
-    const out: PaycomJob[] = [];
-    const seen = new Set<number>();
-    let total = 0;
-    for (let skip = 0; skip < MAX_POSTINGS; skip += PAGE) {
-      const body = {
-        skip,
-        take: PAGE,
-        filtersForQuery: {
-          distanceFrom: 0,
-          workEnvironments: [],
-          positionTypes: [],
-          educationLevels: [],
-          categories: [],
-          travelTypes: [],
-          shiftTypes: [],
-          otherFilters: [],
-          keywordSearchText: "",
-          location: "",
-          sortOption: "",
-        },
-      };
-      const page = await json<Search>(http, `${s.api}/job-posting-previews/search`, { method: "POST", headers: headers(s), body: JSON.stringify(body) });
-      if (!Array.isArray(page.jobPostingPreviews)) throw new Error("unexpected Paycom response: no jobPostingPreviews");
-      const fresh = page.jobPostingPreviews.filter((j) => !seen.has(j.jobId));
-      for (const j of fresh) {
-        seen.add(j.jobId);
-        out.push({ ...j, session: s });
-      }
-      total = page.jobPostingPreviewsCount ?? 0;
-      if (!fresh.length || out.length >= total) break;
-    }
+    const { out, total } = await list(ref, http, "", MAX_POSTINGS);
     // Stopped at the cap (or the API stopped early) well short of the total it reports.
     if (total - out.length >= PAGE) partial?.();
     return out;
+  },
+
+  async search(ref, term, { http }) {
+    return (await list(ref, http, term, SEARCH_MAX_POSTINGS)).out;
   },
 
   async describe(raw, _ref, { http }) {

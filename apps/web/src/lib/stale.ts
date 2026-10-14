@@ -74,3 +74,9 @@ export const staleReasons = (j: Job, ctx?: StaleCtx): string[] => signals(j, ctx
  * Weak: posted 60-120 days ago, reposted once, or a description under 300 characters.
  */
 export const isStale = (j: Job, ctx?: StaleCtx): boolean => signals(j, ctx).reduce((sum, s) => sum + s.weight, 0) >= 2;
+
+/**
+ * A role posted in several places may be stale only when every posting is: one fresh posting means the
+ * role is still live. `ctxOf` gives each posting's context (the drawer has one description's length).
+ */
+export const isRoleStale = (postings: readonly Job[], ctxOf: (j: Job) => StaleCtx | undefined = () => undefined): boolean => postings.length > 0 && postings.every((j) => isStale(j, ctxOf(j)));

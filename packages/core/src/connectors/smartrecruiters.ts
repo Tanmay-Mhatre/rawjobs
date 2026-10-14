@@ -1,6 +1,8 @@
-import type { NormalizedJob, Workplace } from "../schema";
+import type { CompanyRef, NormalizedJob, Workplace } from "../schema";
 import { htmlToText } from "../text";
-import { firstPathSegment, jobId, type Connector } from "./types";
+import { HttpError } from "../http";
+import { urlOf } from "./parse";
+import { firstPathSegment, jobId, SEARCH_MAX_POSTINGS, type Connector, type Ctx } from "./types";
 
 /** https://developers.smartrecruiters.com/docs/posting-api (official, keyless for public postings) */
 export type SmartRecruitersPosting = {
@@ -34,6 +36,21 @@ function countryName(code?: string): string | undefined {
   }
 }
 
+/** The company's postings, or those the API's full-text `q` finds, up to `max`. */
+async function list(ref: CompanyRef, http: Ctx["http"], q: string, max: number) {
+  const out: SmartRecruitersPosting[] = [];
+  let total = 0;
+  for (let offset = 0; offset < max; offset += PAGE) {
+    const page = await http.getJson<Page>(`${API}/${encodeURIComponent(ref.slug)}/postings?limit=${PAGE}&offset=${offset}${q ? `&q=${encodeURIComponent(q)}` : ""}`);
+    if (!Array.isArray(page.content)) throw new Error("unexpected SmartRecruiters response: no content array");
+    out.push(...page.content);
+    total = page.totalFound;
+    // An unknown company id answers 200 with totalFound 0, so an empty result is not proof the board exists.
+    if (offset + PAGE >= page.totalFound || page.content.length === 0) break;
+  }
+  return { out, total };
+}
+
 export const smartrecruiters: Connector<SmartRecruitersPosting> = {
   ats: "smartrecruiters",
 
@@ -48,19 +65,17 @@ export const smartrecruiters: Connector<SmartRecruitersPosting> = {
   },
 
   async fetch(ref, { http, partial }) {
-    const out: SmartRecruitersPosting[] = [];
-    let total = 0;
-    for (let offset = 0; offset < MAX_POSTINGS; offset += PAGE) {
-      const page = await http.getJson<Page>(`${API}/${encodeURIComponent(ref.slug)}/postings?limit=${PAGE}&offset=${offset}`);
-      if (!Array.isArray(page.content)) throw new Error("unexpected SmartRecruiters response: no content array");
-      out.push(...page.content);
-      total = page.totalFound;
-      // An unknown company id answers 200 with totalFound 0, so an empty result is not proof the board exists.
-      if (offset + PAGE >= page.totalFound || page.content.length === 0) break;
-    }
+    const { out, total } = await list(ref, http, "", MAX_POSTINGS);
     // Stopped at the cap (or the API stopped early) well short of the total it reports.
     if (total - out.length >= PAGE) partial?.();
     return out;
+  },
+
+  async search(ref, term, { http }) {
+    // Unquoted, q matches any of the words ("software engineer" finds every engineer, in no useful
+    // order); quoted, it matches the phrase.
+    const words = term.replace(/"/g, " ").trim().replace(/\s+/g, " ");
+    return (await list(ref, http, words.includes(" ") ? `"${words}"` : words, SEARCH_MAX_POSTINGS)).out;
   },
 
   normalize(raw, ref): NormalizedJob {
@@ -92,5 +107,22 @@ export const smartrecruiters: Connector<SmartRecruitersPosting> = {
       .map((k) => htmlToText(sections[k]?.text))
       .filter(Boolean)
       .join("\n\n");
+  },
+
+  /**
+   * The posting's API address: a taken-down posting still answers 200 for a while, with "active": false
+   * (checked 2026-10-14), and 404 once it's gone. Links are jobs.smartrecruiters.com/Acme/{id}[-title].
+   */
+  async isOpen(job, { http }) {
+    const url = urlOf(job.url);
+    const board = url ? smartrecruiters.detect(url) : null;
+    const id = board ? url?.pathname.split("/").filter(Boolean)[1]?.match(/^\d+/)?.[0] : undefined;
+    if (!board || !id) return undefined;
+    try {
+      const posting = await http.getJson<{ id?: string; active?: boolean }>(`${API}/${encodeURIComponent(board.slug)}/postings/${id}`);
+      return posting.id === id && typeof posting.active === "boolean" ? posting.active : undefined;
+    } catch (err) {
+      return err instanceof HttpError && (err.status === 404 || err.status === 410) ? false : undefined;
+    }
   },
 };

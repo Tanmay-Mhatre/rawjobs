@@ -1,7 +1,7 @@
-import type { NormalizedJob, Workplace } from "../schema";
+import type { CompanyRef, NormalizedJob, Workplace } from "../schema";
 import { htmlToText, inferWorkplace } from "../text";
-import { detectAs, isoDate, relativePosted } from "./parse";
-import { jobCompanyKey, workdayJobKey, type Connector } from "./types";
+import { detectAs, isoDate, openByStatus, relativePosted, urlOf } from "./parse";
+import { jobCompanyKey, SEARCH_MAX_POSTINGS, workdayJobKey, type Connector, type Ctx } from "./types";
 
 /** The careers site's own JSON API (/wday/cxs/{tenant}/{site}/jobs), keyless. */
 export type WorkdayPosting = {
@@ -37,25 +37,35 @@ const WORKPLACE: Record<string, Workplace> = { remote: "remote", hybrid: "hybrid
 const host = (ref: { slug: string; shard?: string }) => `https://${ref.slug}.${ref.shard}.myworkdayjobs.com`;
 const api = (ref: { slug: string; shard?: string; site?: string }) => `${host(ref)}/wday/cxs/${encodeURIComponent(ref.slug)}/${encodeURIComponent(ref.site ?? "")}`;
 
+/** The careers site's job list, or its search results for `searchText`, up to `max` postings. */
+async function list(ref: CompanyRef, { http, now }: Ctx, searchText: string, max: number) {
+  if (!ref.shard || !ref.site) throw new Error('workday needs "shard" and "site" from the careers URL');
+  const out: WorkdayPosting[] = [];
+  let total = Infinity;
+  for (let offset = 0; offset < Math.min(total, max); offset += PAGE) {
+    const page = await http.postJson<Page>(`${api(ref)}/jobs`, { appliedFacets: {}, limit: PAGE, offset, searchText });
+    if (!Array.isArray(page.jobPostings)) throw new Error("unexpected Workday response: no jobPostings array");
+    // Only the first page carries the total; later pages say 0.
+    if (offset === 0) total = page.total ?? 0;
+    out.push(...page.jobPostings.map((p) => ({ ...p, postedAt: relativePosted(p.postedOn, now) })));
+    if (page.jobPostings.length < PAGE) break;
+  }
+  return { out, total };
+}
+
 export const workday: Connector<WorkdayPosting> = {
   ats: "workday",
   detect: detectAs("workday"),
 
-  async fetch(ref, { http, now, partial }) {
-    if (!ref.shard || !ref.site) throw new Error('workday needs "shard" and "site" from the careers URL');
-    const out: WorkdayPosting[] = [];
-    let total = Infinity;
-    for (let offset = 0; offset < Math.min(total, MAX_POSTINGS); offset += PAGE) {
-      const page = await http.postJson<Page>(`${api(ref)}/jobs`, { appliedFacets: {}, limit: PAGE, offset, searchText: "" });
-      if (!Array.isArray(page.jobPostings)) throw new Error("unexpected Workday response: no jobPostings array");
-      // Only the first page carries the total; later pages say 0.
-      if (offset === 0) total = page.total ?? 0;
-      out.push(...page.jobPostings.map((p) => ({ ...p, postedAt: relativePosted(p.postedOn, now) })));
-      if (page.jobPostings.length < PAGE) break;
-    }
+  async fetch(ref, ctx) {
+    const { out, total } = await list(ref, ctx, "", MAX_POSTINGS);
     // Stopped at the cap (or the API stopped early) well short of the total it reports.
-    if (total - out.length >= PAGE) partial?.();
+    if (total - out.length >= PAGE) ctx.partial?.();
     return out;
+  },
+
+  async search(ref, term, ctx) {
+    return (await list(ref, ctx, term, SEARCH_MAX_POSTINGS)).out;
   },
 
   normalize(raw, ref): NormalizedJob {
@@ -84,5 +94,30 @@ export const workday: Connector<WorkdayPosting> = {
       country: d.country?.descriptor,
       postedAt: raw.postedAt ?? isoDate(d.startDate),
     };
+  },
+
+  /**
+   * The job's detail address (the one describe() reads) answers 200 while it's up. A 404 alone proves
+   * nothing: a title edit moves the address and the job stays (seen 2026-10-14). So the board's search
+   * is asked for the requisition number too: closed only when that finds nothing at all. Links are
+   * {tenant}.wd5.myworkdayjobs.com/[en-US/]{site}/job/{place}/{title}_{req}.
+   */
+  async isOpen(job, { http }) {
+    const url = urlOf(job.url);
+    const board = url ? workday.detect(url) : null;
+    const at = url?.pathname.indexOf("/job/") ?? -1;
+    if (!board?.shard || !board.site || !url || at < 0) return undefined;
+    const path = url.pathname.slice(at);
+    const open = await openByStatus(http, `${api(board)}${path}`);
+    if (open !== false) return open;
+    const req = workdayJobKey(path);
+    try {
+      const page = await http.postJson<Page>(`${api(board)}/jobs`, { appliedFacets: {}, limit: PAGE, offset: 0, searchText: req });
+      if (!Array.isArray(page.jobPostings)) return undefined;
+      if (page.jobPostings.some((p) => workdayJobKey(p.externalPath) === req)) return true;
+      return page.total === 0 && !page.jobPostings.length ? false : undefined;
+    } catch {
+      return undefined;
+    }
   },
 };

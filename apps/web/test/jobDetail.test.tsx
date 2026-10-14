@@ -60,6 +60,28 @@ describe("JobDetail", () => {
     expect(c2.querySelector(".rj-drawer__meta")!.textContent).toContain("may be filled");
   });
 
+  it("marks a role's stale postings, with the callout only when every posting may be stale", () => {
+    const reposted = { repostedAt: new Date(Date.now() - 5 * 86_400_000).toISOString(), repostCount: 2 };
+    const dubai = job({ id: "greenhouse:acme:1", location: "Dubai", ...reposted });
+    const london = job({ id: "greenhouse:acme:2", location: "London" });
+    const show = (j: Job, postings: Job[]) => render(<JobDetail job={j} postings={postings} profile={profile} onUpdate={() => {}} isNew />);
+    // Open on the stale posting: the role is still live in London, so no callout, just the note on Dubai.
+    const { container } = show(dubai, [dubai, london]);
+    expect(screen.queryByRole("heading", { name: "May be stale" })).toBeNull();
+    const notes = screen.getAllByText("may be stale");
+    expect(notes).toHaveLength(1);
+    expect(notes[0]!.className).toContain("text-warning-text");
+    expect(notes[0]!.title).toMatch(/^Taken down and posted again twice/);
+    expect(notes[0]!.closest("li")!.textContent).toContain("Dubai");
+    expect(container.querySelector(".rj-drawer__meta")!.textContent).toContain("Reposted");
+    cleanup();
+    // Both stale: the callout is back, and each posting is marked.
+    const londonStale = { ...london, ...reposted };
+    show(londonStale, [dubai, londonStale]);
+    expect(screen.getByRole("heading", { name: "May be stale" })).toBeTruthy();
+    expect(screen.getAllByText("may be stale")).toHaveLength(2);
+  });
+
   it("never uses uppercase classes", () => {
     const { container } = renderDetail(job());
     expect(container.querySelector('[class*="uppercase"]')).toBeNull();

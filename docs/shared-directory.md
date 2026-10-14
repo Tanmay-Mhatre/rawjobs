@@ -120,7 +120,7 @@ each tag comes from one of these sources (`scripts/catalog/lib/tags.ts`):
 |---|---|---|---|
 | Hand-made lists | (absent) | The seed list (`seeds/industries.json`), the curated list's `segment`, crypto-jobs-fyi's `category`. The other public lists have no industry column. | `tags` |
 | Wikidata (CC0) | `wikidata` | The industries (P452) of the ~18k companies `seeds-bulk.ts` reads, fetched by two more item-pair queries in the same run (seconds each). Mapped by a fixed table of Wikidata items (`lib/wikidata.ts`; broad ones like "financial services" count only when nothing more specific does). A company matches by the board `resolve.ts --bulk` found on its website, or by the same name (one Wikidata company has it) and a board named like its website (`visa` for visa.com). | `tags` |
-| Job titles | `titles` | `industriesFromTitles` (8% of titles, at least 2). Role words ("Store Manager", "Cashier") count anywhere; an industry's generic words ("retail", "healthcare", "banking") don't count where they name a customer segment: in a business-to-business selling title ("Account Executive, Retail", "Healthcare Solutions Engineer") or after "for"/"to", so a restaurant-software company isn't tagged Retail. Measured with `scripts/catalog/industry-precision.ts`. Titles come from the job index (Greenhouse, Lever, Ashby, SmartRecruiters); else from the daily job feed's shards (Workday, and boards the index didn't reach), downloaded by `scripts/catalog/feed.sh`; else from the titles a live check read anyway (systems with no cheap count read the whole list: up to 60 distinct titles go to `out/titles.jsonl`, kept in the saved state). No extra requests. | `title_tags` |
+| Job titles | `titles` | `industriesFromTitles` (8% of titles, at least 2). Role words ("Store Manager", "Cashier") count anywhere; an industry's generic words ("retail", "healthcare", "banking") don't count where they name a customer segment: in a business-to-business selling title ("Account Executive, Retail", "Healthcare Solutions Engineer") or after "for"/"to", so a restaurant-software company isn't tagged Retail. Measured with `scripts/catalog/industry-precision.ts`. Titles come from the job index (Greenhouse, Lever, Ashby, SmartRecruiters); else from the daily job feed's full copy (`jobs-v2-snapshot-<seq>.json.br`; the first format's shards if it can't be downloaded) for Workday and boards the index didn't reach, downloaded by `scripts/catalog/feed.sh` (one row per job id, up to 300 titles per company); else from the titles a live check read anyway (systems with no cheap count read the whole list: up to 60 distinct titles go to `out/titles.jsonl`, kept in the saved state). No extra requests. | `title_tags` |
 
 In `directory.json` (and `index.json`) each company keeps `tags` (what the company is: lists,
 Wikidata) and `title_tags` (what it hires for: titles only), as apps have always read them; scans
@@ -294,8 +294,9 @@ only companies whose jobs changed are checked again.
 On real data (1.28M jobs), a day's update takes about 3 s and filtering about 2.5 s; with nothing new,
 filtering is instant. The first format is still published next to it while installs update; drop it
 (and the shard code in `jobs.ts` and `syncJobFeed`) once every supported app reads the second. The
-directory build reads the first format's shards for industry tags (`feed.sh`, `readFeedTitles`):
-move those to the full copy first.
+directory build already reads the full copy for industry tags (`feed.sh`, `readFeedTitles`); it falls
+back to the first format's shards only when the full copy can't be downloaded, so drop that fallback
+with them.
 
 ## One-time setup
 
