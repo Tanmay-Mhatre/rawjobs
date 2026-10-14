@@ -148,7 +148,10 @@ export function RadarPage(p: Props) {
   // Typing in search updates the box at once; the list catches up when React has a moment (useDeferredValue).
   const q = useDeferredValue(filters.q);
   const listFilters = useMemo(() => (q === filters.q ? filters : { ...filters, q }), [filters, q]);
-  const visible = useMemo(() => sortJobs(applyFilters(pool, listFilters, ctx), sort, p.isYours, now), [pool, listFilters, ctx, sort, p.isYours, now]);
+  const visible = useMemo(
+    () => sortJobs(applyFilters(pool, listFilters, ctx), sort, p.isYours, now, profile.salary_floor?.currency),
+    [pool, listFilters, ctx, sort, p.isYours, now, profile.salary_floor?.currency],
+  );
   const groups = useMemo(() => groupJobs(visible), [visible]);
   // One company can't fill the page ("+N more at …"), except in Newest (a plain date order) and when you've
   // picked companies yourself.

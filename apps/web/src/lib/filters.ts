@@ -293,20 +293,59 @@ export function facetCounts(jobs: Job[], f: Filters, ctx: Ctx): Record<FacetKey,
 /** "greenhouse" -> "Greenhouse". */
 export const atsLabel = (ats: string) => ATS_LABEL[ats] ?? ats.charAt(0).toUpperCase() + ats.slice(1);
 
-const salaryOf = (j: Job) => j.salary?.max ?? j.salary?.min ?? -1;
+/** Pay periods as a year of full-time work: 52 weeks, 260 days, 2,080 hours. */
+const PER_YEAR: Record<string, number> = { year: 1, month: 12, week: 52, day: 260, hour: 2080 };
+
+/**
+ * The top of a job's pay range as a yearly figure ("$60 an hour" is 124,800), so hourly, monthly and yearly
+ * pay sort together. A period we can't read counts as yearly, the way most postings state pay.
+ */
+export function yearlyPay(s: Job["salary"]): number | undefined {
+  const v = s?.max ?? s?.min;
+  if (!v || !(v > 0)) return undefined;
+  const period = s?.period?.toLowerCase().match(/year|annual|month|week|day|hour/)?.[0];
+  return v * (PER_YEAR[period === "annual" ? "year" : (period ?? "year")] ?? 1);
+}
+
+const currencyOf = (j: Job) => j.salary?.currency?.trim().toUpperCase() || "";
+
+/**
+ * Salary order without exchange rates: pay in your currency (`currency`, else the one most jobs here use)
+ * first, highest yearly figure first; then each other currency as a block, the most common first, so
+ * ₹2,500,000 never ranks above $200,000 just for being a bigger number. Pay with no currency, then no pay, last.
+ */
+function salaryOrder(jobs: readonly Job[], currency?: string): (a: Job, b: Job) => number {
+  const seen = new Map<string, number>();
+  for (const j of jobs) if (yearlyPay(j.salary) !== undefined && currencyOf(j)) seen.set(currencyOf(j), (seen.get(currencyOf(j)) ?? 0) + 1);
+  const mine = currency?.trim().toUpperCase() || [...seen].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))[0]?.[0];
+  const rank = (j: Job) => {
+    if (yearlyPay(j.salary) === undefined) return Infinity;
+    const c = currencyOf(j);
+    if (!c) return Number.MAX_SAFE_INTEGER;
+    // Your currency first; the others by how many jobs use them (more first), then by code.
+    return c === mine ? -Infinity : -(seen.get(c) ?? 0);
+  };
+  const ranks = new Map(jobs.map((j) => [j, rank(j)]));
+  return (a, b) => {
+    const ra = ranks.get(a)!;
+    const rb = ranks.get(b)!;
+    if (ra !== rb) return ra < rb ? -1 : 1;
+    return currencyOf(a).localeCompare(currencyOf(b)) || (yearlyPay(b.salary) ?? 0) - (yearlyPay(a.salary) ?? 0) || b.score - a.score;
+  };
+}
 
 /**
  * Sort the list. Every sort means what it says: your companies are never pinned on top. In "best",
- * `isYours` gives them a nudge (rankScore), and freshness counts, worked out at `now`.
+ * `isYours` gives them a nudge (rankScore), and freshness counts, worked out at `now`. In "salary",
+ * `currency` (your salary floor's) is the one compared first.
  */
-export function sortJobs(jobs: Job[], sort: Sort, isYours?: (j: Job) => boolean, now = Date.now()): Job[] {
+export function sortJobs(jobs: Job[], sort: Sort, isYours?: (j: Job) => boolean, now = Date.now(), currency?: string): Job[] {
   const rank = sort === "best" ? new Map(jobs.map((j) => [j, rankScore(j.score, postedOrSeen(j), now, !!isYours?.(j)) - evergreenCost(j, now)])) : undefined;
   const by: Record<Sort, (a: Job, b: Job) => number> = {
     // Equal ranks go to the one mentioning more of your topics, then the newer.
     best: (a, b) => rank!.get(b)! - rank!.get(a)! || b.why.keywords.length - a.why.keywords.length || postedOrSeen(b).localeCompare(postedOrSeen(a)),
     newest: (a, b) => postedOrSeen(b).localeCompare(postedOrSeen(a)) || b.score - a.score,
-    // Only compares like with like loosely: listed salaries first, highest first.
-    salary: (a, b) => salaryOf(b) - salaryOf(a) || b.score - a.score,
+    salary: sort === "salary" ? salaryOrder(jobs, currency) : () => 0,
     company: (a, b) => a.company.localeCompare(b.company) || b.score - a.score,
   };
   return [...jobs].sort(by[sort]);

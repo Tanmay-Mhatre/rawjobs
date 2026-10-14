@@ -100,6 +100,28 @@ describe("sorting, grouping, chips, suggestions, URL", () => {
     expect(sortJobs(jobs.slice(0, 3), "company").map((j) => j.company)).toEqual(["Kraken", "OKX", "Rain"]);
   });
 
+  it("salary sort compares yearly pay, and never ranks across currencies", () => {
+    const list = [
+      job({ id: "inr", salary: { min: 2_000_000, max: 2_500_000, currency: "INR", period: "year" } }),
+      job({ id: "usd-year", salary: { max: 200_000, currency: "USD", period: "year" } }),
+      job({ id: "usd-hour", salary: { min: 60, max: 120, currency: "USD", period: "hour" } }),
+      job({ id: "usd-month", salary: { max: 15_000, currency: "usd", period: "month" } }),
+      job({ id: "eur", salary: { max: 90_000, currency: "EUR" } }),
+      job({ id: "eur2", salary: { max: 7_000, currency: "EUR", period: "1 MONTH" } }),
+      job({ id: "none-currency", salary: { max: 500_000 } }),
+      job({ id: "unpaid" }),
+    ];
+    // $120 an hour is $249,600 a year; $15k a month is $180k. USD is the most common, so it leads.
+    expect(sortJobs(list, "salary").map((j) => j.id)).toEqual(["usd-hour", "usd-year", "usd-month", "eur", "eur2", "inr", "none-currency", "unpaid"]);
+    // Your currency (the salary floor's) goes first, whatever most jobs use.
+    expect(
+      sortJobs(list, "salary", undefined, NOW, "eur")
+        .map((j) => j.id)
+        .slice(0, 2),
+    ).toEqual(["eur", "eur2"]);
+    expect(sortJobs(list, "salary", undefined, NOW, "INR")[0]!.id).toBe("inr");
+  });
+
   it("breaks a tie on best match by topics mentioned", () => {
     const tied = [
       job({ id: "few", score: 100, postedAt: daysAgo(1), why: { title: 30, location: 20, keywords: ["api"], keywordPoints: 40, industry: 10 } }),
