@@ -3,7 +3,7 @@ import { INDUSTRY_BY_ID } from "@rawjobs/core/catalog/industries";
 import { citiesIn, placeOwner } from "@rawjobs/core/catalog/places";
 import { SENIORITY_LEVELS, type Seniority } from "@rawjobs/core/catalog/seniority";
 import { sponsorOf } from "@rawjobs/core/catalog/visa";
-import { groupKey } from "@rawjobs/core/dashboard";
+import { fromJobBoard, groupKey } from "@rawjobs/core/dashboard";
 import { rankScore } from "@rawjobs/core/score";
 import { ATS_LABEL } from "./companies";
 import type { Job, Profile } from "./data";
@@ -320,14 +320,21 @@ export const roleCount = (jobs: readonly Pick<Job, "company" | "title">[]) => ne
 /** One role posted in several places: the best posting leads, the others ride along. */
 export type JobGroup = { key: string; lead: Job; jobs: Job[] };
 
-/** Groups by role with the place left out of the title (groupKey), so older saved data groups the same way. */
+/**
+ * Groups by role with the place left out of the title (groupKey), so older saved data groups the same way.
+ * The row keeps the place of its best posting, but a job board's copy never leads when the company's own
+ * posting is in the group: that's the one with the real apply link.
+ */
 export function groupJobs(sorted: Job[]): JobGroup[] {
   const groups = new Map<string, JobGroup>();
   for (const j of sorted) {
     const key = roleOf(j);
     const g = groups.get(key);
-    if (g) g.jobs.push(j);
-    else groups.set(key, { key, lead: j, jobs: [j] });
+    if (!g) groups.set(key, { key, lead: j, jobs: [j] });
+    else {
+      g.jobs.push(j);
+      if (fromJobBoard(g.lead) && !fromJobBoard(j)) g.lead = j;
+    }
   }
   return [...groups.values()];
 }

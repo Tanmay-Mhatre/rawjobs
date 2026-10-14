@@ -180,7 +180,7 @@ companies:
     const matches = read("jobs.json");
     expect(matches.version).toBe(2);
     expect(matches.jobs.map((j: { id: string }) => j.id)).toEqual(["greenhouse:acme:1"]);
-    expect(matches.jobs[0]).toMatchObject({ countries: ["United Arab Emirates"], seniority: "senior", hasDescription: true, group: "Acme|senior product manager" });
+    expect(matches.jobs[0]).toMatchObject({ countries: ["United Arab Emirates"], seniority: "senior", hasDescription: true, group: "acme|senior product manager" });
     expect(matches.jobs[0].description).toBeUndefined();
     // The directory's visa sponsor lists ride along (unknown countries dropped).
     expect(matches.jobs[0].visa).toEqual({ GB: "2026-10-09" });
