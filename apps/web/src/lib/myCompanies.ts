@@ -34,12 +34,25 @@ export const isQuiet = (q: Quiet, now = Date.now()) => q.scans >= QUIET_SCANS &&
  * - notAnswering: any other failure, on the last scan or since the first of several.
  * - cantRead: a hiring system RawJobs can't read yet. Not the company's fault, and nothing to fix.
  * - notChecked: no scan has included it yet.
+ * A failing one is chronic once it has failed for CHRONIC_DAYS.
  */
-export type Problem = { kind: "notFound"; since: string } | { kind: "notAnswering"; since: string; scans: number } | { kind: "cantRead" } | { kind: "notChecked"; afterLastScan: boolean } | null;
+export type Problem =
+  | { kind: "notFound"; since: string; chronic?: boolean }
+  | { kind: "notAnswering"; since: string; scans: number; chronic?: boolean }
+  | { kind: "cantRead" }
+  | { kind: "notChecked"; afterLastScan: boolean }
+  | null;
+
+/** Failing this long with no scan that worked: "for over a month" (board-health.ts in core counts the same). */
+export const CHRONIC_DAYS = 30;
 
 const failed = (h: CompanyHealth) => !h.ok && !h.unsupported;
 
-export function problemOf(seen: readonly Seen[], opts: { unreadable?: boolean; anyScans: boolean }): Problem {
+/**
+ * `failingSince`: when the board's failures started, from board-health (meta.json's boardHealth).
+ * It outlasts the saved runs, so a long streak keeps its real start.
+ */
+export function problemOf(seen: readonly Seen[], opts: { unreadable?: boolean; anyScans: boolean; failingSince?: string; now?: number }): Problem {
   const last = seen[0];
   if (!last) return opts.unreadable ? { kind: "cantRead" } : { kind: "notChecked", afterLastScan: opts.anyScans };
   if (last.h.unsupported) return { kind: "cantRead" };
@@ -51,7 +64,11 @@ export function problemOf(seen: readonly Seen[], opts: { unreadable?: boolean; a
     scans++;
     since = at;
   }
-  return /\(404\)/.test(last.h.error ?? "") ? { kind: "notFound", since } : { kind: "notAnswering", since, scans };
+  // Only when every saved run failed: a run that worked ends the streak, whatever the record says.
+  if (opts.failingSince && scans === seen.length && Date.parse(opts.failingSince) < Date.parse(since)) since = opts.failingSince;
+  const chronic = (opts.now ?? Date.now()) - Date.parse(since) >= CHRONIC_DAYS * 86_400_000;
+  const extra = chronic ? { chronic } : {};
+  return /\(404\)/.test(last.h.error ?? "") ? { kind: "notFound", since, ...extra } : { kind: "notAnswering", since, scans, ...extra };
 }
 
 /** Its last scan failed: it needs you (a new link, or another try). */

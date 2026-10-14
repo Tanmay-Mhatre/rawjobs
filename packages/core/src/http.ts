@@ -112,13 +112,12 @@ export class HttpClient {
 
   async getJson<T = unknown>(url: string): Promise<T> {
     const cached = this.opts.cache?.get(url);
-    const res = await this.request(url, { headers: { accept: "application/json", ...(cached ? { "if-none-match": cached.etag } : {}) } });
+    const { res, body } = await this.requestBody(url, { headers: { accept: "application/json", ...(cached ? { "if-none-match": cached.etag } : {}) } });
     if (res.status === 304 && cached) {
       this.stats.notModified++;
       if (cached.body === undefined) throw new NotModifiedError(url);
       return JSON.parse(cached.body) as T;
     }
-    const body = await res.text();
     const etag = res.headers.get("etag");
     const value = parseJson<T>(body, url, res.headers.get("content-type"));
     if (etag && this.opts.cache) this.opts.cache.set(url, etag, body);
@@ -126,26 +125,39 @@ export class HttpClient {
   }
 
   async postJson<T = unknown>(url: string, body: unknown): Promise<T> {
-    const res = await this.request(url, {
+    const { res, body: text } = await this.requestBody(url, {
       method: "POST",
       headers: { accept: "application/json", "content-type": "application/json" },
       body: JSON.stringify(body),
     });
-    return parseJson<T>(await res.text(), url, res.headers.get("content-type"));
+    return parseJson<T>(text, url, res.headers.get("content-type"));
   }
 
   async getText(url: string): Promise<string> {
-    const res = await this.request(url, {});
-    return res.text();
+    return (await this.requestBody(url, {})).body;
   }
 
+  /**
+   * The response with its body already read. The read is part of the attempt: a body that stalls
+   * past the timeout is retried, counts towards the host's failures and says "timed out after Ns".
+   */
+  async requestBody(url: string, init: RequestInit): Promise<{ res: Response; body: string }> {
+    const { res, body } = await this.send(url, init, true);
+    return { res, body: body ?? "" };
+  }
+
+  /** The response with its body unread: the caller's read isn't retried, so prefer requestBody(). */
   async request(url: string, init: RequestInit): Promise<Response> {
+    return (await this.send(url, init, false)).res;
+  }
+
+  private async send(url: string, init: RequestInit, readBody: boolean): Promise<{ res: Response; body?: string }> {
     const host = new URL(url).host;
     if ((this.failures.get(host) ?? 0) >= this.opts.breakAfter) throw new HostSkippedError(`skipped: ${host} failed ${this.opts.breakAfter} times in a row (${url})`, url);
     try {
-      const res = await this.attempt(url, init, host);
+      const out = await this.attempt(url, init, host, readBody);
       this.failures.delete(host);
-      return res;
+      return out;
     } catch (err) {
       // A 4xx is about this URL, not the host.
       const status = (err as HttpError).status;
@@ -159,7 +171,7 @@ export class HttpClient {
     }
   }
 
-  private async attempt(url: string, init: RequestInit, host: string): Promise<Response> {
+  private async attempt(url: string, init: RequestInit, host: string, readBody: boolean): Promise<{ res: Response; body?: string }> {
     const { retries, backoffMs, sleep } = this.opts;
     let lastError: HttpError | undefined;
     /** After a 429 the host's own slot holds the pause (see slowDown), so the retry doesn't wait twice. */
@@ -170,19 +182,22 @@ export class HttpClient {
       await this.waitForHost(host);
       this.stats.requests++;
       let res: Response;
+      let body: string | undefined;
       try {
         res = await this.opts.fetchImpl(url, {
           ...init,
           headers: { "user-agent": this.opts.userAgent, ...(init.headers as Record<string, string>) },
           signal: AbortSignal.timeout(this.opts.timeoutMs),
         });
+        // The timeout covers the body too: read it here, so a stalled body is retried like a stalled answer.
+        if (readBody && res.ok) body = await res.text();
       } catch (err) {
         const e = err as Error;
         const reason = e.name === "TimeoutError" ? `timed out after ${this.opts.timeoutMs / 1000}s` : e.message;
         lastError = new HttpError(`${reason} (${url})`, url);
         continue;
       }
-      if (res.ok || res.status === 304) return res;
+      if (res.ok || res.status === 304) return { res, body };
       lastError = new HttpError(`HTTP ${res.status} (${url})`, url, res.status);
       if (res.status !== 429 && res.status < 500) {
         // 4xx won't fix itself; free the connection now rather than when it's collected.

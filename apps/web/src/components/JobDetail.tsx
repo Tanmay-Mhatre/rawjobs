@@ -1,5 +1,6 @@
 import { surgeTitle } from "@rawjobs/core/activity";
 import { displayName } from "@rawjobs/core/display-name";
+import { EMPLOYMENT_LABEL } from "@rawjobs/core/catalog/employment";
 import { INDUSTRY_BY_ID } from "@rawjobs/core/catalog/industries";
 import { SENIORITY_LEVELS } from "@rawjobs/core/catalog/seniority";
 import { fromJobBoard } from "@rawjobs/core/dashboard";
@@ -144,6 +145,7 @@ export function JobDetail(p: JobDetailProps) {
     job.company,
     places,
     ...(workplace ? [workplace] : []),
+    ...(job.employmentType ? [EMPLOYMENT_LABEL[job.employmentType]] : []),
     SENIORITY_LABEL[job.seniority],
     // The stale callout says how old it is: the meta keeps the plain date then.
     isOlder(job) && job.status === "open" && !stale ? (

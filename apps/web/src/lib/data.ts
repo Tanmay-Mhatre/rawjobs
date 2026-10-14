@@ -1,5 +1,7 @@
 import { viewSummary, type ActivityView, type HiringSummary } from "@rawjobs/core/activity";
+import { employmentTypeOfTitle } from "@rawjobs/core/catalog/employment";
 import { citiesIn } from "@rawjobs/core/catalog/places";
+import { attachFeedJobs } from "./identity";
 import { toDashboardJob } from "@rawjobs/core/dashboard";
 import type { DashboardJob, DashboardJobsFile, DataMeta, Job as FullJob, JobsFile } from "@rawjobs/core/schema";
 
@@ -38,7 +40,12 @@ async function getJson<T>(path: string): Promise<T | null> {
 let legacy: { other: Job[]; descriptions: Record<string, string> } | null = null;
 
 /** Fields added to the dashboard files later: filled in here for files written before them. */
-const upgrade = (j: Job): Job => (j.cities ? j : { ...j, cities: citiesIn(j.location) });
+const upgrade = (j: Job): Job => {
+  const cities = j.cities ?? citiesIn(j.location);
+  // Saved before employment types: the title's own words ("Intern", "(Contract)") are all there is.
+  const employmentType = j.employmentType ?? employmentTypeOfTitle(j.title);
+  return j.cities && employmentType === j.employmentType ? j : { ...j, cities, ...(employmentType ? { employmentType } : {}) };
+};
 
 function fromFile(file: DashboardJobsFile | JobsFile): Job[] {
   if (file.version === 2) return file.jobs.map(upgrade);
@@ -74,7 +81,8 @@ export function useData() {
       const live = fromFile(jobsFile);
       const ids = new Set(live.map((j) => j.id));
       const estimated = (discover?.jobs ?? []).filter((j) => !ids.has(j.id)).map(upgrade);
-      setState({ kind: "ready", jobs: [...live, ...estimated], meta, indexGeneratedAt: discover?.indexGeneratedAt });
+      // Job boards' copies join the company they copy only on proof (attachFeedJobs), worked out once per load.
+      setState({ kind: "ready", jobs: attachFeedJobs([...live, ...estimated]), meta, indexGeneratedAt: discover?.indexGeneratedAt });
       return meta;
     } catch (err) {
       setState({ kind: "error", message: (err as Error).message });
@@ -97,7 +105,7 @@ export function loadOtherJobs(): Promise<Job[]> {
   otherJobs ??= legacy
     ? Promise.resolve(legacy.other)
     : getJson<DashboardJobsFile>("./jobs-other.json")
-        .then((f) => (f?.jobs ?? []).map(upgrade))
+        .then((f) => attachFeedJobs((f?.jobs ?? []).map(upgrade)))
         .catch(() => []);
   return otherJobs;
 }

@@ -1,6 +1,7 @@
 import { mkdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { activityMonths, baselineReady, localActivity, viewSummary, type ActivityView } from "./activity";
+import type { BoardHealth } from "./board-health";
 import { companyIndustries } from "./catalog/industries";
 import { cleanVisa } from "./catalog/visa";
 import { companyKey, companyOfJobId, jobCompanyKey } from "./connectors";
@@ -31,6 +32,16 @@ export function readMeta(dir: string): DataMeta | undefined {
   return readJson<DataMeta>(join(dir, "meta.json"));
 }
 
+/** Your companies whose board is failing, by companyKey(), and since when. */
+function yourFailingBoards(config: Config, boards: BoardHealth): NonNullable<DataMeta["boardHealth"]> {
+  const out: NonNullable<DataMeta["boardHealth"]> = {};
+  for (const c of config.companies) {
+    const r = boards.boards[jobCompanyKey(c)];
+    if (r?.fails && r.since !== undefined) out[companyKey(c)] = { since: new Date(r.since).toISOString() };
+  }
+  return out;
+}
+
 export function summarize(run: RunResult, merged: MergeResult): RunSummary {
   const current = run.jobs;
   return {
@@ -47,16 +58,31 @@ export function summarize(run: RunResult, merged: MergeResult): RunSummary {
   };
 }
 
-type DirectoryRow = { key: string; ats: string; slug: string; site?: string; tags?: string[]; title_tags?: string[]; visa?: unknown };
+type DirectoryRow = { key: string; ats: string; slug: string; site?: string; tags?: string[]; title_tags?: string[]; visa?: unknown; same_as?: string };
+type MoveRow = { from: Parameters<typeof companyKey>[0]; to: Parameters<typeof companyKey>[0] };
 
-/** The published directory's companies (data/catalog/directory.json), if built. */
-const directoryCompanies = (dir: string): DirectoryRow[] => {
+/** The published directory's companies and accepted moves (data/catalog/directory.json), if built. */
+const readDirectory = (dir: string): { companies: DirectoryRow[]; moves: MoveRow[] } => {
   try {
-    return (JSON.parse(readFileSync(join(dir, "catalog", "directory.json"), "utf8")) as { companies: DirectoryRow[] }).companies;
+    const file = JSON.parse(readFileSync(join(dir, "catalog", "directory.json"), "utf8")) as { companies: DirectoryRow[]; moves?: MoveRow[] };
+    return { companies: file.companies ?? [], moves: Array.isArray(file.moves) ? file.moves : [] };
   } catch {
-    return [];
+    return { companies: [], moves: [] };
   }
 };
+
+/**
+ * Boards the directory knows are one company (`same_as`), and accepted moves (the old board is the
+ * new one's company): directory key -> the key the Radar groups that company's jobs by.
+ */
+export function companyIdentities(companies: readonly DirectoryRow[], moves: readonly MoveRow[]): Map<string, string> {
+  const out = new Map(companies.flatMap((c) => (c.same_as ? [[c.key, c.same_as] as const] : [])));
+  for (const m of moves) {
+    const to = companyKey(m.to);
+    out.set(companyKey(m.from), out.get(to) ?? to);
+  }
+  return out;
+}
 
 /** Industry ids per company directory key. */
 function directoryIndustries(companies: readonly DirectoryRow[]): Map<string, string[]> {
@@ -108,7 +134,11 @@ export function saveRun(
   config: Config,
   run: RunResult,
   merged: MergeResult,
-  opts: { /** Add this run to the run history (not for a one-company "Check now"). */ record?: boolean } = {},
+  opts: {
+    /** Add this run to the run history (not for a one-company "Check now"). */ record?: boolean;
+    /** Board health after this run: your failing companies' streaks go into meta.json. Kept as it was when absent. */
+    boards?: BoardHealth;
+  } = {},
 ): RunSummary {
   mkdirSync(join(dir, "runs"), { recursive: true });
   const summary = summarize(run, merged);
@@ -118,8 +148,9 @@ export function saveRun(
   const history: JobsFile = { version: 1, generatedAt, jobs };
   writeFileAtomic(join(dir, "history.json"), JSON.stringify(history));
 
-  const directory = directoryCompanies(dir);
+  const { companies: directory, moves } = readDirectory(dir);
   const industries = directoryIndustries(directory);
+  const identities = companyIdentities(directory, moves);
   const visas = new Map(
     directory.flatMap((c) => {
       const v = cleanVisa(c.visa);
@@ -141,16 +172,26 @@ export function saveRun(
     const key = keyOf(companyOfJobId(j.id));
     const tags = industries.get(key);
     const visa = visas.get(key);
+    const identity = identities.get(key);
     // A job board's copy isn't the company's own hiring (hiringActivity leaves those out).
     const surge = fromJobBoard(j) ? undefined : surges.get(key);
-    return { ...toDashboardJob(j), companyKey: key, ...(tags ? { industries: tags } : {}), ...(visa ? { visa } : {}), ...(surge ? { surge } : {}) };
+    return {
+      ...toDashboardJob(j),
+      companyKey: key,
+      ...(identity ? { identity } : {}),
+      ...(tags ? { industries: tags } : {}),
+      ...(visa ? { visa } : {}),
+      ...(surge ? { surge } : {}),
+    };
   });
   const file = (list: DashboardJob[]): DashboardJobsFile => ({ version: 2, generatedAt, jobs: list });
   writeFileAtomic(join(dir, "jobs.json"), JSON.stringify(file(dashboard.filter((j) => !j.why.gate))));
   writeFileAtomic(join(dir, "jobs-other.json"), JSON.stringify(file(dashboard.filter((j) => j.why.gate))));
   writeFileAtomic(join(dir, "descriptions.json"), JSON.stringify(Object.fromEntries(jobs.filter((j) => j.description).map((j) => [j.id, j.description]))));
 
-  const prevRuns = readMeta(dir)?.runs ?? [];
+  const prev = readMeta(dir);
+  const prevRuns = prev?.runs ?? [];
+  const boardHealth = opts.boards ? yourFailingBoards(config, opts.boards) : prev?.boardHealth;
   const meta: DataMeta = {
     version: 1,
     generatedAt,
@@ -161,6 +202,7 @@ export function saveRun(
     }),
     runs: opts.record === false ? prevRuns : [summary, ...prevRuns].slice(0, KEEP_RUNS),
     ...(activity.ready ? { hiringReady: true } : {}),
+    ...(boardHealth && Object.keys(boardHealth).length ? { boardHealth } : {}),
   };
   writeFileAtomic(join(dir, "meta.json"), JSON.stringify(meta, null, 2));
 

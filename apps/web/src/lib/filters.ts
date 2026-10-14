@@ -1,13 +1,15 @@
 import { displayName } from "@rawjobs/core/display-name";
+import { EMPLOYMENT_LABEL, EMPLOYMENT_TYPES, type EmploymentType } from "@rawjobs/core/catalog/employment";
 import { INDUSTRY_BY_ID } from "@rawjobs/core/catalog/industries";
 import { citiesIn, placeOwner } from "@rawjobs/core/catalog/places";
 import { SENIORITY_LEVELS, type Seniority } from "@rawjobs/core/catalog/seniority";
 import { sponsorOf } from "@rawjobs/core/catalog/visa";
-import { fromJobBoard, groupKey } from "@rawjobs/core/dashboard";
+import { fromJobBoard } from "@rawjobs/core/dashboard";
 import { rankScore } from "@rawjobs/core/score";
 import { ATS_LABEL } from "./companies";
 import type { Job, Profile } from "./data";
 import { ageDays, postedOrSeen } from "./format";
+import { identityOf, roleOf } from "./identity";
 import { hiddenByRules, type HideRule } from "./notForMe";
 import { isStale } from "./stale";
 import type { Status, UserState } from "./userState";
@@ -26,6 +28,8 @@ export type Filters = {
   /** Cities, as "City, Country". */
   locations: string[];
   workplace: Workplace[];
+  /** Employment types ("full-time", "contract"…); "unknown" means the posting doesn't say. */
+  employment: string[];
   seniority: Seniority[];
   industries: string[];
   companies: string[];
@@ -91,6 +95,7 @@ export const DEFAULT_FILTERS: Filters = {
   countries: [],
   locations: [],
   workplace: [],
+  employment: [],
   seniority: [],
   industries: [],
   companies: [],
@@ -111,7 +116,7 @@ export const DEFAULT_FILTERS: Filters = {
 };
 
 /** Facets with option counts. */
-export type FacetKey = "posted" | "countries" | "locations" | "workplace" | "seniority" | "industries" | "companies" | "topics" | "ats" | "match";
+export type FacetKey = "posted" | "countries" | "locations" | "workplace" | "employment" | "seniority" | "industries" | "companies" | "topics" | "ats" | "match";
 
 export type Ctx = {
   user: UserState;
@@ -183,6 +188,7 @@ function passes(j: Job, f: Filters, ctx: Ctx, terms: string[], skip?: FacetKey):
   if (skip !== "countries" && f.countries.length && !countriesOf(j).some((c) => f.countries.includes(c))) return false;
   if (skip !== "locations" && f.locations.length && !j.cities.some((c) => f.locations.includes(c))) return false;
   if (skip !== "workplace" && f.workplace.length && !f.workplace.includes(j.workplace)) return false;
+  if (skip !== "employment" && f.employment.length && !f.employment.includes(j.employmentType ?? "unknown")) return false;
   if (skip !== "seniority" && f.seniority.length && !f.seniority.includes(j.seniority)) return false;
   if (skip !== "industries" && f.industries.length && !ctx.industriesOf(j.company).some((i) => f.industries.includes(i))) return false;
   if (skip !== "companies" && f.companies.length && !f.companies.includes(j.company)) return false;
@@ -265,6 +271,10 @@ export function facetCounts(jobs: Job[], f: Filters, ctx: Ctx): Record<FacetKey,
       ctx.mine?.locations,
     ),
     workplace: (["remote", "hybrid", "onsite", "unknown"] as Workplace[]).map((w) => ({ value: w, label: WORKPLACE_LABEL[w], count: tally("workplace", (j) => [j.workplace]).get(w) ?? 0 })),
+    employment: (() => {
+      const counts = tally("employment", (j) => [j.employmentType ?? "unknown"]);
+      return [...EMPLOYMENT_TYPES, "unknown" as const].map((t) => ({ value: t, label: t === "unknown" ? "Not stated" : EMPLOYMENT_LABEL[t], count: counts.get(t) ?? 0 }));
+    })(),
     seniority: SENIORITY_LEVELS.map((s) => ({ value: s.id, label: s.label, count: tally("seniority", (j) => [j.seniority]).get(s.id) ?? 0 })),
     industries: sorted(
       tally("industries", (j) => ctx.industriesOf(j.company)),
@@ -297,84 +307,132 @@ export function facetCounts(jobs: Job[], f: Filters, ctx: Ctx): Record<FacetKey,
 /** "greenhouse" -> "Greenhouse". */
 export const atsLabel = (ats: string) => ATS_LABEL[ats] ?? ats.charAt(0).toUpperCase() + ats.slice(1);
 
-const salaryOf = (j: Job) => j.salary?.max ?? j.salary?.min ?? -1;
+/** Pay periods as a year of full-time work: 52 weeks, 260 days, 2,080 hours. */
+const PER_YEAR: Record<string, number> = { year: 1, month: 12, week: 52, day: 260, hour: 2080 };
+
+/**
+ * The top of a job's pay range as a yearly figure ("$60 an hour" is 124,800), so hourly, monthly and yearly
+ * pay sort together. A period we can't read counts as yearly, the way most postings state pay.
+ */
+export function yearlyPay(s: Job["salary"]): number | undefined {
+  const v = s?.max ?? s?.min;
+  if (!v || !(v > 0)) return undefined;
+  const period = s?.period?.toLowerCase().match(/year|annual|month|week|day|hour/)?.[0];
+  return v * (PER_YEAR[period === "annual" ? "year" : (period ?? "year")] ?? 1);
+}
+
+const currencyOf = (j: Job) => j.salary?.currency?.trim().toUpperCase() || "";
+
+/**
+ * Salary order without exchange rates: pay in your currency (`currency`, else the one most jobs here use)
+ * first, highest yearly figure first; then each other currency as a block, the most common first, so
+ * ₹2,500,000 never ranks above $200,000 just for being a bigger number. Pay with no currency, then no pay, last.
+ */
+function salaryOrder(jobs: readonly Job[], currency?: string): (a: Job, b: Job) => number {
+  const seen = new Map<string, number>();
+  for (const j of jobs) if (yearlyPay(j.salary) !== undefined && currencyOf(j)) seen.set(currencyOf(j), (seen.get(currencyOf(j)) ?? 0) + 1);
+  const mine = currency?.trim().toUpperCase() || [...seen].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))[0]?.[0];
+  const rank = (j: Job) => {
+    if (yearlyPay(j.salary) === undefined) return Infinity;
+    const c = currencyOf(j);
+    if (!c) return Number.MAX_SAFE_INTEGER;
+    // Your currency first; the others by how many jobs use them (more first), then by code.
+    return c === mine ? -Infinity : -(seen.get(c) ?? 0);
+  };
+  const ranks = new Map(jobs.map((j) => [j, rank(j)]));
+  return (a, b) => {
+    const ra = ranks.get(a)!;
+    const rb = ranks.get(b)!;
+    if (ra !== rb) return ra < rb ? -1 : 1;
+    return currencyOf(a).localeCompare(currencyOf(b)) || (yearlyPay(b.salary) ?? 0) - (yearlyPay(a.salary) ?? 0) || b.score - a.score;
+  };
+}
 
 /**
  * Sort the list. Every sort means what it says: your companies are never pinned on top. In "best",
- * `isYours` gives them a nudge (rankScore), and freshness counts, worked out at `now`.
+ * `isYours` gives them a nudge (rankScore), and freshness counts, worked out at `now`. In "salary",
+ * `currency` (your salary floor's) is the one compared first.
  */
-export function sortJobs(jobs: Job[], sort: Sort, isYours?: (j: Job) => boolean, now = Date.now()): Job[] {
+export function sortJobs(jobs: Job[], sort: Sort, isYours?: (j: Job) => boolean, now = Date.now(), currency?: string): Job[] {
   const rank = sort === "best" ? new Map(jobs.map((j) => [j, rankScore(j.score, postedOrSeen(j), now, !!isYours?.(j)) - evergreenCost(j, now)])) : undefined;
   const by: Record<Sort, (a: Job, b: Job) => number> = {
     // Equal ranks go to the one mentioning more of your topics, then the newer.
     best: (a, b) => rank!.get(b)! - rank!.get(a)! || b.why.keywords.length - a.why.keywords.length || postedOrSeen(b).localeCompare(postedOrSeen(a)),
     newest: (a, b) => postedOrSeen(b).localeCompare(postedOrSeen(a)) || b.score - a.score,
-    // Only compares like with like loosely: listed salaries first, highest first.
-    salary: (a, b) => salaryOf(b) - salaryOf(a) || b.score - a.score,
+    salary: sort === "salary" ? salaryOrder(jobs, currency) : () => 0,
     company: (a, b) => a.company.localeCompare(b.company) || b.score - a.score,
   };
   return [...jobs].sort(by[sort]);
 }
 
-/** The role a posting belongs to: the same key the list groups by (groupJobs). */
-const roleOf = (j: Pick<Job, "company" | "title">) => groupKey(j.company, j.title);
 /** How many roles these postings make up: what the list shows as rows, and what every count should say. */
-export const roleCount = (jobs: readonly Pick<Job, "company" | "title">[]) => new Set(jobs.map(roleOf)).size;
+export const roleCount = (jobs: readonly Pick<Job, "company" | "title" | "identity" | "companyKey" | "ats">[]) => new Set(jobs.map(roleOf)).size;
 
 /** One role posted in several places: the best posting leads, the others ride along. */
 export type JobGroup = { key: string; lead: Job; jobs: Job[] };
 
 /**
- * Groups by role with the place left out of the title (groupKey), so older saved data groups the same way.
- * The row keeps the place of its best posting, but a job board's copy never leads when the company's own
- * posting is in the group: that's the one with the real apply link. Before that, a posting that may be stale
- * (isStale) never leads when a fresh one of the same role is in the group: the row shows the live one.
- * The groups keep the order of `sorted`; only who leads changes.
+ * Which posting of a role to show, best first: a fresh one over one that may be stale (isStale: the row shows
+ * the live one), then the company's own board over a job board's copy (Remotive, Remote First Jobs…: the real
+ * apply link), a board you scan over the directory's estimate, open over closed, one with a description.
+ * Ties keep the sort order.
+ */
+const leadRank = (j: Job, now: number) => [isStale(j, { now }), fromJobBoard(j), !!j.estimated, j.status !== "open", !j.hasDescription].map(Number);
+const betterLead = (a: number[], b: number[]) => {
+  for (let i = 0; i < a.length; i++) if (a[i] !== b[i]) return a[i]! < b[i]!;
+  return false;
+};
+
+/**
+ * Groups by role at one company (roleOf: the company's board, not its name, and the title with places,
+ * gender tags and requisition ids left out). The groups keep the order of `sorted` (a row sits where its
+ * best-ranked posting sorts); only who leads changes, picked by leadRank.
  */
 export function groupJobs(sorted: Job[], now = Date.now()): JobGroup[] {
-  const groups = new Map<string, JobGroup & { leadStale: boolean }>();
+  const groups = new Map<string, JobGroup & { rank: number[] }>();
   for (const j of sorted) {
     const key = roleOf(j);
     const g = groups.get(key);
-    const stale = isStale(j, { now });
-    if (!g) groups.set(key, { key, lead: j, jobs: [j], leadStale: stale });
+    const rank = leadRank(j, now);
+    if (!g) groups.set(key, { key, lead: j, jobs: [j], rank });
     else {
       g.jobs.push(j);
-      const better = g.leadStale !== stale ? !stale : fromJobBoard(g.lead) && !fromJobBoard(j);
-      if (better) {
+      if (betterLead(rank, g.rank)) {
         g.lead = j;
-        g.leadStale = stale;
+        g.rank = rank;
       }
     }
   }
-  return [...groups.values()].map(({ leadStale: _, ...g }) => g);
+  return [...groups.values()].map(({ rank: _, ...g }) => g);
 }
 
 /** Roles shown per company before the rest fold into one "+N more at …" row. */
 export const PER_COMPANY = 2;
 
 /** A row of the feed: a role, or a company's folded roles. */
-export type FeedRow = { kind: "group"; group: JobGroup } | { kind: "more"; company: string; groups: JobGroup[] };
+/** A row of the feed: a role, or a company's folded roles (`key`: the company's identity; `company`: its name). */
+export type FeedRow = { kind: "group"; group: JobGroup } | { kind: "more"; key: string; company: string; groups: JobGroup[] };
 
 /**
  * One company can't fill the page: after its first PER_COMPANY roles, the rest fold into one row
- * where the next one would have been ("+253 more at Speechify"), until you open it (`open`).
+ * where the next one would have been ("+253 more at Speechify"), until you open it (`open`: identities).
+ * Folded by company identity, so two companies with one name don't share a fold, and one company's boards do.
  */
 export function foldCompanies(groups: JobGroup[], open: ReadonlySet<string> = new Set()): FeedRow[] {
   const seen = new Map<string, number>();
   const folded = new Map<string, JobGroup[]>();
   const rows: FeedRow[] = [];
   for (const group of groups) {
-    const company = group.lead.company;
-    const n = (seen.get(company) ?? 0) + 1;
-    seen.set(company, n);
-    if (n <= PER_COMPANY || open.has(company)) rows.push({ kind: "group", group });
+    const key = identityOf(group.lead);
+    const n = (seen.get(key) ?? 0) + 1;
+    seen.set(key, n);
+    if (n <= PER_COMPANY || open.has(key)) rows.push({ kind: "group", group });
     else {
-      let rest = folded.get(company);
+      let rest = folded.get(key);
       if (!rest) {
         rest = [];
-        folded.set(company, rest);
-        rows.push({ kind: "more", company, groups: rest });
+        folded.set(key, rest);
+        rows.push({ kind: "more", key, company: group.lead.company, groups: rest });
       }
       rest.push(group);
     }
@@ -395,7 +453,7 @@ export function activeChips(f: Filters, ctx: Pick<Ctx, "min">, base?: Filters): 
 
 function chipsOf(f: Filters, ctx: Pick<Ctx, "min">): { key: string; label: string; remove: Partial<Filters> }[] {
   const chips: { key: string; label: string; remove: Partial<Filters> }[] = [];
-  const list = <K extends "countries" | "locations" | "workplace" | "seniority" | "industries" | "companies" | "topics" | "ats">(k: K, label: (v: string) => string) => {
+  const list = <K extends "countries" | "locations" | "workplace" | "employment" | "seniority" | "industries" | "companies" | "topics" | "ats">(k: K, label: (v: string) => string) => {
     for (const v of f[k] as string[]) chips.push({ key: `${k}:${v}`, label: label(v), remove: { [k]: (f[k] as string[]).filter((x) => x !== v) } as Partial<Filters> });
   };
   if (f.q.trim()) chips.push({ key: "q", label: `“${f.q.trim()}”`, remove: { q: "" } });
@@ -404,6 +462,7 @@ function chipsOf(f: Filters, ctx: Pick<Ctx, "min">): { key: string; label: strin
   list("countries", (v) => (v === REMOTE ? "Remote & your regions" : v));
   list("locations", (v) => v.replace(/, [^,]+$/, ""));
   list("workplace", (v) => WORKPLACE_LABEL[v as Workplace] ?? v);
+  list("employment", (v) => (v === "unknown" ? "Type not stated" : (EMPLOYMENT_LABEL[v as EmploymentType] ?? v)));
   list("seniority", (v) => SENIORITY_LABEL[v as Seniority] ?? v);
   list("industries", (v) => INDUSTRY_BY_ID.get(v)?.label ?? v);
   list("companies", (v) => displayName(v));

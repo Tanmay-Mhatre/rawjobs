@@ -1,5 +1,7 @@
+import { employmentType } from "../catalog/employment";
 import type { NormalizedJob, Workplace } from "../schema";
 import { htmlToText, inferWorkplace } from "../text";
+import { openByStatus, urlOf } from "./parse";
 import { firstPathSegment, jobId, salaryPeriod, type Connector } from "./types";
 
 /** https://github.com/lever/postings-api */
@@ -50,6 +52,16 @@ export const lever: Connector<LeverPosting> = {
     return data;
   },
 
+  /** The posting's API address (on the board's region) answers 404 once it's taken down. Links are jobs.lever.co/acme/{id}[/apply]. */
+  async isOpen(job, { http }) {
+    const url = urlOf(job.url);
+    const board = url ? lever.detect(url) : null;
+    const id = url?.pathname.split("/").filter(Boolean)[1];
+    // Only a board link says which region the posting lives in; the id alone would guess.
+    if (!board || !url?.hostname.startsWith("jobs.") || !id || !/^[0-9a-f-]{36}$/i.test(id)) return undefined;
+    return openByStatus(http, `${API[board.region ?? "global"]}/v0/postings/${encodeURIComponent(board.slug)}/${id}`);
+  },
+
   normalize(raw, ref): NormalizedJob {
     const c = raw.categories ?? {};
     const location = (c.allLocations?.length ? c.allLocations.join("; ") : c.location) ?? "";
@@ -67,6 +79,7 @@ export const lever: Connector<LeverPosting> = {
       salary: s && (s.min || s.max) ? { min: s.min, max: s.max, currency: s.currency, period: salaryPeriod(s.interval) } : undefined,
       postedAt: raw.createdAt ? new Date(raw.createdAt).toISOString() : undefined,
       url: raw.hostedUrl,
+      employmentType: employmentType(raw.categories?.commitment),
       description,
     };
   },

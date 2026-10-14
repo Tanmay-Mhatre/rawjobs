@@ -53,6 +53,8 @@ export const BOARD_URL: Record<string, (b: string) => string | undefined> = {
   hrmdirect: (b) => (plain(b) && !b.includes(".") ? `https://${b}.hrmdirect.com/employment/` : undefined),
   icims: (b) => (plain(b) && !b.includes(".") ? `https://careers-${b}.icims.com/jobs` : undefined),
   jazzhr: (b) => (plain(b) ? `https://${b}.applytojob.com/apply` : undefined),
+  // The company shortcode of careers.jobscore.com/careers/{board}
+  jobscore: (b) => (plain(b) && !b.includes(".") ? `https://careers.jobscore.com/careers/${b}` : undefined),
   jobvite: (b) => `https://jobs.jobvite.com/${enc(b)}`,
   lever: (b) => `https://jobs.lever.co/${enc(b)}`,
   // "{host}/{siteNumber}"
