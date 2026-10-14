@@ -26,6 +26,10 @@ describe("detectKnownAts", () => {
     ["https://jobs.jobvite.com/acme/jobs", { ats: "jobvite", slug: "acme" }],
     ["https://acme.pinpointhq.com/", { ats: "pinpoint", slug: "acme" }],
     ["https://ats.rippling.com/acme/jobs", { ats: "rippling", slug: "acme" }],
+    ["https://ats.rippling.com/en-CA/acme/jobs", { ats: "rippling", slug: "acme" }],
+    ["https://ats.rippling.com/fr/acme/jobs/u1", { ats: "rippling", slug: "acme" }],
+    ["https://apply.workable.com/acme/j/AB12CD/", { ats: "workable", slug: "acme" }],
+    ["https://aa010.taleo.net/careersection/ext/jobsearch.ftl", { ats: "taleo", slug: "aa010", site: "ext" }],
     ["https://acme.applytojob.com/apply", { ats: "jazzhr", slug: "acme" }],
     ["https://acme.zohorecruit.com/jobs/Careers", { ats: "zoho", slug: "acme", site: "Careers" }],
     ["https://acme.zohorecruit.in/jobs/Careers", { ats: "zoho", slug: "acme", shard: "in", site: "Careers" }],
@@ -38,6 +42,8 @@ describe("detectKnownAts", () => {
   it.each([
     "https://www.workable.com/",
     "https://apply.workable.com/api/v1/x",
+    "https://apply.workable.com/j/AB12CD",
+    "https://phh.tbe.taleo.net/phh04/ats/careers/v2/searchResults?org=ACME&cws=37",
     "https://www.bamboohr.com/",
     "https://app.breezy.hr/",
     "https://www.teamtailor.com/",
@@ -47,5 +53,12 @@ describe("detectKnownAts", () => {
     "https://acme.example.com/careers",
   ])("leaves %s alone", (url) => {
     expect(detect(url)).toBeNull();
+  });
+
+  it("Add by link names the board, not the locale, the job link or the shared pod", async () => {
+    const { detectCompany } = await import("../src/connectors");
+    expect(detectCompany("https://ats.rippling.com/en-CA/acme-labs/jobs")).toMatchObject({ ats: "rippling", slug: "acme-labs", name: "Acme Labs" });
+    expect(detectCompany("https://apply.workable.com/j/AB12CD")).toBeNull();
+    expect(detectCompany("https://phh.tbe.taleo.net/phh04/ats/careers/v2/searchResults?org=ACME&cws=37")?.ats).not.toBe("taleo");
   });
 });
