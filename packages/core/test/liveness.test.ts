@@ -124,10 +124,15 @@ describe("isOpen per hiring system", () => {
     expect(await ashby.isOpen!(job, ctx(() => json({}, 500)).ctx)).toBeUndefined();
   });
 
-  it("smartrecruiters: the posting's API address", async () => {
+  it("smartrecruiters: the posting's API address and its active flag", async () => {
+    const job = { id: "smartrecruiters:acme:744000012345678", url: "https://jobs.smartrecruiters.com/Acme/744000012345678-senior-pm" };
     const { ctx: c, calls } = ctx(() => json({ message: "not found" }, 404));
-    expect(await smartrecruiters.isOpen!({ id: "smartrecruiters:acme:744000012345678", url: "https://jobs.smartrecruiters.com/Acme/744000012345678-senior-pm" }, c)).toBe(false);
+    expect(await smartrecruiters.isOpen!(job, c)).toBe(false);
     expect(calls).toEqual(["https://api.smartrecruiters.com/v1/companies/Acme/postings/744000012345678"]);
+    // A taken-down posting still answers 200, with active: false.
+    expect(await smartrecruiters.isOpen!(job, ctx(() => json({ id: "744000012345678", active: false })).ctx)).toBe(false);
+    expect(await smartrecruiters.isOpen!(job, ctx(() => json({ id: "744000012345678", active: true })).ctx)).toBe(true);
+    expect(await smartrecruiters.isOpen!(job, ctx(() => json({ id: "744000012345678" })).ctx)).toBeUndefined();
   });
 
   it("workday: the job's detail address on the careers site's API", async () => {
@@ -135,6 +140,20 @@ describe("isOpen per hiring system", () => {
     const url = "https://acme.wd5.myworkdayjobs.com/en-US/External/job/Dubai/Senior-PM_R123";
     expect(await workday.isOpen!({ id: "workday:acme|external:R123", url }, c)).toBe(true);
     expect(calls).toEqual(["https://acme.wd5.myworkdayjobs.com/wday/cxs/acme/External/job/Dubai/Senior-PM_R123"]);
+  });
+
+  it("workday: a 404 is checked against the board's search for the requisition number (a title edit moves the address)", async () => {
+    const job = { id: "workday:acme|external:R123", url: "https://acme.wd5.myworkdayjobs.com/External/job/Dubai/Senior-PM_R123" };
+    const searched = (answer: unknown) => {
+      const f = ctx((_url, init) => (init?.method === "POST" ? json(answer) : json({ errorCode: "NOT_FOUND" }, 404)));
+      return workday.isOpen!(job, f.ctx).then((open) => ({ open, calls: f.calls }));
+    };
+    const renamed = await searched({ total: 1, jobPostings: [{ title: "Lead PM", externalPath: "/job/Dubai/Lead-PM_R123" }] });
+    expect(renamed.open).toBe(true);
+    expect(renamed.calls.at(-1)).toBe("https://acme.wd5.myworkdayjobs.com/wday/cxs/acme/External/jobs");
+    expect((await searched({ total: 0, jobPostings: [] })).open).toBe(false);
+    // Other jobs that merely match the search can't say.
+    expect((await searched({ total: 1, jobPostings: [{ title: "PM", externalPath: "/job/Dubai/PM_R1234" }] })).open).toBeUndefined();
   });
 });
 

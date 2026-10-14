@@ -87,7 +87,9 @@ export const workday: Connector<WorkdayPosting> = {
   },
 
   /**
-   * The job's detail address (the one describe() reads) answers 404 once it's taken down. Links are
+   * The job's detail address (the one describe() reads) answers 200 while it's up. A 404 alone proves
+   * nothing: a title edit moves the address and the job stays (seen 2026-10-14). So the board's search
+   * is asked for the requisition number too: closed only when that finds nothing at all. Links are
    * {tenant}.wd5.myworkdayjobs.com/[en-US/]{site}/job/{place}/{title}_{req}.
    */
   async isOpen(job, { http }) {
@@ -95,6 +97,17 @@ export const workday: Connector<WorkdayPosting> = {
     const board = url ? workday.detect(url) : null;
     const at = url?.pathname.indexOf("/job/") ?? -1;
     if (!board?.shard || !board.site || !url || at < 0) return undefined;
-    return openByStatus(http, `${api(board)}${url.pathname.slice(at)}`);
+    const path = url.pathname.slice(at);
+    const open = await openByStatus(http, `${api(board)}${path}`);
+    if (open !== false) return open;
+    const req = workdayJobKey(path);
+    try {
+      const page = await http.postJson<Page>(`${api(board)}/jobs`, { appliedFacets: {}, limit: PAGE, offset: 0, searchText: req });
+      if (!Array.isArray(page.jobPostings)) return undefined;
+      if (page.jobPostings.some((p) => workdayJobKey(p.externalPath) === req)) return true;
+      return page.total === 0 && !page.jobPostings.length ? false : undefined;
+    } catch {
+      return undefined;
+    }
   },
 };
