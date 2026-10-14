@@ -10,7 +10,7 @@ import { copyText } from "../lib/clipboard";
 import { useDescription, type Job, type Profile } from "../lib/data";
 import { formatDate, formatSalary, placeSummary, postedOrSeen, timeAgo } from "../lib/format";
 import { atsLabel, evergreenReason, INDEX_MAX_AGE_DAYS, isOlder } from "../lib/filters";
-import { isStale, staleReasons } from "../lib/stale";
+import { isRoleStale, isStale, staleReasons } from "../lib/stale";
 import { load, save } from "../lib/storage";
 import { PIPELINE, STATUS_LABEL, type Entry, type Status } from "../lib/userState";
 import { Dialog } from "./Dialog";
@@ -135,7 +135,8 @@ export function JobDetail(p: JobDetailProps) {
   const sponsor = sponsorOf(postings ?? [job]);
   // The loaded description counts too, for data written before descriptionLength existed.
   const staleCtx = { descriptionLength: description ? description.trim().length : undefined };
-  const stale = isStale(job, staleCtx) ? staleReasons(job, staleCtx) : null;
+  // The callout is for the role: one fresh posting of it and it's still live (the stale ones are marked in the list).
+  const stale = isRoleStale(postings ?? [job], (j) => (j.id === job.id ? staleCtx : undefined)) ? staleReasons(job, staleCtx) : null;
   const meta: ReactNode[] = [
     job.company,
     places,
@@ -292,18 +293,27 @@ export function JobDetail(p: JobDetailProps) {
             <section className="rj-drawer__section">
               <h3 className="rj-h">{placeCount > 1 ? `Posted in ${placeCount} locations` : `Posted ${postings.length} times`}</h3>
               <ul className="divide-y divide-line rounded-md border border-line">
-                {postings.map((j) => (
-                  <li key={j.id} className={cx("flex items-center gap-2 px-3 py-2 type-small", j.id === job.id && "bg-active")}>
-                    <button type="button" className="min-w-0 flex-1 truncate text-left hover:underline" onClick={() => p.onOpenJob?.(j)} aria-current={j.id === job.id || undefined}>
-                      {j.location || "Location not listed"}
-                      {fromJobBoard(j) && <span className="text-muted"> · via {atsLabel(j.ats)}</span>}
-                    </button>
-                    <span className="tabular text-muted">{j.score}</span>
-                    <a href={safeUrl(j.url)} target="_blank" rel="noreferrer" onClick={() => p.onApply?.(j)} className="text-muted hover:text-ink" aria-label={`Open the ${j.location} posting`}>
-                      <ExternalLink className="rj-icon" />
-                    </a>
-                  </li>
-                ))}
+                {postings.map((j) => {
+                  const ctx = j.id === job.id ? staleCtx : undefined;
+                  return (
+                    <li key={j.id} className={cx("flex items-center gap-2 px-3 py-2 type-small", j.id === job.id && "bg-active")}>
+                      <button type="button" className="min-w-0 flex-1 truncate text-left hover:underline" onClick={() => p.onOpenJob?.(j)} aria-current={j.id === job.id || undefined}>
+                        {j.location || "Location not listed"}
+                        {fromJobBoard(j) && <span className="text-muted"> · via {atsLabel(j.ats)}</span>}
+                      </button>
+                      {/* The role may be live while this posting of it isn't. */}
+                      {isStale(j, ctx) && (
+                        <span className="shrink-0 text-warning-text" title={staleReasons(j, ctx)[0]}>
+                          may be stale
+                        </span>
+                      )}
+                      <span className="tabular text-muted">{j.score}</span>
+                      <a href={safeUrl(j.url)} target="_blank" rel="noreferrer" onClick={() => p.onApply?.(j)} className="text-muted hover:text-ink" aria-label={`Open the ${j.location} posting`}>
+                        <ExternalLink className="rj-icon" />
+                      </a>
+                    </li>
+                  );
+                })}
               </ul>
             </section>
           )}
