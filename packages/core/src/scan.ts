@@ -104,11 +104,9 @@ export function scanPlan(config: Config, dataDir: string, scope: ScanScope) {
   const yours = config.companies.filter((c) => c.enabled);
   const feed = feedMatches(dataDir, config.profile);
   const inScope = scopeCompanies(config, readDirectory(dataDir), scope).filter((c) => !feed.covered.has(jobCompanyKey(c)) || feed.matching.has(jobCompanyKey(c)));
-  // Resting boards aren't fetched, so they don't count towards the time.
-  const boards = readBoardHealth(dataDir);
-  const extra = planBoards(inScope, boards, Date.now()).fetch;
-  const live = planBoards(yours, boards, Date.now(), { yours: new Set(yours.map(jobCompanyKey)) }).fetch;
-  return { yours, extra, seconds: estimateSeconds([...live, ...extra], readSpeeds(dataDir)) };
+  // Resting directory boards aren't fetched, so they don't count towards the time.
+  const extra = planBoards(inScope, readBoardHealth(dataDir), Date.now(), { yours: new Set(yours.map(jobCompanyKey)) }).fetch;
+  return { yours, extra, seconds: estimateSeconds([...yours, ...extra], readSpeeds(dataDir)) };
 }
 
 /**
@@ -141,8 +139,8 @@ export async function scan(config: Config, opts: ScanOptions): Promise<ScanResul
   const prior = fullScan && opts.resume !== false && !opts.dryRun ? readProgress(opts.dataDir, scope) : undefined;
   const resumed = prior && prior.scope === scope && now.getTime() - Date.parse(prior.startedAt) <= RESUME_WITHIN_MS ? prior : undefined;
   const done = new Set((resumed?.health ?? []).map((h) => h.key ?? jobCompanyKey(h)));
-  // Boards whose last fetch failed rest for a while (board-health.ts); a scan of chosen companies
-  // ("Check now", --only) fetches them anyway, and ones the stopped scan did count as done.
+  // Directory boards whose last fetch failed rest for a while (board-health.ts). Your companies are
+  // always fetched; so is a scan of chosen ones ("Check now", --only), and the stopped scan's count as done.
   let boards = readBoardHealth(opts.dataDir);
   const plan = { yours: new Set(config.companies.map(jobCompanyKey)), done };
   const directoryPlan = fullScan ? planBoards(unfed, boards, now.getTime(), plan) : { fetch: unfed, resting: [] };
@@ -161,9 +159,8 @@ export async function scan(config: Config, opts: ScanOptions): Promise<ScanResul
 
   const only = opts.only?.map((s) => s.toLowerCase());
   const chosen = checkOnly ? [] : config.companies.filter((c) => c.enabled && (!only?.length || only.includes(c.name.toLowerCase()) || only.includes(c.slug.toLowerCase())));
-  const yoursPlan = fullScan ? planBoards(chosen, boards, now.getTime(), plan) : { fetch: chosen, resting: [] };
-  const yours = yoursPlan.fetch;
-  const resting = [...yoursPlan.resting, ...directoryPlan.resting];
+  const yours = chosen;
+  const resting = directoryPlan.resting;
   const left = [...yours, ...checks].filter((c) => !done.has(jobCompanyKey(c)));
   const byAts: Record<string, number> = {};
   const resumedByAts: Record<string, number> = {};
@@ -191,8 +188,7 @@ export async function scan(config: Config, opts: ScanOptions): Promise<ScanResul
     only: opts.only,
     previous,
     checks,
-    // Resting companies of yours are skipped like done ones (runRadar fetches every enabled one otherwise).
-    skip: new Set([...done, ...yoursPlan.resting.map(jobCompanyKey)]),
+    skip: done,
     stopped: opts.stopped,
     industriesOf,
     onCompanyDone: opts.onCompanyDone,

@@ -2,6 +2,7 @@ import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, 
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
+import { backoff } from "../src/backoff";
 import { type BoardHealth, type BoardRecord, isChronic, isResting, planBoards, pruneBoards, readBoardHealth, recordBoards, restHours, writeBoardHealth } from "../src/board-health";
 import { parseConfig } from "../src/config";
 import { BoardClosedError } from "../src/connectors/parse";
@@ -25,37 +26,40 @@ const health = (key: string, o: Partial<CompanyHealth> = {}): CompanyHealth => {
 
 describe("rest after failures", () => {
   it("doubles from an hour, up to a day", () => {
-    expect([1, 2, 3, 4, 5, 6, 12].map((n) => restHours(failing(n), T))).toEqual([1, 2, 4, 8, 16, 24, 24]);
-    expect(restHours(undefined, T)).toBe(0);
-    expect(restHours({ okAt: T }, T)).toBe(0);
+    expect([1, 2, 3, 4, 5, 6, 12].map((n) => restHours(failing(n)))).toEqual([1, 2, 4, 8, 16, 24, 24]);
+    expect(restHours(undefined)).toBe(0);
   });
 
-  it("is at most 6 hours for your own companies", () => {
-    expect([1, 3, 4, 12].map((n) => restHours(failing(n), T, true))).toEqual([1, 4, 6, 6]);
+  it("uses the same doubling as the directory's retries", () => {
+    expect([0, 1, 2, 5, 6, 9].map((n) => backoff(n, 1, 30))).toEqual([0, 1, 2, 16, 30, 30]);
   });
 
-  it("is the full day for a board that hasn't worked for 30 days (but still 6 hours for yours)", () => {
-    const chronic = failing(2, { since: T - 31 * DAY });
-    expect(isChronic(chronic, T)).toBe(true);
+  it("calls a board chronic after 30 days without a fetch that worked", () => {
+    expect(isChronic(failing(2, { since: T - 31 * DAY }), T)).toBe(true);
     expect(isChronic(failing(2, { since: T - 29 * DAY }), T)).toBe(false);
-    expect(restHours(chronic, T)).toBe(24);
-    expect(restHours(chronic, T, true)).toBe(6);
+    expect(restHours(failing(40, { since: T - 40 * DAY }))).toBe(24);
   });
 
   it("rests from the last failure until the rest is over", () => {
     const r = failing(3, { failedAt: T - 3 * HOUR });
     expect(isResting(r, T)).toBe(true);
     expect(isResting(r, T + HOUR)).toBe(false);
-    expect(isResting({ okAt: T }, T)).toBe(false);
-    expect(isResting(failing(12, { failedAt: T - 7 * HOUR }), T, true)).toBe(false);
+    expect(isResting(undefined, T)).toBe(false);
   });
 
-  it("plans resting boards out, except ones a stopped scan already did", () => {
-    const h: BoardHealth = { version: 1, boards: { "greenhouse:a": failing(1), "greenhouse:b": { okAt: T } } };
+  it("rests a dead board for 30 days", () => {
+    const dead = failing(2, { reason: "gone", goneSince: T - 2 * HOUR, deadAt: T - HOUR, failedAt: T - HOUR });
+    expect(isResting(dead, T + 2 * DAY)).toBe(true);
+    expect(isResting(dead, T + 30 * DAY)).toBe(false);
+  });
+
+  it("never rests your own companies, nor ones a stopped scan already did", () => {
+    const h: BoardHealth = { version: 1, boards: { "greenhouse:a": failing(1), "greenhouse:c": failing(9, { deadAt: T }) } };
     const a = company("greenhouse", { slug: "a" });
     const b = company("greenhouse", { slug: "b" });
-    expect(planBoards([a, b], h, T)).toEqual({ fetch: [b], resting: [a] });
-    expect(planBoards([a, b], h, T, { done: new Set(["greenhouse:a"]) })).toEqual({ fetch: [a, b], resting: [] });
+    const c = company("greenhouse", { slug: "c" });
+    expect(planBoards([a, b, c], h, T)).toEqual({ fetch: [b], resting: [a, c] });
+    expect(planBoards([a, b, c], h, T, { yours: new Set(["greenhouse:c"]), done: new Set(["greenhouse:a"]) })).toEqual({ fetch: [a, b, c], resting: [] });
   });
 });
 
@@ -63,24 +67,53 @@ describe("recordBoards", () => {
   it("counts failures in a row, keeping when they started and what kind they are", () => {
     let h: BoardHealth = { version: 1, boards: {} };
     h = recordBoards(h, [health("greenhouse:a", { ok: false, failure: "timeout" })], T);
-    h = recordBoards(h, [health("greenhouse:a", { ok: false, failure: "gone" })], T + HOUR);
-    expect(h.boards["greenhouse:a"]).toEqual({ fails: 2, since: T, failedAt: T + HOUR, reason: "gone" });
+    h = recordBoards(h, [health("greenhouse:a", { ok: false, failure: "server" })], T + HOUR);
+    expect(h.boards["greenhouse:a"]).toEqual({ fails: 2, since: T, failedAt: T + HOUR, reason: "server" });
   });
 
-  it("a fetch that works ends the failures", () => {
-    let h: BoardHealth = { version: 1, boards: { "greenhouse:a": failing(5, { okAt: T - 10 * DAY }) } };
-    h = recordBoards(h, [health("greenhouse:a")], T + HOUR);
-    expect(h.boards["greenhouse:a"]).toEqual({ okAt: T + HOUR });
-    expect(isResting(h.boards["greenhouse:a"], T + HOUR)).toBe(false);
-  });
-
-  it("records nothing when no request was made", () => {
-    const h = recordBoards({ version: 1, boards: {} }, [health("kenexa:bank", { ok: false, unsupported: true }), health("greenhouse:a", { ok: false })], T);
+  it("keeps only failing boards: a fetch that works removes the entry", () => {
+    let h: BoardHealth = { version: 1, boards: { "greenhouse:a": failing(5) } };
+    h = recordBoards(h, [health("greenhouse:a"), health("greenhouse:b")], T + HOUR);
     expect(h.boards).toEqual({});
   });
 
-  it("drops boards out of scope 60 days after their last fetch", () => {
-    const h: BoardHealth = { version: 1, boards: { "greenhouse:old": { okAt: T - 61 * DAY }, "greenhouse:recent": { okAt: T - 10 * DAY }, "greenhouse:mine": { okAt: T - 90 * DAY } } };
+  it("records nothing when no request was made, or when our connector couldn't read the answer", () => {
+    const before: BoardHealth = { version: 1, boards: { "workday:acme": failing(1) } };
+    const h = recordBoards(
+      before,
+      [
+        health("kenexa:bank", { ok: false, unsupported: true }),
+        health("greenhouse:a", { ok: false }),
+        health("workday:acme", { ok: false, failure: "parse" }),
+        health("workday:new", { ok: false, failure: "parse" }),
+      ],
+      T + HOUR,
+    );
+    expect(h.boards).toEqual(before.boards);
+  });
+
+  it("calls a board dead only after two definite answers at least an hour apart", () => {
+    const gone = (h: BoardHealth, at: number) => recordBoards(h, [health("greenhouse:a", { ok: false, failure: "gone" })], at);
+    const once = gone({ version: 1, boards: {} }, T);
+    expect(once.boards["greenhouse:a"]).toEqual({ fails: 1, since: T, failedAt: T, reason: "gone", goneSince: T });
+    // Twice within the hour: not yet.
+    expect(gone(once, T + 30 * 60_000).boards["greenhouse:a"]?.deadAt).toBeUndefined();
+    expect(gone(once, T + HOUR).boards["greenhouse:a"]?.deadAt).toBe(T + HOUR);
+  });
+
+  it("never calls a board dead on a timeout, 5xx or 429, and they break a run of 404s", () => {
+    let h: BoardHealth = { version: 1, boards: {} };
+    for (const [i, failure] of (["gone", "timeout", "gone", "server", "network"] as const).entries()) h = recordBoards(h, [health("greenhouse:a", { ok: false, failure })], T + i * 2 * HOUR);
+    expect(h.boards["greenhouse:a"]).toMatchObject({ fails: 5, since: T });
+    expect(h.boards["greenhouse:a"]?.deadAt).toBeUndefined();
+    expect(h.boards["greenhouse:a"]?.goneSince).toBeUndefined();
+  });
+
+  it("drops boards out of scope 60 days after their last failure", () => {
+    const h: BoardHealth = {
+      version: 1,
+      boards: { "greenhouse:old": failing(1, { failedAt: T - 61 * DAY }), "greenhouse:recent": failing(1, { failedAt: T - 10 * DAY }), "greenhouse:mine": failing(1, { failedAt: T - 90 * DAY }) },
+    };
     expect(Object.keys(pruneBoards(h, new Set(["greenhouse:mine"]), T).boards).sort()).toEqual(["greenhouse:mine", "greenhouse:recent"]);
   });
 });
@@ -94,7 +127,11 @@ describe("failureOf", () => {
     expect(failureOf(new HttpError("HTTP 429", "u", 429))).toBe("server");
     expect(failureOf(new HttpError("timed out after 15s (u)", "u"))).toBe("timeout");
     expect(failureOf(new HttpError("fetch failed (u)", "u"))).toBe("network");
+    expect(failureOf(new HttpError("HTTP 403", "u", 403))).toBe("other");
     expect(failureOf(new Error("boom"))).toBe("other");
+    expect(failureOf(new TypeError("Cannot read properties of undefined (reading 'jobs')"))).toBe("parse");
+    expect(failureOf(new HttpError("not JSON (text/html): <html> (u)", "u"))).toBe("parse");
+    expect(failureOf(new Error("Workday: unexpected search response"))).toBe("parse");
     expect(failureOf(new HostSkippedError("skipped: host failed 3 times in a row (u)", "u"))).toBeUndefined();
   });
 });
@@ -111,12 +148,18 @@ describe("board-health.json", () => {
     expect(readdirSync(dir)).toEqual(["board-health.json"]);
   });
 
+  it("drops the entries of boards that worked from an older file", () => {
+    dir = mkdtempSync(join(tmpdir(), "rawjobs-boards-"));
+    writeFileSync(join(dir, "board-health.json"), JSON.stringify({ version: 1, boards: { "greenhouse:a": { okAt: T }, "greenhouse:b": { ...failing(2), okAt: T - DAY } } }));
+    expect(readBoardHealth(dir).boards).toEqual({ "greenhouse:b": failing(2) });
+  });
+
   it("survives a crash mid-write: a leftover temp file is ignored, a damaged file is set aside", () => {
     dir = mkdtempSync(join(tmpdir(), "rawjobs-boards-"));
     const file = join(dir, "board-health.json");
-    writeBoardHealth(dir, { version: 1, boards: { "greenhouse:a": { okAt: T } } });
+    writeBoardHealth(dir, { version: 1, boards: { "greenhouse:a": failing(1) } });
     writeFileSync(`${file}.1234.tmp`, '{"version":1,"boa');
-    expect(readBoardHealth(dir).boards).toEqual({ "greenhouse:a": { okAt: T } });
+    expect(readBoardHealth(dir).boards).toEqual({ "greenhouse:a": failing(1) });
     writeFileSync(file, '{"version":1,"boa');
     expect(readBoardHealth(dir)).toEqual({ version: 1, boards: {} });
     expect(existsSync(`${file}.bad`)).toBe(true);
@@ -158,7 +201,7 @@ companies:
   const at = (ms: number) => new Date(T + ms);
   const ghOpen = (jobs: readonly Job[]) => jobs.filter((j) => j.company === "GH Co").map((j) => [j.status, j.missedRuns ?? 0]);
 
-  it("leaves a failing board of yours alone until its rest is over, keeping its jobs", async () => {
+  it("always fetches a failing board of yours, keeping its jobs while it fails", async () => {
     setup();
     await scan(config(), { dataDir: dir, http: fakeHttp(ok).http, now: at(0), feed: false });
     const before = ghOpen(readJobs(dir));
@@ -167,19 +210,39 @@ companies:
     await scan(config(), { dataDir: dir, http: fakeHttp(down).http, now: at(HOUR), feed: false });
     expect(readBoardHealth(dir).boards["greenhouse:ghco"]).toMatchObject({ fails: 1, reason: "server" });
 
+    const again = fakeHttp(down);
+    const starts: ScanStart[] = [];
+    const r = await scan(config(), { dataDir: dir, http: again.http, now: at(HOUR + 30 * 60_000), feed: false, onStart: (s) => starts.push(s) });
+    expect(again.calls.some((u) => u.includes("greenhouse"))).toBe(true);
+    expect(starts[0]).toMatchObject({ yours: ["GH Co"] });
+    expect(r.resting).toBe(0);
+    expect(readBoardHealth(dir).boards["greenhouse:ghco"]).toMatchObject({ fails: 2, since: T + HOUR });
+    expect(ghOpen(readJobs(dir)).length).toBe(3);
+
+    await scan(config(), { dataDir: dir, http: fakeHttp(ok).http, now: at(2 * HOUR), feed: false });
+    expect(readBoardHealth(dir).boards["greenhouse:ghco"]).toBeUndefined();
+  });
+
+  it("leaves a failing directory board alone until its rest is over, unless you check it now", async () => {
+    setup();
+    writeBoardHealth(dir, { version: 1, boards: { "lever:leverco": failing(1, { failedAt: T - 30 * 60_000 }) } });
     const resting = fakeHttp(ok);
     const starts: ScanStart[] = [];
-    const r = await scan(config(), { dataDir: dir, http: resting.http, now: at(HOUR + 30 * 60_000), feed: false, onStart: (s) => starts.push(s) });
-    expect(resting.calls.some((u) => u.includes("greenhouse"))).toBe(false);
-    expect(starts[0]).toMatchObject({ yours: [], resting: 1 });
+    const r = await scan(config(), { dataDir: dir, http: resting.http, now: at(0), feed: false, onStart: (s) => starts.push(s) });
+    expect(resting.calls.some((u) => u.includes("leverco"))).toBe(false);
+    expect(starts[0]).toMatchObject({ resting: 1 });
     expect(r.resting).toBe(1);
-    expect(ghOpen(readJobs(dir))).toEqual(before);
 
-    // "Check now"-style scans of chosen companies fetch it anyway.
-    const only = fakeHttp(ok);
-    await scan(config(), { dataDir: dir, http: only.http, now: at(HOUR + 40 * 60_000), only: ["GH Co"] });
-    expect(only.calls.some((u) => u.includes("greenhouse"))).toBe(true);
-    expect(readBoardHealth(dir).boards["greenhouse:ghco"]).toEqual({ okAt: T + HOUR + 40 * 60_000 });
+    const now = fakeHttp(ok);
+    await scan(config(), { dataDir: dir, http: now.http, now: at(60_000), checkKeys: ["lever:leverco"] });
+    expect(now.calls.some((u) => u.includes("leverco"))).toBe(true);
+    expect(readBoardHealth(dir).boards).toEqual({});
+  });
+
+  it("writes nothing on a dry run", async () => {
+    setup();
+    await scan(config(), { dataDir: dir, http: fakeHttp(down).http, now: at(0), feed: false, dryRun: true });
+    expect(existsSync(join(dir, "board-health.json"))).toBe(false);
   });
 
   it("tries again once the rest is over", async () => {
@@ -192,7 +255,7 @@ companies:
     expect(calls.some((u) => u.includes("leverco"))).toBe(false);
     expect(r.checks).toEqual([]);
     expect(r.resting).toBe(1);
-    expect(readBoardHealth(dir).boards["greenhouse:ghco"]).toEqual({ okAt: T });
+    expect(readBoardHealth(dir).boards["greenhouse:ghco"]).toBeUndefined();
   });
 
   it("names boards that haven't worked for 30 days", async () => {

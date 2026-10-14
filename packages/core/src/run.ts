@@ -272,16 +272,18 @@ export async function runRadar(config: Config, opts: RunOptions = {}): Promise<R
 /**
  * What kind of failure a fetch had, for resting the board (board-health.ts). Only a definite answer
  * is "gone": a timeout, a 5xx or a dropped connection says nothing about the board. Undefined when
- * no request was made (the host was skipped after failing for other boards).
+ * no request was made (the host was skipped after failing for other boards). "parse" is our side
+ * failing to read an answer (a connector bug, left to the daily connector-health check).
  */
 export function failureOf(err: unknown): CompanyHealth["failure"] {
   if (err instanceof HostSkippedError) return undefined;
   if (err instanceof BoardClosedError) return "gone";
-  if (!(err instanceof HttpError)) return "other";
+  if (err instanceof TypeError || err instanceof SyntaxError) return "parse";
+  if (!(err instanceof HttpError)) return err instanceof Error && /\bunexpected\b/i.test(err.message) ? "parse" : "other";
   if (err.status === 404 || err.status === 410) return "gone";
   if (err.status !== undefined) return err.status === 429 || err.status >= 500 ? "server" : "other";
   if (/^timed out/.test(err.message)) return "timeout";
-  return /^not JSON/.test(err.message) ? "other" : "network";
+  return /^not JSON/.test(err.message) ? "parse" : "network";
 }
 
 export function byScore(a: Job, b: Job): number {

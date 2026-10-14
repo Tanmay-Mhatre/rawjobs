@@ -163,9 +163,10 @@ export type CompanyHealth = {
   searchFound?: number;
   /**
    * What kind of failure, for resting the board (board-health.ts): "gone" only for a definite answer
-   * (404, 410 or the hiring system saying the board is closed). Absent when no request was made.
+   * (404, 410 or the hiring system saying the board is closed); "parse" when our connector couldn't
+   * read the answer (not the board's fault). Absent when no request was made.
    */
-  failure?: "gone" | "timeout" | "server" | "network" | "other";
+  failure?: "gone" | "timeout" | "server" | "network" | "parse" | "other";
 };
 
 export type RunSummary = {

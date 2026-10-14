@@ -4,6 +4,7 @@ export * from "./paths";
 export * from "./runtime";
 export * from "./tracking";
 export * from "./http";
+export { backoff } from "./backoff";
 export * from "./http-cache";
 export * from "./job-feed";
 export * from "./job-feed-diff";
