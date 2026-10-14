@@ -36,6 +36,7 @@
     "design:shots": "tsx scripts/design/shots.ts",
     "catalog:crawl": "tsx scripts/catalog/commoncrawl.ts",
     "catalog:wayback": "tsx scripts/catalog/wayback.ts",
+    "catalog:feed-boards": "tsx scripts/catalog/feed-boards.ts",
     "catalog:seeds-bulk": "tsx scripts/catalog/seeds-bulk.ts",
     "catalog:crossprobe": "tsx scripts/catalog/crossprobe.ts",
     "catalog:merge": "tsx scripts/catalog/merge.ts",
