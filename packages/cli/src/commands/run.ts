@@ -175,13 +175,16 @@ export async function cmdRun(args: string[]): Promise<number> {
         for (const h of failed.slice(0, 50)) console.log(`  ${h.company} (${h.ats}:${h.slug}): ${h.error}`);
         if (failed.length > 50) console.log(`  …and ${failed.length - 50} more`);
       }
-      if (resting) console.log(`\n${resting.toLocaleString()} board${resting === 1 ? "" : "s"} left alone this scan: failed last time, tried again after a rest (up to a day; 6 hours for yours).`);
+      if (resting)
+        console.log(
+          `\n${resting.toLocaleString()} directory board${resting === 1 ? "" : "s"} left alone this scan: failed last time, tried again after a rest (up to a day; your companies are always checked).`,
+        );
       if (quiet)
         console.log(
           `${resting ? "" : "\n"}${quiet.toLocaleString()} quiet directory board${quiet === 1 ? "" : "s"} left alone: no jobs added or removed for 2 weeks or more, checked once a day (every 3 days after 45 days).`,
         );
       if (chronic.length) {
-        console.log(`\n${chronic.length} board${chronic.length === 1 ? " hasn't" : "s haven't"} worked for 30 days or more (tried once a day now; every 6 hours for yours):`);
+        console.log(`\n${chronic.length} board${chronic.length === 1 ? " hasn't" : "s haven't"} worked for 30 days or more (directory boards are tried once a day now):`);
         for (const name of chronic.slice(0, 20)) console.log(`  ${name}`);
         if (chronic.length > 20) console.log(`  …and ${chronic.length - 20} more`);
       }

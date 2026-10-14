@@ -47,6 +47,8 @@ export const ATS_TYPES = [
   "softgarden",
   "cornerstone",
   "keka",
+  "taleobe",
+  "jobscore",
 ] as const;
 
 /**
@@ -54,7 +56,7 @@ export const ATS_TYPES = [
  * your own computer, credited to the board and linked back to it; they're never shared, put in the
  * directory or the job feed (so the catalog only ever works with ATS_TYPES).
  */
-export const JOB_BOARDS = ["hackernews", "remotive", "arbeitnow", "remoteok", "himalayas", "jobicy", "weworkremotely"] as const;
+export const JOB_BOARDS = ["hackernews", "remotive", "arbeitnow", "remoteok", "himalayas", "jobicy", "weworkremotely", "remotefirstjobs"] as const;
 
 export type AtsType = (typeof ATS_TYPES)[number] | (typeof JOB_BOARDS)[number];
 
@@ -163,9 +165,10 @@ export type CompanyHealth = {
   searchFound?: number;
   /**
    * What kind of failure, for resting the board (board-health.ts): "gone" only for a definite answer
-   * (404, 410 or the hiring system saying the board is closed). Absent when no request was made.
+   * (404, 410 or the hiring system saying the board is closed); "parse" when our connector couldn't
+   * read the answer (not the board's fault). Absent when no request was made.
    */
-  failure?: "gone" | "timeout" | "server" | "network" | "other";
+  failure?: "gone" | "timeout" | "server" | "network" | "parse" | "other";
   /** A hash of the board's job ids, when its whole list was read: board-health.ts notes when it changes. */
   idsHash?: string;
 };
@@ -237,6 +240,11 @@ export type DataMeta = {
   companies: { name: string; ats: AtsType; slug: string; enabled: boolean; careers_url?: string /** Industry ids from the company directory. */; industries?: string[] }[];
   /** Newest first, capped. */
   runs: RunSummary[];
+  /**
+   * Your companies whose board is failing, by companyKey(), with when the failures started
+   * (board-health.json): the streak outlasts the capped runs above.
+   */
+  boardHealth?: Record<string, { since: string }>;
 };
 
 // ---------- config ----------

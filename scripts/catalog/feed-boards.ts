@@ -1,6 +1,6 @@
 /**
  * Boards learned from the public job boards the app reads (JOB_BOARDS: Hacker News, Remotive,
- * Arbeitnow, Remote OK, Himalayas, Jobicy, We Work Remotely). Many of their jobs link to the
+ * Arbeitnow, Remote OK, Himalayas, Jobicy, We Work Remotely, Remote First Jobs). Many of their jobs link to the
  * company's own hiring system (the apply link, or links in the post), and that link names a board.
  *
  * Only the board each link names is kept (hiring system + slug), with which feeds saw it and when:

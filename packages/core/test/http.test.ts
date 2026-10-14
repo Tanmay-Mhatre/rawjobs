@@ -102,6 +102,24 @@ describe("HttpClient", () => {
     expect(seen).toHaveLength(4);
   });
 
+  it("retries a body that stalls past the timeout, counts it towards the host and says it timed out", async () => {
+    /** Headers arrived, then the body read hit the request's timeout. */
+    const stalled = () => {
+      const res = new Response("{}", { status: 200 });
+      Object.defineProperty(res, "text", { value: () => Promise.reject(new DOMException("The operation was aborted due to timeout", "TimeoutError")) });
+      return res;
+    };
+    const { http, seen } = client([stalled(), json({ ok: 1 })]);
+    await expect(http.getJson("https://a.example/x")).resolves.toEqual({ ok: 1 });
+    expect(seen).toHaveLength(2);
+
+    const { http: down } = client([stalled(), stalled(), stalled(), stalled(), stalled(), stalled(), stalled(), stalled()], { breakAfter: 2 });
+    await expect(down.getText("https://h.example/1")).rejects.toThrow(/^timed out after 30s \(https:\/\/h\.example\/1\)$/);
+    await expect(down.getText("https://h.example/2")).rejects.toThrow(/timed out after/);
+    await expect(down.getText("https://h.example/3")).rejects.toThrow(/failed 2 times in a row/);
+    expect(down.stats.brokenHosts).toEqual(["h.example"]);
+  });
+
   it("does not retry other 4xx", async () => {
     const { http, seen } = client([new Response("", { status: 404 })]);
     await expect(http.getJson("https://a.example/x")).rejects.toMatchObject({ status: 404 });

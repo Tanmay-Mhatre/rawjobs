@@ -24,7 +24,7 @@ like any website you visit. The app identifies itself with a RawJobs User-Agent.
 your profile or resume to them, and never touches apply forms.
 
 ### Public job boards you add
-If you add Hacker News "Who is hiring", Remotive, Arbeitnow, Remote OK, Himalayas, Jobicy or We Work Remotely, the app reads their free
+If you add Hacker News "Who is hiring", Remotive, Arbeitnow, Remote OK, Himalayas, Jobicy, We Work Remotely or Remote First Jobs, the app reads their free
 public APIs from your computer (Hacker News through Algolia's HN API), at most a few times a day.
 Nothing about you is sent; those sites see your IP address, like any website you visit.
 
