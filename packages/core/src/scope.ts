@@ -109,7 +109,30 @@ export function scopeCompanies(config: Config, directory: readonly DirectoryEntr
 }
 
 /**
- * Before a scan has measured a hiring system, its time comes from requests. Systems that serve every
+ * The order to fetch directory companies in: likeliest to have a match for you first, so a slow or
+ * stopped scan has already found most of what it will. Companies that matched before, then ones in
+ * your industries, then those on hiring systems whose companies matched most often (the share of
+ * them that did); the given order (most open jobs first) breaks ties. Lanes keep this order.
+ */
+export function byMatchChance<T extends CompanyRef>(companies: readonly T[], hints: { matchedBefore: (c: T) => boolean; inIndustry: (c: T) => boolean }): T[] {
+  const seen = new Map<string, number>();
+  const hits = new Map<string, number>();
+  const matched = companies.map((c) => {
+    const m = hints.matchedBefore(c);
+    seen.set(c.ats, (seen.get(c.ats) ?? 0) + 1);
+    if (m) hits.set(c.ats, (hits.get(c.ats) ?? 0) + 1);
+    return m;
+  });
+  const chance = companies.map((c, i) => (matched[i] ? 4 : 0) + (hints.inIndustry(c) ? 2 : 0) + (hits.get(c.ats) ?? 0) / seen.get(c.ats)!);
+  return companies
+    .map((_, i) => i)
+    .sort((a, b) => chance[b]! - chance[a]! || a - b)
+    .map((i) => companies[i]!);
+}
+
+/**
+ * Before a scan has measured a hiring system, its time comes from requests.
+ Systems that serve every
  * company from one API host queue for that host: a request every 0.25 s (Greenhouse, Ashby) or 1 s.
  * The rest give each company its own host (Workday tenants, BambooHR…), so LANE_WORKERS run side by side.
  */

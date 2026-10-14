@@ -9,7 +9,26 @@ export type Ctx = {
    * jobs it didn't reach aren't gone, so the run closes none of the company's unseen jobs.
    */
   partial?: () => void;
+  /**
+   * For paged lists: fetch() reports its first page (firstPageFingerprint of the total and the ids on
+   * it). True means the board is as the last full read saw it: fetch() then stops paging and returns
+   * just that page, and the run keeps the jobs from that read instead.
+   */
+  firstPage?: (fingerprint: string, total: number) => boolean;
 };
+
+/** A cheap fingerprint of a board's job ids (FNV-1a over the sorted ids): the same when the same jobs are listed. */
+export function hashIds(ids: readonly string[]): string {
+  const text = [...ids].sort().join("\n");
+  let h = 0x811c9dc5;
+  for (let i = 0; i < text.length; i++) h = Math.imul(h ^ text.charCodeAt(i), 0x01000193) >>> 0;
+  return h.toString(16).padStart(8, "0");
+}
+
+/** A paged list's first page: its total and the ids on it, in order (a new job lands on top, a closed one changes the total). */
+export function firstPageFingerprint(total: number, ids: readonly string[]): string {
+  return `${total}:${hashIds([ids.join("\n")])}`;
+}
 
 /** What detect() can read off a careers URL. */
 export type DetectedCompany = Pick<CompanyRef, "ats" | "slug" | "region" | "shard" | "site">;

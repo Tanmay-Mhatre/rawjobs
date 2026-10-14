@@ -2,6 +2,7 @@ import { join } from "node:path";
 import { readJsonOrSetAside, writeFileAtomic } from "./atomic";
 import { backoff } from "./backoff";
 import { jobCompanyKey } from "./connectors";
+import { hashIds } from "./connectors/types";
 import type { CompanyHealth, CompanyRef } from "./schema";
 
 /**
@@ -23,11 +24,19 @@ export type BoardRecord = {
   goneSince?: number;
   /** A second definite answer, at least DEAD_AFTER_HOURS after the first: the board is dead. */
   deadAt?: number;
+  /** Times in a row the board was found dead: each one rests it longer (DEAD_REST_DAYS). */
+  deaths?: number;
   /** The last fetch that worked. */
   okAt?: number;
   /** A hash of the board's job ids (hashIds) at the last full read, and since when it's been that. */
   ids?: string;
   changedAt?: number;
+  /**
+   * The board's first page as the last full read saw it (its total and ids, see Ctx.firstPage), and
+   * when. While it's the same and recent, a scan reads only that page and keeps the jobs from then.
+   */
+  fp?: string;
+  fpAt?: number;
 };
 
 export type BoardHealth = { version: 1; boards: Record<string, BoardRecord> };
@@ -41,8 +50,10 @@ export const MAX_REST_HOURS = 24;
 export const CHRONIC_DAYS = 30;
 /** Two definite "not here" answers this far apart make a board dead (one could be a hiccup). */
 export const DEAD_AFTER_HOURS = 1;
-/** A dead directory board is tried again after this long (or sooner with "Check now"). */
-export const DEAD_REST_DAYS = 30;
+/** A dead directory board is tried again after 1 day, then 3, 7, 14 and 30 days while it stays dead (or sooner with "Check now"). */
+export const DEAD_REST_DAYS = [1, 3, 7, 14, 30] as const;
+/** A first page that matches is trusted this long; then the whole list is read again. */
+export const FINGERPRINT_HOURS = 72;
 /** A directory board unchanged this long is fetched at most once a day… */
 export const QUIET_DAYS = 14;
 /** …and unchanged this long, at most every 3 days. */
@@ -51,7 +62,7 @@ export const VERY_QUIET_DAYS = 45;
 export const PRUNE_AFTER_DAYS = 60;
 
 /** Worth keeping: failing, or with a job-list fingerprint. A bare { okAt } (older files kept one per board) is not. */
-const worthKeeping = (r: BoardRecord) => !!r.fails || r.ids !== undefined;
+const worthKeeping = (r: BoardRecord) => !!r.fails || r.ids !== undefined || r.fp !== undefined;
 
 export function readBoardHealth(dataDir: string): BoardHealth {
   const file = readJsonOrSetAside<BoardHealth>(join(dataDir, FILE));
@@ -75,10 +86,16 @@ export function restHours(r: BoardRecord | undefined): number {
   return r?.fails ? backoff(r.fails, 1, MAX_REST_HOURS) : 0;
 }
 
-/** A failing directory board whose rest isn't over: this scan leaves it alone. A dead one rests DEAD_REST_DAYS. */
+/** How long a dead board rests: longer each time it's found dead again. Boards marked dead before the steps existed rest the longest. */
+export function deadRestDays(r: Pick<BoardRecord, "deaths">): number {
+  const step = r.deaths === undefined ? DEAD_REST_DAYS.length : r.deaths;
+  return DEAD_REST_DAYS[Math.min(Math.max(step, 1), DEAD_REST_DAYS.length) - 1]!;
+}
+
+/** A failing directory board whose rest isn't over: this scan leaves it alone. A dead one rests deadRestDays(). */
 export function isResting(r: BoardRecord | undefined, now: number): boolean {
   if (!r?.fails || r.failedAt === undefined) return false;
-  if (r.deadAt !== undefined) return now - r.deadAt < DEAD_REST_DAYS * DAY_MS;
+  if (r.deadAt !== undefined) return now - r.deadAt < deadRestDays(r) * DAY_MS;
   return now - r.failedAt < restHours(r) * HOUR_MS;
 }
 
@@ -120,12 +137,13 @@ export function planBoards<T extends CompanyRef>(companies: readonly T[], health
   return { fetch, resting, quiet };
 }
 
-/** A cheap fingerprint of a board's job ids (FNV-1a over the sorted ids): the same when the same jobs are listed. */
-export function hashIds(ids: readonly string[]): string {
-  const text = [...ids].sort().join("\n");
-  let h = 0x811c9dc5;
-  for (let i = 0; i < text.length; i++) h = Math.imul(h ^ text.charCodeAt(i), 0x01000193) >>> 0;
-  return h.toString(16).padStart(8, "0");
+export { hashIds };
+
+/** The first-page fingerprints a scan may trust: recorded by a full read in the last FINGERPRINT_HOURS. */
+export function knownFirstPages(health: BoardHealth, now: number): Map<string, string> {
+  const known = new Map<string, string>();
+  for (const [key, r] of Object.entries(health.boards)) if (r.fp && r.fpAt !== undefined && now - r.fpAt < FINGERPRINT_HOURS * HOUR_MS) known.set(key, r.fp);
+  return known;
 }
 
 /**
@@ -141,11 +159,21 @@ export function recordBoards(health: BoardHealth, results: readonly CompanyHealt
     const key = h.key ?? jobCompanyKey(h);
     const prev = boards[key] ?? {};
     // The job-list fingerprint carries over failures: whether the jobs changed is about the list.
-    const kept = { ...(prev.ids !== undefined ? { ids: prev.ids, changedAt: prev.changedAt } : {}), ...(prev.okAt !== undefined ? { okAt: prev.okAt } : {}) };
+    const kept = {
+      ...(prev.ids !== undefined ? { ids: prev.ids, changedAt: prev.changedAt } : {}),
+      ...(prev.okAt !== undefined ? { okAt: prev.okAt } : {}),
+      ...(prev.fp !== undefined ? { fp: prev.fp, fpAt: prev.fpAt } : {}),
+    };
     if (h.ok) {
       // A full read says whether the jobs changed; the first one starts the clock.
       const changed = h.idsHash !== undefined && (h.idsHash !== prev.ids || prev.changedAt === undefined);
-      const next: BoardRecord = { ...kept, okAt: now, ...(changed ? { ids: h.idsHash, changedAt: now } : {}) };
+      // A full read's first page is the one later scans compare against; a reused one keeps its time, so it's read in full again in time.
+      const page = h.fingerprint && !h.unchanged && !h.partial ? { fp: h.fingerprint, fpAt: now } : h.unchanged ? {} : { fp: undefined, fpAt: undefined };
+      const next: BoardRecord = { ...kept, okAt: now, ...(changed ? { ids: h.idsHash, changedAt: now } : {}), ...page };
+      if (next.fp === undefined) {
+        delete next.fp;
+        delete next.fpAt;
+      }
       if (worthKeeping(next)) boards[key] = next;
       else delete boards[key];
       continue;
@@ -156,7 +184,10 @@ export function recordBoards(health: BoardHealth, results: readonly CompanyHealt
     if (h.failure === "gone") {
       next.goneSince = prev.goneSince ?? now;
       // Each later definite answer starts the dead board's rest again.
-      if (now - next.goneSince >= DEAD_AFTER_HOURS * HOUR_MS) next.deadAt = now;
+      if (now - next.goneSince >= DEAD_AFTER_HOURS * HOUR_MS) {
+        next.deadAt = now;
+        next.deaths = prev.deadAt !== undefined ? (prev.deaths ?? DEAD_REST_DAYS.length) + 1 : 1;
+      }
     }
     boards[key] = next;
   }
