@@ -107,6 +107,7 @@ describe("ashby", () => {
       salary: { min: 120000, max: 150000, currency: "GBP", period: "year" },
       postedAt: "2026-09-30T12:00:00.000+00:00",
       url: "https://jobs.ashbyhq.com/acme/34413f8d-0000-4bbc-8ade-eb309a0e2245",
+      employmentType: "full-time",
       description: "Build AI agents for payments operations.",
     });
   });

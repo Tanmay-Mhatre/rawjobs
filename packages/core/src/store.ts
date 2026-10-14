@@ -56,16 +56,31 @@ export function summarize(run: RunResult, merged: MergeResult): RunSummary {
   };
 }
 
-type DirectoryRow = { key: string; ats: string; slug: string; site?: string; tags?: string[]; title_tags?: string[]; visa?: unknown };
+type DirectoryRow = { key: string; ats: string; slug: string; site?: string; tags?: string[]; title_tags?: string[]; visa?: unknown; same_as?: string };
+type MoveRow = { from: Parameters<typeof companyKey>[0]; to: Parameters<typeof companyKey>[0] };
 
-/** The published directory's companies (data/catalog/directory.json), if built. */
-const directoryCompanies = (dir: string): DirectoryRow[] => {
+/** The published directory's companies and accepted moves (data/catalog/directory.json), if built. */
+const readDirectory = (dir: string): { companies: DirectoryRow[]; moves: MoveRow[] } => {
   try {
-    return (JSON.parse(readFileSync(join(dir, "catalog", "directory.json"), "utf8")) as { companies: DirectoryRow[] }).companies;
+    const file = JSON.parse(readFileSync(join(dir, "catalog", "directory.json"), "utf8")) as { companies: DirectoryRow[]; moves?: MoveRow[] };
+    return { companies: file.companies ?? [], moves: Array.isArray(file.moves) ? file.moves : [] };
   } catch {
-    return [];
+    return { companies: [], moves: [] };
   }
 };
+
+/**
+ * Boards the directory knows are one company (`same_as`), and accepted moves (the old board is the
+ * new one's company): directory key -> the key the Radar groups that company's jobs by.
+ */
+export function companyIdentities(companies: readonly DirectoryRow[], moves: readonly MoveRow[]): Map<string, string> {
+  const out = new Map(companies.flatMap((c) => (c.same_as ? [[c.key, c.same_as] as const] : [])));
+  for (const m of moves) {
+    const to = companyKey(m.to);
+    out.set(companyKey(m.from), out.get(to) ?? to);
+  }
+  return out;
+}
 
 /** Industry ids per company directory key. */
 function directoryIndustries(companies: readonly DirectoryRow[]): Map<string, string[]> {
@@ -99,8 +114,9 @@ export function saveRun(
   const history: JobsFile = { version: 1, generatedAt, jobs };
   writeFileAtomic(join(dir, "history.json"), JSON.stringify(history));
 
-  const directory = directoryCompanies(dir);
+  const { companies: directory, moves } = readDirectory(dir);
   const industries = directoryIndustries(directory);
+  const identities = companyIdentities(directory, moves);
   const visas = new Map(
     directory.flatMap((c) => {
       const v = cleanVisa(c.visa);
@@ -114,7 +130,8 @@ export function saveRun(
     const key = keyOfJob.get(companyOfJobId(j.id)) ?? companyOfJobId(j.id);
     const tags = industries.get(key);
     const visa = visas.get(key);
-    return { ...toDashboardJob(j), companyKey: key, ...(tags ? { industries: tags } : {}), ...(visa ? { visa } : {}) };
+    const identity = identities.get(key);
+    return { ...toDashboardJob(j), companyKey: key, ...(identity ? { identity } : {}), ...(tags ? { industries: tags } : {}), ...(visa ? { visa } : {}) };
   });
   const file = (list: DashboardJob[]): DashboardJobsFile => ({ version: 2, generatedAt, jobs: list });
   writeFileAtomic(join(dir, "jobs.json"), JSON.stringify(file(dashboard.filter((j) => !j.why.gate))));
