@@ -1,3 +1,4 @@
+import { surgeTitle } from "@rawjobs/core/activity";
 import { sponsorOf, sponsorTitle } from "@rawjobs/core/catalog/visa";
 import { fromJobBoard } from "@rawjobs/core/dashboard";
 import { displayName } from "@rawjobs/core/display-name";
@@ -73,6 +74,13 @@ export const JobCard = forwardRef<HTMLLIElement, Props>(function JobCard({ group
     meta.push(
       <span className="text-success-text" title={sponsorTitle(sponsor)}>
         Sponsors visas
+      </span>,
+    );
+  // The company is opening far more roles than usual (data/activity.json); never part of the score.
+  if (job.surge)
+    meta.push(
+      <span className="text-ink" title={surgeTitle(displayName(job.company), job.surge)}>
+        Hiring surge
       </span>,
     );
   if (salary) meta.push(salary);
