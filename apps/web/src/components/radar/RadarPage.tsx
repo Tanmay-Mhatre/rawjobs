@@ -22,6 +22,7 @@ import {
   type JobGroup,
   type Sort,
 } from "../../lib/filters";
+import { identityOf, roleOf } from "../../lib/identity";
 import type { Prefs, SavedView } from "../../lib/prefs";
 import type { FilterPicks } from "../../lib/profileSync";
 import { postedOrSeen, timeAgo } from "../../lib/format";
@@ -357,7 +358,7 @@ export function RadarPage(p: Props) {
     postings: selectedGroup!.jobs,
     industries: industriesByCompany.get(selected.company),
     moreFromCompany: sortJobs(
-      p.jobs.filter((j) => j.company === selected.company && j.group !== selected.group && j.status === "open"),
+      p.jobs.filter((j) => identityOf(j) === identityOf(selected) && roleOf(j) !== roleOf(selected) && j.status === "open"),
       "best",
     ).slice(0, 5),
     yours: p.isYours(selected),
@@ -651,8 +652,8 @@ export function RadarPage(p: Props) {
                   r.kind === "group" ? (
                     card(r.group)
                   ) : (
-                    <li key={`more:${r.company}`} className="px-4 py-2">
-                      <Button variant="ghost" size="sm" onClick={() => setOpenCompanies((s) => new Set([...s, r.company]))}>
+                    <li key={`more:${r.key}`} className="px-4 py-2">
+                      <Button variant="ghost" size="sm" onClick={() => setOpenCompanies((s) => new Set([...s, r.key]))}>
                         +{r.groups.length} more at {displayName(r.company)}
                       </Button>
                     </li>

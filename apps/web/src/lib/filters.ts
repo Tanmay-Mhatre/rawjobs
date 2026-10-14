@@ -4,11 +4,12 @@ import { INDUSTRY_BY_ID } from "@rawjobs/core/catalog/industries";
 import { citiesIn, placeOwner } from "@rawjobs/core/catalog/places";
 import { SENIORITY_LEVELS, type Seniority } from "@rawjobs/core/catalog/seniority";
 import { sponsorOf } from "@rawjobs/core/catalog/visa";
-import { fromJobBoard, groupKey } from "@rawjobs/core/dashboard";
+import { fromJobBoard } from "@rawjobs/core/dashboard";
 import { rankScore } from "@rawjobs/core/score";
 import { ATS_LABEL } from "./companies";
 import type { Job, Profile } from "./data";
 import { ageDays, postedOrSeen } from "./format";
+import { identityOf, roleOf } from "./identity";
 import { hiddenByRules, type HideRule } from "./notForMe";
 import { isStale } from "./stale";
 import type { Status, UserState } from "./userState";
@@ -360,18 +361,29 @@ export function sortJobs(jobs: Job[], sort: Sort, isYours?: (j: Job) => boolean,
   return [...jobs].sort(by[sort]);
 }
 
-/** The role a posting belongs to: the same key the list groups by (groupJobs). */
-const roleOf = (j: Pick<Job, "company" | "title">) => groupKey(j.company, j.title);
 /** How many roles these postings make up: what the list shows as rows, and what every count should say. */
-export const roleCount = (jobs: readonly Pick<Job, "company" | "title">[]) => new Set(jobs.map(roleOf)).size;
+export const roleCount = (jobs: readonly Pick<Job, "company" | "title" | "identity" | "companyKey" | "ats">[]) => new Set(jobs.map(roleOf)).size;
 
 /** One role posted in several places: the best posting leads, the others ride along. */
 export type JobGroup = { key: string; lead: Job; jobs: Job[] };
 
 /**
- * Groups by role with the place left out of the title (groupKey), so older saved data groups the same way.
- * The row keeps the place of its best posting, but a job board's copy never leads when the company's own
- * posting is in the group: that's the one with the real apply link.
+ * Which posting of a role to show, best first: the company's own board over a job board's copy (the real
+ * apply link), a board you scan over the directory's estimate, open over closed, one with a description.
+ * Ties keep the sort order.
+ */
+const leadRank = (j: Job) => [fromJobBoard(j), !!j.estimated, j.status !== "open", !j.hasDescription].map(Number);
+const betterLead = (a: Job, b: Job) => {
+  const ra = leadRank(a);
+  const rb = leadRank(b);
+  for (let i = 0; i < ra.length; i++) if (ra[i] !== rb[i]) return ra[i]! < rb[i]!;
+  return false;
+};
+
+/**
+ * Groups by role at one company (roleOf: the company's board, not its name, and the title with places,
+ * gender tags and requisition ids left out). The row sits where its best-ranked posting sorts; the posting
+ * it shows is picked by betterLead.
  */
 export function groupJobs(sorted: Job[]): JobGroup[] {
   const groups = new Map<string, JobGroup>();
@@ -381,7 +393,7 @@ export function groupJobs(sorted: Job[]): JobGroup[] {
     if (!g) groups.set(key, { key, lead: j, jobs: [j] });
     else {
       g.jobs.push(j);
-      if (fromJobBoard(g.lead) && !fromJobBoard(j)) g.lead = j;
+      if (betterLead(j, g.lead)) g.lead = j;
     }
   }
   return [...groups.values()];
@@ -391,27 +403,29 @@ export function groupJobs(sorted: Job[]): JobGroup[] {
 export const PER_COMPANY = 2;
 
 /** A row of the feed: a role, or a company's folded roles. */
-export type FeedRow = { kind: "group"; group: JobGroup } | { kind: "more"; company: string; groups: JobGroup[] };
+/** A row of the feed: a role, or a company's folded roles (`key`: the company's identity; `company`: its name). */
+export type FeedRow = { kind: "group"; group: JobGroup } | { kind: "more"; key: string; company: string; groups: JobGroup[] };
 
 /**
  * One company can't fill the page: after its first PER_COMPANY roles, the rest fold into one row
- * where the next one would have been ("+253 more at Speechify"), until you open it (`open`).
+ * where the next one would have been ("+253 more at Speechify"), until you open it (`open`: identities).
+ * Folded by company identity, so two companies with one name don't share a fold, and one company's boards do.
  */
 export function foldCompanies(groups: JobGroup[], open: ReadonlySet<string> = new Set()): FeedRow[] {
   const seen = new Map<string, number>();
   const folded = new Map<string, JobGroup[]>();
   const rows: FeedRow[] = [];
   for (const group of groups) {
-    const company = group.lead.company;
-    const n = (seen.get(company) ?? 0) + 1;
-    seen.set(company, n);
-    if (n <= PER_COMPANY || open.has(company)) rows.push({ kind: "group", group });
+    const key = identityOf(group.lead);
+    const n = (seen.get(key) ?? 0) + 1;
+    seen.set(key, n);
+    if (n <= PER_COMPANY || open.has(key)) rows.push({ kind: "group", group });
     else {
-      let rest = folded.get(company);
+      let rest = folded.get(key);
       if (!rest) {
         rest = [];
-        folded.set(company, rest);
-        rows.push({ kind: "more", company, groups: rest });
+        folded.set(key, rest);
+        rows.push({ kind: "more", key, company: group.lead.company, groups: rest });
       }
       rest.push(group);
     }

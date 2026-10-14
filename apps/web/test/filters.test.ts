@@ -19,6 +19,7 @@ import {
   type Ctx,
   type Filters,
 } from "../src/lib/filters";
+import { attachFeedJobs } from "../src/lib/identity";
 import { makeJob } from "./helpers";
 
 const NOW = Date.parse("2026-10-05T12:00:00Z");
@@ -234,12 +235,13 @@ describe("your companies and directory jobs", () => {
     const board = job({ id: "himalayas:acme:1", ats: "himalayas", company: "Acme Inc.", title: "Sr. Software Engineer", score: 90 });
     const own = job({ id: "greenhouse:acme:1", ats: "greenhouse", company: "ACME", title: "Senior Software Engineer - Remote", score: 80 });
     const other = job({ id: "greenhouse:acme:2", ats: "greenhouse", company: "Acme", title: "Senior Software Engineer II", score: 85 });
-    const g = groupJobs([board, other, own]);
+    const list = attachFeedJobs([board, other, own]);
+    const g = groupJobs(list);
     expect(g.map((x) => [x.lead.id, x.jobs.length])).toEqual([
       ["greenhouse:acme:1", 2],
       ["greenhouse:acme:2", 1],
     ]);
-    expect(roleCount([board, own, other])).toBe(2);
+    expect(roleCount(list)).toBe(2);
     // A board's copy still leads when it's the only posting.
     expect(groupJobs([board])[0]!.lead.id).toBe("himalayas:acme:1");
   });
@@ -249,7 +251,8 @@ describe("your companies and directory jobs", () => {
     const groups = [role("S", 1), role("S", 2), role("K", 1), role("S", 3), role("S", 4), role("K", 2)];
     const rows = foldCompanies(groups);
     expect(rows.map((r) => (r.kind === "group" ? r.group.key : `+${r.groups.length} ${r.company}`))).toEqual(["S1", "S2", "K1", "+2 S", "K2"]);
-    expect(foldCompanies(groups, new Set(["S"]))).toHaveLength(6);
+    const more = rows.find((r) => r.kind === "more")!;
+    expect(foldCompanies(groups, new Set([more.kind === "more" ? more.key : ""]))).toHaveLength(6);
   });
 
   it("'My companies' shows only theirs", () => {

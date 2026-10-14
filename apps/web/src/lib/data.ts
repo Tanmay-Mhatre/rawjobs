@@ -1,5 +1,6 @@
 import { employmentTypeOfTitle } from "@rawjobs/core/catalog/employment";
 import { citiesIn } from "@rawjobs/core/catalog/places";
+import { attachFeedJobs } from "./identity";
 import { toDashboardJob } from "@rawjobs/core/dashboard";
 import type { DashboardJob, DashboardJobsFile, DataMeta, Job as FullJob, JobsFile } from "@rawjobs/core/schema";
 
@@ -79,7 +80,8 @@ export function useData() {
       const live = fromFile(jobsFile);
       const ids = new Set(live.map((j) => j.id));
       const estimated = (discover?.jobs ?? []).filter((j) => !ids.has(j.id)).map(upgrade);
-      setState({ kind: "ready", jobs: [...live, ...estimated], meta, indexGeneratedAt: discover?.indexGeneratedAt });
+      // Job boards' copies join the company they copy only on proof (attachFeedJobs), worked out once per load.
+      setState({ kind: "ready", jobs: attachFeedJobs([...live, ...estimated]), meta, indexGeneratedAt: discover?.indexGeneratedAt });
       return meta;
     } catch (err) {
       setState({ kind: "error", message: (err as Error).message });
@@ -102,7 +104,7 @@ export function loadOtherJobs(): Promise<Job[]> {
   otherJobs ??= legacy
     ? Promise.resolve(legacy.other)
     : getJson<DashboardJobsFile>("./jobs-other.json")
-        .then((f) => (f?.jobs ?? []).map(upgrade))
+        .then((f) => attachFeedJobs((f?.jobs ?? []).map(upgrade)))
         .catch(() => []);
   return otherJobs;
 }

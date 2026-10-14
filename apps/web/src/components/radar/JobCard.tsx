@@ -1,4 +1,5 @@
 import { sponsorOf, sponsorTitle } from "@rawjobs/core/catalog/visa";
+import { fromJobBoard } from "@rawjobs/core/dashboard";
 import { displayName } from "@rawjobs/core/display-name";
 import { Bookmark, Star, X } from "lucide-react";
 import { forwardRef, type ReactNode } from "react";
@@ -75,6 +76,9 @@ export const JobCard = forwardRef<HTMLLIElement, Props>(function JobCard({ group
       </span>,
     );
   if (salary) meta.push(salary);
+  // The company's own posting leads; its job-board copies are named, not shown as more rows.
+  const boards = fromJobBoard(job) ? [] : [...new Set(group.jobs.filter(fromJobBoard).map((j) => atsLabel(j.ats)))];
+  if (boards.length) meta.push(boards.length === 1 ? `Also on ${boards[0]}` : `Also on ${boards.length} job boards`);
   if (status && status !== "dismissed") meta.push(<span className="text-ink">{STATUS_LABEL[status]}</span>);
   const evergreen = evergreenReason(job);
   if (evergreen === "pool")

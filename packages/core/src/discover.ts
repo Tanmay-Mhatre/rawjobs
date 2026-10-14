@@ -197,6 +197,7 @@ export function toIndexJobs(candidates: readonly Candidate[], opts: { live: Read
       }),
       estimated: true,
       companyKey: key,
+      ...(c.company.same_as ? { identity: c.company.same_as } : {}),
       ...(c.company.tags?.length ? { industries: c.company.tags } : {}),
       ...(cleanVisa(c.company.visa) ? { visa: cleanVisa(c.company.visa) } : {}),
     });

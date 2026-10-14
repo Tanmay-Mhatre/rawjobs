@@ -89,6 +89,14 @@ function companyKey(company: string): string {
   return key;
 }
 
+/** The company part of a role's key, for matching a job board's company name to a company's own board. */
+export const companyNameKey = companyKey;
+
+/** A title piece that only says who may apply ("m/w/d", "f/m/x", "all genders", "h/f"): not part of the role. */
+const GENDER_PIECE = /^(?:[mwfdhxi*](?:\s*[/|,]\s*[mwfdhxi*]){1,3}|all genders?|gn|gender neutral)$/i;
+/** A title piece that's only a requisition id ("R12345", "Req #1234", "JR-0042", "123456"). */
+const REQ_PIECE = /^(?:(?:req(?:uisition)?|job)(?:\s*(?:id|no\.?|number))?\s*[:#]?\s*)?[a-z]{0,3}[-_]?\d{4,}$/i;
+
 /** Short forms in titles, as whole words: "Sr." is "Senior", but "Engineering" and "Srebrenica" stay. */
 const TITLE_SHORT_FORMS: ReadonlyMap<string, string> = new Map([
   ["sr", "senior"],
@@ -112,7 +120,8 @@ function titleKey(title: string): string {
       .split(PIECES)
       .map((s) => s.trim())
       .filter(Boolean);
-    const kept = pieces.length > 1 ? pieces.filter((p) => !placeOnly(p)) : pieces;
+    // Places, gender tags and requisition ids say nothing about the role: "Engineer (m/w/d) - R1234 - Berlin" is "engineer".
+    const kept = pieces.length > 1 ? pieces.filter((p) => !placeOnly(p) && !GENDER_PIECE.test(p) && !REQ_PIECE.test(p)) : pieces;
     const w = words((kept.length ? kept : pieces).join(" ")).map((t) => TITLE_SHORT_FORMS.get(t) ?? t);
     key = w.join(" ") || title.toLowerCase().replace(/\s+/g, " ").trim();
     if (groupCache.size > 20_000) groupCache.clear();
@@ -130,6 +139,12 @@ function titleKey(title: string): string {
 export function groupKey(company: string, title: string): string {
   return `${companyKey(company)}|${titleKey(title)}`;
 }
+
+/**
+ * The title part of a role's key on its own: two postings at one company are one role when it's equal.
+ * No fuzzy matching: "Senior Engineer, Payments" and "Senior Engineer, Platform" stay two.
+ */
+export const roleKey = (title: string): string => titleKey(title);
 
 /**
  * Job boards (JOB_BOARDS in schema.ts, kept here so the browser doesn't load the config schema): they
