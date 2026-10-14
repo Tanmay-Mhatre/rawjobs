@@ -199,7 +199,7 @@ export function MyCompanies({
       const key = keyOf(r);
       const seen = healthOf(meta, key);
       const quiet = quietOf(seen);
-      const problem = problemOf(seen, { unreadable: r.state === "soon", anyScans: !!meta?.runs.length });
+      const problem = problemOf(seen, { unreadable: r.state === "soon", anyScans: !!meta?.runs.length, failingSince: meta?.boardHealth?.[key]?.since });
       const radar = radarCompanyHash(jobNames?.get(key) ?? [r.name || r.slug || companyLabel(r)]);
       return {
         r,
@@ -587,11 +587,18 @@ function Status({
     </span>
   );
   if (!problem) return quiet ? <span className="text-muted">Nothing for you in the last {quiet.scans} scans</span> : null;
+  const checkAgain = onScan && (
+    <button type="button" className={linkClass} onClick={onScan} disabled={scanning}>
+      <RefreshCw className="size-3" /> Check again
+    </button>
+  );
+  /** A month or more: say so, the date still shown. */
+  const lasting = (p: { since: string; chronic?: boolean }) => (p.chronic ? `for over a month (since ${shortDate(p.since)})` : `since ${shortDate(p.since)}`);
   switch (problem.kind) {
     case "notFound":
       return line(
         "Careers page not found",
-        `since ${shortDate(problem.since)}`,
+        lasting(problem),
         <>
           {suggestion}
           {fixLink}
@@ -601,16 +608,21 @@ function Status({
     case "notAnswering":
       return line(
         "Not answering",
-        problem.scans > 1 ? `since ${shortDate(problem.since)}` : "on the last scan",
-        <>
-          {onScan && (
-            <button type="button" className={linkClass} onClick={onScan} disabled={scanning}>
-              <RefreshCw className="size-3" /> Check again
-            </button>
-          )}
-          {suggestion}
-          {fixLink}
-        </>,
+        problem.scans > 1 || problem.chronic ? lasting(problem) : "on the last scan",
+        // A month without an answer: a new page is likelier to help than another try, so that comes first.
+        problem.chronic ? (
+          <>
+            {suggestion}
+            {fixLink}
+            {checkAgain}
+          </>
+        ) : (
+          <>
+            {checkAgain}
+            {suggestion}
+            {fixLink}
+          </>
+        ),
         "danger",
       );
     case "cantRead":

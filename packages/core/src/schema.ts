@@ -236,6 +236,11 @@ export type DataMeta = {
   companies: { name: string; ats: AtsType; slug: string; enabled: boolean; careers_url?: string /** Industry ids from the company directory. */; industries?: string[] }[];
   /** Newest first, capped. */
   runs: RunSummary[];
+  /**
+   * Your companies whose board is failing, by companyKey(), with when the failures started
+   * (board-health.json): the streak outlasts the capped runs above.
+   */
+  boardHealth?: Record<string, { since: string }>;
 };
 
 // ---------- config ----------

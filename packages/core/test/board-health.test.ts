@@ -11,7 +11,7 @@ import { HostSkippedError, HttpError } from "../src/http";
 import { failureOf, type RunResult } from "../src/run";
 import { scan, type ScanStart } from "../src/scan";
 import type { CompanyHealth, Job } from "../src/schema";
-import { readJobs } from "../src/store";
+import { readJobs, readMeta } from "../src/store";
 import { company, fakeHttp, fixture, json, makeJob } from "./helpers";
 
 const HOUR = 3_600_000;
@@ -218,9 +218,12 @@ companies:
     expect(r.resting).toBe(0);
     expect(readBoardHealth(dir).boards["greenhouse:ghco"]).toMatchObject({ fails: 2, since: T + HOUR });
     expect(ghOpen(readJobs(dir)).length).toBe(3);
+    // The streak's start goes into meta.json for My companies (it outlasts the saved runs).
+    expect(readMeta(dir)?.boardHealth).toEqual({ "greenhouse:ghco": { since: new Date(T + HOUR).toISOString() } });
 
     await scan(config(), { dataDir: dir, http: fakeHttp(ok).http, now: at(2 * HOUR), feed: false });
     expect(readBoardHealth(dir).boards["greenhouse:ghco"]).toBeUndefined();
+    expect(readMeta(dir)?.boardHealth).toBeUndefined();
   });
 
   it("leaves a failing directory board alone until its rest is over, unless you check it now", async () => {

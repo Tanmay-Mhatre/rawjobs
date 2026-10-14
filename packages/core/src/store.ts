@@ -1,5 +1,6 @@
 import { mkdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
+import type { BoardHealth } from "./board-health";
 import { companyIndustries } from "./catalog/industries";
 import { cleanVisa } from "./catalog/visa";
 import { companyKey, companyOfJobId, jobCompanyKey } from "./connectors";
@@ -27,6 +28,16 @@ export function readJobs(dir: string): Job[] {
 
 export function readMeta(dir: string): DataMeta | undefined {
   return readJson<DataMeta>(join(dir, "meta.json"));
+}
+
+/** Your companies whose board is failing, by companyKey(), and since when. */
+function yourFailingBoards(config: Config, boards: BoardHealth): NonNullable<DataMeta["boardHealth"]> {
+  const out: NonNullable<DataMeta["boardHealth"]> = {};
+  for (const c of config.companies) {
+    const r = boards.boards[jobCompanyKey(c)];
+    if (r?.fails) out[companyKey(c)] = { since: new Date(r.since).toISOString() };
+  }
+  return out;
 }
 
 export function summarize(run: RunResult, merged: MergeResult): RunSummary {
@@ -74,7 +85,11 @@ export function saveRun(
   config: Config,
   run: RunResult,
   merged: MergeResult,
-  opts: { /** Add this run to the run history (not for a one-company "Check now"). */ record?: boolean } = {},
+  opts: {
+    /** Add this run to the run history (not for a one-company "Check now"). */ record?: boolean;
+    /** Board health after this run: your failing companies' streaks go into meta.json. Kept as it was when absent. */
+    boards?: BoardHealth;
+  } = {},
 ): RunSummary {
   mkdirSync(join(dir, "runs"), { recursive: true });
   const summary = summarize(run, merged);
@@ -106,7 +121,9 @@ export function saveRun(
   writeFileAtomic(join(dir, "jobs-other.json"), JSON.stringify(file(dashboard.filter((j) => j.why.gate))));
   writeFileAtomic(join(dir, "descriptions.json"), JSON.stringify(Object.fromEntries(jobs.filter((j) => j.description).map((j) => [j.id, j.description]))));
 
-  const prevRuns = readMeta(dir)?.runs ?? [];
+  const prev = readMeta(dir);
+  const prevRuns = prev?.runs ?? [];
+  const boardHealth = opts.boards ? yourFailingBoards(config, opts.boards) : prev?.boardHealth;
   const meta: DataMeta = {
     version: 1,
     generatedAt,
@@ -116,6 +133,7 @@ export function saveRun(
       return { name, ats, slug, enabled, careers_url, ...(tags ? { industries: tags } : {}) };
     }),
     runs: opts.record === false ? prevRuns : [summary, ...prevRuns].slice(0, KEEP_RUNS),
+    ...(boardHealth && Object.keys(boardHealth).length ? { boardHealth } : {}),
   };
   writeFileAtomic(join(dir, "meta.json"), JSON.stringify(meta, null, 2));
 
