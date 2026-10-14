@@ -1,3 +1,4 @@
+import { employmentType } from "../catalog/employment";
 import type { NormalizedJob } from "../schema";
 import { htmlToText, inferWorkplace } from "../text";
 import { jobId, type Connector } from "./types";
@@ -55,6 +56,7 @@ export const arbeitnow: Connector<ArbeitnowJob> = {
       department: raw.tags?.[0],
       postedAt: raw.created_at ? new Date(raw.created_at * 1000).toISOString() : undefined,
       url: raw.url,
+      employmentType: employmentType(raw.job_types),
       description: htmlToText(raw.description),
     };
   },

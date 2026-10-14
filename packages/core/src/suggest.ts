@@ -44,6 +44,8 @@ export type IndexedCompany = BoardPlace & {
   title_tags?: string[];
   /** Government visa sponsor registers it's on: country code -> list (catalog/visa.ts). */
   visa?: VisaInfo;
+  /** Another board of the same company (same name, same job titles): the key all its boards share. */
+  same_as?: string;
 };
 
 /** A directory company without job rows: no openings right now, or not indexed yet. */

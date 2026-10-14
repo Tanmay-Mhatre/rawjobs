@@ -1,3 +1,4 @@
+import { employmentType } from "../catalog/employment";
 import type { NormalizedJob } from "../schema";
 import { htmlToText, inferWorkplace } from "../text";
 import { firstPathSegment, jobId, type Connector } from "./types";
@@ -59,6 +60,7 @@ export const manatal: Connector<ManatalJob> = {
       country: raw.country || undefined,
       workplace: raw.is_remote ? "remote" : inferWorkplace(location),
       url: `https://www.careers-page.com/${ref.slug}/job/${raw.hash}`,
+      employmentType: employmentType(raw.contract_details),
       description: htmlToText(raw.description ?? ""),
     };
   },
