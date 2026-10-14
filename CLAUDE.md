@@ -31,6 +31,28 @@ no GitHub auto-merge (`mcp__ccd_pr__set_auto_merge`). Those skip the queue.
 
 Don't change `main`'s branch protection or `.mergify.yml` to get your PR in faster.
 
+## Building: the best way, with the fewest tokens
+
+When development starts, build it the best way you can and spend as few tokens as you can:
+
+- Read only what you need. Search (Grep, Glob) before reading, and read just the lines that matter,
+  not whole files. Don't re-read a file you just edited.
+- Reuse the code, helpers and patterns already in the repo rather than writing new ones. Keep the
+  change as small as the task allows.
+- Run independent tool calls together in one step. Hand broad searches to a subagent and keep only
+  its answer.
+- Keep messages to the user short: what changed, what was checked, what's next.
+
+## Before it goes live: fact-check and review
+
+Before you open or queue a PR (or publish anything), check your own work:
+
+1. Read your whole diff again, line by line, for bugs, leftovers and things you didn't mean to change.
+2. Fact-check every claim in the code, copy, docs and PR text (paths, commands, versions, counts,
+   behaviour) against the repo or the official docs, not from memory.
+3. Run `pnpm check`, and test the change in the running app when the user can see it.
+4. Fix what you find, then say in the PR what you checked.
+
 ## UI and UX changes: show the user a screenshot
 
 After any change the user can see (layout, copy, styling, a new state or interaction), once the
