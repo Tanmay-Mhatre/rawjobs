@@ -1,3 +1,4 @@
+import { employmentType } from "../catalog/employment";
 import type { CompanyRef, NormalizedJob, Workplace } from "../schema";
 import { htmlToText } from "../text";
 import { firstPathSegment, jobId, SEARCH_MAX_POSTINGS, type Connector, type Ctx } from "./types";
@@ -12,6 +13,7 @@ export type SmartRecruitersPosting = {
   department?: { label?: string };
   function?: { label?: string };
   customField?: { fieldLabel?: string; valueLabel?: string }[];
+  typeOfEmployment?: { id?: string; label?: string };
 };
 
 type Page = { totalFound: number; content: SmartRecruitersPosting[] };
@@ -93,6 +95,7 @@ export const smartrecruiters: Connector<SmartRecruitersPosting> = {
       department: raw.department?.label || raw.function?.label,
       postedAt: raw.releasedDate,
       url: `https://jobs.smartrecruiters.com/${encodeURIComponent(company)}/${raw.id}`,
+      employmentType: employmentType(raw.typeOfEmployment?.label ?? raw.typeOfEmployment?.id),
       // The list has no descriptions; run.ts asks describe() for the jobs that pass the gates.
       description: "",
     };

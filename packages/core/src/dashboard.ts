@@ -1,3 +1,4 @@
+import { employmentTypeOfTitle } from "./catalog/employment";
 import { citiesIn, countriesIn } from "./catalog/places";
 import { seniorityOf } from "./catalog/seniority";
 import { TITLE_HEADS } from "./catalog/titles";
@@ -10,11 +11,14 @@ import type { DashboardJob, Job, JOB_BOARDS } from "./schema";
  */
 export function toDashboardJob(job: Job): DashboardJob {
   const { description, missedRuns: _missed, ...rest } = job;
+  // Older saves and hiring systems that don't say: from the title's own words ("Intern", "(Contract)").
+  const employmentType = job.employmentType ?? employmentTypeOfTitle(job.title);
   return {
     ...rest,
     countries: countriesIn(job.location, job.country),
     cities: citiesIn(job.location),
     seniority: seniorityOf(job.title),
+    ...(employmentType ? { employmentType } : {}),
     group: groupKey(job.company, job.title),
     hasDescription: !!description,
     ...(description ? { descriptionLength: description.trim().length } : {}),

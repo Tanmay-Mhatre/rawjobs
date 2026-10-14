@@ -1,3 +1,4 @@
+import { employmentType } from "../catalog/employment";
 import type { NormalizedJob } from "../schema";
 import { htmlToText } from "../text";
 import { isoDate } from "./parse";
@@ -54,6 +55,7 @@ export const remotive: Connector<RemotiveJob> = {
       department: raw.category,
       postedAt: isoDate(raw.publication_date),
       url: raw.url,
+      employmentType: employmentType(raw.job_type),
       description: htmlToText(raw.description),
     };
   },

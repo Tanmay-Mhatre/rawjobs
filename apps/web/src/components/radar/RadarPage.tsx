@@ -472,6 +472,7 @@ export function RadarPage(p: Props) {
               <FacetMenu label="Country" searchable options={facet("countries")} selected={filters.countries} onChange={(v) => setFilters({ countries: v })} />
               <FacetMenu label="Location" searchable options={facet("locations")} selected={filters.locations} onChange={(v) => setFilters({ locations: v })} />
               <FacetMenu label="Workplace" options={facet("workplace")} selected={filters.workplace} onChange={(v) => setFilters({ workplace: v as Filters["workplace"] })} />
+              <FacetMenu label="Type" options={facet("employment")} selected={filters.employment} onChange={(v) => setFilters({ employment: v })} />
               <FacetMenu
                 label="Match"
                 single
@@ -696,6 +697,9 @@ export function RadarPage(p: Props) {
           </SheetSection>
           <SheetSection label="Workplace">
             <OptionList label="Workplace" options={facet("workplace")} selected={filters.workplace} onChange={(v) => setFilters({ workplace: v as Filters["workplace"] })} />
+          </SheetSection>
+          <SheetSection label="Type">
+            <OptionList label="Type" options={facet("employment")} selected={filters.employment} onChange={(v) => setFilters({ employment: v })} />
           </SheetSection>
           <SheetSection label="Seniority">
             <OptionList label="Seniority" options={facet("seniority")} selected={filters.seniority} onChange={(v) => setFilters({ seniority: v as Filters["seniority"] })} />

@@ -1,3 +1,4 @@
+import { employmentType } from "../catalog/employment";
 import type { NormalizedJob, Workplace } from "../schema";
 import { htmlToText, inferWorkplace } from "../text";
 import { firstPathSegment, jobId, salaryPeriod, type Connector } from "./types";
@@ -67,6 +68,7 @@ export const lever: Connector<LeverPosting> = {
       salary: s && (s.min || s.max) ? { min: s.min, max: s.max, currency: s.currency, period: salaryPeriod(s.interval) } : undefined,
       postedAt: raw.createdAt ? new Date(raw.createdAt).toISOString() : undefined,
       url: raw.hostedUrl,
+      employmentType: employmentType(raw.categories?.commitment),
       description,
     };
   },

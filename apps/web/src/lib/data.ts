@@ -1,3 +1,4 @@
+import { employmentTypeOfTitle } from "@rawjobs/core/catalog/employment";
 import { citiesIn } from "@rawjobs/core/catalog/places";
 import { toDashboardJob } from "@rawjobs/core/dashboard";
 import type { DashboardJob, DashboardJobsFile, DataMeta, Job as FullJob, JobsFile } from "@rawjobs/core/schema";
@@ -37,7 +38,12 @@ async function getJson<T>(path: string): Promise<T | null> {
 let legacy: { other: Job[]; descriptions: Record<string, string> } | null = null;
 
 /** Fields added to the dashboard files later: filled in here for files written before them. */
-const upgrade = (j: Job): Job => (j.cities ? j : { ...j, cities: citiesIn(j.location) });
+const upgrade = (j: Job): Job => {
+  const cities = j.cities ?? citiesIn(j.location);
+  // Saved before employment types: the title's own words ("Intern", "(Contract)") are all there is.
+  const employmentType = j.employmentType ?? employmentTypeOfTitle(j.title);
+  return j.cities && employmentType === j.employmentType ? j : { ...j, cities, ...(employmentType ? { employmentType } : {}) };
+};
 
 function fromFile(file: DashboardJobsFile | JobsFile): Job[] {
   if (file.version === 2) return file.jobs.map(upgrade);

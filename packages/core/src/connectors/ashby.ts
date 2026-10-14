@@ -1,3 +1,4 @@
+import { employmentType } from "../catalog/employment";
 import type { NormalizedJob, Salary, Workplace } from "../schema";
 import { htmlToText } from "../text";
 import { firstPathSegment, jobId, salaryPeriod, type Connector } from "./types";
@@ -14,6 +15,8 @@ export type AshbyJob = {
   isListed?: boolean;
   isRemote?: boolean;
   workplaceType?: "OnSite" | "Remote" | "Hybrid" | string | null;
+  /** "FullTime", "PartTime", "Intern", "Contract" or "Temporary". */
+  employmentType?: string | null;
   address?: { postalAddress?: { addressCountry?: string; addressLocality?: string } };
   jobUrl: string;
   descriptionPlain?: string;
@@ -77,6 +80,7 @@ export const ashby: Connector<AshbyJob> = {
       salary: salaryOf(raw),
       postedAt: raw.publishedAt,
       url: raw.jobUrl,
+      employmentType: employmentType(raw.employmentType),
       description: raw.descriptionPlain?.trim() || htmlToText(raw.descriptionHtml),
     };
   },

@@ -1,3 +1,4 @@
+import type { EmploymentType } from "./catalog/employment";
 import type { VisaInfo } from "./catalog/visa";
 import { z } from "zod";
 
@@ -105,6 +106,8 @@ export type Job = {
   workplace: Workplace;
   department?: string;
   salary?: Salary;
+  /** Full-time, part-time, contract, internship or temporary, when the hiring system says (catalog/employment.ts). */
+  employmentType?: EmploymentType;
   /** From the ATS when available (ISO 8601). */
   postedAt?: string;
   /** Apply / job page on the company's own careers site. */

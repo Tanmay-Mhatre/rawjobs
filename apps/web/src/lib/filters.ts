@@ -1,4 +1,5 @@
 import { displayName } from "@rawjobs/core/display-name";
+import { EMPLOYMENT_LABEL, EMPLOYMENT_TYPES, type EmploymentType } from "@rawjobs/core/catalog/employment";
 import { INDUSTRY_BY_ID } from "@rawjobs/core/catalog/industries";
 import { citiesIn, placeOwner } from "@rawjobs/core/catalog/places";
 import { SENIORITY_LEVELS, type Seniority } from "@rawjobs/core/catalog/seniority";
@@ -26,6 +27,8 @@ export type Filters = {
   /** Cities, as "City, Country". */
   locations: string[];
   workplace: Workplace[];
+  /** Employment types ("full-time", "contract"…); "unknown" means the posting doesn't say. */
+  employment: string[];
   seniority: Seniority[];
   industries: string[];
   companies: string[];
@@ -89,6 +92,7 @@ export const DEFAULT_FILTERS: Filters = {
   countries: [],
   locations: [],
   workplace: [],
+  employment: [],
   seniority: [],
   industries: [],
   companies: [],
@@ -108,7 +112,7 @@ export const DEFAULT_FILTERS: Filters = {
 };
 
 /** Facets with option counts. */
-export type FacetKey = "posted" | "countries" | "locations" | "workplace" | "seniority" | "industries" | "companies" | "topics" | "ats" | "match";
+export type FacetKey = "posted" | "countries" | "locations" | "workplace" | "employment" | "seniority" | "industries" | "companies" | "topics" | "ats" | "match";
 
 export type Ctx = {
   user: UserState;
@@ -179,6 +183,7 @@ function passes(j: Job, f: Filters, ctx: Ctx, terms: string[], skip?: FacetKey):
   if (skip !== "countries" && f.countries.length && !countriesOf(j).some((c) => f.countries.includes(c))) return false;
   if (skip !== "locations" && f.locations.length && !j.cities.some((c) => f.locations.includes(c))) return false;
   if (skip !== "workplace" && f.workplace.length && !f.workplace.includes(j.workplace)) return false;
+  if (skip !== "employment" && f.employment.length && !f.employment.includes(j.employmentType ?? "unknown")) return false;
   if (skip !== "seniority" && f.seniority.length && !f.seniority.includes(j.seniority)) return false;
   if (skip !== "industries" && f.industries.length && !ctx.industriesOf(j.company).some((i) => f.industries.includes(i))) return false;
   if (skip !== "companies" && f.companies.length && !f.companies.includes(j.company)) return false;
@@ -261,6 +266,10 @@ export function facetCounts(jobs: Job[], f: Filters, ctx: Ctx): Record<FacetKey,
       ctx.mine?.locations,
     ),
     workplace: (["remote", "hybrid", "onsite", "unknown"] as Workplace[]).map((w) => ({ value: w, label: WORKPLACE_LABEL[w], count: tally("workplace", (j) => [j.workplace]).get(w) ?? 0 })),
+    employment: (() => {
+      const counts = tally("employment", (j) => [j.employmentType ?? "unknown"]);
+      return [...EMPLOYMENT_TYPES, "unknown" as const].map((t) => ({ value: t, label: t === "unknown" ? "Not stated" : EMPLOYMENT_LABEL[t], count: counts.get(t) ?? 0 }));
+    })(),
     seniority: SENIORITY_LEVELS.map((s) => ({ value: s.id, label: s.label, count: tally("seniority", (j) => [j.seniority]).get(s.id) ?? 0 })),
     industries: sorted(
       tally("industries", (j) => ctx.industriesOf(j.company)),
@@ -423,7 +432,7 @@ export function activeChips(f: Filters, ctx: Pick<Ctx, "min">, base?: Filters): 
 
 function chipsOf(f: Filters, ctx: Pick<Ctx, "min">): { key: string; label: string; remove: Partial<Filters> }[] {
   const chips: { key: string; label: string; remove: Partial<Filters> }[] = [];
-  const list = <K extends "countries" | "locations" | "workplace" | "seniority" | "industries" | "companies" | "topics" | "ats">(k: K, label: (v: string) => string) => {
+  const list = <K extends "countries" | "locations" | "workplace" | "employment" | "seniority" | "industries" | "companies" | "topics" | "ats">(k: K, label: (v: string) => string) => {
     for (const v of f[k] as string[]) chips.push({ key: `${k}:${v}`, label: label(v), remove: { [k]: (f[k] as string[]).filter((x) => x !== v) } as Partial<Filters> });
   };
   if (f.q.trim()) chips.push({ key: "q", label: `“${f.q.trim()}”`, remove: { q: "" } });
@@ -432,6 +441,7 @@ function chipsOf(f: Filters, ctx: Pick<Ctx, "min">): { key: string; label: strin
   list("countries", (v) => (v === REMOTE ? "Remote & your regions" : v));
   list("locations", (v) => v.replace(/, [^,]+$/, ""));
   list("workplace", (v) => WORKPLACE_LABEL[v as Workplace] ?? v);
+  list("employment", (v) => (v === "unknown" ? "Type not stated" : (EMPLOYMENT_LABEL[v as EmploymentType] ?? v)));
   list("seniority", (v) => SENIORITY_LABEL[v as Seniority] ?? v);
   list("industries", (v) => INDUSTRY_BY_ID.get(v)?.label ?? v);
   list("companies", (v) => displayName(v));

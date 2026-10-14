@@ -344,3 +344,27 @@ describe("your companies and directory jobs", () => {
     expect(fromQuery(q)!.filters).toMatchObject({ mine: true, olderIndex: true });
   });
 });
+
+describe("Type filter (employment type)", () => {
+  const list = [
+    job({ id: "ft", company: "A", title: "PM", employmentType: "full-time" }),
+    job({ id: "ct", company: "B", title: "PM", employmentType: "contract" }),
+    job({ id: "old", company: "C", title: "PM" }),
+  ];
+
+  it("filters by type; jobs that don't say are 'Not stated'", () => {
+    expect(applyFilters(list, f({ employment: ["contract"] }), ctx).map((j) => j.id)).toEqual(["ct"]);
+    expect(applyFilters(list, f({ employment: ["full-time", "unknown"] }), ctx).map((j) => j.id)).toEqual(["ft", "old"]);
+    const options = facetCounts(list, f(), ctx).employment;
+    expect(options.map((o) => [o.label, o.count])).toEqual([
+      ["Full-time", 1],
+      ["Part-time", 0],
+      ["Contract", 1],
+      ["Internship", 0],
+      ["Temporary", 0],
+      ["Not stated", 1],
+    ]);
+    expect(activeChips(f({ employment: ["contract"] }), ctx).map((c) => c.label)).toEqual(["Contract"]);
+    expect(fromQuery(toQuery(f({ employment: ["internship"] }), "best"))!.filters.employment).toEqual(["internship"]);
+  });
+});
