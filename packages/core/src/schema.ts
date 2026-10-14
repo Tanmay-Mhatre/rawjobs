@@ -195,6 +195,8 @@ export type RunSummary = {
   health: CompanyHealth[];
   /** Your companies whose board was gone, and the directory board with the same name: suggestions to review, never applied. */
   moves?: BoardMove[];
+  /** Every company in the directory was checked by this run (a background check or full scan that finished). */
+  everyCompany?: boolean;
 };
 
 /** A company whose board is gone (404), and a live directory board with the same name that may be its new one. */
@@ -358,6 +360,13 @@ export const ConfigSchema = z
       .object({
         auto_update: z.boolean().default(true),
         share_additions: z.boolean().default(true),
+      })
+      .prefault({}),
+    /** How scans run: Scan now, then (background) a quiet check of every other company; your industries rank higher (industry_boost). */
+    scans: z
+      .object({
+        background: z.boolean().default(true),
+        industry_boost: z.boolean().default(true),
       })
       .prefault({}),
   })

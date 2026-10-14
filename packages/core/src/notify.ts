@@ -107,8 +107,9 @@ function newJobsLine(jobs: readonly Job[], minScore: number): string | undefined
   return `${plural(jobs.length, "new job", "new jobs")} · ${strong ? plural(strong, "strong fit", "strong fits") : "no strong fits"}`;
 }
 
-/** Which scan a message is about, short enough for a phone's notification ("mine" includes your industries). */
-const SCOPE_NAME: Record<ScanScope, string> = { mine: "My companies", all: "All companies" };
+/** Which scan a message is about, short enough for a phone's notification. "background": the check of every other company after Scan now. */
+export type AlertScope = ScanScope | "background";
+const SCOPE_NAME: Record<AlertScope, string> = { mine: "Your scan", yours: "My companies", all: "Every company", background: "Background check" };
 
 const seeThem = (n: number) => `Open RawJobs on your computer to see ${n === 1 ? "it" : "them"}.`;
 
@@ -128,7 +129,7 @@ export function alertJobs(config: Pick<Config, "alerts" | "profile">, jobs: read
  * One message for a scan: how many new jobs and strong fits (with only_new off, `jobs` are every
  * strong fit, new or not). Undefined when there's nothing to say (no message beats an empty one).
  */
-export function digest(jobs: readonly Job[], opts: { minScore: number; onlyNew?: boolean; scope: ScanScope }): string | undefined {
+export function digest(jobs: readonly Job[], opts: { minScore: number; onlyNew?: boolean; scope: AlertScope }): string | undefined {
   if (!jobs.length) return undefined;
   const scope = SCOPE_NAME[opts.scope];
   if (opts.onlyNew === false) return message(`💼 <b>Strong fits · ${scope}</b>`, plural(jobs.length, "strong fit", "strong fits"), seeThem(jobs.length));
@@ -136,10 +137,11 @@ export function digest(jobs: readonly Job[], opts: { minScore: number; onlyNew?:
 }
 
 /** The message for "tell me when this scan is done": always sent, finished or stopped, new jobs or not. */
-export function finishedMessage(o: { newJobs: readonly Job[]; minScore: number; stopped?: boolean; scope: ScanScope }): string {
+export function finishedMessage(o: { newJobs: readonly Job[]; minScore: number; stopped?: boolean; scope: AlertScope }): string {
   const facts = newJobsLine(o.newJobs, o.minScore);
   const n = o.newJobs.length;
-  const scan = `${SCOPE_NAME[o.scope]} scan`;
+  const name = SCOPE_NAME[o.scope];
+  const scan = /(?:scan|check)$/.test(name) ? name : `${name} scan`;
   if (o.stopped)
     return message(
       `⏸ <b>${scan} stopped</b>`,

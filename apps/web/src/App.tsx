@@ -13,7 +13,8 @@ import { RadarPage } from "./components/radar/RadarPage";
 import { NotifyBell, NotifyFailed, notifyLine } from "./components/NotifyWhenDone";
 import { ServerNotices } from "./components/Updates";
 import { UpdatePill } from "./components/WhatsNew";
-import { ScanButton, ScanChooser } from "./components/ScanButton";
+import { ScanButton } from "./components/ScanButton";
+import { FeedStaleNotice } from "./components/FeedStaleNotice";
 import { Settings } from "./components/Settings";
 import { settingsHash } from "./components/settings/registry";
 import { ShortcutList } from "./components/ShortcutList";
@@ -79,20 +80,13 @@ export function App() {
   const afterScan = useCallback(async () => {
     await Promise.all([reload(), setup.refresh()]);
   }, [reload, setup.refresh]);
-  const { scan, start: startScan, stop: stopScan, notify: notifyScan } = useScan(afterScan);
+  const { scan, start: startScan, stop: stopScan, restart: restartScan, notify: notifyScan } = useScan(afterScan);
   const afterBackgroundScan = useCallback(async () => {
     const [m] = await Promise.all([reload(), setup.refresh()]);
     return m;
   }, [reload, setup.refresh]);
-  /** The "which scan?" pop-up. */
-  const [choosing, setChoosing] = useState(false);
-  /** A "Scan now" click: ask which scan, or run your default if you said not to ask. */
-  const requestScan = useCallback(() => {
-    const p = scanPrefs();
-    if (p.ask) setChoosing(true);
-    else void startScan(p.scope);
-  }, [startScan]);
-  const closeChooser = useCallback(() => setChoosing(false), []);
+  /** A "Scan now" click: runs what Settings > Scans says (the scan, or only your companies), straight away. */
+  const requestScan = useCallback(() => void startScan(scanPrefs().scope), [startScan]);
   const scanning = scan.phase === "running";
   /** A scheduled scan: shown in the header while it runs; its results replace the ones on screen when it ends. */
   const background = useBackgroundScan({
@@ -303,8 +297,10 @@ export function App() {
                     <ScanButton
                       scan={scan}
                       background={background.running}
-                      onRequest={requestScan}
-                      onChoose={() => setChoosing(true)}
+                      onStart={(scope) => void startScan(scope)}
+                      onSettings={() => {
+                        location.hash = settingsHash("scans");
+                      }}
                       onStop={() => void stopScan()}
                       notifyLine={notifyLine(tg, scan, notifyFailed)}
                       notify={(openDetails) => <NotifyBell tg={tg} scan={scan} failed={notifyFailed} onDetails={openDetails} onSaved={() => setup.refresh()} onConnected={notifyNow} />}
@@ -333,6 +329,7 @@ export function App() {
           )}
         >
           <ServerNotices onRadar={!inSetup && tab === "radar" && !openId && !showKeys && status !== undefined} />
+          {!inSetup && tab === "radar" && <FeedStaleNotice scan={scan} onOnlyMine={() => void restartScan("yours")} />}
           {status === undefined || state.kind === "loading" ? (
             <FeedSkeleton />
           ) : inSetup ? (
@@ -481,6 +478,10 @@ export function App() {
                     go({ tab: "radar" });
                     requestScan();
                   }}
+                  onCheckEvery={() => {
+                    go({ tab: "radar" });
+                    void startScan("all");
+                  }}
                   scanning={scanning}
                   user={user.state}
                   prefs={prefs.prefs}
@@ -556,7 +557,6 @@ export function App() {
         />
 
         <ShortcutHelp open={showKeys} onClose={() => setShowKeys(false)} canScan={canRunLocally && setupState === "configured"} />
-        <ScanChooser open={choosing} onClose={closeChooser} onStart={(scope) => void startScan(scope)} />
         <Toaster />
       </div>
     </NotForMeProvider>

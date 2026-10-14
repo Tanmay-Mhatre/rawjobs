@@ -6,8 +6,15 @@ import type { AtsType, CompanyHealth, Config, DashboardJob } from "./schema";
  * one RunEvent per line.
  */
 
-/** What a scan covers besides your companies: "mine" = your industries, "all" = the whole directory. */
-export type ScanScope = "mine" | "all";
+/**
+ * What a scan covers. "mine" (Scan now): your companies, companies that matched you before, and the
+ * ones the shared job feed flags for you; every company when the feed is too old. "yours": only your
+ * companies. "all": every company in the directory, fetched live.
+ */
+export type ScanScope = "mine" | "all" | "yours";
+
+/** Where a Scan now company comes from: yours, a past match, or picked by the shared job feed. */
+export type ScanSource = "yours" | "past" | "feed";
 
 export type SetupStatus = {
   configPath: string;
@@ -85,13 +92,27 @@ export type RunEvent =
       byAts?: Record<string, number>;
       /** Of those, done before this scan started (it resumed a stopped one), per hiring system. */
       doneByAts?: Record<string, number>;
+      /** A Scan now scan's companies by where they come from, and how many of each are done. Older CLIs leave it out. */
+      bySource?: Record<ScanSource, number>;
+      doneBySource?: Record<ScanSource, number>;
+      /** How old the shared job feed is, in days; null without one. */
+      feedAgeDays?: number | null;
+      /** The feed is too old to pick companies, so this Scan now checks every company itself. */
+      fallback?: boolean;
+      /** The quick Scan now, or the background check of every other company that follows it. */
+      stage?: "quick" | "background";
     }
   /** A company done: every one of yours, and directory ones that matched or failed. */
-  | ({ type: "company"; done?: number; doneByAts?: Record<string, number> } & CompanyHealth)
+  | ({ type: "company"; done?: number; doneByAts?: Record<string, number>; doneBySource?: Record<ScanSource, number> } & CompanyHealth)
   /** A company's matches, fetched live just now: the Radar shows them before the scan ends. Older CLIs don't send it. */
   | { type: "jobs"; jobs: DashboardJob[] }
   /** Directory companies done, as a count (`ats`: the hiring system of the last one). */
-  | { type: "progress"; done: number; ats?: string; doneByAts?: Record<string, number> }
+  | { type: "progress"; done: number; ats?: string; doneByAts?: Record<string, number>; doneBySource?: Record<ScanSource, number> }
+  /** Scan now is done and saved; the background check of every other company starts (its own start … done follow). */
+  | { type: "background" }
+  /** The background check paused because the computer is on battery; resumed once it's plugged in. */
+  | { type: "paused"; reason: "battery" }
+  | { type: "resumed" }
   | {
       type: "done";
       jobsFound: number;
@@ -103,6 +124,10 @@ export type RunEvent =
       checked?: number;
       /** Stopped before the end; the next scan of the same type resumes. */
       stopped?: boolean;
+      /** Which stage finished: the quick Scan now, or the background check. Older CLIs leave it out. */
+      stage?: "quick" | "background";
+      /** Every company in the directory has now been checked (a background check or a full scan that finished). */
+      everyCompany?: boolean;
       /** Your companies whose board is gone, with a directory board that may be the new one: suggestions, never applied. */
       moves?: { name: string; from: string; to: string }[];
       /** Older CLIs: switching a moved board in your config failed. */
@@ -132,6 +157,8 @@ export type ScanPlan = Record<
     seconds: number;
     /** `seconds` by stage: the shared job feed, then the live fetches. Older CLIs leave it out. */
     stages?: { feed: number; live: number; seconds: number };
+    /** Scan now with a job feed too old to pick companies: it checks every company itself. */
+    fallback?: boolean;
     resumable: { done: number; startedAt: string } | null;
   }
 >;

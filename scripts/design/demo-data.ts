@@ -533,8 +533,9 @@ export const DIRECTORY_STATUS = {
 };
 
 export const SCAN_PLAN = {
-  mine: { yours: MY_COMPANIES.length, extra: 412, seconds: 540, resumable: null },
-  all: { yours: MY_COMPANIES.length, extra: 18_198, seconds: 7_200, resumable: null },
+  mine: { yours: MY_COMPANIES.length, extra: 259, seconds: 180, resumable: null },
+  yours: { yours: MY_COMPANIES.length, extra: 0, seconds: 50, resumable: null },
+  all: { yours: MY_COMPANIES.length, extra: 6_790, seconds: 3_900, resumable: null },
 };
 
 /** Telegram set up with an obviously fake, masked token. */

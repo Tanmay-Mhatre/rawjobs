@@ -43,6 +43,7 @@ export { isCareerSiteHost } from "./connectors/successfactors";
 export { isTeamtailorHost } from "./connectors/teamtailor";
 export * from "./employers";
 export * from "./scope";
+export * from "./stages";
 export * from "./notify";
 export * from "./liveness";
 export * from "./schedule";

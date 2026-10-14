@@ -1,7 +1,7 @@
 import { CircleAlert, Clock, LoaderCircle, Plus, Power, Play, RefreshCw, X } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import { removeSchedule, runScheduleNow, saveSchedule, scheduleStatus, type ScheduledRun, type ScheduleStatus } from "../lib/automation";
-import { formatDateTime, roughCount, timeAgo } from "../lib/format";
+import { formatDateTime, timeAgo } from "../lib/format";
 import { aboutTime, scopeLabel } from "../lib/scan";
 import { scanPlan, type ScanPlan, type ScanScope } from "../lib/setup";
 import { toast } from "./Toast";
@@ -45,7 +45,8 @@ export function ScheduledScans() {
     setStatus(s);
     if (s.settings) {
       setTimes(s.settings.times);
-      setScope(s.settings.scope);
+      // "All companies" from before is the scan now: its background check covers every other company.
+      setScope(s.settings.scope === "all" ? "mine" : s.settings.scope);
     }
   }, []);
   useEffect(() => {
@@ -153,7 +154,7 @@ export function ScheduledScans() {
         <fieldset>
           <legend className="type-label">What to scan</legend>
           <div className="mt-1.5 grid gap-2 sm:grid-cols-2">
-            {(["mine", "all"] as const).map((s) => {
+            {(["mine", "yours"] as const).map((s) => {
               const p = plan?.[s];
               const count = p ? p.yours + p.extra : 0;
               return (
@@ -161,7 +162,7 @@ export function ScheduledScans() {
                   <input type="radio" name="schedule-scope" checked={scope === s} onChange={() => setScope(s)} className="mt-0.5 accent-ink" />
                   <span className="type-small">
                     <b>{scopeLabel(s, hasIndustries)}</b>
-                    <span className="block text-muted">{p ? `${s === "all" ? roughCount(count) : count.toLocaleString()} companies · ${aboutTime(p.seconds)}` : "…"}</span>
+                    <span className="block text-muted">{p ? `${count.toLocaleString()} companies · ${aboutTime(p.seconds)}` : "…"}</span>
                   </span>
                 </label>
               );
@@ -203,8 +204,7 @@ export function ScheduledScans() {
       </div>
 
       <p className="type-small text-muted">
-        Scans run on this computer, even with this page closed, but only while it's on or asleep (it wakes up for them). A scan missed while it was off runs as soon as it's back on.{" "}
-        {scope === "all" && "All companies usually takes minutes with the shared job feed, a few hours without it: keep the computer on until it's done."}
+        Scans run on this computer, even with this page closed, but only while it's on or asleep (it wakes up for them). A scan missed while it was off runs as soon as it's back on.
       </p>
 
       {status.runs.length > 0 && (

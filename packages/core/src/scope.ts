@@ -1,6 +1,5 @@
 import { closeSync, existsSync, openSync, readFileSync, readSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { companyIndustries } from "./catalog/industries";
 import { companyKey, connectors } from "./connectors";
 import { companyWords } from "./employers";
 import { laneOf } from "./run";
@@ -12,12 +11,14 @@ import type { DirectoryCompany } from "./suggest";
 
 /**
  * What a scan fetches, besides your own companies (always all of them):
- *   mine: directory companies in your industries (from lists or from their job titles)
- *   all:  every company in the directory we can read
- * The directory is only the list of companies and their boards; the jobs are always fetched live.
+ *   mine:  Scan now: companies that matched you before and ones the shared job feed flags (stages.ts)
+ *   yours: nothing more
+ *   all:   every company in the directory we can read
+ * Your industries only rank jobs higher, they never decide what's fetched. The directory is only the
+ * list of companies and their boards; the jobs are always fetched live.
  */
 export type { ScanScope } from "./protocol";
-export const SCAN_SCOPES: readonly ScanScope[] = ["mine", "all"];
+export const SCAN_SCOPES: readonly ScanScope[] = ["mine", "yours", "all"];
 
 export type DirectoryEntry = DirectoryCompany & { indexed?: boolean; status?: string; origin?: "user" };
 
@@ -94,11 +95,10 @@ export function scopeCompanies(config: Config, directory: readonly DirectoryEntr
   const yours = new Set(config.companies.map(companyKey));
   const yourNames = new Set(config.companies.map((c) => nameKey(c.name)));
   const muted = new Set(config.companies_muted);
-  const wanted = new Set(config.profile.industries);
+  if (scope === "yours") return [];
   const best = new Map<string, DirectoryEntry>();
   for (const c of directory) {
     if (c.status !== "live" || !readable(c) || muted.has(c.key) || yours.has(c.key)) continue;
-    if (scope === "mine" && !companyIndustries(c).some((t) => wanted.has(t))) continue;
     if (c.origin !== "user" && isPlaceholderBoard(c.name)) continue;
     const name = nameKey(c.name) || c.key;
     if (yourNames.has(name)) continue;
