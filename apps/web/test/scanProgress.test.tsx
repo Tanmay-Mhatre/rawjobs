@@ -2,12 +2,13 @@
 import { cleanup, render, screen, within } from "@testing-library/react";
 import { afterEach, describe, expect, it } from "vitest";
 import { ScanProgress } from "../src/components/ScanProgress";
-import { applyScanEvent, progressRows, type ScanState } from "../src/lib/scan";
+import { applyScanEvent, progressRows, withLive, type ScanState } from "../src/lib/scan";
+import { makeJob } from "./helpers";
 import type { RunEvent } from "../src/lib/setup";
 
 afterEach(cleanup);
 
-const IDLE: ScanState = { phase: "running", companies: [], total: 0, done: 0, resumed: 0, results: {} };
+const IDLE: ScanState = { phase: "running", companies: [], total: 0, done: 0, resumed: 0, results: {}, live: [] };
 const health = (company: string, ats: "greenhouse" | "lever", matches = 0) => ({ company, ats, slug: company.toLowerCase(), ok: true, jobsFound: 10, matches, durationMs: 5 });
 const play = (events: RunEvent[], from: ScanState = IDLE) => events.reduce(applyScanEvent, from);
 
@@ -38,6 +39,27 @@ describe("applyScanEvent", () => {
     ]);
     expect(s.byAts).toBeUndefined();
     expect(progressRows(s)).toEqual([{ ats: "", total: 4, done: 2 }]);
+  });
+});
+
+describe("streamed matches", () => {
+  it("collects each company's matches as they come, the latest copy of a job winning", () => {
+    const s = play([
+      { type: "jobs", jobs: [makeJob({ id: "a", score: 60 }), makeJob({ id: "b" })] },
+      { type: "jobs", jobs: [makeJob({ id: "a", score: 80 })] },
+    ]);
+    expect(s.live.map((j) => [j.id, j.score])).toEqual([
+      ["b", makeJob({ id: "b" }).score],
+      ["a", 80],
+    ]);
+  });
+
+  it("puts new matches on top of the Radar and updates the ones it has, keeping what only the saved files know", () => {
+    const saved = [makeJob({ id: "a", score: 50, industries: ["fintech"] }), makeJob({ id: "c" })];
+    const shown = withLive(saved, [makeJob({ id: "a", score: 90 }), makeJob({ id: "new" })]);
+    expect(shown.map((j) => j.id)).toEqual(["new", "a", "c"]);
+    expect(shown[1]).toMatchObject({ score: 90, industries: ["fintech"] });
+    expect(withLive(saved, [])).toBe(saved);
   });
 });
 

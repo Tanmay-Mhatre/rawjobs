@@ -1,3 +1,4 @@
+import { employmentType } from "../catalog/employment";
 import type { NormalizedJob, Salary } from "../schema";
 import { htmlToText } from "../text";
 import { jobId, type Connector } from "./types";
@@ -88,6 +89,7 @@ export const himalayas: Connector<HimalayasJob> = {
       ...(salary ? { salary } : {}),
       postedAt: raw.pubDate ? new Date(raw.pubDate * 1000).toISOString() : undefined,
       url,
+      employmentType: employmentType(raw.employmentType),
       description: htmlToText(raw.description ?? ""),
     };
   },

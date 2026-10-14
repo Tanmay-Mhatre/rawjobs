@@ -1,6 +1,7 @@
 import { chmodSync, existsSync, mkdirSync, readFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
-import type { Job } from "./schema";
+import type { Config, Job } from "./schema";
+import type { ScanScope } from "./protocol";
 import { rawjobsHome } from "./paths";
 import { writeFileAtomic } from "./atomic";
 
@@ -106,6 +107,9 @@ function newJobsLine(jobs: readonly Job[], minScore: number): string | undefined
   return `${plural(jobs.length, "new job", "new jobs")} · ${strong ? plural(strong, "strong fit", "strong fits") : "no strong fits"}`;
 }
 
+/** Which scan a message is about, short enough for a phone's notification ("mine" includes your industries). */
+const SCOPE_NAME: Record<ScanScope, string> = { mine: "My companies", all: "All companies" };
+
 const seeThem = (n: number) => `Open RawJobs on your computer to see ${n === 1 ? "it" : "them"}.`;
 
 /** The connect confirmation: what the bot will send, and where to choose. */
@@ -114,25 +118,33 @@ export const connectedMessage = () =>
 
 export const testMessage = () => message("👋 <b>Test alert</b>", "Alerts from RawJobs are working.", "Go back to RawJobs on your computer.");
 
+/** The jobs a scan's alert is about: its new matches, or with only_new off every strong match. */
+export function alertJobs(config: Pick<Config, "alerts" | "profile">, jobs: readonly Job[], newIds: ReadonlySet<string>): Job[] {
+  const matches = jobs.filter((j) => !j.why.gate);
+  return config.alerts.only_new ? matches.filter((j) => newIds.has(j.id)) : matches.filter((j) => j.score >= config.profile.min_score);
+}
+
 /**
  * One message for a scan: how many new jobs and strong fits (with only_new off, `jobs` are every
  * strong fit, new or not). Undefined when there's nothing to say (no message beats an empty one).
  */
-export function digest(jobs: readonly Job[], opts: { minScore: number; onlyNew?: boolean }): string | undefined {
+export function digest(jobs: readonly Job[], opts: { minScore: number; onlyNew?: boolean; scope: ScanScope }): string | undefined {
   if (!jobs.length) return undefined;
-  if (opts.onlyNew === false) return message("💼 <b>Strong fits</b>", plural(jobs.length, "strong fit", "strong fits"), seeThem(jobs.length));
-  return message("💼 <b>New jobs</b>", newJobsLine(jobs, opts.minScore)!, seeThem(jobs.length));
+  const scope = SCOPE_NAME[opts.scope];
+  if (opts.onlyNew === false) return message(`💼 <b>Strong fits · ${scope}</b>`, plural(jobs.length, "strong fit", "strong fits"), seeThem(jobs.length));
+  return message(`💼 <b>New jobs · ${scope}</b>`, newJobsLine(jobs, opts.minScore)!, seeThem(jobs.length));
 }
 
 /** The message for "tell me when this scan is done": always sent, finished or stopped, new jobs or not. */
-export function finishedMessage(o: { newJobs: readonly Job[]; minScore: number; stopped?: boolean }): string {
+export function finishedMessage(o: { newJobs: readonly Job[]; minScore: number; stopped?: boolean; scope: ScanScope }): string {
   const facts = newJobsLine(o.newJobs, o.minScore);
   const n = o.newJobs.length;
+  const scan = `${SCOPE_NAME[o.scope]} scan`;
   if (o.stopped)
     return message(
-      "⏸ <b>Scan stopped</b>",
+      `⏸ <b>${scan} stopped</b>`,
       facts ?? "No new jobs yet",
       n ? `Open RawJobs on your computer to see ${n === 1 ? "it" : "them"} and finish the scan.` : "Open RawJobs on your computer to finish the scan.",
     );
-  return message("✅ <b>Scan finished</b>", facts ?? "No new jobs", n ? seeThem(n) : "Open RawJobs on your computer to see your matches.");
+  return message(`✅ <b>${scan} finished</b>`, facts ?? "No new jobs", n ? seeThem(n) : "Open RawJobs on your computer to see your matches.");
 }

@@ -58,6 +58,43 @@ companies:
     // The accountant fails the title gate, so its page is never fetched.
     expect(calls.filter((u) => u.includes("/job/"))).toEqual(["https://bank.wd3.myworkdayjobs.com/wday/cxs/bank/External/job/Dubai/PM_1"]);
   });
+
+  it("remembers a '2 Locations' job's real place, so its page is fetched once, not every scan", async () => {
+    const config = parseConfig(`
+profile:
+  titles: { include: ["product manager"] }
+  locations: { include: ["dubai"] }
+companies: []
+`);
+    const bank = { name: "Bank", ats: "workday" as const, slug: "bank", shard: "wd3", site: "External", enabled: true };
+    const { http, calls } = fakeHttp((url) => {
+      if (url.endsWith("/jobs")) return json({ total: 1, jobPostings: [posting(1, "2 Locations")] });
+      return json({ jobPostingInfo: { location: "London", additionalLocations: ["Paris"], jobDescription: "<p>Payments</p>" } });
+    });
+    const locations = new Map();
+    // A directory company whose job is elsewhere: not kept, but where it is is remembered.
+    expect((await runRadar(config, { http, now, checks: [bank], locations })).jobs).toEqual([]);
+    expect(locations.get("workday:bank|external:1")).toMatchObject({ location: "London; Paris" });
+    await runRadar(config, { http, now, checks: [bank], locations });
+    expect(calls.filter((u) => u.includes("/job/"))).toHaveLength(1);
+  });
+
+  it("fetches at most 5 detail pages per directory company a scan", async () => {
+    const config = parseConfig(`
+profile:
+  titles: { include: ["product manager"] }
+  locations: { include: ["dubai"] }
+companies: []
+`);
+    const bank = { name: "Bank", ats: "workday" as const, slug: "bank", shard: "wd3", site: "External", enabled: true };
+    const { http, calls } = fakeHttp((url) => {
+      if (url.endsWith("/jobs")) return json({ total: 8, jobPostings: Array.from({ length: 8 }, (_, i) => posting(i, "2 Locations")) });
+      return json({ jobPostingInfo: { location: "Dubai", jobDescription: "<p>Payments</p>" } });
+    });
+    const result = await runRadar(config, { http, now, checks: [bank], locations: new Map() });
+    expect(calls.filter((u) => u.includes("/job/"))).toHaveLength(5);
+    expect(result.jobs).toHaveLength(5);
+  });
 });
 
 describe("JSON feed connectors", () => {
@@ -256,6 +293,35 @@ ${place}, NL</span></td></tr>`;
       url: "https://jobs.acme.com/job/Heerhugowaard-Installatie-monteur/200/",
     });
     expect(await c.describe!(raws[25]!, ref, { http, now: new Date() })).toBe("Fix heat pumps");
+  });
+
+  it("successfactors: a career site on the tile template pages its /search/ until the count", async () => {
+    const field = (id: number, f: string, label: string, value: string) =>
+      `<div id="job-${id}-desktop-section-${f}" class="section-field ${f}"><span id="job-${id}-desktop-section-${f}-label" class="section-label">
+        ${label}
+      </span><div id="job-${id}-desktop-section-${f}-value">${value}
+      </div></div>`;
+    const tile = (id: number, title: string) =>
+      `<li class="job-tile job-id-${id} job-row-index-1" data-url="/job/Pooler-${id}/${id}/"><div class="col-md-12 sub-section sub-section-desktop"><a class="jobTitle-link fontcolor1" href="/job/Pooler-${id}/${id}/">
+        ${title}
+      </a>${field(id, "location", "Location", "Pooler, GA, US, 31322")}${field(id, "businessunit", "Business Unit", "Retail Field")}${field(id, "date", "Posted", "Oct 13, 2026")}</div>
+      <div class="sub-section-mobile">${field(id, "location", "Location", "ignored")}</div></li>`;
+    const page = (tiles: string) => `<script>var x = { jobRecordsFound: parseInt("3") };</script><ul id="job-tile-list">${tiles}</ul>`;
+    const { jobs, calls } = await run("successfactors", { slug: "careers.acme.com" }, (url) =>
+      text(url.includes("startrow=0") ? page(tile(11, "Stock Keyholder, PT") + tile(12, "Store Lead")) : page(tile(13, "Analyst"))),
+    );
+    expect(calls).toEqual(["https://careers.acme.com/search/?q=&startrow=0", "https://careers.acme.com/search/?q=&startrow=2"]);
+    expect(jobs).toHaveLength(3);
+    expect(jobs[0]).toMatchObject({
+      id: "successfactors:careers.acme.com:11",
+      title: "Stock Keyholder, PT",
+      location: "Pooler, GA, US, 31322",
+      department: "Retail Field",
+      postedAt: "2026-10-13T00:00:00.000Z",
+      url: "https://careers.acme.com/job/Pooler-11/11/",
+    });
+    const empty = await run("successfactors", { slug: "careers.acme.com" }, () => text(`<script>jobRecordsFound: parseInt("0")</script>`));
+    expect(empty.jobs).toEqual([]);
   });
 
   it("successfactors: a career site on a newer template is refused, not read as empty", async () => {

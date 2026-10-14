@@ -1,6 +1,8 @@
 import { companyOfJobId, getConnector, jobCompanyKey } from "./connectors";
-import { HttpClient, HttpError } from "./http";
-import type { BoardMove, CompanyHealth, CompanyRef, Config, Job, NormalizedJob } from "./schema";
+import { hashIds } from "./board-health";
+import { BoardClosedError } from "./connectors/parse";
+import { HostSkippedError, HttpClient, HttpError } from "./http";
+import type { BoardMove, CompanyHealth, CompanyRef, Config, Job, NormalizedJob, Profile } from "./schema";
 import { scoreJob } from "./score";
 import { safeUrl } from "./text";
 
@@ -17,8 +19,60 @@ export type RunResult = {
   moves?: BoardMove[];
 };
 
-/** Description fetches per company per run, for ATSs that need one request per job. */
+/**
+ * Description fetches per company per run, for ATSs that need one request per job: up to 40 for your
+ * companies, 5 for directory ones (the rest are fetched on later scans: what's fetched is remembered).
+ */
 const MAX_DESCRIBE_PER_COMPANY = 40;
+const MAX_DESCRIBE_PER_CHECK = 5;
+/** Description fetches in flight per company (each host still keeps its own pace). */
+const DESCRIBE_WORKERS = 4;
+
+/** Where a job with a vague location ("3 Locations") really is, from its detail page (see LocationCache). */
+export type ResolvedLocation = Pick<NormalizedJob, "location"> & Partial<Pick<NormalizedJob, "country" | "workplace">>;
+/** Resolved locations by job id, kept between scans, so a job's detail page is fetched for its place only once. */
+export type LocationCache = Map<string, ResolvedLocation>;
+
+/** Title searches per capped company: each is a few more requests to the same board. */
+const MAX_SEARCH_TERMS = 5;
+
+/** Level words that narrow a search without changing the role: "Senior Product Manager" searches as "product manager". */
+const LEVEL = /^(?:(?:senior|sr\.?|junior|jr\.?|lead|principal|staff|associate|group|mid[- ]level|entry[- ]level)\s+)+/i;
+/** One-word titles that would match most of a big employer's list, so a search for them finds nothing new. */
+const GENERIC = new Set([
+  "manager",
+  "director",
+  "head",
+  "lead",
+  "engineer",
+  "developer",
+  "analyst",
+  "specialist",
+  "consultant",
+  "associate",
+  "officer",
+  "executive",
+  "coordinator",
+  "assistant",
+  "administrator",
+  "intern",
+  "senior",
+  "staff",
+]);
+
+/**
+ * What to search a capped board for: your titles without level words, most specific first, at most
+ * MAX_SEARCH_TERMS. A title that contains another one is left out ("product manager" already finds
+ * "technical product manager"), as are lone generic words and short forms ("PM"), which search poorly.
+ */
+export function searchTerms(profile: Pick<Profile, "titles">): string[] {
+  const cleaned = profile.titles.include.map((t) => t.toLowerCase().replace(/\s+/g, " ").trim().replace(LEVEL, "").trim());
+  const usable = [...new Set(cleaned)].filter((t) => (t.includes(" ") ? true : t.length >= 4 && !GENERIC.has(t)));
+  const words = (t: string) => ` ${t} `;
+  const broadest = usable.filter((t) => !usable.some((o) => o !== t && words(t).includes(words(o))));
+  // Multi-word titles first: they're the specific ones a big board's search answers best.
+  return [...broadest.filter((t) => t.includes(" ")), ...broadest.filter((t) => !t.includes(" "))].slice(0, MAX_SEARCH_TERMS);
+}
 
 /**
  * A posting's date only ever moves earlier. Boards that give relative dates ("Posted 30+ Days Ago")
@@ -37,7 +91,10 @@ export type RunOptions = {
   only?: string[];
   /** Jobs from earlier runs; keeps firstSeen stable so freshness and "new" are right. */
   previous?: readonly Job[];
-  /** Companies you haven't added, checked live too; only their jobs that pass your gates are kept. */
+  /**
+   * Companies you haven't added, checked live too; only their jobs that pass your gates are kept,
+   * plus the ones already in history (a job that stops matching is still listed, not closed).
+   */
   checks?: readonly CompanyRef[];
   onCompanyDone?: (h: CompanyHealth) => void;
   /** Each company's health and the jobs kept from it, as soon as it's done (to save progress). */
@@ -48,6 +105,8 @@ export type RunOptions = {
   stopped?: () => boolean;
   /** A company's industry ids, when the directory knows them (for the industry part of the score). */
   industriesOf?: (c: CompanyRef) => readonly string[] | undefined;
+  /** Locations resolved by earlier scans (read, and added to as jobs are described). */
+  locations?: LocationCache;
 };
 
 /**
@@ -55,7 +114,7 @@ export type RunOptions = {
  * site still gets its own pace (HttpClient's per-host spacing): companies sharing one API host just
  * queue for it, while companies on their own hosts (Workday tenants, Recruitee, BambooHR…) run side by side.
  */
-const laneOf = (c: CompanyRef) => `${c.ats}:${c.region ?? ""}:${c.ats === "workday" ? c.shard : ""}`;
+export const laneOf = (c: Pick<CompanyRef, "ats" | "region" | "shard">) => `${c.ats}:${c.region ?? ""}:${c.ats === "workday" ? c.shard : ""}`;
 /** Companies in flight per lane. */
 const LANE_WORKERS = 4;
 
@@ -71,6 +130,7 @@ export async function runRadar(config: Config, opts: RunOptions = {}): Promise<R
   const companies = config.companies.filter((c) => c.enabled && (!only?.length || only.includes(c.name.toLowerCase()) || only.includes(c.slug.toLowerCase())));
   const previous = new Map((opts.previous ?? []).map((j) => [j.id, j]));
   const checks = opts.checks ?? [];
+  const terms = searchTerms(config.profile);
 
   const jobs: Job[] = [];
   const order = new Map<string, number>();
@@ -101,7 +161,8 @@ export async function runRadar(config: Config, opts: RunOptions = {}): Promise<R
       const recent = connector.minIntervalHours ? recentJobs(jobCompanyKey(company), connector.minIntervalHours) : undefined;
       for (const j of recent ?? []) {
         const { score, why } = scoreJob(j, config.profile, fit);
-        if (!extra || !why.gate) kept.push({ ...j, score, why });
+        // These all come from history, so they're all kept (see below).
+        kept.push({ ...j, score, why });
         if (!why.gate) h.matches++;
       }
       const raws = recent
@@ -113,7 +174,38 @@ export async function runRadar(config: Config, opts: RunOptions = {}): Promise<R
               h.partial = true;
             },
           });
+      // A list cut short at its cap: ask the board's own search for your titles, so the jobs past the
+      // cap that fit you are still seen. The company stays partial: its other unseen jobs aren't gone.
+      if (h.partial && connector.search && terms.length) {
+        const idOf = (raw: unknown) => {
+          try {
+            return connector.normalize(raw, company).id;
+          } catch {
+            return undefined;
+          }
+        };
+        const seen = new Set(raws.map(idOf));
+        let found = 0;
+        for (const term of terms) {
+          if (opts.stopped?.()) break;
+          // A failed search loses only its own extra jobs, never the list already fetched.
+          const more = await connector.search(company, term, { http, now }).catch(() => []);
+          for (const raw of more) {
+            const id = idOf(raw);
+            if (!id || seen.has(id)) continue;
+            seen.add(id);
+            raws.push(raw);
+            found++;
+          }
+        }
+        h.searchFound = found;
+      }
+      // First the whole list, scored; then the detail pages it needs, a few at a time.
+      type Item = { raw: unknown; base: NormalizedJob; prev?: Job; vague: boolean; describe: boolean; score: number; why: Job["why"] };
+      const items: Item[] = [];
+      const maxDescribe = extra ? MAX_DESCRIBE_PER_CHECK : MAX_DESCRIBE_PER_COMPANY;
       let described = 0;
+      const ids: string[] = [];
       for (const raw of raws) {
         let base: NormalizedJob;
         try {
@@ -124,27 +216,53 @@ export async function runRadar(config: Config, opts: RunOptions = {}): Promise<R
           continue;
         }
         base.url = safeUrl(base.url) ?? "";
+        ids.push(base.id);
         const prev = previous.get(base.id);
-        const firstSeen = prev?.firstSeen ?? nowIso;
         let { score, why } = scoreJob(base, config.profile, fit);
         // Lists without descriptions (or with only "3 Locations"): reuse what's stored, else fetch the
         // job's page for jobs that pass the gates (or pass the title gate, when the location is vague).
-        const vague = !!connector.vagueLocation?.(raw);
-        if (connector.describe && (vague ? !why.gate || why.gate === "location" : !why.gate && !base.description)) {
-          if (prev?.description) Object.assign(base, { description: prev.description }, vague ? { location: prev.location, country: prev.country, workplace: prev.workplace } : {});
-          else if (described < MAX_DESCRIBE_PER_COMPANY) {
-            described++;
-            const d = await connector.describe(raw, company, { http, now }).catch(() => {
-              h.describeFailed = (h.describeFailed ?? 0) + 1;
-              return "";
-            });
-            if (typeof d === "string") base.description = d;
-            else for (const [k, v] of Object.entries(d)) if (v) Object.assign(base, { [k]: v });
-          }
+        let vague = !!connector.vagueLocation?.(raw);
+        // A place resolved by an earlier scan: no page to fetch just to learn where the job is.
+        const known = vague && !prev?.description ? opts.locations?.get(base.id) : undefined;
+        if (known) {
+          Object.assign(base, known);
+          vague = false;
           ({ score, why } = scoreJob(base, config.profile, fit));
         }
-        // Your companies keep every job (the Radar can show the rest); extra checks only matches.
-        if (!extra || !why.gate) {
+        let describe = false;
+        if (connector.describe && (vague ? !why.gate || why.gate === "location" : !why.gate && !base.description)) {
+          if (prev?.description) {
+            Object.assign(base, { description: prev.description }, vague ? { location: prev.location, country: prev.country, workplace: prev.workplace } : {});
+            ({ score, why } = scoreJob(base, config.profile, fit));
+          } else if (described < maxDescribe) {
+            described++;
+            describe = true;
+          }
+        }
+        items.push({ raw, base, prev, vague, describe, score, why });
+      }
+      const queue = items.filter((i) => i.describe);
+      const describeWorker = async () => {
+        for (let item = queue.shift(); item; item = queue.shift()) {
+          const d = await connector.describe!(item.raw, company, { http, now }).catch(() => {
+            h.describeFailed = (h.describeFailed ?? 0) + 1;
+            return "";
+          });
+          const { base } = item;
+          if (typeof d === "string") base.description = d;
+          else for (const [k, v] of Object.entries(d)) if (v) Object.assign(base, { [k]: v });
+          if (item.vague && typeof d !== "string" && d.location)
+            opts.locations?.set(base.id, { location: base.location, ...(base.country ? { country: base.country } : {}), workplace: base.workplace });
+          ({ score: item.score, why: item.why } = scoreJob(base, config.profile, fit));
+        }
+      };
+      await Promise.all(Array.from({ length: Math.min(DESCRIBE_WORKERS, queue.length) }, describeWorker));
+      for (const { base, prev, score, why } of items) {
+        const firstSeen = prev?.firstSeen ?? nowIso;
+        // Your companies keep every job (the Radar can show the rest); extra checks only matches, and
+        // the jobs already in history: one that stops matching is still listed, and leaving it out
+        // would read as gone and close it (mergeHistory).
+        if (!extra || !why.gate || prev) {
           const postedAt = earliestPosted(base.postedAt, prev);
           // The board's own date, kept when it's later: a board that refreshes it (see staleReasons in the dashboard).
           const boardPostedAt = base.postedAt && postedAt && Date.parse(base.postedAt) > Date.parse(postedAt) ? base.postedAt : undefined;
@@ -155,9 +273,12 @@ export async function runRadar(config: Config, opts: RunOptions = {}): Promise<R
         if (!why.gate) h.matches++;
       }
       h.jobsFound = recent?.length ?? raws.length - (h.skipped ?? 0);
+      // Only a list read in full says whether the board's jobs changed (board-health.ts).
+      if (!recent && !h.partial) h.idsHash = hashIds(ids);
       h.ok = true;
     } catch (err) {
       h.error = err instanceof HttpError && err.status === 404 ? `board not found (404): check the slug "${company.slug}" against the careers URL` : (err as Error).message;
+      if (!h.unsupported) h.failure = failureOf(err);
     }
     h.durationMs = Date.now() - started;
     jobs.push(...kept);
@@ -197,6 +318,23 @@ export async function runRadar(config: Config, opts: RunOptions = {}): Promise<R
     partial: companies.length < config.companies.filter((c) => c.enabled).length || !!opts.stopped?.(),
     checked: checks.length,
   };
+}
+
+/**
+ * What kind of failure a fetch had, for resting the board (board-health.ts). Only a definite answer
+ * is "gone": a timeout, a 5xx or a dropped connection says nothing about the board. Undefined when
+ * no request was made (the host was skipped after failing for other boards). "parse" is our side
+ * failing to read an answer (a connector bug, left to the daily connector-health check).
+ */
+export function failureOf(err: unknown): CompanyHealth["failure"] {
+  if (err instanceof HostSkippedError) return undefined;
+  if (err instanceof BoardClosedError) return "gone";
+  if (err instanceof TypeError || err instanceof SyntaxError) return "parse";
+  if (!(err instanceof HttpError)) return err instanceof Error && /\bunexpected\b/i.test(err.message) ? "parse" : "other";
+  if (err.status === 404 || err.status === 410) return "gone";
+  if (err.status !== undefined) return err.status === 429 || err.status >= 500 ? "server" : "other";
+  if (/^timed out/.test(err.message)) return "timeout";
+  return /^not JSON/.test(err.message) ? "parse" : "network";
 }
 
 export function byScore(a: Job, b: Job): number {

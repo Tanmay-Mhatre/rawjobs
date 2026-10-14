@@ -17,8 +17,8 @@ import { applyFeedDiff, diffFeedStates, feedStateHash, JOB_FEED_SCHEMA_V2, type 
 export const KEEP_DIFFS = 14;
 const MANIFEST = "jobs-v2-manifest.json";
 
-const brotli = (s: string) => brotliCompressSync(s, { params: { [constants.BROTLI_PARAM_QUALITY]: 11, [constants.BROTLI_PARAM_LGWIN]: 24, [constants.BROTLI_PARAM_SIZE_HINT]: s.length } });
-const sha = (b: Buffer) => createHash("sha256").update(b).digest("hex");
+export const brotli = (s: string) => brotliCompressSync(s, { params: { [constants.BROTLI_PARAM_QUALITY]: 11, [constants.BROTLI_PARAM_LGWIN]: 24, [constants.BROTLI_PARAM_SIZE_HINT]: s.length } });
+export const sha = (b: Buffer) => createHash("sha256").update(b).digest("hex");
 
 /** Today's companies (from the first format's shards) as a state: rows by id, day last read. */
 export function stateOf(companies: Record<string, { fetched_at: string; jobs: FeedRow[] }>): FeedState {
@@ -31,17 +31,29 @@ export function stateOf(companies: Record<string, { fetched_at: string; jobs: Fe
   return state;
 }
 
-function readPrevious(out: string): { manifest: FeedManifestV2; state: FeedState } | undefined {
+/** A full copy's file name, as a manifest may name it: nothing else is read from a downloaded manifest. */
+export const SNAPSHOT_FILE = /^jobs-v2-snapshot-\d+\.json\.br$/;
+
+/**
+ * The full copy the second format's manifest in `dir` names (jobs-v2-manifest.json and its snapshot),
+ * or undefined when either is missing, of another schema, misnamed or unreadable.
+ */
+export function readFeedV2(dir: string): { manifest: FeedManifestV2; state: FeedState } | undefined {
   try {
-    const manifest = JSON.parse(readFileSync(join(out, MANIFEST), "utf8")) as FeedManifestV2;
-    const file = join(out, manifest.snapshot.file);
-    if (manifest.schema !== JOB_FEED_SCHEMA_V2 || !existsSync(file)) return undefined;
+    const manifest = JSON.parse(readFileSync(join(dir, MANIFEST), "utf8")) as FeedManifestV2;
+    const name = manifest.snapshot?.file;
+    if (manifest.schema !== JOB_FEED_SCHEMA_V2 || typeof name !== "string" || !SNAPSHOT_FILE.test(name)) return undefined;
+    const file = join(dir, name);
+    if (!existsSync(file)) return undefined;
     const snap = JSON.parse(brotliDecompressSync(readFileSync(file)).toString("utf8")) as FeedSnapshot;
-    return { manifest, state: { verified: snap.verified, jobs: snap.jobs } };
+    if (snap.schema !== JOB_FEED_SCHEMA_V2 || !snap.jobs) return undefined;
+    return { manifest, state: { verified: snap.verified ?? {}, jobs: snap.jobs } };
   } catch {
     return undefined;
   }
 }
+
+const readPrevious = readFeedV2;
 
 export type V2Result = { seq: number; snapshotBytes: number; diffBytes?: number; changedCompanies?: number; note?: string };
 

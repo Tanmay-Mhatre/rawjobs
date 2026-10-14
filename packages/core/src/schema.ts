@@ -1,3 +1,4 @@
+import type { EmploymentType } from "./catalog/employment";
 import type { VisaInfo } from "./catalog/visa";
 import { z } from "zod";
 
@@ -47,6 +48,8 @@ export const ATS_TYPES = [
   "softgarden",
   "cornerstone",
   "keka",
+  "taleobe",
+  "jobscore",
 ] as const;
 
 /**
@@ -54,7 +57,7 @@ export const ATS_TYPES = [
  * your own computer, credited to the board and linked back to it; they're never shared, put in the
  * directory or the job feed (so the catalog only ever works with ATS_TYPES).
  */
-export const JOB_BOARDS = ["hackernews", "remotive", "arbeitnow", "remoteok", "himalayas", "jobicy", "weworkremotely"] as const;
+export const JOB_BOARDS = ["hackernews", "remotive", "arbeitnow", "remoteok", "himalayas", "jobicy", "weworkremotely", "remotefirstjobs"] as const;
 
 export type AtsType = (typeof ATS_TYPES)[number] | (typeof JOB_BOARDS)[number];
 
@@ -105,6 +108,8 @@ export type Job = {
   workplace: Workplace;
   department?: string;
   salary?: Salary;
+  /** Full-time, part-time, contract, internship or temporary, when the hiring system says (catalog/employment.ts). */
+  employmentType?: EmploymentType;
   /** From the ATS when available (ISO 8601). */
   postedAt?: string;
   /** Apply / job page on the company's own careers site. */
@@ -159,6 +164,16 @@ export type CompanyHealth = {
   describeFailed?: number;
   /** The list was cut short (a page cap): its unseen jobs stay open instead of counting as gone. */
   partial?: boolean;
+  /** On a partial list: jobs past the cap that the board's search for your titles found (see searchTerms in run.ts). */
+  searchFound?: number;
+  /**
+   * What kind of failure, for resting the board (board-health.ts): "gone" only for a definite answer
+   * (404, 410 or the hiring system saying the board is closed); "parse" when our connector couldn't
+   * read the answer (not the board's fault). Absent when no request was made.
+   */
+  failure?: "gone" | "timeout" | "server" | "network" | "parse" | "other";
+  /** A hash of the board's job ids, when its whole list was read: board-health.ts notes when it changes. */
+  idsHash?: string;
 };
 
 export type RunSummary = {
@@ -211,10 +226,17 @@ export type DashboardJob = Omit<Job, "description" | "missedRuns"> & {
   estimated?: boolean;
   /** Directory key of the job's company ("ats:slug"); set on index jobs. */
   companyKey?: string;
+  /**
+   * The company's key when the directory knows this board is one of several boards of the same company
+   * (`same_as`: same name and the same job titles, or an accepted move). The Radar groups by it.
+   */
+  identity?: string;
   /** Industry ids the company directory puts the job's company in. */
   industries?: string[];
   /** Visa sponsor registers the job's company is on (country code -> list), from the company directory. */
   visa?: VisaInfo;
+  /** The company is opening far more roles than usual (activity.ts isSurge): new roles in the last 30 days, and its usual 30 days. */
+  surge?: { n: number; usual: number };
 };
 
 /** data/jobs.json (jobs that pass your filters) and data/jobs-other.json (the rest). */
@@ -228,6 +250,13 @@ export type DataMeta = {
   companies: { name: string; ats: AtsType; slug: string; enabled: boolean; careers_url?: string /** Industry ids from the company directory. */; industries?: string[] }[];
   /** Newest first, capped. */
   runs: RunSummary[];
+  /** Some company has enough hiring records to compare with (data/activity.json `ready`): the surge filter shows. */
+  hiringReady?: boolean;
+  /**
+   * Your companies whose board is failing, by companyKey(), with when the failures started
+   * (board-health.json): the streak outlasts the capped runs above.
+   */
+  boardHealth?: Record<string, { since: string }>;
 };
 
 // ---------- config ----------

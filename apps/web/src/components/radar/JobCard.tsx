@@ -1,10 +1,12 @@
+import { surgeTitle } from "@rawjobs/core/activity";
 import { sponsorOf, sponsorTitle } from "@rawjobs/core/catalog/visa";
+import { fromJobBoard } from "@rawjobs/core/dashboard";
 import { displayName } from "@rawjobs/core/display-name";
 import { Bookmark, Star, X } from "lucide-react";
 import { forwardRef, type ReactNode } from "react";
 import type { JobGroup } from "../../lib/filters";
 import { atsLabel, evergreenReason, isOlder } from "../../lib/filters";
-import { isStale, staleReasons } from "../../lib/stale";
+import { isRoleStale, staleReasons } from "../../lib/stale";
 import { formatSalary, placeSummary, postedOrSeen, shortAge, timeAgo } from "../../lib/format";
 import { STATUS_LABEL, type Entry, type Status } from "../../lib/userState";
 import { IconButton, ScoreBadge, SourceTag } from "../primitives";
@@ -27,7 +29,9 @@ function placeLine(group: JobGroup): string {
   const cities = group.jobs.flatMap((j) => j.cities);
   if (cities.length) return placeSummary(cities);
   const lead = group.lead.location || "Location not listed";
-  return group.jobs.length > 1 ? `${lead} +${group.jobs.length - 1}` : lead;
+  // A job board's copy of the same posting isn't another place.
+  const others = new Set(group.jobs.map((j) => j.location || "Location not listed")).size - 1;
+  return others > 0 ? `${lead} +${others}` : lead;
 }
 
 const WORKPLACE: Record<string, string> = { remote: "Remote", hybrid: "Hybrid", onsite: "On-site" };
@@ -72,7 +76,17 @@ export const JobCard = forwardRef<HTMLLIElement, Props>(function JobCard({ group
         Sponsors visas
       </span>,
     );
+  // The company is opening far more roles than usual (data/activity.json); never part of the score.
+  if (job.surge)
+    meta.push(
+      <span className="text-ink" title={surgeTitle(displayName(job.company), job.surge)}>
+        Hiring surge
+      </span>,
+    );
   if (salary) meta.push(salary);
+  // The company's own posting leads; its job-board copies are named, not shown as more rows.
+  const boards = fromJobBoard(job) ? [] : [...new Set(group.jobs.filter(fromJobBoard).map((j) => atsLabel(j.ats)))];
+  if (boards.length) meta.push(boards.length === 1 ? `Also on ${boards[0]}` : `Also on ${boards.length} job boards`);
   if (status && status !== "dismissed") meta.push(<span className="text-ink">{STATUS_LABEL[status]}</span>);
   const evergreen = evergreenReason(job);
   if (evergreen === "pool")
@@ -81,11 +95,12 @@ export const JobCard = forwardRef<HTMLLIElement, Props>(function JobCard({ group
         Talent pool
       </span>,
     );
-  // One tag for every sign of a ghost job; a repost alone keeps its own note.
-  const stale = staleReasons(job);
-  if (isStale(job))
+  // One tag for every sign of a ghost job; a repost alone keeps its own note. A role posted in several places
+  // is tagged only when every posting may be stale (the lead is a fresh one when there is one: groupJobs).
+  const n = group.jobs.length;
+  if (isRoleStale(group.jobs))
     meta.push(
-      <span className="text-warning-text" title={stale.join(". ")}>
+      <span className="text-warning-text" title={[...(n > 1 ? [`All ${n} postings may be stale`] : []), ...staleReasons(job)].join(". ")}>
         May be stale
       </span>,
     );

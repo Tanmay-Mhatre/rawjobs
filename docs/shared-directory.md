@@ -120,7 +120,7 @@ each tag comes from one of these sources (`scripts/catalog/lib/tags.ts`):
 |---|---|---|---|
 | Hand-made lists | (absent) | The seed list (`seeds/industries.json`), the curated list's `segment`, crypto-jobs-fyi's `category`. The other public lists have no industry column. | `tags` |
 | Wikidata (CC0) | `wikidata` | The industries (P452) of the ~18k companies `seeds-bulk.ts` reads, fetched by two more item-pair queries in the same run (seconds each). Mapped by a fixed table of Wikidata items (`lib/wikidata.ts`; broad ones like "financial services" count only when nothing more specific does). A company matches by the board `resolve.ts --bulk` found on its website, or by the same name (one Wikidata company has it) and a board named like its website (`visa` for visa.com). | `tags` |
-| Job titles | `titles` | `industriesFromTitles` (8% of titles, at least 2). Titles come from the job index (Greenhouse, Lever, Ashby, SmartRecruiters); else from the daily job feed's shards (Workday, and boards the index didn't reach), downloaded by `scripts/catalog/feed.sh`; else from the titles a live check read anyway (systems with no cheap count read the whole list: up to 60 distinct titles go to `out/titles.jsonl`, kept in the saved state). No extra requests. | `title_tags` |
+| Job titles | `titles` | `industriesFromTitles` (8% of titles, at least 2). Role words ("Store Manager", "Cashier") count anywhere; an industry's generic words ("retail", "healthcare", "banking") don't count where they name a customer segment: in a business-to-business selling title ("Account Executive, Retail", "Healthcare Solutions Engineer") or after "for"/"to", so a restaurant-software company isn't tagged Retail. Measured with `scripts/catalog/industry-precision.ts`. Titles come from the job index (Greenhouse, Lever, Ashby, SmartRecruiters); else from the daily job feed's full copy (`jobs-v2-snapshot-<seq>.json.br`; the first format's shards if it can't be downloaded) for Workday and boards the index didn't reach, downloaded by `scripts/catalog/feed.sh` (one row per job id, up to 300 titles per company); else from the titles a live check read anyway (systems with no cheap count read the whole list: up to 60 distinct titles go to `out/titles.jsonl`, kept in the saved state). No extra requests. | `title_tags` |
 
 In `directory.json` (and `index.json`) each company keeps `tags` (what the company is: lists,
 Wikidata) and `title_tags` (what it hires for: titles only), as apps have always read them; scans
@@ -148,7 +148,7 @@ address only for rate limiting and stores none; for move reports it keeps a keye
 board (30 days) to count distinct reporters. Full details for users: [PRIVACY.md](../PRIVACY.md).
 
 The published data is CC BY 4.0 (`LICENSE-DATA` in the directory repo); sources and credits are
-in its `NOTICE.md`. Public job boards (Hacker News, Remotive, Arbeitnow, Remote OK, Himalayas, Jobicy, We Work Remotely) are
+in its `NOTICE.md`. Public job boards (Hacker News, Remotive, Arbeitnow, Remote OK, Himalayas, Jobicy, We Work Remotely, Remote First Jobs) are
 never published; only the hiring-system boards their jobs link to are kept, as a source of companies.
 
 ## Denylist
@@ -294,8 +294,41 @@ only companies whose jobs changed are checked again.
 On real data (1.28M jobs), a day's update takes about 3 s and filtering about 2.5 s; with nothing new,
 filtering is instant. The first format is still published next to it while installs update; drop it
 (and the shard code in `jobs.ts` and `syncJobFeed`) once every supported app reads the second. The
-directory build reads the first format's shards for industry tags (`feed.sh`, `readFeedTitles`):
-move those to the full copy first.
+directory build already reads the full copy for industry tags (`feed.sh`, `readFeedTitles`); it falls
+back to the first format's shards only when the full copy can't be downloaded, so drop that fallback
+with them.
+
+### Hiring activity
+
+After the feed is built, `scripts/catalog/activity.ts` reads today's change file and records each
+company's new roles (`packages/core/src/activity.ts`, `scripts/catalog/lib/activity.ts`). A new role
+is a job id first seen that day whose title (groupKey's title part: place left out) the company hasn't
+listed in the last 60 days, so reposts and one role posted per city don't count; a company's first day
+in the feed (or its first day back after it was dropped) is its starting point, not new roles. Titles
+are also sorted into internships, graduate and early-career roles, and the rest, from their words.
+
+- `activity-state.json` (kept in the saved state, about 18 MB): per company, its titles of the last
+  60 days, new roles per day for 60 days and per month for 13 months. Losing it restarts the records.
+- `jobs-activity-<seq>.json.br` (listed as `activity` in `jobs-v2-manifest.json`, with its SHA-256;
+  about 0.2 MB): per company, new roles per month (total, internships, graduate), new roles and roles
+  posted (from posted dates) in the last 30 days, the day its records start when later than the
+  file's `since`, and `e: 1` for mass posters (over 500 open jobs and new ids mostly reposts, or new
+  roles over half the open jobs: lists turning over at a hiring system's cap). Mass posters are never
+  a hiring surge.
+
+The step may fail without stopping the feed: the manifest then has no `activity` entry that day and
+apps keep what they have. A day without a change file (the feed published only a full copy) or a day
+the step didn't run goes uncounted. Apps compare the last 30 days with the usual pace after 42 days
+of records (`BASELINE_MIN_DAYS`).
+
+In the app, the activity file comes with the feed (checked against the signed manifest's SHA-256,
+kept as `catalog/jobs/activity.json.br`, ignored once over 7 days old). Each scan writes
+`data/activity.json` for the companies in your history: the feed's numbers where it covers the company,
+else the same numbers from your own scans (`localActivity`: records start the day the company was first
+scanned). The job drawer shows "Hiring at {company}"; a company with at least 5 new roles in the last 30
+days, twice its usual pace or more, gets a "Hiring surge" tag and the Radar's "Only companies with a
+hiring surge" filter. Both stay hidden until some company has 6 weeks of records (`meta.json`
+`hiringReady`), so nobody sees a filter that can only be empty. None of it changes a job's score.
 
 ## One-time setup
 

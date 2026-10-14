@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import type { CompanyHealth } from "./data";
+import type { CompanyHealth, Job } from "./data";
 import { followScan, notifyWhenDone, runScan, stopScan, type RunEvent, type ScanScope } from "./setup";
 import { load, save } from "./storage";
 
@@ -28,6 +28,8 @@ export type ScanState = {
   seconds?: number;
   /** Health of your companies, and directory ones that matched or failed, by company name. */
   results: Record<string, CompanyHealth>;
+  /** Matches fetched live by this scan so far, shown on the Radar before it ends (newer CLIs only). */
+  live: Job[];
   /** Stop was asked for; the scan finishes the companies in progress. */
   stopping?: boolean;
   /** A Telegram message when this scan finishes: asked for, then what happened ("sent", "off", or why it failed). */
@@ -36,7 +38,7 @@ export type ScanState = {
   error?: string;
 };
 
-const IDLE: ScanState = { phase: "idle", companies: [], total: 0, done: 0, resumed: 0, results: {} };
+const IDLE: ScanState = { phase: "idle", companies: [], total: 0, done: 0, resumed: 0, results: {}, live: [] };
 const SCOPE_KEY = "rawjobs.scanScope";
 const ASK_KEY = "rawjobs.scanAsk";
 
@@ -76,6 +78,10 @@ export function applyScanEvent(s: ScanState, e: RunEvent): ScanState {
       const { type: _, done, doneByAts, ...h } = e;
       return { ...s, done: done ?? s.done + 1, results: { ...s.results, [h.company]: h }, ...(doneByAts ? { doneByAts: { ...doneByAts } } : {}) };
     }
+    case "jobs": {
+      const ids = new Set(e.jobs.map((j) => j.id));
+      return { ...s, live: [...s.live.filter((j) => !ids.has(j.id)), ...e.jobs] };
+    }
     case "progress":
       return { ...s, done: Math.max(s.done, e.done), ...(e.doneByAts ? { doneByAts: { ...e.doneByAts } } : {}) };
     case "done":
@@ -85,6 +91,23 @@ export function applyScanEvent(s: ScanState, e: RunEvent): ScanState {
     default:
       return s;
   }
+}
+
+/**
+ * The Radar's jobs with a running scan's matches: a job fetched again is updated in place (keeping what
+ * only the saved files know, like its industries), a new one is added at the top. The saved files replace
+ * all of it when the scan ends.
+ */
+export function withLive(jobs: Job[], live: readonly Job[]): Job[] {
+  if (!live.length) return jobs;
+  const fresh = new Map(live.map((j) => [j.id, j]));
+  const updated = jobs.map((j) => {
+    const l = fresh.get(j.id);
+    if (!l) return j;
+    fresh.delete(j.id);
+    return { ...j, ...l, companyKey: j.companyKey, industries: j.industries, visa: j.visa };
+  });
+  return [...fresh.values(), ...updated];
 }
 
 /** One progress row per hiring system, biggest first. Older CLIs send no breakdown: one row (ats "") for all companies. */
@@ -118,7 +141,8 @@ export function useScan(onFinished: () => void | Promise<void>) {
     }
     if (followed !== false) {
       await finished.current();
-      setScan((s) => (failed && !s.summary ? { ...s, phase: "error", error: failed } : { ...s, phase: "done", stopping: false }));
+      // The saved files now hold the scan's jobs: the streamed copies go.
+      setScan((s) => (failed && !s.summary ? { ...s, phase: "error", error: failed, live: [] } : { ...s, phase: "done", stopping: false, live: [] }));
     }
     busy.current = false;
   }, []);
@@ -184,7 +208,7 @@ export function scanLine(scan: ScanState): string {
     // No directory companies on top of yours: say "My companies", not "+ my industries".
     scan.scope && scopeLabel(scan.scope, scan.total > scan.companies.length),
     left > 60 ? `${aboutTime(left)} left` : null,
-    scan.skippedByFeed ? `${scan.skippedByFeed.toLocaleString()} skipped (nothing for you in today's job feed)` : null,
+    scan.skippedByFeed ? `${scan.skippedByFeed.toLocaleString()} skipped (nothing for you in the job feed)` : null,
   ]
     .filter(Boolean)
     .join(" · ");

@@ -102,6 +102,66 @@ describe("HttpClient", () => {
     expect(seen).toHaveLength(4);
   });
 
+  it("retries a body that stalls past the timeout, counts it towards the host and says it timed out", async () => {
+    /** Headers arrived, then the body read hit the request's timeout. */
+    const stalled = () => {
+      const res = new Response("{}", { status: 200 });
+      Object.defineProperty(res, "text", { value: () => Promise.reject(new DOMException("The operation was aborted due to timeout", "TimeoutError")) });
+      return res;
+    };
+    const { http, seen } = client([stalled(), json({ ok: 1 })]);
+    await expect(http.getJson("https://a.example/x")).resolves.toEqual({ ok: 1 });
+    expect(seen).toHaveLength(2);
+
+    const { http: down } = client([stalled(), stalled(), stalled(), stalled(), stalled(), stalled(), stalled(), stalled()], { breakAfter: 2 });
+    await expect(down.getText("https://h.example/1")).rejects.toThrow(/^timed out after 30s \(https:\/\/h\.example\/1\)$/);
+    await expect(down.getText("https://h.example/2")).rejects.toThrow(/timed out after/);
+    await expect(down.getText("https://h.example/3")).rejects.toThrow(/failed 2 times in a row/);
+    expect(down.stats.brokenHosts).toEqual(["h.example"]);
+    expect(down.stats.timeouts).toBeGreaterThanOrEqual(6);
+  });
+
+  it("gives up on a host that sends no headers after the connect timeout, not the whole timeout", async () => {
+    const hang = ((_u: string, init?: RequestInit) => new Promise((_, reject) => init?.signal?.addEventListener("abort", () => reject(init.signal!.reason)))) as typeof fetch;
+    const http = new HttpClient({ hostDelayMs: 0, retries: 0, connectTimeoutMs: 20, readTimeoutMs: 5_000, fetchImpl: hang });
+    const started = Date.now();
+    await expect(http.getText("https://slow.example/x")).rejects.toThrow(/^timed out after 0.02s/);
+    expect(Date.now() - started).toBeLessThan(2_000);
+    expect(http.stats.timeouts).toBe(1);
+  });
+
+  it("reads a saved body only on a 304, and fetches in full when it's gone", async () => {
+    const sent: (string | undefined)[] = [];
+    let loads = 0;
+    /** etag -> body; a body of undefined is a saved file that has gone missing. */
+    const saved = new Map<string, string | undefined>([["https://a.example/x", JSON.stringify({ jobs: [1] })]]);
+    const cache = {
+      get: (u: string) => (saved.has(u) ? { etag: 'W/"v1"' } : undefined),
+      set: () => {},
+      load: async (u: string) => {
+        loads++;
+        const b = saved.get(u);
+        if (b === undefined) saved.delete(u);
+        return b;
+      },
+    };
+    const replies = [new Response(null, { status: 304 }), new Response(null, { status: 304 }), json({ jobs: [2] })];
+    const http = new HttpClient({
+      hostDelayMs: 0,
+      cache,
+      fetchImpl: (async (_u: string, init?: RequestInit) => {
+        sent.push((init?.headers as Record<string, string> | undefined)?.["if-none-match"]);
+        return replies.shift()!;
+      }) as typeof fetch,
+    });
+    await expect(http.getJson("https://a.example/x")).resolves.toEqual({ jobs: [1] });
+    // The body went missing: the 304 can't be used, so it asks again without the ETag.
+    saved.set("https://a.example/x", undefined);
+    await expect(http.getJson("https://a.example/x")).resolves.toEqual({ jobs: [2] });
+    expect(loads).toBe(2);
+    expect(sent).toEqual(['W/"v1"', 'W/"v1"', undefined]);
+  });
+
   it("does not retry other 4xx", async () => {
     const { http, seen } = client([new Response("", { status: 404 })]);
     await expect(http.getJson("https://a.example/x")).rejects.toMatchObject({ status: 404 });

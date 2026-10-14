@@ -1,7 +1,7 @@
-import type { NormalizedJob } from "../schema";
+import type { CompanyRef, NormalizedJob } from "../schema";
 import { inferWorkplace } from "../text";
 import { countryName, joinParts } from "./parse";
-import { jobId, type Connector, type Ctx } from "./types";
+import { jobId, SEARCH_MAX_POSTINGS, type Connector, type Ctx } from "./types";
 
 /**
  * Dayforce (formerly Ceridian) career sites, all on jobs.dayforcehcm.com/{culture}/{tenant}/{site}.
@@ -31,14 +31,35 @@ const culture = (ref: { shard?: string }) => (ref.shard && CULTURE.test(ref.shar
 
 /** The anonymous CSRF pair every visitor gets: the cookie to send back, and its token for the header. */
 async function csrf(http: Ctx["http"]): Promise<{ cookie: string; token: string }> {
-  const res = await http.request(`${BASE}/api/auth/csrf`, { headers: { accept: "application/json" } });
+  const { res, body } = await http.requestBody(`${BASE}/api/auth/csrf`, { headers: { accept: "application/json" } });
   const cookie = res.headers
     .getSetCookie()
     .map((c) => c.split(";")[0])
     .join("; ");
-  const token = ((await res.json()) as { csrfToken?: string }).csrfToken;
+  const token = (JSON.parse(body) as { csrfToken?: string }).csrfToken;
   if (!token || !cookie) throw new Error("unexpected Dayforce response: no CSRF token");
   return { cookie, token };
+}
+
+/** The board's postings, or those its search finds for `searchText`, up to `max`. */
+async function list(ref: CompanyRef, http: Ctx["http"], searchText: string, max: number) {
+  if (!NAME.test(ref.slug) || !ref.site || !NAME.test(ref.site)) throw new Error('Dayforce boards need the tenant and "site" (the board code) from the careers URL');
+  const { cookie, token } = await csrf(http);
+  const out: DayforceJob[] = [];
+  let total = 0;
+  for (let start = 0; start < max; start += PAGE) {
+    const { body } = await http.requestBody(`${BASE}/api/geo/${encodeURIComponent(ref.slug)}/jobposting/search`, {
+      method: "POST",
+      headers: { accept: "application/json", "content-type": "application/json", cookie, "x-csrf-token": token },
+      body: JSON.stringify({ clientNamespace: ref.slug, jobBoardCode: ref.site, cultureCode: culture(ref), paginationStart: start, ...(searchText ? { searchText } : {}) }),
+    });
+    const page = JSON.parse(body) as { jobPostings?: DayforceJob[]; maxCount?: number };
+    if (!Array.isArray(page.jobPostings)) throw new Error("unexpected Dayforce response: no jobPostings");
+    out.push(...page.jobPostings);
+    total = page.maxCount ?? 0;
+    if (!page.jobPostings.length || out.length >= total) break;
+  }
+  return { out, total };
 }
 
 export const dayforce: Connector<DayforceJob> = {
@@ -53,25 +74,14 @@ export const dayforce: Connector<DayforceJob> = {
   },
 
   async fetch(ref, { http, partial }) {
-    if (!NAME.test(ref.slug) || !ref.site || !NAME.test(ref.site)) throw new Error('Dayforce boards need the tenant and "site" (the board code) from the careers URL');
-    const { cookie, token } = await csrf(http);
-    const out: DayforceJob[] = [];
-    let total = 0;
-    for (let start = 0; start < MAX_POSTINGS; start += PAGE) {
-      const res = await http.request(`${BASE}/api/geo/${encodeURIComponent(ref.slug)}/jobposting/search`, {
-        method: "POST",
-        headers: { accept: "application/json", "content-type": "application/json", cookie, "x-csrf-token": token },
-        body: JSON.stringify({ clientNamespace: ref.slug, jobBoardCode: ref.site, cultureCode: culture(ref), paginationStart: start }),
-      });
-      const page = (await res.json()) as { jobPostings?: DayforceJob[]; maxCount?: number };
-      if (!Array.isArray(page.jobPostings)) throw new Error("unexpected Dayforce response: no jobPostings");
-      out.push(...page.jobPostings);
-      total = page.maxCount ?? 0;
-      if (!page.jobPostings.length || out.length >= total) break;
-    }
+    const { out, total } = await list(ref, http, "", MAX_POSTINGS);
     // Stopped at the cap well short of the total the site reports.
     if (total - out.length >= PAGE) partial?.();
     return out;
+  },
+
+  async search(ref, term, { http }) {
+    return (await list(ref, http, term, SEARCH_MAX_POSTINGS)).out;
   },
 
   normalize(raw, ref): NormalizedJob {

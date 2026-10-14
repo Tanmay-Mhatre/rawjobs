@@ -87,7 +87,7 @@ A scan has one of two scopes:
 Every scan:
 
 1. **Syncs the directory**: a small manifest check, and a download only when there's a newer version.
-2. **Uses the shared daily job feed** to skip directory companies that have nothing passing your title and location gates. Your own companies, companies the feed doesn't cover, and feed data older than 3 days are always fetched live.
+2. **Uses the shared job feed** to skip directory companies that have nothing passing your title and location gates. Your own companies, companies the feed doesn't cover, and feed data older than 3 days are always fetched live.
 3. **Fetches live** from each remaining company's hiring system, scores every job, and merges the result into `data/`. Every job you see was fetched by your own scan.
 
 Jobs keep their first-seen date, and a job missing from two successful scans of its company is marked closed. A company whose feed fails never closes its jobs.
@@ -159,7 +159,7 @@ RawJobs reads many hiring systems, including Greenhouse, Lever, Ashby, Workday a
 Two things are built for everyone by GitHub Actions and published as releases of the directory repo. Neither knows anything about you.
 
 - **The directory** (rebuilt weekly): which companies exist, which hiring system and board each one uses, whether it's live, and its industries, plus the open job titles and places at the companies we can index. The [website](https://www.rawjobs.workers.dev) shows its current size.
-- **The job feed** (daily): every open job on the live Greenhouse, Lever, Ashby, SmartRecruiters and Workday boards, as a full copy plus a small change file per day. Scans use it only to skip companies with nothing for you.
+- **The job feed** (refreshed regularly): every open job on the live Greenhouse, Lever, Ashby, SmartRecruiters and Workday boards, as a full copy plus a small change file per refresh. Scans use it only to skip companies with nothing for you.
 
 How the directory is built (no AI, `scripts/catalog/`):
 
@@ -219,7 +219,7 @@ Your config lists the companies you're targeting. If you run RawJobs from GitHub
 
 - **Code:** MIT ([LICENSE](LICENSE)), copyright Tanmay Mhatre. Use, change and share it freely; copies must keep the copyright and license notice.
 - **Shared directory and job index:** CC BY 4.0. Sources and credits (Common Crawl, the Wayback Machine, Wikidata, permissively licensed board lists, user contributions) are in the directory repo's `NOTICE.md` ([template](services/directory-repo-template/NOTICE.md)).
-- **Public job boards** (Hacker News "Who is hiring", Remotive, Arbeitnow, Remote OK, Himalayas, Jobicy, We Work Remotely) are fetched on your own computer only, at most a few times a day, credited by name with every job linking back to the board, and never shared or redistributed. (The Muse and Jobicy aren't included: their terms weren't confirmed.)
+- **Public job boards** (Hacker News "Who is hiring", Remotive, Arbeitnow, Remote OK, Himalayas, Jobicy, We Work Remotely, Remote First Jobs) are fetched on your own computer only, at most a few times a day, credited by name with every job linking back to the board, and never shared or redistributed. (The Muse and Jobicy aren't included: their terms weren't confirmed.)
 - **Remove a company:** open a [takedown request](.github/ISSUE_TEMPLATE/takedown.yml). We reply within 7 days, and removed companies go into `denylist.json`.
 - **Running a fork with your own data:** [docs/self-hosting.md](docs/self-hosting.md).
 
@@ -252,7 +252,7 @@ apps/web            React + Vite + Tailwind dashboard (reads data/ and the local
 packaging/          the installers (install.ps1, install.sh) and the launchers in bin/
 scripts/bundle      pnpm bundle: the copy that installs, needing only Node
 scripts/release     pnpm release:files: the signed release (see .github/workflows/release.yml)
-scripts/catalog     builds the shared directory and the daily job feed
+scripts/catalog     builds the shared directory and the shared job feed
 scripts/design      design tokens, design lint, screenshots (pnpm design:build | design:lint | design:shots)
 services/contribute the contribution inbox (Cloudflare Worker)
 design/             brand book, component specs and screenshots

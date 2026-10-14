@@ -1,4 +1,4 @@
-import type { AtsType, CompanyHealth, Config } from "./schema";
+import type { AtsType, CompanyHealth, Config, DashboardJob } from "./schema";
 
 /**
  * What the CLI and the local API send the dashboard: one definition, used on both sides
@@ -75,6 +75,8 @@ export type RunEvent =
       scope?: ScanScope;
       /** About how long the rest takes. */
       seconds?: number;
+      /** Seconds by stage: the shared job feed (sync and match, done by now) and the live fetches. Older CLIs leave it out. */
+      stages?: { feed: number; live: number; seconds: number };
       /** Directory companies skipped: the shared job feed shows nothing for you there. */
       skippedByFeed?: number;
       /** Older CLIs: the last `checking` companies aren't yours. */
@@ -86,6 +88,8 @@ export type RunEvent =
     }
   /** A company done: every one of yours, and directory ones that matched or failed. */
   | ({ type: "company"; done?: number; doneByAts?: Record<string, number> } & CompanyHealth)
+  /** A company's matches, fetched live just now: the Radar shows them before the scan ends. Older CLIs don't send it. */
+  | { type: "jobs"; jobs: DashboardJob[] }
   /** Directory companies done, as a count (`ats`: the hiring system of the last one). */
   | { type: "progress"; done: number; ats?: string; doneByAts?: Record<string, number> }
   | {
@@ -105,10 +109,29 @@ export type RunEvent =
       moveError?: string;
       /** Older CLIs: jobs found in the directory index. */
       indexJobs?: number;
+      /** Where the time went (milliseconds per stage) and what the requests did. Older CLIs leave it out. */
+      stats?: {
+        stages: { sync: number; match: number; live: number; save: number };
+        wallMs: number;
+        requests: number;
+        notModified: number;
+        rateLimited: number;
+        timeouts: number;
+      };
     }
   /** The Telegram message asked for during the scan: "sent", "off" (not set up) or why it failed. */
   | { type: "notified"; result: string }
   | { type: "error"; message: string };
 
 /** What each scan type covers (GET /api/scan/plan). */
-export type ScanPlan = Record<ScanScope, { yours: number; extra: number; seconds: number; resumable: { done: number; startedAt: string } | null }>;
+export type ScanPlan = Record<
+  ScanScope,
+  {
+    yours: number;
+    extra: number;
+    seconds: number;
+    /** `seconds` by stage: the shared job feed, then the live fetches. Older CLIs leave it out. */
+    stages?: { feed: number; live: number; seconds: number };
+    resumable: { done: number; startedAt: string } | null;
+  }
+>;

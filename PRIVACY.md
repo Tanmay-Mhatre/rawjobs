@@ -24,13 +24,13 @@ like any website you visit. The app identifies itself with a RawJobs User-Agent.
 your profile or resume to them, and never touches apply forms.
 
 ### Public job boards you add
-If you add Hacker News "Who is hiring", Remotive, Arbeitnow, Remote OK, Himalayas, Jobicy or We Work Remotely, the app reads their free
+If you add Hacker News "Who is hiring", Remotive, Arbeitnow, Remote OK, Himalayas, Jobicy, We Work Remotely or Remote First Jobs, the app reads their free
 public APIs from your computer (Hacker News through Algolia's HN API), at most a few times a day.
 Nothing about you is sent; those sites see your IP address, like any website you visit.
 
 ### The shared company directory
 The app downloads the company directory and job index (`manifest.json`, `directory.json.gz`,
-`index.json.gz`) and the daily job feed (`jobs-manifest.json` and its shards, from the `jobs` release)
+`index.json.gz`) and the shared job feed (`jobs-manifest.json` and its shards, from the `jobs` release)
 from GitHub Releases of `Tanmay-Mhatre/rawjobs-directory`. GitHub sees your IP address, as with
 any download. Everyone downloads the same files, and your filters are applied on your computer, so
 nothing about you is uploaded and the downloads don't reveal what you're looking for.

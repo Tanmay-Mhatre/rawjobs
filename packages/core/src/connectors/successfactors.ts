@@ -1,7 +1,7 @@
-import type { NormalizedJob } from "../schema";
+import type { CompanyRef, NormalizedJob } from "../schema";
 import { htmlToText, inferWorkplace } from "../text";
 import { detectAs, isoDate, xmlBlocks, xmlOne } from "./parse";
-import { jobId, type Connector } from "./types";
+import { jobId, SEARCH_MAX_POSTINGS, type Connector, type Ctx } from "./types";
 
 /** One <Job> of SAP SuccessFactors' public listing feed (career?…&resultType=XML), descriptions included. */
 export type SuccessFactorsJob = {
@@ -28,11 +28,43 @@ const inlineHtml = (s: string | undefined) => (s ? htmlToText(s).replace(/\s+/g,
 const cell = (row: string, cls: string) => inlineHtml(row.match(new RegExp(`class="${cls}[^"]*"[^>]*>([\\s\\S]*?)</span>`))?.[1]);
 
 /**
- * One search page of a career site: its job rows, the total it reports ("Results 1 – 25 of 978"),
- * and whether it is the classic template we read (newer ones render the list in the browser).
+ * The "tile" template (Career Site Builder): the same /search/ page, rows as
+ * <li class="job-tile job-id-{id}" data-url="/job/…/{id}/">, each field a labelled section
+ * (job-{id}-desktop-section-{field}-label / -value). Page size varies (10, 25, 50).
+ */
+function parseTiles(html: string, host: string): SuccessFactorsJob[] {
+  const jobs: SuccessFactorsJob[] = [];
+  for (const tile of html.split(/<li class="job-tile\b/).slice(1)) {
+    const path = tile.match(/data-url="(\/(?:[^"/]+\/)?job\/[^"]+)"/)?.[1]?.replace(/&amp;/g, "&");
+    const reqId = path?.match(/\/(\d+)\/?$/)?.[1];
+    const title = inlineHtml(tile.match(/<a\b[^>]*class="jobTitle-link[^"]*"[^>]*>([\s\S]*?)<\/a>/)?.[1]);
+    if (!path || !reqId || !title) continue;
+    const filters: Record<string, string> = {};
+    let posted: string | undefined;
+    for (const m of tile.matchAll(/id="job-\d+-desktop-section-([\w-]+?)-label"[^>]*>([\s\S]*?)<\/span>/g)) {
+      const field = m[1]!;
+      const value = inlineHtml(tile.match(new RegExp(`id="job-\\d+-desktop-section-${field}-value"[^>]*>([\\s\\S]*?)</div>`))?.[1]);
+      if (!value) continue;
+      if (field === "date") posted = value;
+      else if (field === "location") filters.Location = value;
+      else filters[inlineHtml(m[2]) || field] = value;
+    }
+    jobs.push({ reqId, title, description: "", filters, url: `https://${host}${path}`, posted });
+  }
+  return jobs;
+}
+
+/**
+ * One search page of a career site: its job rows, the total it reports ("Results 1 – 25 of 978",
+ * or the page script's jobRecordsFound), and whether it is a template we read: the classic table
+ * or tiles. (The "Unify" template renders its list in the browser from /services/, which
+ * robots.txt closes, so it stays unreadable.)
  */
 export function parseCareerSitePage(html: string, host: string): { jobs: SuccessFactorsJob[]; total: number; readable: boolean } {
-  const total = Number(html.match(/Results\s*<b>[^<]*<\/b>\s*of\s*<b>([\d,.]+)<\/b>/)?.[1]?.replace(/[,.]/g, "") ?? 0);
+  const count = html.match(/Results\s*<b>[^<]*<\/b>\s*of\s*<b>([\d,.]+)<\/b>/)?.[1] ?? html.match(/jobRecordsFound:\s*parseInt\("(\d+)"\)/)?.[1] ?? "0";
+  const total = Number(count.replace(/[,.]/g, ""));
+  // A tile page with no results has no tiles, only its count.
+  if (/<li class="job-tile\b/.test(html) || /jobRecordsFound:\s*parseInt\("0"\)/.test(html)) return { jobs: parseTiles(html, host), total, readable: true };
   const jobs: SuccessFactorsJob[] = [];
   for (const row of html.split(/<tr class="data-row/).slice(1)) {
     const link = row.match(/<a\b[^>]*class="jobTitle-link"[^>]*>([\s\S]*?)<\/a>/);
@@ -89,26 +121,32 @@ function host(ref: { shard?: string; careers_url?: string }): string {
   return "career4.successfactors.com";
 }
 
+/** A career site's search pages for `q` ("" lists every job), up to `max` jobs. */
+async function searchCareerSite(ref: CompanyRef, http: Ctx["http"], q: string, max: number) {
+  const site = ref.slug.toLowerCase();
+  const out: SuccessFactorsJob[] = [];
+  const seen = new Set<string>();
+  let total = Infinity;
+  for (let start = 0; start < Math.min(total, max); ) {
+    const page = parseCareerSitePage(await http.getText(`https://${site}/search/?q=${encodeURIComponent(q)}&startrow=${start}`), site);
+    if (!page.readable) throw new Error(`${site}: this SuccessFactors career site template isn't readable yet`);
+    if (start === 0) total = page.total || page.jobs.length;
+    const fresh = page.jobs.filter((j) => !seen.has(j.reqId));
+    if (!fresh.length) break;
+    for (const j of fresh) seen.add(j.reqId);
+    out.push(...fresh);
+    start += page.jobs.length;
+  }
+  return { out, total };
+}
+
 export const successfactors: Connector<SuccessFactorsJob> = {
   ats: "successfactors",
   detect: detectAs("successfactors"),
 
   async fetch(ref, { http, partial }) {
     if (isCareerSiteHost(ref)) {
-      const site = ref.slug.toLowerCase();
-      const out: SuccessFactorsJob[] = [];
-      const seen = new Set<string>();
-      let total = Infinity;
-      for (let start = 0; start < Math.min(total, MAX_POSTINGS); ) {
-        const page = parseCareerSitePage(await http.getText(`https://${site}/search/?q=&startrow=${start}`), site);
-        if (!page.readable) throw new Error(`${site}: this SuccessFactors career site template isn't readable yet`);
-        if (start === 0) total = page.total || page.jobs.length;
-        const fresh = page.jobs.filter((j) => !seen.has(j.reqId));
-        if (!fresh.length) break;
-        for (const j of fresh) seen.add(j.reqId);
-        out.push(...fresh);
-        start += page.jobs.length;
-      }
+      const { out, total } = await searchCareerSite(ref, http, "", MAX_POSTINGS);
       // Stopped at the cap well short of the total the site reports.
       if (Number.isFinite(total) && total - out.length >= 25) partial?.();
       return out;
@@ -116,6 +154,11 @@ export const successfactors: Connector<SuccessFactorsJob> = {
     const xml = await http.getText(`https://${host(ref)}/career?company=${encodeURIComponent(ref.slug)}&career_ns=job_listing_summary&resultType=XML`);
     if (!/<Job-Listing/.test(xml)) throw new Error("unexpected SuccessFactors response: not a job listing feed");
     return parseSuccessFactors(xml);
+  },
+
+  // Only career sites are capped; the XML feed always lists every job.
+  async search(ref, term, { http }) {
+    return isCareerSiteHost(ref) ? (await searchCareerSite(ref, http, term, SEARCH_MAX_POSTINGS)).out : [];
   },
 
   async describe(raw, _ref, { http }) {
@@ -134,7 +177,7 @@ export const successfactors: Connector<SuccessFactorsJob> = {
       location,
       country: pick(f, /country/i),
       workplace: inferWorkplace(`${location} ${pick(f, /remote|workplace/i) ?? ""}`),
-      department: pick(f, /department|function|area|category/i),
+      department: pick(f, /department|function|area|category|business ?unit/i),
       ...(raw.posted ? { postedAt: isoDate(`${raw.posted} UTC`) } : {}),
       url: raw.url ?? `https://${host(ref)}/career?company=${encodeURIComponent(ref.slug)}&career_ns=job_listing&career_job_req_id=${raw.reqId}`,
       description: htmlToText(raw.description),

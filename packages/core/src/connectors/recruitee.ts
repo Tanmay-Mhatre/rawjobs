@@ -1,3 +1,4 @@
+import { employmentType } from "../catalog/employment";
 import type { NormalizedJob, Workplace } from "../schema";
 import { htmlToText, inferWorkplace } from "../text";
 import { detectAs, isoDate, joinParts } from "./parse";
@@ -17,6 +18,7 @@ export type RecruiteeOffer = {
   locations?: { city?: string; state?: string; country?: string; name?: string }[];
   remote?: boolean;
   hybrid?: boolean;
+  employment_type_code?: string | null;
   on_site?: boolean;
   published_at?: string;
   created_at?: string;
@@ -58,6 +60,7 @@ export const recruitee: Connector<RecruiteeOffer> = {
       salary: min || max ? { min, max, currency: s?.currency ?? undefined, period: salaryPeriod(s?.period) } : undefined,
       postedAt: isoDate(raw.published_at ?? raw.created_at),
       url: raw.careers_url ?? `https://${ref.slug}.recruitee.com/o/${raw.slug ?? raw.id}`,
+      employmentType: employmentType(raw.employment_type_code),
       description: [htmlToText(raw.description), htmlToText(raw.requirements)].filter(Boolean).join("\n\n"),
     };
   },

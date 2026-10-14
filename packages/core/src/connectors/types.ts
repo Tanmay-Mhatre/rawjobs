@@ -1,5 +1,5 @@
 import type { HttpClient } from "../http";
-import type { AtsType, CompanyRef, NormalizedJob } from "../schema";
+import type { AtsType, CompanyRef, Job, NormalizedJob } from "../schema";
 
 export type Ctx = {
   http: HttpClient;
@@ -28,10 +28,21 @@ export interface Connector<Raw = unknown> {
    */
   describe?(raw: Raw, ref: CompanyRef, ctx: Ctx): Promise<string | JobDetail>;
   /**
+   * For capped lists: the board's own keyword search, postings shaped like fetch()'s, at most
+   * SEARCH_MAX_POSTINGS. When fetch() was cut short, the run searches for your titles so the jobs
+   * past the cap that fit you are still seen.
+   */
+  search?(ref: CompanyRef, term: string, ctx: Ctx): Promise<Raw[]>;
+  /**
    * True when the list's location is only a placeholder ("3 Locations"): the run then asks
    * describe() for the real one before the location gate, for jobs whose title already matches.
    */
   vagueLocation?(raw: Raw): boolean;
+  /**
+   * Is this one job still up? Asked before an alert (see liveness.ts), for jobs from this system or
+   * whose link is on it. One cheap request: true = open, false = taken down, undefined = can't tell.
+   */
+  isOpen?(job: Pick<Job, "id" | "url">, ctx: Ctx): Promise<boolean | undefined>;
   /** A job board (JOB_BOARDS): its name, used instead of one guessed from the slug. */
   label?: string;
   /**
@@ -40,6 +51,9 @@ export interface Connector<Raw = unknown> {
    */
   minIntervalHours?: number;
 }
+
+/** Postings one search() reads at most: it's for the jobs past a cap that fit you, not a second full list. */
+export const SEARCH_MAX_POSTINGS = 200;
 
 /** What a job's own page adds to its list entry. */
 export type JobDetail = Partial<Pick<NormalizedJob, "description" | "location" | "country" | "workplace" | "postedAt">>;

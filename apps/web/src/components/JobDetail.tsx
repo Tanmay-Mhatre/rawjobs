@@ -1,18 +1,22 @@
+import { surgeTitle } from "@rawjobs/core/activity";
 import { displayName } from "@rawjobs/core/display-name";
+import { EMPLOYMENT_LABEL } from "@rawjobs/core/catalog/employment";
 import { INDUSTRY_BY_ID } from "@rawjobs/core/catalog/industries";
 import { SENIORITY_LEVELS } from "@rawjobs/core/catalog/seniority";
+import { fromJobBoard } from "@rawjobs/core/dashboard";
 import { sponsorOf, sponsorSentence, sponsorTitle, VISA_REGISTERS } from "@rawjobs/core/catalog/visa";
 import { matchesTitle, safeUrl } from "@rawjobs/core/text";
 import { ArrowLeft, Bookmark, Check, ChevronDown, ChevronUp, CircleCheck, Copy, ExternalLink, Info, LoaderCircle, Maximize2, Plus, RefreshCw, Star, StickyNote, X } from "lucide-react";
 import { Fragment, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { copyText } from "../lib/clipboard";
-import { useDescription, type Job, type Profile } from "../lib/data";
+import { useDescription, useHiring, type Job, type Profile } from "../lib/data";
 import { formatDate, formatSalary, placeSummary, postedOrSeen, timeAgo } from "../lib/format";
 import { atsLabel, evergreenReason, INDEX_MAX_AGE_DAYS, isOlder } from "../lib/filters";
-import { isStale, staleReasons } from "../lib/stale";
+import { isRoleStale, isStale, staleReasons } from "../lib/stale";
 import { load, save } from "../lib/storage";
 import { PIPELINE, STATUS_LABEL, type Entry, type Status } from "../lib/userState";
 import { Dialog } from "./Dialog";
+import { HiringActivity } from "./HiringActivity";
 import { ReasonPicker, useNotForMe } from "./NotForMe";
 import { Button, buttonClass, Chip, ChipGroup, IconButton, ScoreBadge, scoreBandOf, ScoreBreakdown, scoreParts, SourceTag } from "./primitives";
 import { cx } from "./ui";
@@ -76,6 +80,7 @@ function MetaLine({ parts, className }: { parts: ReactNode[]; className?: string
 export function JobDetail(p: JobDetailProps) {
   const { job, entry, profile } = p;
   const description = useDescription(job);
+  const hiring = useHiring(job);
   const [copied, setCopied] = useState(false);
   /** The full-window reader, for reading the whole description in one view. */
   const [expanded, setExpanded] = useState(false);
@@ -122,6 +127,8 @@ export function JobDetail(p: JobDetailProps) {
   }, []);
 
   const postings = p.postings && p.postings.length > 1 ? p.postings : null;
+  // A job board's copy of the role is a posting, not another place.
+  const placeCount = postings ? new Set(postings.map((j) => j.location || "Location not listed")).size : 0;
   const places = postings
     ? placeSummary(postings.flatMap((j) => (j.cities.length ? j.cities : j.location ? [j.location] : [])))
     : placeSummary(job.cities.length ? job.cities : job.location ? [job.location] : []);
@@ -132,11 +139,13 @@ export function JobDetail(p: JobDetailProps) {
   const sponsor = sponsorOf(postings ?? [job]);
   // The loaded description counts too, for data written before descriptionLength existed.
   const staleCtx = { descriptionLength: description ? description.trim().length : undefined };
-  const stale = isStale(job, staleCtx) ? staleReasons(job, staleCtx) : null;
+  // The callout is for the role: one fresh posting of it and it's still live (the stale ones are marked in the list).
+  const stale = isRoleStale(postings ?? [job], (j) => (j.id === job.id ? staleCtx : undefined)) ? staleReasons(job, staleCtx) : null;
   const meta: ReactNode[] = [
     job.company,
     places,
     ...(workplace ? [workplace] : []),
+    ...(job.employmentType ? [EMPLOYMENT_LABEL[job.employmentType]] : []),
     SENIORITY_LABEL[job.seniority],
     // The stale callout says how old it is: the meta keeps the plain date then.
     isOlder(job) && job.status === "open" && !stale ? (
@@ -153,6 +162,13 @@ export function JobDetail(p: JobDetailProps) {
       ? [
           <span key="visa" className="text-success-text" title={sponsorTitle(sponsor)}>
             Sponsors visas
+          </span>,
+        ]
+      : []),
+    ...(job.surge
+      ? [
+          <span key="surge" className="text-ink" title={surgeTitle(displayName(job.company), job.surge)}>
+            Hiring surge
           </span>,
         ]
       : []),
@@ -287,19 +303,29 @@ export function JobDetail(p: JobDetailProps) {
 
           {postings && (
             <section className="rj-drawer__section">
-              <h3 className="rj-h">Posted in {postings.length} locations</h3>
+              <h3 className="rj-h">{placeCount > 1 ? `Posted in ${placeCount} locations` : `Posted ${postings.length} times`}</h3>
               <ul className="divide-y divide-line rounded-md border border-line">
-                {postings.map((j) => (
-                  <li key={j.id} className={cx("flex items-center gap-2 px-3 py-2 type-small", j.id === job.id && "bg-active")}>
-                    <button type="button" className="min-w-0 flex-1 truncate text-left hover:underline" onClick={() => p.onOpenJob?.(j)} aria-current={j.id === job.id || undefined}>
-                      {j.location || "Location not listed"}
-                    </button>
-                    <span className="tabular text-muted">{j.score}</span>
-                    <a href={safeUrl(j.url)} target="_blank" rel="noreferrer" onClick={() => p.onApply?.(j)} className="text-muted hover:text-ink" aria-label={`Open the ${j.location} posting`}>
-                      <ExternalLink className="rj-icon" />
-                    </a>
-                  </li>
-                ))}
+                {postings.map((j) => {
+                  const ctx = j.id === job.id ? staleCtx : undefined;
+                  return (
+                    <li key={j.id} className={cx("flex items-center gap-2 px-3 py-2 type-small", j.id === job.id && "bg-active")}>
+                      <button type="button" className="min-w-0 flex-1 truncate text-left hover:underline" onClick={() => p.onOpenJob?.(j)} aria-current={j.id === job.id || undefined}>
+                        {j.location || "Location not listed"}
+                        {fromJobBoard(j) && <span className="text-muted"> · via {atsLabel(j.ats)}</span>}
+                      </button>
+                      {/* The role may be live while this posting of it isn't. */}
+                      {isStale(j, ctx) && (
+                        <span className="shrink-0 text-warning-text" title={staleReasons(j, ctx)[0]}>
+                          may be stale
+                        </span>
+                      )}
+                      <span className="tabular text-muted">{j.score}</span>
+                      <a href={safeUrl(j.url)} target="_blank" rel="noreferrer" onClick={() => p.onApply?.(j)} className="text-muted hover:text-ink" aria-label={`Open the ${j.location} posting`}>
+                        <ExternalLink className="rj-icon" />
+                      </a>
+                    </li>
+                  );
+                })}
               </ul>
             </section>
           )}
@@ -337,6 +363,8 @@ export function JobDetail(p: JobDetailProps) {
               <dd>{source}</dd>
             </dl>
           </section>
+
+          {hiring && <HiringActivity company={displayName(job.company)} summary={hiring} />}
 
           {(p.moreFromCompany?.length || p.onHideCompany) && (
             <section className="rj-drawer__section">

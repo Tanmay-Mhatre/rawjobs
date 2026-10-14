@@ -1,8 +1,16 @@
 #!/usr/bin/env bash
-# Download the shared job feed's current shards (the "jobs" release, built daily by jobs-daily.yml)
-# into scripts/catalog/out/feed, so publish.ts can tag industries from the job titles of companies the
-# job index doesn't read (Workday, and boards it didn't reach this run). Already fetched for everyone:
-# no board is asked again. Best effort: without the feed, those companies just keep fewer tags.
+# Download the shared job feed (the "jobs" release, built daily by jobs-daily.yml) into
+# scripts/catalog/out/feed, so publish.ts can tag industries from the job titles of companies the job
+# index doesn't read (Workday, and boards it didn't reach this run). Already fetched for everyone: no
+# board is asked again. Best effort: without the feed, those companies just keep fewer tags.
+#
+# Reads the second format's full copy (jobs-v2-manifest.json and the snapshot it names, ~20 MB). Only
+# when that can't be downloaded, the first format's shards (jobs-manifest.json), while they're published.
+#
+# The manifests' .sig files aren't checked here: apps check them because they download from a public
+# release over the internet, while this runs in our own workflow, downloads with the workflow's token
+# from our own release, and only reads job titles from it (nothing is run, and file names from a
+# manifest are checked below before anything is downloaded by them).
 #
 #   GH_TOKEN=… DATA_REPO=owner/repo bash scripts/catalog/feed.sh
 set -uo pipefail
@@ -13,16 +21,43 @@ warn() {
   echo "$1" >&2
   if [ -n "${GITHUB_ACTIONS:-}" ]; then echo "::warning title=Job feed::$1"; fi
 }
-if ! gh release download jobs -R "$DATA_REPO" -p jobs-manifest.json -D "$dir" --clobber; then
-  warn "Couldn't download the job feed's manifest: industry tags from job titles cover only the job index this time."
-  exit 0
-fi
-for f in $(jq -r '.shards[]?.file' "$dir/jobs-manifest.json"); do
-  # Names come from the manifest: only plain shard file names.
-  if ! [[ "$f" =~ ^jobs-[a-z0-9-]+-[0-9A-Za-z]+\.json\.gz$ ]]; then
-    warn "Skipped an unexpected job feed file name: $f"
-    continue
+get() { gh release download jobs -R "$DATA_REPO" -p "$1" -D "$dir" --clobber; }
+
+# The second format: one full copy.
+v2() {
+  get jobs-v2-manifest.json || { warn "Couldn't download the job feed's jobs-v2-manifest.json."; return 1; }
+  local f
+  f=$(jq -r '.snapshot.file // empty' "$dir/jobs-v2-manifest.json") || f=
+  # The name comes from the manifest: only a plain snapshot file name.
+  if ! [[ "$f" =~ ^jobs-v2-snapshot-[0-9]+\.json\.br$ ]]; then
+    warn "Skipped an unexpected job feed snapshot name: '$f'"
+    return 1
   fi
-  gh release download jobs -R "$DATA_REPO" -p "$f" -D "$dir" --clobber || warn "Couldn't download $f: its companies keep fewer industry tags this time."
-done
-echo "Job feed: $(ls "$dir" | grep -c '\.json\.gz$') shards in $dir"
+  get "$f" || { warn "Couldn't download the job feed's full copy $f."; return 1; }
+  echo "Job feed: full copy $f ($(wc -c <"$dir/$f") bytes) in $dir"
+}
+
+# The first format: a shard per hiring system.
+v1() {
+  if ! get jobs-manifest.json; then
+    warn "Couldn't download the job feed's manifest: industry tags from job titles cover only the job index this time."
+    return 0
+  fi
+  for f in $(jq -r '.shards[]?.file' "$dir/jobs-manifest.json"); do
+    # Names come from the manifest: only plain shard file names.
+    if ! [[ "$f" =~ ^jobs-[a-z0-9-]+-[0-9A-Za-z]+\.json\.gz$ ]]; then
+      warn "Skipped an unexpected job feed file name: $f"
+      continue
+    fi
+    get "$f" || warn "Couldn't download $f: its companies keep fewer industry tags this time."
+  done
+  echo "Job feed: $(ls "$dir" | grep -c '\.json\.gz$') shards in $dir"
+}
+
+if ! v2; then
+  # Don't let a half-downloaded second format be read instead of the first.
+  rm -f "$dir"/jobs-v2-*
+  warn "Reading the job feed's first format instead."
+  v1
+fi
+exit 0

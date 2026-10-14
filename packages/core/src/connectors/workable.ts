@@ -1,3 +1,4 @@
+import { employmentType } from "../catalog/employment";
 import type { NormalizedJob } from "../schema";
 import { htmlToText, inferWorkplace } from "../text";
 import { detectAs, isoDate, joinParts } from "./parse";
@@ -8,6 +9,7 @@ export type WorkableJob = {
   title: string;
   shortcode: string;
   telecommuting?: boolean;
+  employment_type?: string | null;
   department?: string | null;
   url?: string;
   published_on?: string;
@@ -45,6 +47,7 @@ export const workable: Connector<WorkableJob> = {
       department: raw.department ?? undefined,
       postedAt: isoDate(raw.published_on ?? raw.created_at),
       url: raw.url ?? `https://apply.workable.com/${ref.slug}/j/${raw.shortcode}/`,
+      employmentType: employmentType(raw.employment_type),
       description: htmlToText(raw.description),
     };
   },

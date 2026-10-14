@@ -1,7 +1,7 @@
-import type { NormalizedJob } from "../schema";
+import type { CompanyRef, NormalizedJob } from "../schema";
 import { htmlToText, inferWorkplace } from "../text";
 import { countryName, joinParts } from "./parse";
-import { jobId, type Connector, type Ctx } from "./types";
+import { jobId, SEARCH_MAX_POSTINGS, type Connector, type Ctx } from "./types";
 
 /**
  * Cornerstone OnDemand (CSOD) career sites, used by large employers: {tenant}.csod.com. The
@@ -44,6 +44,41 @@ function date(s?: string): string | undefined {
   return m ? new Date(Date.UTC(Number(m[3]), Number(m[1]) - 1, Number(m[2]))).toISOString() : undefined;
 }
 
+/** The career site's requisitions, or those matching `searchText`, up to `max`. */
+async function list(ref: CompanyRef, http: Ctx["http"], searchText: string, max: number) {
+  if (!TENANT.test(ref.slug)) throw new Error(`Cornerstone tenant should be a subdomain name, got "${ref.slug}"`);
+  const s = await session(ref.slug, http);
+  const out: CornerstoneRequisition[] = [];
+  let total = 0;
+  for (let page = 1; out.length < max; page++) {
+    const { body } = await http.requestBody(s.url, {
+      method: "POST",
+      headers: { accept: "application/json", "content-type": "application/json", authorization: `Bearer ${s.token}` },
+      body: JSON.stringify({
+        careerSiteId: 1,
+        careerSitePageId: 1,
+        pageNumber: page,
+        pageSize: PAGE,
+        cultureId: s.cultureId,
+        cultureName: s.cultureName,
+        searchText,
+        states: [],
+        countryCodes: [],
+        cities: [],
+        customFieldCheckboxKeys: [],
+        customFieldDropdowns: [],
+        customFieldRadios: [],
+      }),
+    });
+    const d = (JSON.parse(body) as { data?: { totalCount?: number; requisitions?: CornerstoneRequisition[] } }).data;
+    if (!Array.isArray(d?.requisitions)) throw new Error("unexpected Cornerstone response: no requisitions");
+    out.push(...d.requisitions);
+    total = d.totalCount ?? 0;
+    if (!d.requisitions.length || out.length >= total) break;
+  }
+  return { out, total };
+}
+
 export const cornerstone: Connector<CornerstoneRequisition> = {
   ats: "cornerstone",
 
@@ -53,38 +88,13 @@ export const cornerstone: Connector<CornerstoneRequisition> = {
   },
 
   async fetch(ref, { http, partial }) {
-    if (!TENANT.test(ref.slug)) throw new Error(`Cornerstone tenant should be a subdomain name, got "${ref.slug}"`);
-    const s = await session(ref.slug, http);
-    const out: CornerstoneRequisition[] = [];
-    let total = 0;
-    for (let page = 1; out.length < MAX_POSTINGS; page++) {
-      const res = await http.request(s.url, {
-        method: "POST",
-        headers: { accept: "application/json", "content-type": "application/json", authorization: `Bearer ${s.token}` },
-        body: JSON.stringify({
-          careerSiteId: 1,
-          careerSitePageId: 1,
-          pageNumber: page,
-          pageSize: PAGE,
-          cultureId: s.cultureId,
-          cultureName: s.cultureName,
-          searchText: "",
-          states: [],
-          countryCodes: [],
-          cities: [],
-          customFieldCheckboxKeys: [],
-          customFieldDropdowns: [],
-          customFieldRadios: [],
-        }),
-      });
-      const d = ((await res.json()) as { data?: { totalCount?: number; requisitions?: CornerstoneRequisition[] } }).data;
-      if (!Array.isArray(d?.requisitions)) throw new Error("unexpected Cornerstone response: no requisitions");
-      out.push(...d.requisitions);
-      total = d.totalCount ?? 0;
-      if (!d.requisitions.length || out.length >= total) break;
-    }
+    const { out, total } = await list(ref, http, "", MAX_POSTINGS);
     if (total - out.length >= PAGE) partial?.();
     return out;
+  },
+
+  async search(ref, term, { http }) {
+    return (await list(ref, http, term, SEARCH_MAX_POSTINGS)).out;
   },
 
   normalize(raw, ref): NormalizedJob {

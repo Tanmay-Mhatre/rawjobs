@@ -1,8 +1,10 @@
 import { existsSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
+import { constants, setPriority } from "node:os";
 import { dirname, resolve } from "node:path";
 import { parseArgs } from "node:util";
 import {
   defaultDataDir,
+  readDirectory,
   loadConfig,
   scan,
   syncDirectory,
@@ -10,6 +12,7 @@ import {
   scanPlan,
   acquireScanLock,
   releaseScanLock,
+  alertJobs,
   digest,
   finishedMessage,
   sendTelegram,
@@ -24,6 +27,8 @@ import {
   type CompanyHealth,
   type Config,
   type Job,
+  type ScanStats,
+  toDashboardJob,
 } from "@rawjobs/core";
 import type { RunEvent } from "@rawjobs/core/protocol";
 
@@ -80,12 +85,13 @@ export function sessionOptions(values: RunValues, dataDir: string, scope: ScanSc
  * sync first on a full scan that's online, then `body`. The lock and the stop file are released
  * however it ends. When another scan holds the lock, `busy()` answers instead.
  */
-export async function scanSession<T>(values: RunValues, dataDir: string, o: { busy: () => T; sync: () => Promise<void> }, body: () => Promise<T>): Promise<T> {
+export async function scanSession<T>(values: RunValues, dataDir: string, o: { busy: () => T; sync: () => Promise<void> }, body: (syncMs: number) => Promise<T>): Promise<T> {
   if (!values["dry-run"] && !acquireScanLock(dataDir)) return o.busy();
   try {
     const fullScan = !values.only?.length && !values.check?.length;
+    const started = Date.now();
     if (fullScan && !values.offline) await o.sync();
-    return await body();
+    return await body(Date.now() - started);
   } finally {
     if (!values["dry-run"]) releaseScanLock(dataDir);
     rmSync(stopFile(dataDir), { force: true });
@@ -122,6 +128,7 @@ export async function cmdRun(args: string[]): Promise<number> {
     },
   });
   if (values.plan) return printPlan(values);
+  lowerPriority();
   if (values.progress === "ndjson") return runNdjson(values);
   const scope = parseScope(values.scope);
   const { config, path } = loadConfig(values.config);
@@ -141,12 +148,15 @@ export async function cmdRun(args: string[]): Promise<number> {
     if (!values.full) console.error(`  ${(await syncJobFeed(dataDir)).message}`);
   };
   try {
-    return await scanSession(values, dataDir, { busy, sync }, async () => {
-      const { result, merged, summary, checks, moves, stopped } = await scan(config, {
+    return await scanSession(values, dataDir, { busy, sync }, async (syncMs) => {
+      const { result, merged, summary, checks, moves, stopped, resting, quiet, chronic, openCheck, stats } = await scan(config, {
         ...sessionOptions(values, dataDir, scope),
+        syncMs,
+        // Only when an alert will go out: the check costs requests the alert-less scan doesn't need.
+        checkBeforeAlert: values.notify && alertsOn(config),
         onStart: (s) =>
           console.error(
-            `Checking ${values.only?.length ? values.only.join(", ") : `${s.yours.length} of your companies`}${s.extra ? ` and ${s.extra.toLocaleString()} ${s.scope === "all" ? "more from the directory" : "in your industries"}` : ""}${s.resumed ? ` (resuming: ${s.resumed.toLocaleString()} done already)` : ""}${s.skippedByFeed ? ` (${s.skippedByFeed.toLocaleString()} skipped: nothing for you in the shared job feed)` : ""}, about ${duration(s.seconds)}...\n`,
+            `Checking ${values.only?.length ? values.only.join(", ") : `${s.yours.length} of your companies`}${s.extra ? ` and ${s.extra.toLocaleString()} ${s.scope === "all" ? "more from the directory" : "in your industries"}` : ""}${s.resumed ? ` (resuming: ${s.resumed.toLocaleString()} done already)` : ""}${s.skippedByFeed ? ` (${s.skippedByFeed.toLocaleString()} skipped: nothing for you in the shared job feed)` : ""}${s.resting ? ` (${s.resting.toLocaleString()} resting after failing)` : ""}${s.quiet ? ` (${s.quiet.toLocaleString()} quiet: unchanged for weeks)` : ""}, about ${duration(s.seconds)}...\n`,
           ),
         onCompanyDone: (h) => {
           // A whole-directory scan prints your companies, matches and failures, not 17,000 lines.
@@ -172,7 +182,25 @@ export async function cmdRun(args: string[]): Promise<number> {
         for (const h of failed.slice(0, 50)) console.log(`  ${h.company} (${h.ats}:${h.slug}): ${h.error}`);
         if (failed.length > 50) console.log(`  …and ${failed.length - 50} more`);
       }
+      if (resting)
+        console.log(
+          `\n${resting.toLocaleString()} directory board${resting === 1 ? "" : "s"} left alone this scan: failed last time, tried again after a rest (up to a day; your companies are always checked).`,
+        );
+      if (quiet)
+        console.log(
+          `${resting ? "" : "\n"}${quiet.toLocaleString()} quiet directory board${quiet === 1 ? "" : "s"} left alone: no jobs added or removed for 2 weeks or more, checked once a day (every 3 days after 45 days).`,
+        );
+      if (chronic.length) {
+        console.log(`\n${chronic.length} board${chronic.length === 1 ? " hasn't" : "s haven't"} worked for 30 days or more (directory boards are tried once a day now):`);
+        for (const name of chronic.slice(0, 20)) console.log(`  ${name}`);
+        if (chronic.length > 20) console.log(`  …and ${chronic.length - 20} more`);
+      }
 
+      if (openCheck?.checked)
+        console.error(
+          `\nChecked ${openCheck.checked} job${openCheck.checked === 1 ? "" : "s"} again before alerting: ${openCheck.closed ? `${openCheck.closed} had closed (marked closed, left out of the alert)` : "all still open"}.`,
+        );
+      console.error(`\n${statsLine(stats)}`);
       if (summary) console.error(`\nSaved to ${dataDir} (${merged.jobs.length} jobs tracked, ${summary.closed} closed this run). Open the dashboard with: pnpm start`);
 
       if (values.json) {
@@ -182,7 +210,7 @@ export async function cmdRun(args: string[]): Promise<number> {
         console.error(`\nWrote ${out}`);
       }
 
-      const notified = values.notify && !values["dry-run"] ? await notifyScan(config, result, merged) : undefined;
+      const notified = values.notify && !values["dry-run"] ? await notifyScan(config, result, merged, scope) : undefined;
       if (notified)
         console.error(`Telegram: ${notified === "sent" ? "sent the new jobs" : notified === "nothing-new" ? "nothing new to send" : notified === "off" ? "not set up (Settings → Alerts)" : notified}`);
       log({ ok: true, matches: matches.length, newMatches: fresh, notified, stopped });
@@ -202,10 +230,11 @@ export async function cmdRun(args: string[]): Promise<number> {
 export function printPlan(values: { config?: string; data: string }): number {
   const { config } = loadConfig(values.config);
   const dataDir = resolve(values.data);
+  const directory = readDirectory(dataDir);
   const plans = Object.fromEntries(
     SCAN_SCOPES.map((scope) => {
-      const p = scanPlan(config, dataDir, scope);
-      return [scope, { yours: p.yours.length, extra: p.extra.length, seconds: p.seconds, resumable: resumable(dataDir, scope) ?? null }];
+      const p = scanPlan(config, dataDir, scope, directory);
+      return [scope, { yours: p.yours.length, extra: p.extra.length, seconds: p.seconds, stages: p.stages, resumable: resumable(dataDir, scope) ?? null }];
     }),
   );
   console.log(JSON.stringify(plans));
@@ -229,13 +258,14 @@ export async function runNdjson(values: RunValues): Promise<number> {
       emit({ type: "sync" });
       emit({ type: "synced", ...(await syncDirectory(dataDir)), ...(values.full ? {} : { feed: (await syncJobFeed(dataDir)).message }) });
     };
-    return await scanSession(values, dataDir, { busy, sync }, async () => {
+    return await scanSession(values, dataDir, { busy, sync }, async (syncMs) => {
       const yours = new Set(config.companies.map((c) => `${c.ats}:${c.slug}`));
       let done = 0;
       /** Companies done per hiring system, including ones a resumed scan already did. */
       let doneByAts: Record<string, number> = {};
-      const { result, merged, summary, checks, moves, stopped } = await scan(config, {
+      const { result, merged, summary, checks, moves, stopped, stats } = await scan(config, {
         ...sessionOptions(values, dataDir, scope),
+        syncMs,
         onStart: (s) => {
           done = s.resumed;
           doneByAts = { ...s.resumedByAts };
@@ -247,6 +277,7 @@ export async function runNdjson(values: RunValues): Promise<number> {
             resumed: s.resumed,
             scope: s.scope,
             seconds: s.seconds,
+            stages: s.stages,
             skippedByFeed: s.skippedByFeed,
             byAts: s.byAts,
             doneByAts,
@@ -258,6 +289,11 @@ export async function runNdjson(values: RunValues): Promise<number> {
           // Every one of yours, and directory companies that matched or failed; the rest only as a count.
           if (yours.has(`${h.ats}:${h.slug}`) || h.matches > 0 || (!h.ok && !h.unsupported)) emit({ type: "company", done, doneByAts, ...h });
           else if (done % 25 === 0) emit({ type: "progress", done, ats: h.ats, doneByAts });
+        },
+        // Matches as each company finishes, so the Radar shows them before the scan ends.
+        onCompanyResult: (_h, jobs) => {
+          const matches = jobs.filter((j) => !j.why.gate);
+          if (matches.length) emit({ type: "jobs", jobs: matches.map(toDashboardJob) });
         },
       });
       const matches = result.jobs.filter((j) => !j.why.gate);
@@ -271,6 +307,7 @@ export async function runNdjson(values: RunValues): Promise<number> {
         checked: checks.length,
         stopped,
         moves: moves.map((m) => ({ name: m.name, from: `${m.from.ats}:${m.from.slug}`, to: `${m.to.ats}:${m.to.slug}` })),
+        stats: { stages: stats.stages, wallMs: stats.wallMs, requests: stats.http.requests, notModified: stats.http.notModified, rateLimited: stats.http.rateLimited, timeouts: stats.http.timeouts },
       });
       if (existsSync(notifyFile(dataDir))) {
         rmSync(notifyFile(dataDir), { force: true });
@@ -280,6 +317,7 @@ export async function runNdjson(values: RunValues): Promise<number> {
             config,
             matches.filter((j) => merged.newIds.has(j.id)),
             stopped,
+            scope,
           ),
         });
       }
@@ -291,13 +329,18 @@ export async function runNdjson(values: RunValues): Promise<number> {
   }
 }
 
-/** Send how many new matches the scan found (or, with only_new off, how many strong ones) to Telegram. Never throws. */
-export async function notifyScan(config: Config, result: RunResult, merged: MergeResult): Promise<string> {
+/** Telegram alerts are switched on and the bot is set up. */
+function alertsOn(config: Config): boolean {
   const secrets = telegramSecrets();
-  if (!config.alerts.telegram || !secrets.token || !secrets.chatId) return "off";
-  const matches = result.jobs.filter((j) => !j.why.gate);
-  const jobs = config.alerts.only_new ? matches.filter((j) => merged.newIds.has(j.id)) : matches.filter((j) => j.score >= config.profile.min_score);
-  const text = digest(jobs, { minScore: config.profile.min_score, onlyNew: config.alerts.only_new });
+  return !!(config.alerts.telegram && secrets.token && secrets.chatId);
+}
+
+/** Send how many new matches the scan found (or, with only_new off, how many strong ones) to Telegram. Never throws. */
+export async function notifyScan(config: Config, result: RunResult, merged: MergeResult, scope: ScanScope): Promise<string> {
+  const secrets = telegramSecrets();
+  if (!alertsOn(config)) return "off";
+  const jobs = alertJobs(config, result.jobs, merged.newIds);
+  const text = digest(jobs, { minScore: config.profile.min_score, onlyNew: config.alerts.only_new, scope });
   if (!text) return "nothing-new";
   try {
     await sendTelegram(text, secrets);
@@ -308,20 +351,39 @@ export async function notifyScan(config: Config, result: RunResult, merged: Merg
 }
 
 /** "Tell me when it's done": sent whether or not there's anything new, and whatever the alerts switch says. */
-export async function notifyFinished(config: Config, newJobs: Job[], stopped: boolean): Promise<string> {
+export async function notifyFinished(config: Config, newJobs: Job[], stopped: boolean, scope: ScanScope): Promise<string> {
   const secrets = telegramSecrets();
   if (!secrets.token || !secrets.chatId) return "off";
   try {
-    await sendTelegram(finishedMessage({ newJobs, minScore: config.profile.min_score, stopped }), secrets);
+    await sendTelegram(finishedMessage({ newJobs, minScore: config.profile.min_score, stopped, scope }), secrets);
     return "sent";
   } catch (err) {
     return `failed: ${(err as Error).message}`;
   }
 }
 
+/** A scan runs below normal priority (whoever started it), so the computer stays quick to use meanwhile. */
+function lowerPriority(): void {
+  try {
+    setPriority(constants.priority.PRIORITY_BELOW_NORMAL);
+  } catch {
+    // Not allowed here: the scan just runs at normal priority.
+  }
+}
+
+/** "Took 4.2 min: sync 9s · feed match 12s · live 3.9 min · save 2s. 1,204 requests: 310 unchanged, 0 rate-limited, 3 timed out." */
+export function statsLine(s: ScanStats): string {
+  const t = (ms: number) => (ms >= 90_000 ? `${(ms / 60_000).toFixed(1)} min` : `${Math.round(ms / 1000)}s`);
+  const { sync, match, live, save } = s.stages;
+  const h = s.http;
+  return `Took ${t(s.wallMs)}: sync ${t(sync)} · feed match ${t(match)} · live ${t(live)} · save ${t(save)}. ${h.requests.toLocaleString()} requests: ${h.notModified.toLocaleString()} unchanged, ${h.rateLimited} rate-limited, ${h.timeouts} timed out${h.brokenHosts.length ? `, ${h.brokenHosts.length} hosts skipped` : ""}.`;
+}
+
 export function healthLine(h: CompanyHealth): string {
   if (!h.ok) return h.error ?? "failed";
-  return `${String(h.jobsFound).padStart(4)} jobs, ${h.matches} match${h.matches === 1 ? "" : "es"} (${(h.durationMs / 1000).toFixed(1)}s)`;
+  // Past a board's cap, the jobs its search for your titles found (counted in jobsFound too).
+  const searched = h.searchFound ? ` (${h.searchFound} past the cap, from searching your titles)` : "";
+  return `${String(h.jobsFound).padStart(4)} jobs${searched}, ${h.matches} match${h.matches === 1 ? "" : "es"} (${(h.durationMs / 1000).toFixed(1)}s)`;
 }
 
 export function printJobs(jobs: Job[], min: number): void {

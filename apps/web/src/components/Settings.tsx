@@ -380,7 +380,7 @@ export function Settings({
                     <li>
                       <b>All companies</b>
                       <span className="text-muted">
-                        : every company in the directory that RawJobs can scan. The daily job feed skips companies with nothing for you, so usually minutes; up to 2 hours without it. Stop any time and
+                        : every company in the directory that RawJobs can scan. The shared job feed skips companies with nothing for you, so usually minutes; a few hours without it. Stop any time and
                         it carries on later.
                       </span>
                     </li>

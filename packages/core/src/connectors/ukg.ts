@@ -1,7 +1,8 @@
-import type { NormalizedJob, Workplace } from "../schema";
+import { employmentType } from "../catalog/employment";
+import type { CompanyRef, NormalizedJob, Workplace } from "../schema";
 import { htmlToText, inferWorkplace } from "../text";
 import { joinParts, jsonAfter } from "./parse";
-import { jobId, type Connector } from "./types";
+import { jobId, SEARCH_MAX_POSTINGS, type Connector, type Ctx } from "./types";
 
 /**
  * UKG Pro Recruiting (formerly UltiPro). A job board lives at
@@ -32,6 +33,24 @@ const board = (ref: { slug: string; shard?: string; site?: string }) => {
   return `https://${ref.shard.toLowerCase()}/${encodeURIComponent(ref.slug)}/JobBoard/${ref.site.toLowerCase()}`;
 };
 
+/** The board's opportunities, or those its search box finds for `QueryString`, up to `max`. */
+async function list(ref: CompanyRef, http: Ctx["http"], QueryString: string, max: number) {
+  const url = `${board(ref)}/JobBoardView/LoadSearchResults`;
+  const out: UkgOpportunity[] = [];
+  const seen = new Set<string>();
+  let total = 0;
+  for (let skip = 0; skip < max; skip += PAGE) {
+    const page = await http.postJson<{ opportunities?: UkgOpportunity[]; totalCount?: number }>(url, { opportunitySearch: { Top: PAGE, Skip: skip, ...(QueryString ? { QueryString } : {}) } });
+    if (!Array.isArray(page.opportunities)) throw new Error("unexpected UKG response: no opportunities array");
+    const fresh = page.opportunities.filter((o) => !seen.has(o.Id));
+    for (const o of fresh) seen.add(o.Id);
+    out.push(...fresh);
+    total = page.totalCount ?? 0;
+    if (!fresh.length || out.length >= total) break;
+  }
+  return { out, total };
+}
+
 export const ukg: Connector<UkgOpportunity> = {
   ats: "ukg",
 
@@ -47,22 +66,14 @@ export const ukg: Connector<UkgOpportunity> = {
   },
 
   async fetch(ref, { http, partial }) {
-    const url = `${board(ref)}/JobBoardView/LoadSearchResults`;
-    const out: UkgOpportunity[] = [];
-    const seen = new Set<string>();
-    let total = 0;
-    for (let skip = 0; skip < MAX_POSTINGS; skip += PAGE) {
-      const page = await http.postJson<{ opportunities?: UkgOpportunity[]; totalCount?: number }>(url, { opportunitySearch: { Top: PAGE, Skip: skip } });
-      if (!Array.isArray(page.opportunities)) throw new Error("unexpected UKG response: no opportunities array");
-      const fresh = page.opportunities.filter((o) => !seen.has(o.Id));
-      for (const o of fresh) seen.add(o.Id);
-      out.push(...fresh);
-      total = page.totalCount ?? 0;
-      if (!fresh.length || out.length >= total) break;
-    }
+    const { out, total } = await list(ref, http, "", MAX_POSTINGS);
     // Stopped at the cap (or the API stopped early) well short of the total it reports.
     if (total - out.length >= PAGE) partial?.();
     return out;
+  },
+
+  async search(ref, term, { http }) {
+    return (await list(ref, http, term, SEARCH_MAX_POSTINGS)).out;
   },
 
   async describe(raw, ref, { http }) {
@@ -89,6 +100,7 @@ export const ukg: Connector<UkgOpportunity> = {
       department: raw.JobCategoryName || undefined,
       postedAt: raw.PostedDate,
       url: `${board(ref)}/OpportunityDetail?opportunityId=${raw.Id}`,
+      employmentType: employmentType(raw.FullTime === undefined ? undefined : raw.FullTime ? "full-time" : "part-time"),
       // The list only has a brief; run.ts asks describe() for the jobs that pass the gates.
       description: "",
     };
