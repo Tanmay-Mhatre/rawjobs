@@ -5,7 +5,8 @@ import type { CompanyHealth, CompanyRef } from "./schema";
 
 /**
  * How each board did across scans (data/board-health.json, keyed by jobCompanyKey()). A board that
- * keeps failing rests for a while instead of being asked again every scan. Times are milliseconds
+ * keeps failing rests for a while instead of being asked again every scan, and a directory board
+ * whose jobs haven't changed for weeks is fetched less often (quiet). Times are milliseconds
  * since 1970, to keep the file small: an "all" scan records one entry per board it fetched.
  */
 export type BoardRecord = {
@@ -18,6 +19,9 @@ export type BoardRecord = {
   reason?: CompanyHealth["failure"];
   /** The last fetch that worked. */
   okAt?: number;
+  /** A hash of the board's job ids (hashIds) at the last full read, and since when it's been that. */
+  ids?: string;
+  changedAt?: number;
 };
 
 export type BoardHealth = { version: 1; boards: Record<string, BoardRecord> };
@@ -31,6 +35,10 @@ export const MAX_REST_HOURS = 24;
 export const MAX_REST_HOURS_YOURS = 6;
 /** No fetch that worked for this long: the board is chronic (shown in the scan's output, rested the longest). */
 export const CHRONIC_DAYS = 30;
+/** A directory board unchanged this long is fetched at most once a day… */
+export const QUIET_DAYS = 14;
+/** …and unchanged this long, at most every 3 days. */
+export const VERY_QUIET_DAYS = 45;
 /** Entries of boards no scan covers any more are dropped this long after their last fetch. */
 export const PRUNE_AFTER_DAYS = 60;
 
@@ -65,18 +73,49 @@ export function isResting(r: BoardRecord | undefined, now: number, yours = false
 }
 
 /**
- * Splits a scan's companies into those to fetch and those resting. A skipped board has no result
- * this scan, so its jobs stay as they are (see mergeHistory), like a board whose fetch failed.
- * `yours`: jobCompanyKey()s of your companies; `done`: ones a stopped scan already fetched (never resting).
+ * How often a board that works needs fetching, in hours, by how long its jobs have stayed the same:
+ * 0 (every scan) until QUIET_DAYS, then a day, then 3 days from VERY_QUIET_DAYS. A board whose
+ * jobs were never recorded is fetched every scan.
+ */
+export function quietHours(r: BoardRecord | undefined, now: number): number {
+  if (r?.changedAt === undefined) return 0;
+  const same = now - r.changedAt;
+  return same >= VERY_QUIET_DAYS * DAY_MS ? 72 : same >= QUIET_DAYS * DAY_MS ? 24 : 0;
+}
+
+/** A board that worked last time, has kept the same jobs for weeks and was fetched recently enough. */
+export function isQuiet(r: BoardRecord | undefined, now: number): boolean {
+  return !r?.fails && r?.okAt !== undefined && now - r.okAt < quietHours(r, now) * HOUR_MS;
+}
+
+/**
+ * Splits a scan's companies into those to fetch, those resting after failing and quiet ones (never
+ * yours). A skipped board has no result this scan, so its jobs stay as they are (see mergeHistory),
+ * like a board whose fetch failed; being quiet isn't a failure.
+ * `yours`: jobCompanyKey()s of your companies; `done`: ones a stopped scan already fetched (never skipped).
  */
 export function planBoards<T extends CompanyRef>(companies: readonly T[], health: BoardHealth, now: number, opts: { yours?: ReadonlySet<string>; done?: ReadonlySet<string> } = {}) {
   const fetch: T[] = [];
   const resting: T[] = [];
+  const quiet: T[] = [];
   for (const c of companies) {
     const key = jobCompanyKey(c);
-    (!opts.done?.has(key) && isResting(health.boards[key], now, !!opts.yours?.has(key)) ? resting : fetch).push(c);
+    const r = health.boards[key];
+    const yours = !!opts.yours?.has(key);
+    if (opts.done?.has(key)) fetch.push(c);
+    else if (isResting(r, now, yours)) resting.push(c);
+    else if (!yours && isQuiet(r, now)) quiet.push(c);
+    else fetch.push(c);
   }
-  return { fetch, resting };
+  return { fetch, resting, quiet };
+}
+
+/** A cheap fingerprint of a board's job ids (FNV-1a over the sorted ids): the same when the same jobs are listed. */
+export function hashIds(ids: readonly string[]): string {
+  const text = [...ids].sort().join("\n");
+  let h = 0x811c9dc5;
+  for (let i = 0; i < text.length; i++) h = Math.imul(h ^ text.charCodeAt(i), 0x01000193) >>> 0;
+  return h.toString(16).padStart(8, "0");
 }
 
 /**
@@ -91,7 +130,9 @@ export function recordBoards(health: BoardHealth, results: readonly CompanyHealt
     const prev = boards[key] ?? {};
     if (h.ok) {
       const { fails: _f, since: _s, failedAt: _a, reason: _r, ...rest } = prev;
-      boards[key] = { ...rest, okAt: now };
+      // A full read says whether the jobs changed; the first one starts the clock.
+      const changed = h.idsHash !== undefined && (h.idsHash !== prev.ids || prev.changedAt === undefined);
+      boards[key] = { ...rest, okAt: now, ...(changed ? { ids: h.idsHash, changedAt: now } : {}) };
     } else {
       boards[key] = { ...prev, fails: (prev.fails ?? 0) + 1, since: prev.fails ? (prev.since ?? now) : now, failedAt: now, reason: h.failure };
     }
