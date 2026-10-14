@@ -258,6 +258,35 @@ ${place}, NL</span></td></tr>`;
     expect(await c.describe!(raws[25]!, ref, { http, now: new Date() })).toBe("Fix heat pumps");
   });
 
+  it("successfactors: a career site on the tile template pages its /search/ until the count", async () => {
+    const field = (id: number, f: string, label: string, value: string) =>
+      `<div id="job-${id}-desktop-section-${f}" class="section-field ${f}"><span id="job-${id}-desktop-section-${f}-label" class="section-label">
+        ${label}
+      </span><div id="job-${id}-desktop-section-${f}-value">${value}
+      </div></div>`;
+    const tile = (id: number, title: string) =>
+      `<li class="job-tile job-id-${id} job-row-index-1" data-url="/job/Pooler-${id}/${id}/"><div class="col-md-12 sub-section sub-section-desktop"><a class="jobTitle-link fontcolor1" href="/job/Pooler-${id}/${id}/">
+        ${title}
+      </a>${field(id, "location", "Location", "Pooler, GA, US, 31322")}${field(id, "businessunit", "Business Unit", "Retail Field")}${field(id, "date", "Posted", "Oct 13, 2026")}</div>
+      <div class="sub-section-mobile">${field(id, "location", "Location", "ignored")}</div></li>`;
+    const page = (tiles: string) => `<script>var x = { jobRecordsFound: parseInt("3") };</script><ul id="job-tile-list">${tiles}</ul>`;
+    const { jobs, calls } = await run("successfactors", { slug: "careers.acme.com" }, (url) =>
+      text(url.includes("startrow=0") ? page(tile(11, "Stock Keyholder, PT") + tile(12, "Store Lead")) : page(tile(13, "Analyst"))),
+    );
+    expect(calls).toEqual(["https://careers.acme.com/search/?q=&startrow=0", "https://careers.acme.com/search/?q=&startrow=2"]);
+    expect(jobs).toHaveLength(3);
+    expect(jobs[0]).toMatchObject({
+      id: "successfactors:careers.acme.com:11",
+      title: "Stock Keyholder, PT",
+      location: "Pooler, GA, US, 31322",
+      department: "Retail Field",
+      postedAt: "2026-10-13T00:00:00.000Z",
+      url: "https://careers.acme.com/job/Pooler-11/11/",
+    });
+    const empty = await run("successfactors", { slug: "careers.acme.com" }, () => text(`<script>jobRecordsFound: parseInt("0")</script>`));
+    expect(empty.jobs).toEqual([]);
+  });
+
   it("successfactors: a career site on a newer template is refused, not read as empty", async () => {
     await expect(run("successfactors", { slug: "jobs.acme.com" }, () => text("<html><div id='app'></div></html>"))).rejects.toThrow(/template isn't readable yet/);
   });
