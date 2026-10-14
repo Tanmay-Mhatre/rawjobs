@@ -5,7 +5,7 @@ import { describe, expect, it } from "vitest";
 import { parseConfig } from "../src/config";
 import { readLedger } from "../src/discover";
 import { readProgress, resumable, scan, type ScanStart } from "../src/scan";
-import { estimateSeconds, readSpeeds, recordSpeeds, scopeCompanies, type DirectoryEntry } from "../src/scope";
+import { estimateScan, estimateSeconds, readSpeeds, recordSpeeds, scopeCompanies, type DirectoryEntry } from "../src/scope";
 import { fakeHttp, fixture, json } from "./helpers";
 import type { DataMeta } from "../src/schema";
 
@@ -97,7 +97,21 @@ describe("scopeCompanies", () => {
 describe("estimateSeconds", () => {
   const c = (ats: string) => ({ ats: ats as "lever" });
   it("counts the slowest hiring system, since systems are fetched in parallel", () => {
-    expect(estimateSeconds([c("lever"), c("lever"), c("ashby")])).toBe(3);
+    // Lever queues for its one API host, a request a second; Ashby takes 4 a second.
+    expect(estimateSeconds([c("lever"), c("lever"), c("ashby")])).toBe(2);
+  });
+
+  it("runs Workday shards as lanes of their own, and boards on their own hosts 4 at a time", () => {
+    const wd = (shard: string) => ({ ats: "workday" as const, shard });
+    const one = estimateSeconds(Array.from({ length: 40 }, () => wd("wd1")));
+    expect(estimateSeconds([...Array.from({ length: 20 }, () => wd("wd1")), ...Array.from({ length: 20 }, () => wd("wd5"))])).toBe(Math.ceil(one / 2));
+    // 40 boards × 3 requests × 1.2 s, 4 at a time.
+    expect(one).toBe(36);
+  });
+
+  it("gives the job feed and the live fetches their own estimate", () => {
+    expect(estimateScan([c("lever")], { feed: true, feedSeconds: 12 })).toEqual({ feed: 12, live: 1, seconds: 13 });
+    expect(estimateScan([c("lever")])).toEqual({ feed: 0, live: 1, seconds: 1 });
   });
 
   it("uses speeds measured by earlier scans", () => {
@@ -115,6 +129,15 @@ describe("estimateSeconds", () => {
       ),
     ).toEqual({ lever: 0.5 });
     expect(readSpeeds(dir)).toEqual({ lever: 0.5 });
+    rmSync(dir, { recursive: true, force: true });
+  });
+
+  it("isn't thrown by a few boards that time out, and forgets speeds measured the old way", () => {
+    const dir = mkdtempSync(join(tmpdir(), "speed-"));
+    writeFileSync(join(dir, "scan-speed.json"), JSON.stringify({ lever: 40 }));
+    expect(readSpeeds(dir)).toEqual({});
+    const h = (ms: number) => ({ company: "x", ats: "lever" as const, slug: "x", ok: true, jobsFound: 0, matches: 0, durationMs: ms });
+    expect(recordSpeeds(dir, [h(2000), h(2000), h(2000), h(2000), h(51_000)])).toEqual({ lever: 0.5 });
     rmSync(dir, { recursive: true, force: true });
   });
 });
@@ -182,6 +205,32 @@ describe("scan", () => {
     expect(calls.some((u) => [...done].some((slug) => u.includes(`/${slug}`)))).toBe(false);
     expect(second.result.health.length).toBe(4);
     expect(existsSync(join(dir, "scan-progress-all.json"))).toBe(false);
+  });
+
+  it("appends progress line by line, and still resumes a progress file from before", async () => {
+    const dir = setup();
+    let fetched = 0;
+    await scan(config(), { dataDir: dir, http: fakeHttp(routes).http, now, scope: "all", onCompanyDone: () => fetched++, stopped: () => fetched >= 1 });
+    const lines = readFileSync(join(dir, "scan-progress-all.json"), "utf8").trim().split("\n");
+    expect(JSON.parse(lines[0]!)).toMatchObject({ version: 2, scope: "all" });
+    expect(lines.length).toBeGreaterThanOrEqual(2);
+
+    const old = readProgress(dir, "all")!;
+    writeFileSync(join(dir, "scan-progress-all.json"), JSON.stringify({ ...old, version: 1 }));
+    expect(resumable(dir, "all", now)?.done).toBe(old.health.length);
+    const starts: ScanStart[] = [];
+    await scan(config(), { dataDir: dir, http: fakeHttp(routes).http, now, scope: "all", onStart: (s) => starts.push(s) });
+    expect(starts[0]!.resumed).toBe(old.health.length);
+  });
+
+  it("records where the time went, per stage and per company, with the request counts", async () => {
+    const dir = setup();
+    const r = await scan(config(), { dataDir: dir, http: fakeHttp(routes).http, now, scope: "all", syncMs: 1234 });
+    expect(r.stats.stages.sync).toBe(1234);
+    expect(Object.keys(r.stats.companies ?? {})).toHaveLength(4);
+    const saved = read<{ runs: { stages: unknown; http: { requests: number } }[] }>(dir, "scan-stats.json").runs;
+    expect(saved).toHaveLength(1);
+    expect(saved[0]!.http.requests).toBeGreaterThan(0);
   });
 
   it("a quick scan in between doesn't lose a stopped long scan", async () => {

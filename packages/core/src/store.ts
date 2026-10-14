@@ -1,4 +1,4 @@
-import { mkdirSync, readFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
 import type { BoardHealth } from "./board-health";
 import { companyIndustries } from "./catalog/industries";
@@ -9,6 +9,14 @@ import type { MergeResult } from "./diff";
 import type { RunResult } from "./run";
 import type { Config, DashboardJob, DashboardJobsFile, DataMeta, Job, JobsFile, RunSummary } from "./schema";
 import { readJsonOrSetAside, writeFileAtomic } from "./atomic";
+import { readJsonOnce } from "./json-once";
+
+/** Write the file unless it already says exactly this (same size first, so a changed file is rarely read). */
+export function writeIfChanged(path: string, text: string): boolean {
+  if (existsSync(path) && statSync(path).size === Buffer.byteLength(text) && readFileSync(path, "utf8") === text) return false;
+  writeFileAtomic(path, text);
+  return true;
+}
 
 /** How many run summaries meta.json keeps (the dashboard's health history). */
 export const KEEP_RUNS = 30;
@@ -61,7 +69,7 @@ type DirectoryRow = { key: string; ats: string; slug: string; site?: string; tag
 /** The published directory's companies (data/catalog/directory.json), if built. */
 const directoryCompanies = (dir: string): DirectoryRow[] => {
   try {
-    return (JSON.parse(readFileSync(join(dir, "catalog", "directory.json"), "utf8")) as { companies: DirectoryRow[] }).companies;
+    return readJsonOnce<{ companies: DirectoryRow[] }>(join(dir, "catalog", "directory.json"))?.companies ?? [];
   } catch {
     return [];
   }
@@ -119,7 +127,8 @@ export function saveRun(
   const file = (list: DashboardJob[]): DashboardJobsFile => ({ version: 2, generatedAt, jobs: list });
   writeFileAtomic(join(dir, "jobs.json"), JSON.stringify(file(dashboard.filter((j) => !j.why.gate))));
   writeFileAtomic(join(dir, "jobs-other.json"), JSON.stringify(file(dashboard.filter((j) => j.why.gate))));
-  writeFileAtomic(join(dir, "descriptions.json"), JSON.stringify(Object.fromEntries(jobs.filter((j) => j.description).map((j) => [j.id, j.description]))));
+  // The biggest file, and often unchanged: written only when a description changed.
+  writeIfChanged(join(dir, "descriptions.json"), JSON.stringify(Object.fromEntries(jobs.filter((j) => j.description).map((j) => [j.id, j.description]))));
 
   const prev = readMeta(dir);
   const prevRuns = prev?.runs ?? [];

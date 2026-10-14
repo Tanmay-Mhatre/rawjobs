@@ -1,8 +1,10 @@
 import { existsSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
+import { constants, setPriority } from "node:os";
 import { dirname, resolve } from "node:path";
 import { parseArgs } from "node:util";
 import {
   defaultDataDir,
+  readDirectory,
   loadConfig,
   scan,
   syncDirectory,
@@ -25,6 +27,8 @@ import {
   type CompanyHealth,
   type Config,
   type Job,
+  type ScanStats,
+  toDashboardJob,
 } from "@rawjobs/core";
 import type { RunEvent } from "@rawjobs/core/protocol";
 
@@ -81,12 +85,13 @@ export function sessionOptions(values: RunValues, dataDir: string, scope: ScanSc
  * sync first on a full scan that's online, then `body`. The lock and the stop file are released
  * however it ends. When another scan holds the lock, `busy()` answers instead.
  */
-export async function scanSession<T>(values: RunValues, dataDir: string, o: { busy: () => T; sync: () => Promise<void> }, body: () => Promise<T>): Promise<T> {
+export async function scanSession<T>(values: RunValues, dataDir: string, o: { busy: () => T; sync: () => Promise<void> }, body: (syncMs: number) => Promise<T>): Promise<T> {
   if (!values["dry-run"] && !acquireScanLock(dataDir)) return o.busy();
   try {
     const fullScan = !values.only?.length && !values.check?.length;
+    const started = Date.now();
     if (fullScan && !values.offline) await o.sync();
-    return await body();
+    return await body(Date.now() - started);
   } finally {
     if (!values["dry-run"]) releaseScanLock(dataDir);
     rmSync(stopFile(dataDir), { force: true });
@@ -123,6 +128,7 @@ export async function cmdRun(args: string[]): Promise<number> {
     },
   });
   if (values.plan) return printPlan(values);
+  lowerPriority();
   if (values.progress === "ndjson") return runNdjson(values);
   const scope = parseScope(values.scope);
   const { config, path } = loadConfig(values.config);
@@ -142,9 +148,10 @@ export async function cmdRun(args: string[]): Promise<number> {
     if (!values.full) console.error(`  ${(await syncJobFeed(dataDir)).message}`);
   };
   try {
-    return await scanSession(values, dataDir, { busy, sync }, async () => {
-      const { result, merged, summary, checks, moves, stopped, resting, quiet, chronic, openCheck } = await scan(config, {
+    return await scanSession(values, dataDir, { busy, sync }, async (syncMs) => {
+      const { result, merged, summary, checks, moves, stopped, resting, quiet, chronic, openCheck, stats } = await scan(config, {
         ...sessionOptions(values, dataDir, scope),
+        syncMs,
         // Only when an alert will go out: the check costs requests the alert-less scan doesn't need.
         checkBeforeAlert: values.notify && alertsOn(config),
         onStart: (s) =>
@@ -193,6 +200,7 @@ export async function cmdRun(args: string[]): Promise<number> {
         console.error(
           `\nChecked ${openCheck.checked} job${openCheck.checked === 1 ? "" : "s"} again before alerting: ${openCheck.closed ? `${openCheck.closed} had closed (marked closed, left out of the alert)` : "all still open"}.`,
         );
+      console.error(`\n${statsLine(stats)}`);
       if (summary) console.error(`\nSaved to ${dataDir} (${merged.jobs.length} jobs tracked, ${summary.closed} closed this run). Open the dashboard with: pnpm start`);
 
       if (values.json) {
@@ -222,10 +230,11 @@ export async function cmdRun(args: string[]): Promise<number> {
 export function printPlan(values: { config?: string; data: string }): number {
   const { config } = loadConfig(values.config);
   const dataDir = resolve(values.data);
+  const directory = readDirectory(dataDir);
   const plans = Object.fromEntries(
     SCAN_SCOPES.map((scope) => {
-      const p = scanPlan(config, dataDir, scope);
-      return [scope, { yours: p.yours.length, extra: p.extra.length, seconds: p.seconds, resumable: resumable(dataDir, scope) ?? null }];
+      const p = scanPlan(config, dataDir, scope, directory);
+      return [scope, { yours: p.yours.length, extra: p.extra.length, seconds: p.seconds, stages: p.stages, resumable: resumable(dataDir, scope) ?? null }];
     }),
   );
   console.log(JSON.stringify(plans));
@@ -249,13 +258,14 @@ export async function runNdjson(values: RunValues): Promise<number> {
       emit({ type: "sync" });
       emit({ type: "synced", ...(await syncDirectory(dataDir)), ...(values.full ? {} : { feed: (await syncJobFeed(dataDir)).message }) });
     };
-    return await scanSession(values, dataDir, { busy, sync }, async () => {
+    return await scanSession(values, dataDir, { busy, sync }, async (syncMs) => {
       const yours = new Set(config.companies.map((c) => `${c.ats}:${c.slug}`));
       let done = 0;
       /** Companies done per hiring system, including ones a resumed scan already did. */
       let doneByAts: Record<string, number> = {};
-      const { result, merged, summary, checks, moves, stopped } = await scan(config, {
+      const { result, merged, summary, checks, moves, stopped, stats } = await scan(config, {
         ...sessionOptions(values, dataDir, scope),
+        syncMs,
         onStart: (s) => {
           done = s.resumed;
           doneByAts = { ...s.resumedByAts };
@@ -267,6 +277,7 @@ export async function runNdjson(values: RunValues): Promise<number> {
             resumed: s.resumed,
             scope: s.scope,
             seconds: s.seconds,
+            stages: s.stages,
             skippedByFeed: s.skippedByFeed,
             byAts: s.byAts,
             doneByAts,
@@ -278,6 +289,11 @@ export async function runNdjson(values: RunValues): Promise<number> {
           // Every one of yours, and directory companies that matched or failed; the rest only as a count.
           if (yours.has(`${h.ats}:${h.slug}`) || h.matches > 0 || (!h.ok && !h.unsupported)) emit({ type: "company", done, doneByAts, ...h });
           else if (done % 25 === 0) emit({ type: "progress", done, ats: h.ats, doneByAts });
+        },
+        // Matches as each company finishes, so the Radar shows them before the scan ends.
+        onCompanyResult: (_h, jobs) => {
+          const matches = jobs.filter((j) => !j.why.gate);
+          if (matches.length) emit({ type: "jobs", jobs: matches.map(toDashboardJob) });
         },
       });
       const matches = result.jobs.filter((j) => !j.why.gate);
@@ -291,6 +307,7 @@ export async function runNdjson(values: RunValues): Promise<number> {
         checked: checks.length,
         stopped,
         moves: moves.map((m) => ({ name: m.name, from: `${m.from.ats}:${m.from.slug}`, to: `${m.to.ats}:${m.to.slug}` })),
+        stats: { stages: stats.stages, wallMs: stats.wallMs, requests: stats.http.requests, notModified: stats.http.notModified, rateLimited: stats.http.rateLimited, timeouts: stats.http.timeouts },
       });
       if (existsSync(notifyFile(dataDir))) {
         rmSync(notifyFile(dataDir), { force: true });
@@ -342,6 +359,23 @@ export async function notifyFinished(config: Config, newJobs: Job[], stopped: bo
   } catch (err) {
     return `failed: ${(err as Error).message}`;
   }
+}
+
+/** A scan runs below normal priority (whoever started it), so the computer stays quick to use meanwhile. */
+function lowerPriority(): void {
+  try {
+    setPriority(constants.priority.PRIORITY_BELOW_NORMAL);
+  } catch {
+    // Not allowed here: the scan just runs at normal priority.
+  }
+}
+
+/** "Took 4.2 min: sync 9s · feed match 12s · live 3.9 min · save 2s. 1,204 requests: 310 unchanged, 0 rate-limited, 3 timed out." */
+export function statsLine(s: ScanStats): string {
+  const t = (ms: number) => (ms >= 90_000 ? `${(ms / 60_000).toFixed(1)} min` : `${Math.round(ms / 1000)}s`);
+  const { sync, match, live, save } = s.stages;
+  const h = s.http;
+  return `Took ${t(s.wallMs)}: sync ${t(sync)} · feed match ${t(match)} · live ${t(live)} · save ${t(save)}. ${h.requests.toLocaleString()} requests: ${h.notModified.toLocaleString()} unchanged, ${h.rateLimited} rate-limited, ${h.timeouts} timed out${h.brokenHosts.length ? `, ${h.brokenHosts.length} hosts skipped` : ""}.`;
 }
 
 export function healthLine(h: CompanyHealth): string {

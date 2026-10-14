@@ -30,8 +30,8 @@ export const hibob: Connector<HibobJob> = {
 
   async fetch(ref, { http }) {
     // The careers page names the company in a header; without it the API answers 401.
-    const res = await http.request(`https://${ref.slug}.careers.hibob.com/api/job-ad`, { headers: { accept: "application/json", companyidentifier: ref.slug } });
-    const data = (await res.json()) as { jobAdDetails?: HibobJob[] };
+    const { body } = await http.requestBody(`https://${ref.slug}.careers.hibob.com/api/job-ad`, { headers: { accept: "application/json", companyidentifier: ref.slug } });
+    const data = JSON.parse(body) as { jobAdDetails?: HibobJob[] };
     if (!Array.isArray(data.jobAdDetails)) throw new Error("unexpected HiBob response: no jobAdDetails array");
     return data.jobAdDetails;
   },

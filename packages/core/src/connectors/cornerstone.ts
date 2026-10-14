@@ -51,7 +51,7 @@ async function list(ref: CompanyRef, http: Ctx["http"], searchText: string, max:
   const out: CornerstoneRequisition[] = [];
   let total = 0;
   for (let page = 1; out.length < max; page++) {
-    const res = await http.request(s.url, {
+    const { body } = await http.requestBody(s.url, {
       method: "POST",
       headers: { accept: "application/json", "content-type": "application/json", authorization: `Bearer ${s.token}` },
       body: JSON.stringify({
@@ -70,7 +70,7 @@ async function list(ref: CompanyRef, http: Ctx["http"], searchText: string, max:
         customFieldRadios: [],
       }),
     });
-    const d = ((await res.json()) as { data?: { totalCount?: number; requisitions?: CornerstoneRequisition[] } }).data;
+    const d = (JSON.parse(body) as { data?: { totalCount?: number; requisitions?: CornerstoneRequisition[] } }).data;
     if (!Array.isArray(d?.requisitions)) throw new Error("unexpected Cornerstone response: no requisitions");
     out.push(...d.requisitions);
     total = d.totalCount ?? 0;

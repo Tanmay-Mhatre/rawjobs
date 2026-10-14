@@ -24,7 +24,7 @@ import { keyOf } from "./lib/companies";
 import { canRunLocally, useData, useOtherJobs, type Job } from "./lib/data";
 import { newSinceLastVisit } from "./lib/newSince";
 import { usePrefs } from "./lib/prefs";
-import { scanPrefs, useScan } from "./lib/scan";
+import { scanPrefs, useScan, withLive } from "./lib/scan";
 import { useBackgroundScan } from "./lib/backgroundScan";
 import { announceBackgroundScan } from "./app/announceBackgroundScan";
 import { useResume } from "./lib/resume";
@@ -166,7 +166,8 @@ export function App() {
   /** Where a "set up" CTA should take the user right now. */
   const toSetup = useCallback(() => goStep(setupState === "invalid" ? 0 : progress.started ? progress.nextStep : STEP.resume), [goStep, setupState, progress]);
 
-  const jobs = state.kind === "ready" ? state.jobs : [];
+  // A running scan's matches show up as each company finishes; the saved files replace them when it ends.
+  const jobs = useMemo(() => withLive(state.kind === "ready" ? state.jobs : NO_JOBS, scan.live), [state, scan.live]);
   const jobsById = useMemo(() => new Map(jobs.map((j) => [j.id, j])), [jobs]);
   const openJob = openId ? jobsById.get(openId) : undefined;
   // Not interested, with an optional reason: X (row button or key) asks why in a toast; the drawer asks inline.
@@ -389,7 +390,7 @@ export function App() {
                   {state.kind === "ready" && lastRun && matched === 0 && <NoMatches jobs={otherJobs ? [...jobs, ...otherJobs] : jobs} onStep={goStep} onCompanies={goCompanies} />}
                   {state.kind === "ready" && (matched > 0 || !lastRun) && (
                     <RadarPage
-                      jobs={state.jobs}
+                      jobs={jobs}
                       meta={state.meta}
                       user={user.state}
                       prefs={prefs.prefs}

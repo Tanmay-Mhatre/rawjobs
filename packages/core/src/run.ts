@@ -19,8 +19,19 @@ export type RunResult = {
   moves?: BoardMove[];
 };
 
-/** Description fetches per company per run, for ATSs that need one request per job. */
+/**
+ * Description fetches per company per run, for ATSs that need one request per job: up to 40 for your
+ * companies, 5 for directory ones (the rest are fetched on later scans: what's fetched is remembered).
+ */
 const MAX_DESCRIBE_PER_COMPANY = 40;
+const MAX_DESCRIBE_PER_CHECK = 5;
+/** Description fetches in flight per company (each host still keeps its own pace). */
+const DESCRIBE_WORKERS = 4;
+
+/** Where a job with a vague location ("3 Locations") really is, from its detail page (see LocationCache). */
+export type ResolvedLocation = Pick<NormalizedJob, "location"> & Partial<Pick<NormalizedJob, "country" | "workplace">>;
+/** Resolved locations by job id, kept between scans, so a job's detail page is fetched for its place only once. */
+export type LocationCache = Map<string, ResolvedLocation>;
 
 /** Title searches per capped company: each is a few more requests to the same board. */
 const MAX_SEARCH_TERMS = 5;
@@ -94,6 +105,8 @@ export type RunOptions = {
   stopped?: () => boolean;
   /** A company's industry ids, when the directory knows them (for the industry part of the score). */
   industriesOf?: (c: CompanyRef) => readonly string[] | undefined;
+  /** Locations resolved by earlier scans (read, and added to as jobs are described). */
+  locations?: LocationCache;
 };
 
 /**
@@ -101,7 +114,7 @@ export type RunOptions = {
  * site still gets its own pace (HttpClient's per-host spacing): companies sharing one API host just
  * queue for it, while companies on their own hosts (Workday tenants, Recruitee, BambooHR…) run side by side.
  */
-const laneOf = (c: CompanyRef) => `${c.ats}:${c.region ?? ""}:${c.ats === "workday" ? c.shard : ""}`;
+export const laneOf = (c: Pick<CompanyRef, "ats" | "region" | "shard">) => `${c.ats}:${c.region ?? ""}:${c.ats === "workday" ? c.shard : ""}`;
 /** Companies in flight per lane. */
 const LANE_WORKERS = 4;
 
@@ -187,6 +200,10 @@ export async function runRadar(config: Config, opts: RunOptions = {}): Promise<R
         }
         h.searchFound = found;
       }
+      // First the whole list, scored; then the detail pages it needs, a few at a time.
+      type Item = { raw: unknown; base: NormalizedJob; prev?: Job; vague: boolean; describe: boolean; score: number; why: Job["why"] };
+      const items: Item[] = [];
+      const maxDescribe = extra ? MAX_DESCRIBE_PER_CHECK : MAX_DESCRIBE_PER_COMPANY;
       let described = 0;
       const ids: string[] = [];
       for (const raw of raws) {
@@ -201,24 +218,47 @@ export async function runRadar(config: Config, opts: RunOptions = {}): Promise<R
         base.url = safeUrl(base.url) ?? "";
         ids.push(base.id);
         const prev = previous.get(base.id);
-        const firstSeen = prev?.firstSeen ?? nowIso;
         let { score, why } = scoreJob(base, config.profile, fit);
         // Lists without descriptions (or with only "3 Locations"): reuse what's stored, else fetch the
         // job's page for jobs that pass the gates (or pass the title gate, when the location is vague).
-        const vague = !!connector.vagueLocation?.(raw);
-        if (connector.describe && (vague ? !why.gate || why.gate === "location" : !why.gate && !base.description)) {
-          if (prev?.description) Object.assign(base, { description: prev.description }, vague ? { location: prev.location, country: prev.country, workplace: prev.workplace } : {});
-          else if (described < MAX_DESCRIBE_PER_COMPANY) {
-            described++;
-            const d = await connector.describe(raw, company, { http, now }).catch(() => {
-              h.describeFailed = (h.describeFailed ?? 0) + 1;
-              return "";
-            });
-            if (typeof d === "string") base.description = d;
-            else for (const [k, v] of Object.entries(d)) if (v) Object.assign(base, { [k]: v });
-          }
+        let vague = !!connector.vagueLocation?.(raw);
+        // A place resolved by an earlier scan: no page to fetch just to learn where the job is.
+        const known = vague && !prev?.description ? opts.locations?.get(base.id) : undefined;
+        if (known) {
+          Object.assign(base, known);
+          vague = false;
           ({ score, why } = scoreJob(base, config.profile, fit));
         }
+        let describe = false;
+        if (connector.describe && (vague ? !why.gate || why.gate === "location" : !why.gate && !base.description)) {
+          if (prev?.description) {
+            Object.assign(base, { description: prev.description }, vague ? { location: prev.location, country: prev.country, workplace: prev.workplace } : {});
+            ({ score, why } = scoreJob(base, config.profile, fit));
+          } else if (described < maxDescribe) {
+            described++;
+            describe = true;
+          }
+        }
+        items.push({ raw, base, prev, vague, describe, score, why });
+      }
+      const queue = items.filter((i) => i.describe);
+      const describeWorker = async () => {
+        for (let item = queue.shift(); item; item = queue.shift()) {
+          const d = await connector.describe!(item.raw, company, { http, now }).catch(() => {
+            h.describeFailed = (h.describeFailed ?? 0) + 1;
+            return "";
+          });
+          const { base } = item;
+          if (typeof d === "string") base.description = d;
+          else for (const [k, v] of Object.entries(d)) if (v) Object.assign(base, { [k]: v });
+          if (item.vague && typeof d !== "string" && d.location)
+            opts.locations?.set(base.id, { location: base.location, ...(base.country ? { country: base.country } : {}), workplace: base.workplace });
+          ({ score: item.score, why: item.why } = scoreJob(base, config.profile, fit));
+        }
+      };
+      await Promise.all(Array.from({ length: Math.min(DESCRIBE_WORKERS, queue.length) }, describeWorker));
+      for (const { base, prev, score, why } of items) {
+        const firstSeen = prev?.firstSeen ?? nowIso;
         // Your companies keep every job (the Radar can show the rest); extra checks only matches, and
         // the jobs already in history: one that stops matching is still listed, and leaving it out
         // would read as gone and close it (mergeHistory).

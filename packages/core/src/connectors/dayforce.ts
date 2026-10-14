@@ -31,12 +31,12 @@ const culture = (ref: { shard?: string }) => (ref.shard && CULTURE.test(ref.shar
 
 /** The anonymous CSRF pair every visitor gets: the cookie to send back, and its token for the header. */
 async function csrf(http: Ctx["http"]): Promise<{ cookie: string; token: string }> {
-  const res = await http.request(`${BASE}/api/auth/csrf`, { headers: { accept: "application/json" } });
+  const { res, body } = await http.requestBody(`${BASE}/api/auth/csrf`, { headers: { accept: "application/json" } });
   const cookie = res.headers
     .getSetCookie()
     .map((c) => c.split(";")[0])
     .join("; ");
-  const token = ((await res.json()) as { csrfToken?: string }).csrfToken;
+  const token = (JSON.parse(body) as { csrfToken?: string }).csrfToken;
   if (!token || !cookie) throw new Error("unexpected Dayforce response: no CSRF token");
   return { cookie, token };
 }
@@ -48,12 +48,12 @@ async function list(ref: CompanyRef, http: Ctx["http"], searchText: string, max:
   const out: DayforceJob[] = [];
   let total = 0;
   for (let start = 0; start < max; start += PAGE) {
-    const res = await http.request(`${BASE}/api/geo/${encodeURIComponent(ref.slug)}/jobposting/search`, {
+    const { body } = await http.requestBody(`${BASE}/api/geo/${encodeURIComponent(ref.slug)}/jobposting/search`, {
       method: "POST",
       headers: { accept: "application/json", "content-type": "application/json", cookie, "x-csrf-token": token },
       body: JSON.stringify({ clientNamespace: ref.slug, jobBoardCode: ref.site, cultureCode: culture(ref), paginationStart: start, ...(searchText ? { searchText } : {}) }),
     });
-    const page = (await res.json()) as { jobPostings?: DayforceJob[]; maxCount?: number };
+    const page = JSON.parse(body) as { jobPostings?: DayforceJob[]; maxCount?: number };
     if (!Array.isArray(page.jobPostings)) throw new Error("unexpected Dayforce response: no jobPostings");
     out.push(...page.jobPostings);
     total = page.maxCount ?? 0;
