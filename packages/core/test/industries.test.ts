@@ -211,4 +211,10 @@ describe("citiesIn", async () => {
     ["Middle East & North Africa", []],
     ["Remote", []],
   ] as const)("%s", (location, expected) => expect(citiesIn(location)).toEqual([...expected]));
+
+  it("reads words that are also built-in object names as words", () => {
+    // A job title piece once crashed groupKey: "constructor" found Object.prototype.constructor.
+    expect(() => citiesIn("Constructor")).not.toThrow();
+    expect(() => citiesIn("toString, hasOwnProperty")).not.toThrow();
+  });
 });

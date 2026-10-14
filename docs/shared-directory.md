@@ -298,6 +298,29 @@ directory build already reads the full copy for industry tags (`feed.sh`, `readF
 back to the first format's shards only when the full copy can't be downloaded, so drop that fallback
 with them.
 
+### Hiring activity
+
+After the feed is built, `scripts/catalog/activity.ts` reads today's change file and records each
+company's new roles (`packages/core/src/activity.ts`, `scripts/catalog/lib/activity.ts`). A new role
+is a job id first seen that day whose title (groupKey's title part: place left out) the company hasn't
+listed in the last 60 days, so reposts and one role posted per city don't count; a company's first day
+in the feed (or its first day back after it was dropped) is its starting point, not new roles. Titles
+are also sorted into internships, graduate and early-career roles, and the rest, from their words.
+
+- `activity-state.json` (kept in the saved state, about 18 MB): per company, its titles of the last
+  60 days, new roles per day for 60 days and per month for 13 months. Losing it restarts the records.
+- `jobs-activity-<seq>.json.br` (listed as `activity` in `jobs-v2-manifest.json`, with its SHA-256;
+  about 0.2 MB): per company, new roles per month (total, internships, graduate), new roles and roles
+  posted (from posted dates) in the last 30 days, the day its records start when later than the
+  file's `since`, and `e: 1` for mass posters (over 500 open jobs and new ids mostly reposts, or new
+  roles over half the open jobs: lists turning over at a hiring system's cap). Mass posters are never
+  a hiring surge.
+
+The step may fail without stopping the feed: the manifest then has no `activity` entry that day and
+apps keep what they have. A day without a change file (the feed published only a full copy) or a day
+the step didn't run goes uncounted. Apps compare the last 30 days with the usual pace after 42 days
+of records (`BASELINE_MIN_DAYS`).
+
 ## One-time setup
 
 1. **GitHub permission for workflow files** (once): `gh auth refresh -s workflow`
