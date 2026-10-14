@@ -252,51 +252,56 @@ gh label create move-approved -R Tanmay-Mhatre/rawjobs --color 0E8A16 --descript
 
 ## Job feed
 
-Every day, `Jobs · daily feed` (`.github/workflows/jobs-daily.yml`, script `scripts/catalog/jobs.ts`)
-reads every live directory board on Greenhouse, Lever, Ashby, SmartRecruiters and Workday once, for
-everyone, and publishes slim rows (job id, title, location, workplace, posted date; no descriptions)
-as one gzipped shard per hiring system on the `jobs` release of the directory repo.
-`jobs-manifest.json` lists the shards with their SHA-256 and `schema` version; it's uploaded last.
+Every 6 hours, `Jobs · feed every 6 h` (`.github/workflows/jobs-daily.yml`, script `scripts/catalog/jobs.ts`)
+reads every live directory board on every hiring system with a connector once, for everyone, and
+publishes slim rows (job id, title, location, workplace, posted date; for Workday's "3 Locations"
+jobs, where they are; no descriptions) on the `jobs` release of the directory repo.
 
-- **Cheap to run:** Greenhouse, Lever and Ashby boards that haven't changed answer an empty 304
-  (ETags are kept in the feed's own saved state, the `jobs-state.tar.gz` asset of the `state` release).
-  A board that fails, or that the 5-hour limit leaves out, keeps yesterday's rows and date.
-- **How apps use it** (`packages/core/src/job-feed.ts`): every scan downloads the shards that changed,
-  then fetches live only the directory companies whose jobs could pass the user's filters, plus any
-  the feed doesn't cover or that are more than 3 days old. Every job shown is still checked live;
-  the feed only decides which companies are worth a request. `rawjobs scan --full` skips the feed.
-- **Watching it:** the workflow opens an issue when a run fails, or when jobs or companies move more
-  than 20% from the day before. It also re-enables itself each run, so GitHub doesn't switch the
-  schedule off after 60 quiet days.
-- **Format changes:** bump `JOB_FEED_SCHEMA`; older apps ignore a feed they don't understand and
-  scan live.
+- **Four groups, one merge:** a crawl job per group of systems (`GROUPS` in `jobs.ts`: SmartRecruiters;
+  Paylocity, Paycom, Hireology, Workable; Workday and the other enterprise systems; everything else)
+  runs side by side, each with its own saved state (`jobs-<group>-state.tar.gz` on the `state`
+  release). The merge job alone writes, signs and publishes; a group that failed is replaced by its
+  previous saved copy. CI paces the shared APIs faster than the app does (`CI_HOST_DELAYS`).
+- **Started twice, run once:** GitHub's cron often starts hours late, so a Cloudflare cron
+  (`services/feed-trigger`) also starts the workflow. The first job skips the run when the feed was
+  started less than 4 hours ago (`force` overrides). `publish: false` runs everything but publishes,
+  saves and opens nothing (and a run publishes only from `main`).
+- **Cheap to run:** Greenhouse, Lever and Ashby boards that haven't changed answer an empty 304.
+  A board that fails, or that the 4-hour limit leaves out, keeps its previous rows and time. A system
+  with 100 failed boards in a row is stopped for the run (a blocked runner).
+- **How apps use it** (`packages/core/src/job-feed.ts`): every scan brings its copy up to date, then
+  fetches live only the directory companies whose jobs could pass the user's filters, plus any the
+  feed doesn't cover, that are more than 3 days old, or whose board stopped at a cap (`partial`).
+  Every job shown is still checked live; the feed only decides which companies are worth a request.
+  `rawjobs scan --full` skips the feed.
+- **Watching it:** the merge job opens (or comments on) one issue per hiring system that stops, has
+  more than 30% of its boards fail, or moves more than 20% in jobs, and one when a run fails. It also
+  re-enables itself each run, so GitHub doesn't switch the schedule off after 60 quiet days.
 
-### Second format: a full copy, then a change file a day
+### Formats: a full copy, then a change file per run
 
-About 31% of companies change on a given day but only about 5% of jobs, so re-downloading the whole
-feed daily (25 MB) wastes almost all of it. The second format (`packages/core/src/job-feed-diff.ts`,
-`scripts/catalog/lib/feed-v2.ts`) works like OpenStreetMap's update files:
+Only a few % of jobs change between runs, so apps download a full copy once and then only change files
+(`packages/core/src/job-feed-diff.ts`, `scripts/catalog/lib/feed-v2.ts`), the way OpenStreetMap ships
+updates:
 
-- `jobs-v2-snapshot-<seq>.json.br`: the full copy, brotli (about 18.5 MB), for new installs.
-- `jobs-v2-diff-<seq>.json.br`: that day's changes. Per company, the job ids that closed or changed
-  and the jobs that are new or changed. Also the companies that were added, dropped, or not read that
-  day. On real data, a day's file is about 0.85 MB.
-- `jobs-v2-manifest.json` (uploaded last): version `seq`, the fingerprint of the full state
-  (`feedStateHash`), the snapshot, and the last 14 change files.
+- `jobs-v3-snapshot-<seq>.txt.br`: the full copy of every system in the compact text format
+  (`job-feed-compact.ts`: each title and place stored once, each company's jobs one string), so an app
+  holds millions of jobs in a few hundred MB. `jobs-v3-diff-<seq>.json.br`: one run's changes.
+  `jobs-v3-manifest.json` (uploaded last): version `seq`, the fingerprint of the full state
+  (`feedStateHash`), the snapshot, and the last 56 change files (14 days).
+- `jobs-v2-*` (JSON) and the first format (`jobs-manifest.json`, one gzipped shard per system) stay
+  frozen to Greenhouse, Lever, Ashby, SmartRecruiters and Workday, for apps from before the third.
 
-The build checks every change file before publishing it: yesterday's copy plus the change file must
-reproduce today's copy exactly, or only the full copy is published. Apps apply the change files since
-their version and check the result against the manifest's fingerprint. When they're more than 14 days
-behind, a file is missing, or the fingerprint doesn't match, they take the full copy. They keep the
-copy in `catalog/jobs/v2-state.json.br`, and remember which companies matched so that after an update
-only companies whose jobs changed are checked again.
+The build checks every change file before publishing it: the previous copy plus the change file must
+reproduce this copy exactly, or only the full copy is published. Apps apply the change files since
+their version and check the result against the manifest's fingerprint; when they're too far behind,
+a file is missing, or the fingerprint doesn't match, they take the full copy. The previous run's full
+copy and shards stay published one more run, for apps part-way through downloading them. Apps keep
+the copy in `catalog/jobs/v3-state.txt.br` and remember which companies matched, so after an update
+only companies whose jobs changed are checked again. The directory build reads the second format's
+full copy for industry tags (`feed.sh`, `readFeedTitles`).
 
-On real data (1.28M jobs), a day's update takes about 3 s and filtering about 2.5 s; with nothing new,
-filtering is instant. The first format is still published next to it while installs update; drop it
-(and the shard code in `jobs.ts` and `syncJobFeed`) once every supported app reads the second. The
-directory build already reads the full copy for industry tags (`feed.sh`, `readFeedTitles`); it falls
-back to the first format's shards only when the full copy can't be downloaded, so drop that fallback
-with them.
+**Format changes:** bump the schema; older apps ignore a feed they don't understand and scan live.
 
 ## One-time setup
 
