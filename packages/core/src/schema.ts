@@ -159,6 +159,11 @@ export type CompanyHealth = {
   describeFailed?: number;
   /** The list was cut short (a page cap): its unseen jobs stay open instead of counting as gone. */
   partial?: boolean;
+  /**
+   * What kind of failure, for resting the board (board-health.ts): "gone" only for a definite answer
+   * (404, 410 or the hiring system saying the board is closed). Absent when no request was made.
+   */
+  failure?: "gone" | "timeout" | "server" | "network" | "other";
 };
 
 export type RunSummary = {

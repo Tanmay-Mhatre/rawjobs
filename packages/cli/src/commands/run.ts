@@ -142,11 +142,11 @@ export async function cmdRun(args: string[]): Promise<number> {
   };
   try {
     return await scanSession(values, dataDir, { busy, sync }, async () => {
-      const { result, merged, summary, checks, moves, stopped } = await scan(config, {
+      const { result, merged, summary, checks, moves, stopped, resting, chronic } = await scan(config, {
         ...sessionOptions(values, dataDir, scope),
         onStart: (s) =>
           console.error(
-            `Checking ${values.only?.length ? values.only.join(", ") : `${s.yours.length} of your companies`}${s.extra ? ` and ${s.extra.toLocaleString()} ${s.scope === "all" ? "more from the directory" : "in your industries"}` : ""}${s.resumed ? ` (resuming: ${s.resumed.toLocaleString()} done already)` : ""}${s.skippedByFeed ? ` (${s.skippedByFeed.toLocaleString()} skipped: nothing for you in the shared job feed)` : ""}, about ${duration(s.seconds)}...\n`,
+            `Checking ${values.only?.length ? values.only.join(", ") : `${s.yours.length} of your companies`}${s.extra ? ` and ${s.extra.toLocaleString()} ${s.scope === "all" ? "more from the directory" : "in your industries"}` : ""}${s.resumed ? ` (resuming: ${s.resumed.toLocaleString()} done already)` : ""}${s.skippedByFeed ? ` (${s.skippedByFeed.toLocaleString()} skipped: nothing for you in the shared job feed)` : ""}${s.resting ? ` (${s.resting.toLocaleString()} resting after failing)` : ""}, about ${duration(s.seconds)}...\n`,
           ),
         onCompanyDone: (h) => {
           // A whole-directory scan prints your companies, matches and failures, not 17,000 lines.
@@ -171,6 +171,15 @@ export async function cmdRun(args: string[]): Promise<number> {
         console.log(`\n${failed.length} compan${failed.length === 1 ? "y" : "ies"} failed:`);
         for (const h of failed.slice(0, 50)) console.log(`  ${h.company} (${h.ats}:${h.slug}): ${h.error}`);
         if (failed.length > 50) console.log(`  …and ${failed.length - 50} more`);
+      }
+      if (resting)
+        console.log(`
+${resting.toLocaleString()} board${resting === 1 ? "" : "s"} left alone this scan: ${resting === 1 ? "it" : "they"} failed last time and ${resting === 1 ? "is" : "are"} tried again after a rest (up to a day; 6 hours for yours).`);
+      if (chronic.length) {
+        console.log(`
+${chronic.length} board${chronic.length === 1 ? " hasn't" : "s haven't"} worked for 30 days or more (tried once a day now; every 6 hours for yours):`);
+        for (const name of chronic.slice(0, 20)) console.log(`  ${name}`);
+        if (chronic.length > 20) console.log(`  …and ${chronic.length - 20} more`);
       }
 
       if (summary) console.error(`\nSaved to ${dataDir} (${merged.jobs.length} jobs tracked, ${summary.closed} closed this run). Open the dashboard with: pnpm start`);
