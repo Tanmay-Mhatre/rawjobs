@@ -80,7 +80,10 @@ export type RunOptions = {
   only?: string[];
   /** Jobs from earlier runs; keeps firstSeen stable so freshness and "new" are right. */
   previous?: readonly Job[];
-  /** Companies you haven't added, checked live too; only their jobs that pass your gates are kept. */
+  /**
+   * Companies you haven't added, checked live too; only their jobs that pass your gates are kept,
+   * plus the ones already in history (a job that stops matching is still listed, not closed).
+   */
   checks?: readonly CompanyRef[];
   onCompanyDone?: (h: CompanyHealth) => void;
   /** Each company's health and the jobs kept from it, as soon as it's done (to save progress). */
@@ -145,7 +148,8 @@ export async function runRadar(config: Config, opts: RunOptions = {}): Promise<R
       const recent = connector.minIntervalHours ? recentJobs(jobCompanyKey(company), connector.minIntervalHours) : undefined;
       for (const j of recent ?? []) {
         const { score, why } = scoreJob(j, config.profile, fit);
-        if (!extra || !why.gate) kept.push({ ...j, score, why });
+        // These all come from history, so they're all kept (see below).
+        kept.push({ ...j, score, why });
         if (!why.gate) h.matches++;
       }
       const raws = recent
@@ -215,8 +219,10 @@ export async function runRadar(config: Config, opts: RunOptions = {}): Promise<R
           }
           ({ score, why } = scoreJob(base, config.profile, fit));
         }
-        // Your companies keep every job (the Radar can show the rest); extra checks only matches.
-        if (!extra || !why.gate) {
+        // Your companies keep every job (the Radar can show the rest); extra checks only matches, and
+        // the jobs already in history: one that stops matching is still listed, and leaving it out
+        // would read as gone and close it (mergeHistory).
+        if (!extra || !why.gate || prev) {
           const postedAt = earliestPosted(base.postedAt, prev);
           // The board's own date, kept when it's later: a board that refreshes it (see staleReasons in the dashboard).
           const boardPostedAt = base.postedAt && postedAt && Date.parse(base.postedAt) > Date.parse(postedAt) ? base.postedAt : undefined;
