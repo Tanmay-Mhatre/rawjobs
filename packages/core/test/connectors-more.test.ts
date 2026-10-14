@@ -58,6 +58,43 @@ companies:
     // The accountant fails the title gate, so its page is never fetched.
     expect(calls.filter((u) => u.includes("/job/"))).toEqual(["https://bank.wd3.myworkdayjobs.com/wday/cxs/bank/External/job/Dubai/PM_1"]);
   });
+
+  it("remembers a '2 Locations' job's real place, so its page is fetched once, not every scan", async () => {
+    const config = parseConfig(`
+profile:
+  titles: { include: ["product manager"] }
+  locations: { include: ["dubai"] }
+companies: []
+`);
+    const bank = { name: "Bank", ats: "workday" as const, slug: "bank", shard: "wd3", site: "External", enabled: true };
+    const { http, calls } = fakeHttp((url) => {
+      if (url.endsWith("/jobs")) return json({ total: 1, jobPostings: [posting(1, "2 Locations")] });
+      return json({ jobPostingInfo: { location: "London", additionalLocations: ["Paris"], jobDescription: "<p>Payments</p>" } });
+    });
+    const locations = new Map();
+    // A directory company whose job is elsewhere: not kept, but where it is is remembered.
+    expect((await runRadar(config, { http, now, checks: [bank], locations })).jobs).toEqual([]);
+    expect(locations.get("workday:bank|external:1")).toMatchObject({ location: "London; Paris" });
+    await runRadar(config, { http, now, checks: [bank], locations });
+    expect(calls.filter((u) => u.includes("/job/"))).toHaveLength(1);
+  });
+
+  it("fetches at most 5 detail pages per directory company a scan", async () => {
+    const config = parseConfig(`
+profile:
+  titles: { include: ["product manager"] }
+  locations: { include: ["dubai"] }
+companies: []
+`);
+    const bank = { name: "Bank", ats: "workday" as const, slug: "bank", shard: "wd3", site: "External", enabled: true };
+    const { http, calls } = fakeHttp((url) => {
+      if (url.endsWith("/jobs")) return json({ total: 8, jobPostings: Array.from({ length: 8 }, (_, i) => posting(i, "2 Locations")) });
+      return json({ jobPostingInfo: { location: "Dubai", jobDescription: "<p>Payments</p>" } });
+    });
+    const result = await runRadar(config, { http, now, checks: [bank], locations: new Map() });
+    expect(calls.filter((u) => u.includes("/job/"))).toHaveLength(5);
+    expect(result.jobs).toHaveLength(5);
+  });
 });
 
 describe("JSON feed connectors", () => {

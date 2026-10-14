@@ -58,6 +58,8 @@ export type FeedManifestV2 = {
   snapshot: { file: string; sha256: string; bytes: number };
   /** The most recent change files, oldest first; each one's `state_sha256` is the state after it. */
   diffs: { seq: number; file: string; sha256: string; bytes: number; state_sha256: string }[];
+  /** Hiring activity (activity.ts): optional, older apps ignore it, and a run that couldn't make it leaves it out. */
+  activity?: { file: string; sha256: string; bytes: number };
 };
 
 const byId = (a: FeedRow, b: FeedRow) => (a[0] < b[0] ? -1 : a[0] > b[0] ? 1 : 0);

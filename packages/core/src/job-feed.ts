@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import { existsSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { brotliDecompressSync, gunzipSync } from "node:zlib";
+import { ACTIVITY_SCHEMA, dayNumber, type ActivityFile } from "./activity";
 import { compactMatcher, VAGUE_LOCATION } from "./job-feed-compact";
 import { readDict, readStore, removeStore, storeApplyDiffs, storeFromSnapshot, type StoreFiles, type StoreResult } from "./job-feed-store";
 import { JOB_FEED_SCHEMA_V3, type FeedDiff, type FeedManifestV2, type FeedRow } from "./job-feed-diff";
@@ -80,7 +81,11 @@ export async function syncJobFeed(dataDir: string, opts: { fetchImpl?: typeof fe
     // A badly signed manifest stops here: falling back to the other format would let a tamperer pick.
     const badSignature = { updated: false, ageDays: stale(), message: "The job feed's signature isn't valid; scanning every company live." };
     const v3 = await fetchSignedJson<FeedManifestV2>(get, `${jobFeedUrl()}/${V3_MANIFEST}`);
-    if (v3.ok && v3.value.schema === JOB_FEED_SCHEMA_V3) return { ...(await syncV3(dir, v3.value, get, opts.now)), ageDays: stale() };
+    if (v3.ok && v3.value.schema === JOB_FEED_SCHEMA_V3) {
+      const synced = await syncV3(dir, v3.value, get, opts.now);
+      await syncActivity(dir, v3.value, get);
+      return { ...synced, ageDays: stale() };
+    }
     if (!v3.ok && v3.status === null) return badSignature;
     const res = await fetchSignedJson<JobFeedManifest>(get, `${jobFeedUrl()}/jobs-manifest.json`);
     if (!res.ok) return res.status ? { updated: false, ageDays: stale(), message: `Job feed unavailable (HTTP ${res.status}); scanning every company live.` } : badSignature;
@@ -228,6 +233,44 @@ async function syncV3(dir: string, m: FeedManifestV2, get: typeof fetch, now?: n
       rmSync(join(dir, f), { force: true });
   const size = `${(bytes / 1e6).toFixed(1)} MB`;
   return { updated: true, message: steps ? `Job feed updated with ${steps} change file(s) (${size}, ${when(m.generated_at, now)}).` : `Job feed downloaded (${size}, ${when(m.generated_at, now)}).` };
+}
+
+// ---------- hiring activity, listed in the third format's manifest (activity.ts) ----------
+
+/** The local copy of the feed's activity file, as downloaded (brotli). */
+const ACTIVITY_LOCAL = "activity.json.br";
+/** An activity file older than this isn't shown: its "last 30 days" would be out of date. */
+const ACTIVITY_MAX_AGE_DAYS = 7;
+
+/**
+ * Download the activity file the manifest lists, when the local copy isn't it. Optional: a manifest
+ * without one, or a failed download, keeps the local copy (readFeedActivity stops using it once it's old).
+ */
+async function syncActivity(dir: string, m: FeedManifestV2, get: typeof fetch): Promise<void> {
+  if (!m.activity) return;
+  const local = join(dir, ACTIVITY_LOCAL);
+  try {
+    if (existsSync(local) && createHash("sha256").update(readFileSync(local)).digest("hex") === m.activity.sha256) return;
+    const buf = await download(get, m.activity.file, m.activity.sha256);
+    mkdirSync(dir, { recursive: true });
+    writeFileSync(`${local}.tmp`, buf);
+    renameSync(`${local}.tmp`, local);
+  } catch {
+    // Only the "Hiring at …" block and the surge tag go without it.
+  }
+}
+
+/** The feed's hiring activity, if downloaded, readable and recent; undefined otherwise. */
+export function readFeedActivity(dataDir: string, now = Date.now()): ActivityFile | undefined {
+  try {
+    const path = join(feedDir(dataDir), ACTIVITY_LOCAL);
+    if (!existsSync(path)) return undefined;
+    const file = JSON.parse(brotliDecompressSync(readFileSync(path)).toString("utf8")) as ActivityFile;
+    if (file.schema !== ACTIVITY_SCHEMA || typeof file.date !== "string" || !file.companies) return undefined;
+    return Math.floor(now / 86_400_000) - dayNumber(file.date) > ACTIVITY_MAX_AGE_DAYS ? undefined : file;
+  } catch {
+    return undefined;
+  }
 }
 
 export type FeedMatches = {

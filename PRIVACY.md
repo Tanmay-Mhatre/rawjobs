@@ -30,7 +30,7 @@ Nothing about you is sent; those sites see your IP address, like any website you
 
 ### The shared company directory
 The app downloads the company directory and job index (`manifest.json`, `directory.json.gz`,
-`index.json.gz`) and the daily job feed (`jobs-manifest.json` and its shards, from the `jobs` release)
+`index.json.gz`) and the shared job feed (`jobs-manifest.json` and its shards, from the `jobs` release)
 from GitHub Releases of `Tanmay-Mhatre/rawjobs-directory`. GitHub sees your IP address, as with
 any download. Everyone downloads the same files, and your filters are applied on your computer, so
 nothing about you is uploaded and the downloads don't reveal what you're looking for.

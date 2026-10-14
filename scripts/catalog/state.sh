@@ -2,7 +2,8 @@
 # Working state the catalog workflows carry from one run to the next, kept as assets of the "state"
 # release of $DATA_REPO. Two sets, one asset each, so their workflows never overwrite each other:
 #   catalog  the directory runs (weekly rebuild, contributions), which take turns (one concurrency group)
-#   jobs     the job feed's merge job: what it last published (the next change files are made against it)
+#   jobs     the job feed's merge job: what it last published (the next change files are made against
+#            it), and the hiring activity recorded so far
 #   jobs-<group>  each feed group's last shards and ETags (sr, payroll, enterprise, rest; jobs.ts GROUPS)
 #
 #   state.sh restore [catalog|jobs|jobs-<group>]   download and unpack; fails if it exists but can't be
@@ -52,7 +53,8 @@ case "$SET" in
     ;;
   jobs)
     # The feed's merge job: what it last published. The next run's change files are made against it.
-    FILES=(out/jobs/jobs-manifest.json out/jobs/jobs-v2-manifest.json out/jobs/jobs-v3-manifest.json out/jobs/stats.json)
+    # activity-state.json: each company's new roles by day and month (activity.ts); losing it restarts the records.
+    FILES=(out/jobs/jobs-manifest.json out/jobs/jobs-v2-manifest.json out/jobs/jobs-v3-manifest.json out/jobs/stats.json out/jobs/activity-state.json)
     for f in out/jobs/jobs-*.json.gz out/jobs/jobs-v2-snapshot-*.json.br out/jobs/jobs-v3-snapshot-*.txt.br; do FILES+=("$f"); done
     ;;
   jobs-sr | jobs-payroll | jobs-enterprise | jobs-rest)

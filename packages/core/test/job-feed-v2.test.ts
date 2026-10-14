@@ -3,11 +3,12 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { brotliCompressSync, brotliDecompressSync } from "node:zlib";
 import { afterAll, afterEach, describe, expect, it } from "vitest";
+import { writeActivity } from "../../../scripts/catalog/lib/activity";
 import { KEEP_DIFFS, stateOf, writeFeed, writeFeedV2, type FeedFormat } from "../../../scripts/catalog/lib/feed-v2";
 import { parseConfig } from "../src/config";
 import { compactHash, compactOf, decodeCompact, decodeRows, encodeCompact, stateOfCompact } from "../src/job-feed-compact";
 import { PART_COMPANIES, readDict, readStore, storeApplyDiffs, storeFromSnapshot } from "../src/job-feed-store";
-import { feedMatches, jobFeedStatus, syncJobFeed, type FeedRow } from "../src/job-feed";
+import { feedMatches, jobFeedStatus, readFeedActivity, syncJobFeed, type FeedRow } from "../src/job-feed";
 import { applyFeedDiff, diffFeedStates, feedStateHash, type FeedState } from "../src/job-feed-diff";
 import { json, testDataKey } from "./helpers";
 
@@ -298,6 +299,54 @@ describe("the app", () => {
     feedMatches(app, profile, Date.parse(run(1)));
     const designer = { ...profile, titles: { include: ["designer"], exclude: [] } };
     expect([...feedMatches(app, designer, Date.parse(run(1))).matching]).toEqual(["lever:acme"]);
+  });
+});
+
+describe("hiring activity", () => {
+  it("downloads the activity file the signed manifest lists, once, and keeps it when a day has none", async () => {
+    process.env.JOBHUNTER_JOBS_URL = "https://feed.example/jobs";
+    const rel = feedRelease();
+    const app = tmp();
+    const publish = (companies: Parameters<typeof rel.publish>[0], at: string, activity = true) => {
+      rel.publish(companies, at);
+      if (activity) writeActivity(rel.out);
+      for (const f of readdirSync(rel.out)) rel.files.set(f, readFileSync(join(rel.out, f)));
+    };
+    const now = Date.parse(run(2));
+
+    // A feed without it: nothing to show.
+    publish(RUN1, run(1), false);
+    await syncJobFeed(app, { fetchImpl: rel.fetchImpl });
+    expect(readFeedActivity(app, now)).toBeUndefined();
+
+    publish(RUN2, run(2));
+    rel.calls.length = 0;
+    await syncJobFeed(app, { fetchImpl: rel.fetchImpl });
+    expect(rel.calls).toContain("jobs-activity-2.json.br");
+    expect(readFeedActivity(app, now)).toMatchObject({ date: "2026-10-01", companies: { "lever:acme": { n: 0 } } });
+
+    // Up to date: not downloaded again.
+    rel.calls.length = 0;
+    await syncJobFeed(app, { fetchImpl: rel.fetchImpl });
+    expect(rel.calls).toEqual(["jobs-v3-manifest.json"]);
+
+    // A day the build couldn't make it: the copy stays.
+    publish(RUN3, run(3), false);
+    rel.files.delete("jobs-activity-2.json.br");
+    await syncJobFeed(app, { fetchImpl: rel.fetchImpl });
+    expect(readFeedActivity(app, now)?.date).toBe("2026-10-01");
+  });
+
+  it("refuses an activity file that doesn't match the manifest", async () => {
+    process.env.JOBHUNTER_JOBS_URL = "https://feed.example/jobs";
+    const rel = feedRelease();
+    const app = tmp();
+    rel.publish(RUN1, run(1));
+    writeActivity(rel.out);
+    for (const f of readdirSync(rel.out)) rel.files.set(f, readFileSync(join(rel.out, f)));
+    rel.files.set("jobs-activity-1.json.br", Buffer.from("tampered"));
+    expect((await syncJobFeed(app, { fetchImpl: rel.fetchImpl })).message).toMatch(/downloaded/);
+    expect(readFeedActivity(app, Date.parse(run(1)))).toBeUndefined();
   });
 });
 

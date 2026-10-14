@@ -187,6 +187,16 @@ jobs:
           NODE_OPTIONS: --max-old-space-size=12288
         run: pnpm exec tsx scripts/catalog/jobs.ts merge --generated "${{ needs.guard.outputs.run_at }}" --out scripts/catalog/out/jobs
 
+      - name: Record hiring activity
+        # New roles per company from this run's change file (scripts/catalog/activity.ts), over every
+        # hiring system (the third format); listed in the third and second formats' manifests. Optional:
+        # if it fails or runs out of time, the manifests have no activity entry this run.
+        continue-on-error: true
+        timeout-minutes: 20
+        env:
+          NODE_OPTIONS: --max-old-space-size=12288
+        run: pnpm exec tsx scripts/catalog/activity.ts --out scripts/catalog/out/jobs
+
       - name: Report per group and system
         working-directory: scripts/catalog/out/jobs
         run: |
@@ -228,6 +238,7 @@ jobs:
           # First format: one shard per original hiring system. Second and third: this run's full copy and change file.
           shards=$(jq -r '.shards[].file' jobs-manifest.json)
           new=$(ls jobs-v2-snapshot-*.json.br jobs-v2-diff-*.json.br jobs-v3-snapshot-*.txt.br jobs-v3-diff-*.json.br 2> /dev/null || true)
+          new="$new $(jq -r '.activity.file // empty' jobs-v3-manifest.json)"
           gh release upload jobs $shards $new -R "$DATA_REPO" --clobber
           # Each manifest together with its signature, so the pair changes as close to together as it can.
           for m in jobs-manifest.json jobs-v2-manifest.json jobs-v3-manifest.json; do
@@ -236,7 +247,7 @@ jobs:
           # Drop files no manifest points to any more (change files: the last 56 runs), except the previous
           # run's full copies and shards: an app may be part-way through downloading them.
           keep=$(printf '%s\n' $shards jobs-manifest.json jobs-manifest.json.sig jobs-v2-manifest.json jobs-v2-manifest.json.sig jobs-v3-manifest.json jobs-v3-manifest.json.sig \
-            $(jq -r '.snapshot.file, .diffs[].file' jobs-v2-manifest.json jobs-v3-manifest.json) \
+            $(jq -r '.snapshot.file, .diffs[].file, (.activity.file // empty)' jobs-v2-manifest.json jobs-v3-manifest.json) \
             $(jq -r '.v1.previous[]?, .v2.previousSnapshot // empty, .v3.previousSnapshot // empty' stats.json))
           for a in $(gh release view jobs -R "$DATA_REPO" --json assets -q '.assets[].name'); do
             grep -qx "$a" <<< "$keep" || gh release delete-asset jobs "$a" -R "$DATA_REPO" -y

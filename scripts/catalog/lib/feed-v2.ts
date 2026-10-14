@@ -36,8 +36,11 @@ export type FeedFormat = 2 | 3;
 const MANIFEST = (f: FeedFormat) => `jobs-v${f}-manifest.json`;
 const SNAPSHOT = (f: FeedFormat, seq: number) => (f === 3 ? `jobs-v3-snapshot-${seq}.txt.br` : `jobs-v2-snapshot-${seq}.json.br`);
 
-const brotli = (b: Buffer) => brotliCompressSync(b, { params: { [constants.BROTLI_PARAM_QUALITY]: 11, [constants.BROTLI_PARAM_LGWIN]: 24, [constants.BROTLI_PARAM_SIZE_HINT]: b.length } });
-const sha = (b: Buffer) => createHash("sha256").update(b).digest("hex");
+export const brotli = (s: string | Buffer) => {
+  const b = typeof s === "string" ? Buffer.from(s, "utf8") : s;
+  return brotliCompressSync(b, { params: { [constants.BROTLI_PARAM_QUALITY]: 11, [constants.BROTLI_PARAM_LGWIN]: 24, [constants.BROTLI_PARAM_SIZE_HINT]: b.length } });
+};
+export const sha = (b: Buffer) => createHash("sha256").update(b).digest("hex");
 
 /** No field may hold a tab or a line break: the compact format is tab- and line-separated. */
 const clean = (s: string) => s.replace(/[\t\r\n]+/g, " ");

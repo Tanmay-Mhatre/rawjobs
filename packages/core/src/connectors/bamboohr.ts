@@ -24,14 +24,14 @@ export const bamboohr: Connector<BambooJob> = {
 
   async fetch(ref, { http }) {
     let res: Response;
+    let body: string;
     try {
-      res = await http.request(`https://${ref.slug}.bamboohr.com/careers/list`, { headers: { accept: "application/json" } });
+      ({ res, body } = await http.requestBody(`https://${ref.slug}.bamboohr.com/careers/list`, { headers: { accept: "application/json" } }));
     } catch (err) {
       // The account exists but its careers page is switched off (the page sends you to the login).
       if (err instanceof HttpError && err.status === 401) throw new BoardClosedError("BambooHR", ref.slug, "has its careers page switched off");
       throw err;
     }
-    const body = await res.text();
     let data: { result?: BambooJob[] };
     try {
       data = JSON.parse(body) as { result?: BambooJob[] };

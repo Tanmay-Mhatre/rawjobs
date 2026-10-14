@@ -23,6 +23,9 @@ no GitHub auto-merge (`mcp__ccd_pr__set_auto_merge`). Those skip the queue.
    or someone comments.
 2. Wait your turn. When your PR is at the front, Mergify merges `main` into it, waits for CI and
    merges it. Mergify pushes to your branch, so run `git pull` before you push again.
+   To add work to a queued PR, remove the `queue` label first, then pull, push, check the commit
+   is on the PR and add the label back. Pushing while it's queued can race the merge: the PR
+   merges without your last commit.
 3. If your PR leaves the queue (Mergify comments on why: a conflict or failing CI), fix it
    yourself. For a conflict, merge `origin/main` into your branch (in a desktop-app worktree, use
    `sync_with_base_branch`) and resolve it. Run `pnpm check`, push, then remove and add the `queue`
@@ -31,9 +34,19 @@ no GitHub auto-merge (`mcp__ccd_pr__set_auto_merge`). Those skip the queue.
 
 Don't change `main`'s branch protection or `.mergify.yml` to get your PR in faster.
 
+## Don't build until the user says go
+
+Answering a plan question is not a go-ahead. Until the user explicitly says to build ("go",
+"build it", "start"), do research, plans, mockups and notes only: no worktrees, edits, commits or
+PRs. Put plans and research in `docs/plans/` and commit them with the work they describe, or in
+their own PR, so they don't sit untracked in the main checkout.
+
 ## Building: the best way, with the fewest tokens
 
 When development starts, build it the best way you can and spend as few tokens as you can:
+
+- In a new worktree, run `pnpm install` first. The pre-push hook runs `pnpm check`, which fails
+  without dependencies.
 
 - Read only what you need. Search (Grep, Glob) before reading, and read just the lines that matter,
   not whole files. Don't re-read a file you just edited.
@@ -72,13 +85,18 @@ change, and send it to the user so they can check it. Use a scratch copy of the 
 (`RAWJOBS_HOME`), never their real config. Send one screenshot per changed screen or state, and say
 in a line what each one shows. When phones or dark mode are affected, include those too.
 
-## Releasing: remind the user to tag
+Test, preview and screenshot only in Claude's built-in browser pane, never the user's Chrome unless
+they ask: the installed RawJobs runs on ports 4317/4318, and test pages opened there clash with it.
+Run test servers on a non-default port with auto-open off: Vite already has `open: false`; give the
+desktop launcher `--no-browser`.
+
+## Releasing: only when the user asks
 
 Merging releases nothing: a release happens only when the user pushes a version tag
-(`.github/workflows/release.yml`). So after any PR merges into `main` (yours, or one you watched
-merge), end your message with a reminder that it isn't released yet, with the commands to release
-it: the next version (the latest `vX.Y.Z` tag with the patch + 1) and a tag message drafted from the
-merged PRs' "Release note" lines (`pnpm release:notes` prints it). For example:
+(`.github/workflows/release.yml`). The user batches releases and says when to release, so don't
+add a tag reminder after merges. When they ask, give the commands: the next version (the latest
+`vX.Y.Z` tag with the patch + 1) and a tag message drafted from the merged PRs' "Release note"
+lines (`pnpm release:notes` prints it). For example:
 
 ```bash
 git tag -a v0.6.1 -m "RawJobs 0.6.1" -m "New: …" -m "Fixed: …"

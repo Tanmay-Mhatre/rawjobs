@@ -19,6 +19,7 @@ import {
   type Ctx,
   type Filters,
 } from "../src/lib/filters";
+import { attachFeedJobs } from "../src/lib/identity";
 import { makeJob } from "./helpers";
 
 const NOW = Date.parse("2026-10-05T12:00:00Z");
@@ -98,6 +99,28 @@ describe("sorting, grouping, chips, suggestions, URL", () => {
     const paid = [job({ id: "x", salary: { min: 100 } }), job({ id: "y", salary: { min: 90, max: 200 } }), job({ id: "z" })];
     expect(sortJobs(paid, "salary").map((j) => j.id)).toEqual(["y", "x", "z"]);
     expect(sortJobs(jobs.slice(0, 3), "company").map((j) => j.company)).toEqual(["Kraken", "OKX", "Rain"]);
+  });
+
+  it("salary sort compares yearly pay, and never ranks across currencies", () => {
+    const list = [
+      job({ id: "inr", salary: { min: 2_000_000, max: 2_500_000, currency: "INR", period: "year" } }),
+      job({ id: "usd-year", salary: { max: 200_000, currency: "USD", period: "year" } }),
+      job({ id: "usd-hour", salary: { min: 60, max: 120, currency: "USD", period: "hour" } }),
+      job({ id: "usd-month", salary: { max: 15_000, currency: "usd", period: "month" } }),
+      job({ id: "eur", salary: { max: 90_000, currency: "EUR" } }),
+      job({ id: "eur2", salary: { max: 7_000, currency: "EUR", period: "1 MONTH" } }),
+      job({ id: "none-currency", salary: { max: 500_000 } }),
+      job({ id: "unpaid" }),
+    ];
+    // $120 an hour is $249,600 a year; $15k a month is $180k. USD is the most common, so it leads.
+    expect(sortJobs(list, "salary").map((j) => j.id)).toEqual(["usd-hour", "usd-year", "usd-month", "eur", "eur2", "inr", "none-currency", "unpaid"]);
+    // Your currency (the salary floor's) goes first, whatever most jobs use.
+    expect(
+      sortJobs(list, "salary", undefined, NOW, "eur")
+        .map((j) => j.id)
+        .slice(0, 2),
+    ).toEqual(["eur", "eur2"]);
+    expect(sortJobs(list, "salary", undefined, NOW, "INR")[0]!.id).toBe("inr");
   });
 
   it("breaks a tie on best match by topics mentioned", () => {
@@ -212,12 +235,13 @@ describe("your companies and directory jobs", () => {
     const board = job({ id: "himalayas:acme:1", ats: "himalayas", company: "Acme Inc.", title: "Sr. Software Engineer", score: 90 });
     const own = job({ id: "greenhouse:acme:1", ats: "greenhouse", company: "ACME", title: "Senior Software Engineer - Remote", score: 80 });
     const other = job({ id: "greenhouse:acme:2", ats: "greenhouse", company: "Acme", title: "Senior Software Engineer II", score: 85 });
-    const g = groupJobs([board, other, own]);
+    const list = attachFeedJobs([board, other, own]);
+    const g = groupJobs(list);
     expect(g.map((x) => [x.lead.id, x.jobs.length])).toEqual([
       ["greenhouse:acme:1", 2],
       ["greenhouse:acme:2", 1],
     ]);
-    expect(roleCount([board, own, other])).toBe(2);
+    expect(roleCount(list)).toBe(2);
     // A board's copy still leads when it's the only posting.
     expect(groupJobs([board])[0]!.lead.id).toBe("himalayas:acme:1");
   });
@@ -227,7 +251,8 @@ describe("your companies and directory jobs", () => {
     const groups = [role("S", 1), role("S", 2), role("K", 1), role("S", 3), role("S", 4), role("K", 2)];
     const rows = foldCompanies(groups);
     expect(rows.map((r) => (r.kind === "group" ? r.group.key : `+${r.groups.length} ${r.company}`))).toEqual(["S1", "S2", "K1", "+2 S", "K2"]);
-    expect(foldCompanies(groups, new Set(["S"]))).toHaveLength(6);
+    const more = rows.find((r) => r.kind === "more")!;
+    expect(foldCompanies(groups, new Set([more.kind === "more" ? more.key : ""]))).toHaveLength(6);
   });
 
   it("'My companies' shows only theirs", () => {
@@ -304,6 +329,16 @@ describe("your companies and directory jobs", () => {
     expect(fromQuery(toQuery(f({ visaOnly: true }), "best"))!.filters.visaOnly).toBe(true);
   });
 
+  it("keeps only companies with a hiring surge, when asked, without changing the order", () => {
+    const surging = job({ id: "surge", score: 60, surge: { n: 14, usual: 5 } });
+    const calm = job({ id: "calm", score: 80 });
+    expect(applyFilters([surging, calm], f(), ctx).map((j) => j.id)).toEqual(["surge", "calm"]);
+    expect(applyFilters([surging, calm], f({ surgeOnly: true }), ctx).map((j) => j.id)).toEqual(["surge"]);
+    expect(surging.score).toBe(60);
+    expect(activeChips(f({ surgeOnly: true }), ctx)).toEqual([{ key: "surge", label: "Hiring surge", remove: { surgeOnly: false } }]);
+    expect(fromQuery(toQuery(f({ surgeOnly: true }), "best"))!.filters.surgeOnly).toBe(true);
+  });
+
   it("ranks jobs that may be stale lower, and No talent pools or stale jobs hides them", () => {
     const stale = job({ id: "stale", score: 85, repostedAt: daysAgo(3), repostCount: 2 });
     const real = job({ id: "real", score: 80 });
@@ -342,5 +377,29 @@ describe("your companies and directory jobs", () => {
   it("round-trips the new filters through the URL", () => {
     const q = toQuery(f({ mine: true, olderIndex: true }), "best");
     expect(fromQuery(q)!.filters).toMatchObject({ mine: true, olderIndex: true });
+  });
+});
+
+describe("Type filter (employment type)", () => {
+  const list = [
+    job({ id: "ft", company: "A", title: "PM", employmentType: "full-time" }),
+    job({ id: "ct", company: "B", title: "PM", employmentType: "contract" }),
+    job({ id: "old", company: "C", title: "PM" }),
+  ];
+
+  it("filters by type; jobs that don't say are 'Not stated'", () => {
+    expect(applyFilters(list, f({ employment: ["contract"] }), ctx).map((j) => j.id)).toEqual(["ct"]);
+    expect(applyFilters(list, f({ employment: ["full-time", "unknown"] }), ctx).map((j) => j.id)).toEqual(["ft", "old"]);
+    const options = facetCounts(list, f(), ctx).employment;
+    expect(options.map((o) => [o.label, o.count])).toEqual([
+      ["Full-time", 1],
+      ["Part-time", 0],
+      ["Contract", 1],
+      ["Internship", 0],
+      ["Temporary", 0],
+      ["Not stated", 1],
+    ]);
+    expect(activeChips(f({ employment: ["contract"] }), ctx).map((c) => c.label)).toEqual(["Contract"]);
+    expect(fromQuery(toQuery(f({ employment: ["internship"] }), "best"))!.filters.employment).toEqual(["internship"]);
   });
 });
