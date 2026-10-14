@@ -47,6 +47,7 @@ export const ATS_TYPES = [
   "softgarden",
   "cornerstone",
   "keka",
+  "taleobe",
 ] as const;
 
 /**

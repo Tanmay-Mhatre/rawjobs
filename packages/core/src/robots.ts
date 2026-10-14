@@ -64,7 +64,12 @@ export function parseRobots(body: string): RobotsRules {
 function matchLength(rule: string, path: string): number {
   const anchored = rule.endsWith("$");
   const body = anchored ? rule.slice(0, -1) : rule;
-  const re = new RegExp(`^${body.split("*").map((s) => s.replace(/[.+?^${}()|[\]\\]/g, "\\$&")).join(".*")}${anchored ? "$" : ""}`);
+  const re = new RegExp(
+    `^${body
+      .split("*")
+      .map((s) => s.replace(/[.+?^${}()|[\]\\]/g, "\\$&"))
+      .join(".*")}${anchored ? "$" : ""}`,
+  );
   return re.test(path) ? body.length : -1;
 }
 

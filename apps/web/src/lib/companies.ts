@@ -47,6 +47,7 @@ export const ATS_LABEL: Record<string, string> = {
   softgarden: "softgarden",
   cornerstone: "Cornerstone",
   keka: "Keka",
+  taleobe: "Taleo Business Edition",
   // Job boards: credited by name (Remote OK's terms ask for it), linked back on every job.
   hackernews: "Hacker News",
   remotive: "Remotive",
