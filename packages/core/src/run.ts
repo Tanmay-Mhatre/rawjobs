@@ -1,5 +1,6 @@
 import { companyOfJobId, getConnector, jobCompanyKey } from "./connectors";
-import { HttpClient, HttpError } from "./http";
+import { BoardClosedError } from "./connectors/parse";
+import { HostSkippedError, HttpClient, HttpError } from "./http";
 import type { BoardMove, CompanyHealth, CompanyRef, Config, Job, NormalizedJob } from "./schema";
 import { scoreJob } from "./score";
 import { safeUrl } from "./text";
@@ -158,6 +159,7 @@ export async function runRadar(config: Config, opts: RunOptions = {}): Promise<R
       h.ok = true;
     } catch (err) {
       h.error = err instanceof HttpError && err.status === 404 ? `board not found (404): check the slug "${company.slug}" against the careers URL` : (err as Error).message;
+      if (!h.unsupported) h.failure = failureOf(err);
     }
     h.durationMs = Date.now() - started;
     jobs.push(...kept);
@@ -197,6 +199,21 @@ export async function runRadar(config: Config, opts: RunOptions = {}): Promise<R
     partial: companies.length < config.companies.filter((c) => c.enabled).length || !!opts.stopped?.(),
     checked: checks.length,
   };
+}
+
+/**
+ * What kind of failure a fetch had, for resting the board (board-health.ts). Only a definite answer
+ * is "gone": a timeout, a 5xx or a dropped connection says nothing about the board. Undefined when
+ * no request was made (the host was skipped after failing for other boards).
+ */
+export function failureOf(err: unknown): CompanyHealth["failure"] {
+  if (err instanceof HostSkippedError) return undefined;
+  if (err instanceof BoardClosedError) return "gone";
+  if (!(err instanceof HttpError)) return "other";
+  if (err.status === 404 || err.status === 410) return "gone";
+  if (err.status !== undefined) return err.status === 429 || err.status >= 500 ? "server" : "other";
+  if (/^timed out/.test(err.message)) return "timeout";
+  return /^not JSON/.test(err.message) ? "other" : "network";
 }
 
 export function byScore(a: Job, b: Job): number {
