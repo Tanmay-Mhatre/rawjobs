@@ -14,6 +14,7 @@ import {
   dayNumber,
   dayString,
   groupKey,
+  MASS_POSTER_OPEN_JOBS,
   monthOf,
   REPOST_DAYS,
   roleKind,
@@ -52,9 +53,6 @@ export type ActivityState = {
   since: string | null;
   companies: Record<string, CompanyState>;
 };
-
-/** Companies with more open jobs than this can be mass posters (see MASS_POSTER in toActivityFile). */
-export const MASS_POSTER_OPEN_JOBS = 500;
 
 export const emptyActivityState = (): ActivityState => ({ schema: ACTIVITY_SCHEMA, seq: 0, date: "", since: null, companies: {} });
 

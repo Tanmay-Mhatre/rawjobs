@@ -1,10 +1,12 @@
 import { mkdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
+import { activityMonths, baselineReady, localActivity, viewSummary, type ActivityView } from "./activity";
 import { companyIndustries } from "./catalog/industries";
 import { cleanVisa } from "./catalog/visa";
 import { companyKey, companyOfJobId, jobCompanyKey } from "./connectors";
-import { toDashboardJob } from "./dashboard";
+import { fromJobBoard, toDashboardJob } from "./dashboard";
 import type { MergeResult } from "./diff";
+import { readFeedActivity } from "./job-feed";
 import type { RunResult } from "./run";
 import type { Config, DashboardJob, DashboardJobsFile, DataMeta, Job, JobsFile, RunSummary } from "./schema";
 import { readJsonOrSetAside, writeFileAtomic } from "./atomic";
@@ -62,11 +64,43 @@ function directoryIndustries(companies: readonly DirectoryRow[]): Map<string, st
 }
 
 /**
+ * Hiring activity for the companies in your history, by the dashboard's companyKey (data/activity.json):
+ * the shared feed's numbers when it covers the company, else the same numbers from your own scans.
+ * Job boards' copies aren't a company's own hiring, so they're left out.
+ */
+export function hiringActivity(dir: string, jobs: readonly Job[], keyOf: (jobKey: string) => string, finishedAt: string): ActivityView {
+  const date = finishedAt.slice(0, 10);
+  const feed = readFeedActivity(dir, Date.parse(finishedAt));
+  const view: ActivityView = { version: 1, ready: !!feed && baselineReady(feed.since, feed.date), companies: {} };
+  if (feed) view.feed = { date: feed.date, since: feed.since, first_month: feed.first_month };
+  const byCompany = new Map<string, Job[]>();
+  for (const j of jobs) {
+    if (fromJobBoard(j)) continue;
+    const key = companyOfJobId(j.id);
+    const list = byCompany.get(key);
+    if (list) list.push(j);
+    else byCompany.set(key, [j]);
+  }
+  for (const [jobKey, list] of byCompany) {
+    const shared = feed?.companies[jobKey];
+    const own = shared ? undefined : localActivity(list, date);
+    if (shared) view.companies[keyOf(jobKey)] = { ...shared, src: "feed" };
+    else if (own) {
+      view.companies[keyOf(jobKey)] = { ...own, src: "local" };
+      view.local ??= { date, since: null, first_month: activityMonths(date)[0]! };
+      if (baselineReady(own.s, date)) view.ready = true;
+    }
+  }
+  return view;
+}
+
+/**
  * Write the run's files:
  *   history.json       every job, with descriptions for those that pass the gates (merge reads this)
  *   jobs.json          dashboard: jobs that pass your gates, no descriptions
  *   jobs-other.json    dashboard: the rest, loaded only on demand
  *   descriptions.json  dashboard: id -> description, loaded when a job is opened
+ *   activity.json      dashboard: hiring activity per company (hiringActivity), loaded when a job is opened
  *   meta.json, runs/<time>.json
  */
 export function saveRun(
@@ -95,11 +129,21 @@ export function saveRun(
   // Job ids carry jobCompanyKey(), which differs from the directory key for Workday and Taleo:
   // map one to the other so the Radar can match jobs to your companies and their industries.
   const keyOfJob = new Map([...directory.map((c) => [jobCompanyKey(c), c.key] as const), ...config.companies.map((c) => [jobCompanyKey(c), companyKey(c)] as const)]);
+  const keyOf = (jobKey: string) => keyOfJob.get(jobKey) ?? jobKey;
+  const activity = hiringActivity(dir, jobs, keyOf, generatedAt);
+  writeFileAtomic(join(dir, "activity.json"), JSON.stringify(activity));
+  const surges = new Map<string, DashboardJob["surge"]>();
+  for (const key of Object.keys(activity.companies)) {
+    const s = viewSummary(activity, key);
+    if (s?.surge && s.usual !== undefined) surges.set(key, { n: s.last30 ?? 0, usual: s.usual });
+  }
   const dashboard = jobs.map((j) => {
-    const key = keyOfJob.get(companyOfJobId(j.id)) ?? companyOfJobId(j.id);
+    const key = keyOf(companyOfJobId(j.id));
     const tags = industries.get(key);
     const visa = visas.get(key);
-    return { ...toDashboardJob(j), companyKey: key, ...(tags ? { industries: tags } : {}), ...(visa ? { visa } : {}) };
+    // A job board's copy isn't the company's own hiring (hiringActivity leaves those out).
+    const surge = fromJobBoard(j) ? undefined : surges.get(key);
+    return { ...toDashboardJob(j), companyKey: key, ...(tags ? { industries: tags } : {}), ...(visa ? { visa } : {}), ...(surge ? { surge } : {}) };
   });
   const file = (list: DashboardJob[]): DashboardJobsFile => ({ version: 2, generatedAt, jobs: list });
   writeFileAtomic(join(dir, "jobs.json"), JSON.stringify(file(dashboard.filter((j) => !j.why.gate))));
@@ -116,6 +160,7 @@ export function saveRun(
       return { name, ats, slug, enabled, careers_url, ...(tags ? { industries: tags } : {}) };
     }),
     runs: opts.record === false ? prevRuns : [summary, ...prevRuns].slice(0, KEEP_RUNS),
+    ...(activity.ready ? { hiringReady: true } : {}),
   };
   writeFileAtomic(join(dir, "meta.json"), JSON.stringify(meta, null, 2));
 

@@ -1,3 +1,4 @@
+import { surgeTitle } from "@rawjobs/core/activity";
 import { displayName } from "@rawjobs/core/display-name";
 import { INDUSTRY_BY_ID } from "@rawjobs/core/catalog/industries";
 import { SENIORITY_LEVELS } from "@rawjobs/core/catalog/seniority";
@@ -7,13 +8,14 @@ import { matchesTitle, safeUrl } from "@rawjobs/core/text";
 import { ArrowLeft, Bookmark, Check, ChevronDown, ChevronUp, CircleCheck, Copy, ExternalLink, Info, LoaderCircle, Maximize2, Plus, RefreshCw, Star, StickyNote, X } from "lucide-react";
 import { Fragment, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { copyText } from "../lib/clipboard";
-import { useDescription, type Job, type Profile } from "../lib/data";
+import { useDescription, useHiring, type Job, type Profile } from "../lib/data";
 import { formatDate, formatSalary, placeSummary, postedOrSeen, timeAgo } from "../lib/format";
 import { atsLabel, evergreenReason, INDEX_MAX_AGE_DAYS, isOlder } from "../lib/filters";
 import { isRoleStale, isStale, staleReasons } from "../lib/stale";
 import { load, save } from "../lib/storage";
 import { PIPELINE, STATUS_LABEL, type Entry, type Status } from "../lib/userState";
 import { Dialog } from "./Dialog";
+import { HiringActivity } from "./HiringActivity";
 import { ReasonPicker, useNotForMe } from "./NotForMe";
 import { Button, buttonClass, Chip, ChipGroup, IconButton, ScoreBadge, scoreBandOf, ScoreBreakdown, scoreParts, SourceTag } from "./primitives";
 import { cx } from "./ui";
@@ -77,6 +79,7 @@ function MetaLine({ parts, className }: { parts: ReactNode[]; className?: string
 export function JobDetail(p: JobDetailProps) {
   const { job, entry, profile } = p;
   const description = useDescription(job);
+  const hiring = useHiring(job);
   const [copied, setCopied] = useState(false);
   /** The full-window reader, for reading the whole description in one view. */
   const [expanded, setExpanded] = useState(false);
@@ -157,6 +160,13 @@ export function JobDetail(p: JobDetailProps) {
       ? [
           <span key="visa" className="text-success-text" title={sponsorTitle(sponsor)}>
             Sponsors visas
+          </span>,
+        ]
+      : []),
+    ...(job.surge
+      ? [
+          <span key="surge" className="text-ink" title={surgeTitle(displayName(job.company), job.surge)}>
+            Hiring surge
           </span>,
         ]
       : []),
@@ -351,6 +361,8 @@ export function JobDetail(p: JobDetailProps) {
               <dd>{source}</dd>
             </dl>
           </section>
+
+          {hiring && <HiringActivity company={displayName(job.company)} summary={hiring} />}
 
           {(p.moreFromCompany?.length || p.onHideCompany) && (
             <section className="rj-drawer__section">
