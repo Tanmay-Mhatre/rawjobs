@@ -396,7 +396,7 @@ export function Settings({
             <Section
               id="directory"
               title="Company directory"
-              hint={`The shared directory lists ${directorySize ? roughCount(directorySize) : "~47,000"} companies and where each one posts jobs. Jobs are always fetched live by your own scans; nothing about you is sent.`}
+              hint={`The shared directory lists ${directorySize ? `${roughCount(directorySize)} ` : ""}companies and where each one posts jobs. Jobs are always fetched live by your own scans; nothing about you is sent.`}
             >
               <div className="space-y-2">
                 <p className="type-small text-muted">Every scan first updates the directory, so new companies and moved careers pages are picked up.</p>

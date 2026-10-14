@@ -1,7 +1,7 @@
 # Hiring systems
 
-RawJobs reads jobs from 44 hiring systems (applicant tracking systems, or ATS) and 7 public job
-boards. Paste a company's careers link into **Companies → Add by link** in the dashboard, or into
+RawJobs reads jobs from the hiring systems (applicant tracking systems, or ATS) and public job
+boards listed below. Paste a company's careers link into **Companies → Add by link** in the dashboard, or into
 `rawjobs detect`, and RawJobs works out which system it is.
 
 | ATS | Careers URL looks like | Read from |

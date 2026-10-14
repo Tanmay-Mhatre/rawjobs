@@ -1,4 +1,4 @@
-**Jobs, straight from the source.** RawJobs reads openings directly from the hiring systems of 47,000+ companies and scores them with rules anyone can read. The interface looks like what it is: source data, shown honestly. Unbleached paper, black ink, and one hot signal color that means "this is live, go now."
+**Jobs, straight from the source.** RawJobs reads openings directly from companies' own hiring systems and scores them with rules anyone can read. The interface looks like what it is: source data, shown honestly. Unbleached paper, black ink, and one hot signal color that means "this is live, go now."
 
 ## Principles
 
