@@ -2,7 +2,7 @@ import { CircleAlert, CircleCheck, Clock, LoaderCircle, RefreshCw } from "lucide
 import { FAILING_HASH } from "../lib/companies";
 import { atsLabel } from "../lib/filters";
 import { progressRows, scanLine, type ScanState } from "../lib/scan";
-import { SourceTag } from "./primitives";
+import { ScanBars } from "./ScanBars";
 import { Button, cx } from "./ui";
 
 /** Rows listed under the progress bars: your companies, then directory ones that matched or failed. */
@@ -28,22 +28,7 @@ export function ScanProgress({ scan, onRetry }: { scan: ScanState; onRetry?: () 
           <p className="type-small font-medium" role="status">
             {scanLine(scan)}
           </p>
-          {bars.length > 0 && (
-            // biome-ignore lint/a11y/useSemanticElements: an ARIA role on purpose: the native element (fieldset, output, input, hr, ul) would change layout or behaviour here
-            <div className="rj-progress" role="group" aria-label="Scan progress">
-              {bars.map((b) => (
-                <div key={b.ats || "all"} className="rj-progress__row">
-                  <SourceTag source={b.ats ? atsLabel(b.ats) : "All companies"} className="min-w-0 truncate" />
-                  <span className="rj-progress__track">
-                    <span className="rj-progress__fill" style={{ transform: `scaleX(${b.total ? b.done / b.total : 0})` }} />
-                  </span>
-                  <span className="rj-progress__count">
-                    {b.done.toLocaleString()} / {b.total.toLocaleString()}
-                  </span>
-                </div>
-              ))}
-            </div>
-          )}
+          <ScanBars rows={bars.map((b) => ({ ...b, key: b.ats || "all", label: b.ats ? atsLabel(b.ats) : "All companies" }))} noun="hiring system" />
         </div>
       )}
       {s && (

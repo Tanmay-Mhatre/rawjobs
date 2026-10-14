@@ -168,6 +168,18 @@ export function progressRows(scan: ScanState): { ats: string; done: number; tota
     .sort((x, y) => y.total - x.total || x.ats.localeCompare(y.ats));
 }
 
+/**
+ * Progress rows split for a short list: up to `limit` unfinished ones (in the order given, so rows
+ * never jump), the rest of the unfinished, and the finished. Lists of `limit` rows or fewer stay
+ * whole and in place (`inPlace`).
+ */
+export function splitProgress<R extends { done: number; total: number; feed?: true }>(rows: R[], limit: number): { shown: R[]; rest: R[]; done: R[]; inPlace: boolean } {
+  if (rows.length <= limit) return { shown: rows, rest: [], done: [], inPlace: true };
+  const finished = (r: R) => !!r.feed || r.done >= r.total;
+  const open = rows.filter((r) => !finished(r));
+  return { shown: open.slice(0, limit), rest: open.slice(limit), done: rows.filter(finished), inPlace: false };
+}
+
 /** One scan at a time, shared by the header button, the wizard and Radar cards. */
 export function useScan(onFinished: () => void | Promise<void>) {
   const [scan, setScan] = useState<ScanState>(IDLE);

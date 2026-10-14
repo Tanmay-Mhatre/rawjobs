@@ -68,6 +68,11 @@ export function roughCount(n: number): string {
   return `~${(Math.round(n / 1000) * 1000).toLocaleString()}`;
 }
 
+/** A count that fits a narrow column: exact below 10,000, then "12.2K" (locale-aware). Show the exact number nearby for screen readers. */
+export function shortCount(n: number): string {
+  return n < 10000 ? n.toLocaleString() : new Intl.NumberFormat(undefined, { notation: "compact", maximumFractionDigits: 1 }).format(n);
+}
+
 /** One format for several places everywhere: "Berlin", or "Berlin +3" (L5). Cities lose their ", Country" suffix. */
 export function placeSummary(places: string[], fallback = "Location not listed"): string {
   // ATS strings often pack several places: "Germany (remote); Portugal (remote); Berlin Office".
