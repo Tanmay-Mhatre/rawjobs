@@ -671,27 +671,82 @@ export function industriesForLabel(label: string | undefined): string[] {
   return ids;
 }
 
-const titleTermCache = new Map<string, string[]>();
-/** What counts in a job title: the shared terms plus the title-only ones. */
-function titleTermsOf(ind: Industry): string[] {
-  let terms = titleTermCache.get(ind.id);
-  if (!terms) titleTermCache.set(ind.id, (terms = [...new Set([...ind.terms, ...(ind.titleTerms ?? [])])]));
-  return terms;
+const titleTermCache = new Map<string, { roles: string[]; generic: string[] }>();
+/** What counts in a job title: the role words (`titleTerms`) anywhere, and the industry's generic `terms`. */
+function titleTermsOf(ind: Industry) {
+  let t = titleTermCache.get(ind.id);
+  if (!t) {
+    const roles = ind.titleTerms ?? [];
+    titleTermCache.set(ind.id, (t = { roles, generic: ind.terms.filter((w) => !roles.includes(w)) }));
+  }
+  return t;
+}
+
+/**
+ * Business-to-business selling roles, whose titles name the customer segment they sell to
+ * ("Account Executive, Retail", "Healthcare Solutions Engineer"), not what the company is. Not
+ * store or agency sales ("Sales Associate", "Insurance Sales Agent", "Pharmaceutical Sales
+ * Specialist"): there the word is what the company sells.
+ */
+const SEGMENT_ROLE =
+  /(?<![\p{L}\p{N}])(?:(?:key |strategic |enterprise |named |global |major |territory |inside |field )?account (?:executive|manager|director|lead|management|strategist|partner)|aes?|business development|bdrs?|sdrs?|sales (?:development|engineer|engineering|executive|director|manager|lead|leader)|pre-?sales|solutions? (?:engineer|consultant|architect)|customer success|client success|partnerships?|partner (?:manager|development)|alliances?|channel (?:manager|partner|sales|account)|go[ -]to[ -]market|gtm|industry (?:lead|principal|director|manager|advisor|specialist|strategist|marketing|solutions?)|vertical|implementation (?:consultant|manager|specialist|lead)|product marketing|mid[ -]?market)(?![\p{L}\p{N}])/iu;
+
+/** "Sales to Retailers", "Engineer for Banks": what follows is who the work is for. */
+const FOR_TO = /(?<![\p{L}\p{N}])(?:for|to)(?![\p{L}\p{N}])/iu;
+
+/** For "strict" only: any sales or marketing title, and anything after a comma, dash, pipe, colon or bracket. */
+const ANY_GTM =
+  /(?<![\p{L}\p{N}])(?:account (?:executive|manager|director|lead|management)|aes?|sales|pre-?sales|business development|bdrs?|sdrs?|partnerships?|partner (?:manager|development)|alliances?|channel (?:manager|partner|sales)|solutions? (?:engineer|consultant|architect|specialist|manager|lead|director)|customer success|csms?|client success|marketing|go[ -]to[ -]market|gtm|implementation|onboarding (?:manager|specialist|consultant)|industry (?:lead|principal|director|manager|advisor|specialist|strategist)|vertical|segment|growth (?:manager|lead))(?![\p{L}\p{N}])/iu;
+const QUALIFIER = /,|\s[-–—]\s|\s?[–—|:([]|(?<![\p{L}\p{N}])(?:for|to)(?![\p{L}\p{N}])/iu;
+
+/**
+ * Industries whose generic words often name a kind of customer ("Account Executive, Retail" at a
+ * restaurant-software company) rather than the product ("SaaS BDR", "Cybersecurity Solutions
+ * Architect", which say what the company sells).
+ */
+// biome-ignore format: a word list, kept compact
+export const SEGMENT_INDUSTRIES: ReadonlySet<string> = new Set([
+  "retail", "healthtech", "biotech", "banking", "lending", "wealth", "insurtech", "fintech", "government", "food", "travel", "proptech",
+  "manufacturing", "logistics", "construction", "automotive", "aerospace", "edtech", "legal", "nonprofit", "media", "telecom", "sports",
+  "mobility", "agriculture", "climate", "gaming", "ecommerce", "betting", "consulting",
+]);
+
+/**
+ * How an industry's generic words ("retail", "healthcare", "banking") count in job titles. Its role
+ * words (`titleTerms`: "Store Manager", "Cashier") always count.
+ * - "segment" (used): for SEGMENT_INDUSTRIES, not in a business-to-business selling role's title
+ *   and not after "for"/"to", where they name who the company sells to.
+ * - "strict": not after a comma, dash, pipe, colon or bracket either (team names: "Engineer,
+ *   Payments"), nor in any sales or marketing title, for every industry.
+ * - "all": anywhere (the rule before 2026-10-14). "none": never, role words only.
+ * The last three are kept for scripts/catalog/industry-precision.ts.
+ */
+export type GenericTitleTerms = "segment" | "strict" | "all" | "none";
+
+/** The part of a title where generic industry words count ("" for none), for the segment industries under `generic`. */
+export function titleRolePart(title: string, generic: GenericTitleTerms = "segment"): string {
+  if (generic === "all") return title;
+  if (generic === "none" || (generic === "strict" ? ANY_GTM : SEGMENT_ROLE).test(title)) return "";
+  const cut = title.search(generic === "strict" ? QUALIFIER : FOR_TO);
+  return cut <= 0 ? title : title.slice(0, cut);
 }
 
 /**
  * Industries a company's job titles point to: at least 8% of the titles (and at least 2) mention
- * the industry's terms. Industries with `requires` need that industry already (from `known` or titles).
+ * the industry's role words, or its generic words where they describe the company (see
+ * `GenericTitleTerms`). Industries with `requires` need that industry already (from `known` or titles).
  */
-export function industriesFromTitles(titles: readonly string[], known: readonly string[] = []): string[] {
+export function industriesFromTitles(titles: readonly string[], known: readonly string[] = [], generic: GenericTitleTerms = "segment"): string[] {
   if (titles.length === 0) return [];
   const min = Math.max(2, Math.ceil(titles.length * 0.08));
+  const heads = titles.map((t) => titleRolePart(t, generic));
   const found: string[] = [];
   for (const ind of INDUSTRIES) {
     if (!ind.fromTitles) continue;
-    const terms = titleTermsOf(ind);
+    const { roles, generic: words } = titleTermsOf(ind);
+    const where = generic === "segment" && !SEGMENT_INDUSTRIES.has(ind.id) ? titles : heads;
     let hits = 0;
-    for (const t of titles) if (matchesAny(t, terms) && ++hits >= min) break;
+    for (let i = 0; i < titles.length; i++) if ((matchesAny(titles[i]!, roles) || (where[i] !== "" && matchesAny(where[i]!, words))) && ++hits >= min) break;
     if (hits >= min) found.push(ind.id);
   }
   const have = new Set([...known, ...found]);

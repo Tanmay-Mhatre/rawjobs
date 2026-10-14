@@ -55,6 +55,14 @@ const FIXTURES: Record<string, { item: unknown; boards: string[] }> = {
     },
     boards: ["lever:eta"],
   },
+  remotefirstjobs: {
+    item: {
+      title: "Engineer at Theta",
+      link: "https://remotefirstjobs.com/companies/theta/jobs/engineer-1",
+      description: "&lt;p&gt;Apply: https://jobs.ashbyhq.com/theta/1f2e&lt;/p&gt;",
+    },
+    boards: ["ashby:theta"],
+  },
 };
 
 describe("boards in feed items", () => {

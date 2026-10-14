@@ -1,8 +1,8 @@
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { gzipSync } from "node:zlib";
-import { HttpClient, INDUSTRY_BY_ID } from "@rawjobs/core";
+import { brotliCompressSync, gzipSync } from "node:zlib";
+import { HttpClient, INDUSTRY_BY_ID, JOB_FEED_SCHEMA_V2, type FeedRow, type FeedState } from "@rawjobs/core";
 import { afterEach, describe, expect, it } from "vitest";
 import { compact, mergeTitlesRow } from "../compact";
 import { checkBoard, MAX_TITLES, titlesOf } from "./live-check";
@@ -107,6 +107,67 @@ describe("job titles for tags", () => {
     writeFileSync(join(d, "jobs-manifest.json"), JSON.stringify({ schema: 1, shards: { workday: { file: "jobs-workday-20261013T1157.json.gz" }, lever: { file: "jobs-lever-missing.json.gz" } } }));
     expect(Object.fromEntries(readFeedTitles(d))).toEqual({ "workday:visa|jobs": ["Payments Engineer"] });
     expect(readFeedTitles(join(d, "nowhere")).size).toBe(0);
+  });
+
+  it("skips first-format shard names that aren't plain shard files", () => {
+    const d = tmp();
+    const shard = { companies: { "lever:a": { jobs: [["1", "Nurse", "", "onsite", null]] } } };
+    writeFileSync(join(d, "jobs-lever-x.json.gz"), gzipSync(JSON.stringify(shard)));
+    writeFileSync(join(d, "evil.json.gz"), gzipSync(JSON.stringify(shard)));
+    writeFileSync(join(d, "jobs-manifest.json"), JSON.stringify({ shards: { a: { file: "../jobs-lever-x.json.gz" }, b: { file: "evil.json.gz" }, c: { file: 7 } } }));
+    expect(readFeedTitles(d).size).toBe(0);
+  });
+
+  const v2Feed = (d: string, snapshotFile: string, state: FeedState) => {
+    writeFileSync(join(d, snapshotFile), brotliCompressSync(JSON.stringify({ schema: JOB_FEED_SCHEMA_V2, seq: 6, generated_at: "2026-10-13", ...state })));
+    writeFileSync(join(d, "jobs-v2-manifest.json"), JSON.stringify({ schema: JOB_FEED_SCHEMA_V2, seq: 6, snapshot: { file: snapshotFile, sha256: "", bytes: 0 }, diffs: [] }));
+  };
+
+  it("reads titles from the job feed's full copy (second format) before the shards", () => {
+    const d = tmp();
+    v2Feed(d, "jobs-v2-snapshot-6.json.br", {
+      verified: { "workday:visa|jobs": "2026-10-13", "lever:empty": "2026-10-13" },
+      jobs: {
+        "workday:visa|jobs": [
+          ["R1", "Payments Engineer", "Austin", "onsite", "2026-10-10"],
+          ["R2", "", "x", "onsite", null],
+          ["R3", "Risk Analyst", "", "remote", null],
+        ],
+        "lever:empty": [],
+        "lever:many": Array.from({ length: 400 }, (_, i): FeedRow => [`${i}`, `Role ${i}`, "", "onsite", null]),
+      },
+    });
+    // A first-format feed next to it is ignored.
+    writeFileSync(join(d, "jobs-manifest.json"), JSON.stringify({ shards: { lever: { file: "jobs-lever-x.json.gz" } } }));
+    writeFileSync(join(d, "jobs-lever-x.json.gz"), gzipSync(JSON.stringify({ companies: { "lever:v1": { jobs: [["1", "Nurse"]] } } })));
+    const titles = readFeedTitles(d);
+    expect([...titles.keys()].sort()).toEqual(["lever:many", "workday:visa|jobs"]);
+    expect(titles.get("workday:visa|jobs")).toEqual(["Payments Engineer", "Risk Analyst"]);
+    expect(titles.get("lever:many")).toHaveLength(300);
+  });
+
+  it("falls back to the shards when the full copy is missing, misnamed or unreadable", () => {
+    const shards = (d: string) => {
+      writeFileSync(join(d, "jobs-manifest.json"), JSON.stringify({ shards: { lever: { file: "jobs-lever-x.json.gz" } } }));
+      writeFileSync(join(d, "jobs-lever-x.json.gz"), gzipSync(JSON.stringify({ companies: { "lever:v1": { jobs: [["1", "Nurse"]] } } })));
+    };
+    const state: FeedState = { verified: {}, jobs: { "lever:v2": [["1", "Chef", "", "onsite", null]] } };
+    // Named outside the snapshot pattern: not read.
+    const misnamed = tmp();
+    v2Feed(misnamed, "jobs-v2-snapshot-latest.json.br", state);
+    shards(misnamed);
+    expect(Object.fromEntries(readFeedTitles(misnamed))).toEqual({ "lever:v1": ["Nurse"] });
+    // Manifest without its snapshot.
+    const missing = tmp();
+    writeFileSync(join(missing, "jobs-v2-manifest.json"), JSON.stringify({ schema: JOB_FEED_SCHEMA_V2, snapshot: { file: "jobs-v2-snapshot-9.json.br" } }));
+    shards(missing);
+    expect(Object.fromEntries(readFeedTitles(missing))).toEqual({ "lever:v1": ["Nurse"] });
+    // A cut-off snapshot.
+    const broken = tmp();
+    v2Feed(broken, "jobs-v2-snapshot-6.json.br", state);
+    writeFileSync(join(broken, "jobs-v2-snapshot-6.json.br"), Buffer.from("not brotli"));
+    shards(broken);
+    expect(Object.fromEntries(readFeedTitles(broken))).toEqual({ "lever:v1": ["Nurse"] });
   });
 
   it("keeps distinct titles, at most MAX_TITLES", () => {

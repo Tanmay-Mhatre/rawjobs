@@ -30,7 +30,8 @@ export function detectKnownAts(url: URL): DetectedCompany | null {
     const [tenant, site] = i >= 0 ? [parts[i + 1], parts[i + 2]] : [];
     return tenant && site ? { ats: "workday", slug: tenant.toLowerCase(), shard: wds[1]!, site } : null;
   }
-  if (host === "apply.workable.com" && seg && seg !== "api") return { ats: "workable", slug: seg };
+  // apply.workable.com/j/{shortcode} is one job with no account in the link: not a board we can name.
+  if (host === "apply.workable.com" && seg && seg !== "api" && seg !== "j") return { ats: "workable", slug: seg };
   if (host.endsWith(".workable.com") && sub && !["www", "apply", "jobs"].includes(sub)) return { ats: "workable", slug: sub };
   if (host.endsWith(".recruitee.com") && sub && sub !== "www") return { ats: "recruitee", slug: sub };
   if (/\.jobs\.personio\.(de|com)$/.test(host)) return { ats: "personio", slug: sub };
@@ -60,14 +61,19 @@ export function detectKnownAts(url: URL): DetectedCompany | null {
   if (host.endsWith(".icims.com") && sub && !["www", "cdn", "cdn01", "cdn02", "community", "careers", "hrjobs"].includes(sub)) return { ats: "icims", slug: sub };
   // Taleo: {company or pod}.taleo.net/careersection/{section}/jobsearch.ftl. Pods (aa010…) host many
   // companies, so the section name is part of the key.
-  if (host.endsWith(".taleo.net") && sub && sub !== "www") {
+  // Taleo Business Edition ({pod}.tbe.taleo.net) is a different system: its pod is shared by hundreds of companies.
+  if (host.endsWith(".taleo.net") && sub && sub !== "www" && !host.endsWith(".tbe.taleo.net")) {
     const section = parts[0] === "careersection" ? parts[1] : undefined;
     const real = section && !/^\d{4}PRD|^(rest|iam|theme|careersection|application\.jss)$/i.test(section) ? section : undefined;
     return { ats: "taleo", slug: sub, ...(real ? { site: real } : {}) };
   }
   if (host === "jobs.jobvite.com" && seg) return { ats: "jobvite", slug: seg };
   if (host.endsWith(".pinpointhq.com") && sub && !["www", "app", "api"].includes(sub)) return { ats: "pinpoint", slug: sub };
-  if (host === "ats.rippling.com" && seg) return { ats: "rippling", slug: seg };
+  // ats.rippling.com/[en-CA/]{board}/jobs: a locale may come first.
+  if (host === "ats.rippling.com") {
+    const board = /^[a-z]{2}(-[a-z]{2})?$/i.test(parts[0] ?? "") && parts[1] ? parts[1] : parts[0];
+    if (board && board !== "api") return { ats: "rippling", slug: board };
+  }
   if (host.endsWith(".applytojob.com") && sub && sub !== "www") return { ats: "jazzhr", slug: sub };
   // Zoho Recruit: {company}.zohorecruit.{data centre}/jobs/{careers page}. A board answers only on its
   // own data centre's domain, kept in `shard` when it isn't .com.

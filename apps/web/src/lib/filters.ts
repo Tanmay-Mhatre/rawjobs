@@ -368,35 +368,38 @@ export const roleCount = (jobs: readonly Pick<Job, "company" | "title" | "identi
 export type JobGroup = { key: string; lead: Job; jobs: Job[] };
 
 /**
- * Which posting of a role to show, best first: the company's own board over a job board's copy (the real
+ * Which posting of a role to show, best first: a fresh one over one that may be stale (isStale: the row shows
+ * the live one), then the company's own board over a job board's copy (Remotive, Remote First Jobs…: the real
  * apply link), a board you scan over the directory's estimate, open over closed, one with a description.
  * Ties keep the sort order.
  */
-const leadRank = (j: Job) => [fromJobBoard(j), !!j.estimated, j.status !== "open", !j.hasDescription].map(Number);
-const betterLead = (a: Job, b: Job) => {
-  const ra = leadRank(a);
-  const rb = leadRank(b);
-  for (let i = 0; i < ra.length; i++) if (ra[i] !== rb[i]) return ra[i]! < rb[i]!;
+const leadRank = (j: Job, now: number) => [isStale(j, { now }), fromJobBoard(j), !!j.estimated, j.status !== "open", !j.hasDescription].map(Number);
+const betterLead = (a: number[], b: number[]) => {
+  for (let i = 0; i < a.length; i++) if (a[i] !== b[i]) return a[i]! < b[i]!;
   return false;
 };
 
 /**
  * Groups by role at one company (roleOf: the company's board, not its name, and the title with places,
- * gender tags and requisition ids left out). The row sits where its best-ranked posting sorts; the posting
- * it shows is picked by betterLead.
+ * gender tags and requisition ids left out). The groups keep the order of `sorted` (a row sits where its
+ * best-ranked posting sorts); only who leads changes, picked by leadRank.
  */
-export function groupJobs(sorted: Job[]): JobGroup[] {
-  const groups = new Map<string, JobGroup>();
+export function groupJobs(sorted: Job[], now = Date.now()): JobGroup[] {
+  const groups = new Map<string, JobGroup & { rank: number[] }>();
   for (const j of sorted) {
     const key = roleOf(j);
     const g = groups.get(key);
-    if (!g) groups.set(key, { key, lead: j, jobs: [j] });
+    const rank = leadRank(j, now);
+    if (!g) groups.set(key, { key, lead: j, jobs: [j], rank });
     else {
       g.jobs.push(j);
-      if (betterLead(j, g.lead)) g.lead = j;
+      if (betterLead(rank, g.rank)) {
+        g.lead = j;
+        g.rank = rank;
+      }
     }
   }
-  return [...groups.values()];
+  return [...groups.values()].map(({ rank: _, ...g }) => g);
 }
 
 /** Roles shown per company before the rest fold into one "+N more at …" row. */

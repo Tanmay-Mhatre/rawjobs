@@ -150,7 +150,16 @@ export const roleKey = (title: string): string => titleKey(title);
  * Job boards (JOB_BOARDS in schema.ts, kept here so the browser doesn't load the config schema): they
  * repost a company's jobs, so when a role is on both, the company's own posting is the one we show.
  */
-const BOARD_SOURCES: ReadonlySet<string> = new Set(["hackernews", "remotive", "arbeitnow", "remoteok", "himalayas", "jobicy", "weworkremotely"] satisfies (typeof JOB_BOARDS)[number][]);
+const BOARD_SOURCES: ReadonlySet<string> = new Set([
+  "hackernews",
+  "remotive",
+  "arbeitnow",
+  "remoteok",
+  "himalayas",
+  "jobicy",
+  "weworkremotely",
+  "remotefirstjobs",
+] satisfies (typeof JOB_BOARDS)[number][]);
 
 /** A posting copied by a job board, not from the company's own hiring system. */
 export const fromJobBoard = (job: Pick<Job, "ats">): boolean => BOARD_SOURCES.has(job.ats);

@@ -5,7 +5,7 @@ import { Bookmark, Star, X } from "lucide-react";
 import { forwardRef, type ReactNode } from "react";
 import type { JobGroup } from "../../lib/filters";
 import { atsLabel, evergreenReason, isOlder } from "../../lib/filters";
-import { groupStale } from "../../lib/stale";
+import { isRoleStale, staleReasons } from "../../lib/stale";
 import { formatSalary, placeSummary, postedOrSeen, shortAge, timeAgo } from "../../lib/format";
 import { STATUS_LABEL, type Entry, type Status } from "../../lib/userState";
 import { IconButton, ScoreBadge, SourceTag } from "../primitives";
@@ -87,12 +87,12 @@ export const JobCard = forwardRef<HTMLLIElement, Props>(function JobCard({ group
         Talent pool
       </span>,
     );
-  // One tag for every sign of a ghost job; a repost alone keeps its own note.
-  // A role on several boards or in several places is stale only when every open posting of it is.
-  const stale = groupStale(group.jobs);
-  if (stale.stale)
+  // One tag for every sign of a ghost job; a repost alone keeps its own note. A role posted in several places
+  // is tagged only when every posting may be stale (the lead is a fresh one when there is one: groupJobs).
+  const n = group.jobs.length;
+  if (isRoleStale(group.jobs))
     meta.push(
-      <span className="text-warning-text" title={stale.reasons.join(". ")}>
+      <span className="text-warning-text" title={[...(n > 1 ? [`All ${n} postings may be stale`] : []), ...staleReasons(job)].join(". ")}>
         May be stale
       </span>,
     );

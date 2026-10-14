@@ -1,5 +1,6 @@
 import { readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
+import { backoff } from "@rawjobs/core";
 
 /** One board's latest check, as check.ts, build.ts and compact.ts read it. */
 export type CheckRow = {
@@ -29,7 +30,7 @@ export function mergeCheck(prev: CheckRow | undefined, next: CheckRow): CheckRow
 }
 
 /** Days to wait before retrying a board after this many errors in a row: 1, 2, 4, 8, 16, then 30. */
-export const retryWaitDays = (errors: number): number => Math.min(2 ** (Math.max(errors, 1) - 1), MAX_RETRY_DAYS);
+export const retryWaitDays = (errors: number): number => backoff(Math.max(errors, 1), 1, MAX_RETRY_DAYS);
 
 /**
  * 0-6 extra days per board, fixed by its key (FNV-1a). Boards first checked together (some 40,000

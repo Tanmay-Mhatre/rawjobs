@@ -73,16 +73,10 @@ export const staleReasons = (j: Job, ctx?: StaleCtx): string[] => signals(j, ctx
  * Strong: listed 60+ days while the board's date is from the last 30, posted 120+ days ago, or reposted twice or more.
  * Weak: posted 60-120 days ago, reposted once, or a description under 300 characters.
  */
-export const isStale = (j: Job, ctx?: StaleCtx): boolean => weightOf(j, ctx) >= 2;
-const weightOf = (j: Job, ctx?: StaleCtx) => signals(j, ctx).reduce((sum, s) => sum + s.weight, 0);
+export const isStale = (j: Job, ctx?: StaleCtx): boolean => signals(j, ctx).reduce((sum, s) => sum + s.weight, 0) >= 2;
 
 /**
- * A role posted more than once (a grouped row) may be stale only when every open posting of it is: one
- * fresh posting means the role is live. The reasons are the least stale posting's, the one that convinced us.
+ * A role posted in several places may be stale only when every posting is: one fresh posting means the
+ * role is still live. `ctxOf` gives each posting's context (the drawer has one description's length).
  */
-export function groupStale(jobs: readonly Job[], ctx?: StaleCtx): { stale: boolean; reasons: string[] } {
-  const open = jobs.filter((j) => j.status === "open");
-  if (!open.length || !open.every((j) => isStale(j, ctx))) return { stale: false, reasons: [] };
-  const least = open.reduce((a, b) => (weightOf(b, ctx) < weightOf(a, ctx) ? b : a));
-  return { stale: true, reasons: staleReasons(least, ctx) };
-}
+export const isRoleStale = (postings: readonly Job[], ctxOf: (j: Job) => StaleCtx | undefined = () => undefined): boolean => postings.length > 0 && postings.every((j) => isStale(j, ctxOf(j)));

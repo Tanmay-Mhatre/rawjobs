@@ -1,6 +1,6 @@
 import { chmodSync, existsSync, mkdirSync, readFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
-import type { Job } from "./schema";
+import type { Config, Job } from "./schema";
 import { rawjobsHome } from "./paths";
 import { writeFileAtomic } from "./atomic";
 
@@ -113,6 +113,12 @@ export const connectedMessage = () =>
   message("🔔 <b>Connected</b>", "RawJobs will message you here when a scan finds new jobs or an update is ready.", "Choose which alerts you get in RawJobs settings.");
 
 export const testMessage = () => message("👋 <b>Test alert</b>", "Alerts from RawJobs are working.", "Go back to RawJobs on your computer.");
+
+/** The jobs a scan's alert is about: its new matches, or with only_new off every strong match. */
+export function alertJobs(config: Pick<Config, "alerts" | "profile">, jobs: readonly Job[], newIds: ReadonlySet<string>): Job[] {
+  const matches = jobs.filter((j) => !j.why.gate);
+  return config.alerts.only_new ? matches.filter((j) => newIds.has(j.id)) : matches.filter((j) => j.score >= config.profile.min_score);
+}
 
 /**
  * One message for a scan: how many new jobs and strong fits (with only_new off, `jobs` are every

@@ -337,6 +337,28 @@ describe("your companies and directory jobs", () => {
     expect(activeChips(f({ hideEvergreen: true }), ctx).map((c) => c.label)).toContain("No talent pools or stale jobs");
   });
 
+  it("a fresh posting of a role leads its row over a stale one, and the filter drops only the stale posting", () => {
+    const stale = job({ id: "stale", company: "K", title: "PM", location: "Dubai", score: 99, repostedAt: daysAgo(3), repostCount: 2 });
+    const fresh = job({ id: "fresh", company: "K", title: "PM", location: "London", score: 70 });
+    const other = job({ id: "other", company: "R", title: "PM", score: 80 });
+    // Best match still puts the stale one first (99 less its cost beats 80 and 70): the row is the role's place in the list.
+    const sorted = sortJobs([fresh, other, stale], "best", undefined, NOW);
+    expect(sorted.map((j) => j.id)).toEqual(["stale", "other", "fresh"]);
+    const g = groupJobs(sorted, NOW);
+    expect(g.map((x) => [x.lead.id, x.jobs.map((j) => j.id)])).toEqual([
+      ["fresh", ["stale", "fresh"]],
+      ["other", ["other"]],
+    ]);
+    expect(roleCount(sorted)).toBe(2);
+    expect(foldCompanies(g)).toHaveLength(2);
+    // All stale: the first still leads.
+    const stale2 = job({ id: "stale2", company: "K", title: "PM", location: "London", repostedAt: daysAgo(3), repostCount: 2 });
+    expect(groupJobs([stale, stale2], NOW)[0]!.lead.id).toBe("stale");
+    // No talent pools or stale jobs works per posting, before grouping: the role stays, with its fresh posting.
+    const kept = groupJobs(applyFilters([stale, fresh], f({ hideEvergreen: true }), ctx), NOW);
+    expect(kept.map((x) => [x.lead.id, x.jobs.length])).toEqual([["fresh", 1]]);
+  });
+
   it("marks postings over two months old", () => {
     expect(isOlder(job({ postedAt: daysAgo(61) }), NOW)).toBe(true);
     expect(isOlder(job({ postedAt: daysAgo(59) }), NOW)).toBe(false);

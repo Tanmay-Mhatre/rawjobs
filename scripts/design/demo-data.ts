@@ -48,6 +48,8 @@ export const MY_COMPANIES: DemoCompany[] = [
   { name: "Quillfeather", ats: "workable", slug: "quillfeather", industries: ["fintech"] },
   /** Broken: its board stopped answering three scans ago. */
   { name: "Larkspur Labs", ats: "lever", slug: "larkspurlabs", industries: ["payments"] },
+  /** Chronic: its board hasn't answered for over a month (board-health's record outlasts the saved scans). */
+  { name: "Ospreyline", ats: "ashby", slug: "ospreyline", industries: ["fintech"] },
 ];
 
 /** Directory companies (not yours): estimated jobs, suggestions, Browse all. */
@@ -311,6 +313,7 @@ function healthFor(c: DemoCompany, run: number): CompanyHealth {
   const key = companyKey(c);
   const base = { company: c.name, ats: c.ats, slug: c.slug, key, durationMs: 800 + ((run * 137 + c.slug.length * 53) % 1400) };
   if (c.slug === "larkspurlabs" && run < 3) return { ...base, ok: false, jobsFound: 0, matches: 0, error: "HTTP 404: the board at jobs.lever.co/larkspurlabs isn't there any more" };
+  if (c.slug === "ospreyline") return { ...base, ok: false, jobsFound: 0, matches: 0, error: "timed out after 15s (https://api.ashbyhq.com/posting-api/job-board/ospreyline)" };
   if (c.slug === "quillfeather") return { ...base, ok: true, jobsFound: 4, matches: 0 };
   const mine = passing.filter((j) => j.company === c.name && Date.parse(j.firstSeen) <= SCAN_AT - run * DAY);
   const all = liveDash.filter((j) => j.company === c.name).length;
@@ -340,6 +343,8 @@ export const META: DataMeta = {
   profile: PROFILE,
   companies: MY_COMPANIES.map((c) => ({ name: c.name, ats: c.ats, slug: c.slug, enabled: true, careers_url: careers(c.slug), industries: c.industries })),
   runs,
+  // Ospreyline's failures started before the oldest saved scan.
+  boardHealth: { "ashby:ospreyline": { since: iso(SCAN_AT - 41 * DAY) } },
 };
 
 const generatedAt = runs[0]!.finishedAt;

@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { parseConfig } from "../src/config";
+import { mergeHistory } from "../src/diff";
 import { earliestPosted, runRadar } from "../src/run";
 import { fakeHttp, fixture, json } from "./helpers";
 
@@ -89,6 +90,39 @@ profile:
     const result = await runRadar(empty, { http, now });
     expect(result).toMatchObject({ jobs: [], health: [], partial: false });
     expect(calls).toHaveLength(0);
+  });
+});
+
+describe("directory checks", () => {
+  const dir = { name: "Dir Co", enabled: true, ats: "greenhouse" as const, slug: "dirco" };
+  const none = { ...config, companies: [] };
+  const later = (days: number) => new Date(now.getTime() + days * 86_400_000);
+
+  it("keep only matches, plus jobs already in history: one that stops matching is still listed, not closed", async () => {
+    const { http } = fakeHttp(routes);
+    // In history: 1001, and 1002 from when it matched (it doesn't now: US remote). 1003 never was.
+    const seen = await runRadar({ ...config, companies: [dir] }, { http, now });
+    expect(seen.jobs.find((j) => j.id === "greenhouse:dirco:1002")!.why.gate).toBeDefined();
+    let history = mergeHistory([], { ...seen, jobs: seen.jobs.filter((j) => j.id !== "greenhouse:dirco:1003") }, [dir]).jobs;
+
+    for (const days of [1, 2, 3]) {
+      const run = await runRadar(none, { http, now: later(days), previous: history, checks: [dir] });
+      // 1003 is listed too but was never in history: a directory company keeps only its matches.
+      expect(run.jobs.map((j) => j.id).sort()).toEqual(["greenhouse:dirco:1001", "greenhouse:dirco:1002"]);
+      expect(run.health[0]!.matches).toBe(1);
+      history = mergeHistory(history, run, [dir]).jobs;
+    }
+    expect(history.find((j) => j.id === "greenhouse:dirco:1002")).toMatchObject({ status: "open", lastSeen: later(3).toISOString() });
+  });
+
+  it("reopen a stored closed job that is still listed, even when it no longer matches", async () => {
+    const { http } = fakeHttp(routes);
+    const seen = await runRadar({ ...config, companies: [dir] }, { http, now });
+    const previous = seen.jobs.map((j) => (j.id === "greenhouse:dirco:1002" ? { ...j, status: "closed" as const, missedRuns: 2, closedAt: now.toISOString() } : j));
+    const run = await runRadar(none, { http, now: later(1), previous, checks: [dir] });
+    const merged = mergeHistory(previous, run, [dir]);
+    expect(merged.jobs.find((j) => j.id === "greenhouse:dirco:1002")).toMatchObject({ status: "open" });
+    expect(merged.newIds.size).toBe(0);
   });
 });
 

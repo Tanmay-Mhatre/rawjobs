@@ -10,6 +10,7 @@ import {
   scanPlan,
   acquireScanLock,
   releaseScanLock,
+  alertJobs,
   digest,
   finishedMessage,
   sendTelegram,
@@ -142,11 +143,13 @@ export async function cmdRun(args: string[]): Promise<number> {
   };
   try {
     return await scanSession(values, dataDir, { busy, sync }, async () => {
-      const { result, merged, summary, checks, moves, stopped, resting, chronic } = await scan(config, {
+      const { result, merged, summary, checks, moves, stopped, resting, quiet, chronic, openCheck } = await scan(config, {
         ...sessionOptions(values, dataDir, scope),
+        // Only when an alert will go out: the check costs requests the alert-less scan doesn't need.
+        checkBeforeAlert: values.notify && alertsOn(config),
         onStart: (s) =>
           console.error(
-            `Checking ${values.only?.length ? values.only.join(", ") : `${s.yours.length} of your companies`}${s.extra ? ` and ${s.extra.toLocaleString()} ${s.scope === "all" ? "more from the directory" : "in your industries"}` : ""}${s.resumed ? ` (resuming: ${s.resumed.toLocaleString()} done already)` : ""}${s.skippedByFeed ? ` (${s.skippedByFeed.toLocaleString()} skipped: nothing for you in the shared job feed)` : ""}${s.resting ? ` (${s.resting.toLocaleString()} resting after failing)` : ""}, about ${duration(s.seconds)}...\n`,
+            `Checking ${values.only?.length ? values.only.join(", ") : `${s.yours.length} of your companies`}${s.extra ? ` and ${s.extra.toLocaleString()} ${s.scope === "all" ? "more from the directory" : "in your industries"}` : ""}${s.resumed ? ` (resuming: ${s.resumed.toLocaleString()} done already)` : ""}${s.skippedByFeed ? ` (${s.skippedByFeed.toLocaleString()} skipped: nothing for you in the shared job feed)` : ""}${s.resting ? ` (${s.resting.toLocaleString()} resting after failing)` : ""}${s.quiet ? ` (${s.quiet.toLocaleString()} quiet: unchanged for weeks)` : ""}, about ${duration(s.seconds)}...\n`,
           ),
         onCompanyDone: (h) => {
           // A whole-directory scan prints your companies, matches and failures, not 17,000 lines.
@@ -172,13 +175,24 @@ export async function cmdRun(args: string[]): Promise<number> {
         for (const h of failed.slice(0, 50)) console.log(`  ${h.company} (${h.ats}:${h.slug}): ${h.error}`);
         if (failed.length > 50) console.log(`  …and ${failed.length - 50} more`);
       }
-      if (resting) console.log(`\n${resting.toLocaleString()} board${resting === 1 ? "" : "s"} left alone this scan: failed last time, tried again after a rest (up to a day; 6 hours for yours).`);
+      if (resting)
+        console.log(
+          `\n${resting.toLocaleString()} directory board${resting === 1 ? "" : "s"} left alone this scan: failed last time, tried again after a rest (up to a day; your companies are always checked).`,
+        );
+      if (quiet)
+        console.log(
+          `${resting ? "" : "\n"}${quiet.toLocaleString()} quiet directory board${quiet === 1 ? "" : "s"} left alone: no jobs added or removed for 2 weeks or more, checked once a day (every 3 days after 45 days).`,
+        );
       if (chronic.length) {
-        console.log(`\n${chronic.length} board${chronic.length === 1 ? " hasn't" : "s haven't"} worked for 30 days or more (tried once a day now; every 6 hours for yours):`);
+        console.log(`\n${chronic.length} board${chronic.length === 1 ? " hasn't" : "s haven't"} worked for 30 days or more (directory boards are tried once a day now):`);
         for (const name of chronic.slice(0, 20)) console.log(`  ${name}`);
         if (chronic.length > 20) console.log(`  …and ${chronic.length - 20} more`);
       }
 
+      if (openCheck?.checked)
+        console.error(
+          `\nChecked ${openCheck.checked} job${openCheck.checked === 1 ? "" : "s"} again before alerting: ${openCheck.closed ? `${openCheck.closed} had closed (marked closed, left out of the alert)` : "all still open"}.`,
+        );
       if (summary) console.error(`\nSaved to ${dataDir} (${merged.jobs.length} jobs tracked, ${summary.closed} closed this run). Open the dashboard with: pnpm start`);
 
       if (values.json) {
@@ -297,12 +311,17 @@ export async function runNdjson(values: RunValues): Promise<number> {
   }
 }
 
+/** Telegram alerts are switched on and the bot is set up. */
+function alertsOn(config: Config): boolean {
+  const secrets = telegramSecrets();
+  return !!(config.alerts.telegram && secrets.token && secrets.chatId);
+}
+
 /** Send how many new matches the scan found (or, with only_new off, how many strong ones) to Telegram. Never throws. */
 export async function notifyScan(config: Config, result: RunResult, merged: MergeResult): Promise<string> {
   const secrets = telegramSecrets();
-  if (!config.alerts.telegram || !secrets.token || !secrets.chatId) return "off";
-  const matches = result.jobs.filter((j) => !j.why.gate);
-  const jobs = config.alerts.only_new ? matches.filter((j) => merged.newIds.has(j.id)) : matches.filter((j) => j.score >= config.profile.min_score);
+  if (!alertsOn(config)) return "off";
+  const jobs = alertJobs(config, result.jobs, merged.newIds);
   const text = digest(jobs, { minScore: config.profile.min_score, onlyNew: config.alerts.only_new });
   if (!text) return "nothing-new";
   try {

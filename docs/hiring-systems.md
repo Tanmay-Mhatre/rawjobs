@@ -23,7 +23,7 @@ boards listed below. Paste a company's careers link into **Companies → Add by 
 | Freshteam | `{slug}.freshteam.com/jobs` | widget feed |
 | Comeet | `www.comeet.com/jobs/{company}/{uid}` | data embedded in the hosted page |
 | Oracle Recruiting | `{pod}.fa.{dc}.oraclecloud.com/hcmUI/CandidateExperience/en/sites/{site}` | candidate-experience API |
-| SAP SuccessFactors | `career{N}.successfactors.com/career?company={id}` (or `.eu`) | XML listing feed |
+| SAP SuccessFactors | `career{N}.successfactors.com/career?company={id}` (or `.eu`), or a career site such as `jobs.acme.com/search/` | XML listing feed; career sites: search pages (classic and tile templates) |
 | Taleo | `{host}.taleo.net/careersection/{section}/jobsearch.ftl` | career-section search API |
 | iCIMS | `careers-{slug}.icims.com/jobs` | portal search pages |
 | Jobvite | `jobs.jobvite.com/{slug}` | careers search pages |
@@ -50,6 +50,8 @@ boards listed below. Paste a company's careers link into **Companies → Add by 
 | softgarden | `{slug}.career.softgarden.de` | JSON job feed |
 | Cornerstone OnDemand | `{tenant}.csod.com/ux/ats/careersite/{n}/home` | careers-site API |
 | Keka | `{slug}.keka.com/careers` | careers API |
+| Taleo Business Edition | `{pod}.tbe.taleo.net/{pod}{NN}/ats/careers/v2/searchResults?org={ORG}&cws={N}` | RSS feed |
+| JobScore | `careers.jobscore.com/careers/{slug}` | JSON job feed |
 
 iCIMS, Jobvite, JazzHR and several smaller systems (CareerPlug, Paycor, HiringThing, Factorial, HRMDirect) have no keyless feed, so their connectors read the public careers pages. If a company changes its page template, that connector may need an update.
 
@@ -62,7 +64,7 @@ connector. A system fails when none of its boards gives jobs with a title, link 
 some don't; systems with no live board in the directory are skipped. Failures open one "Hiring system
 checks failing" issue, which closes itself once none fails; the full table is in the run's summary.
 
-Public job boards: Hacker News "Who is hiring", Remotive, Arbeitnow, Remote OK, Himalayas, Jobicy and We Work Remotely, added the same way,
+Public job boards: Hacker News "Who is hiring", Remotive, Arbeitnow, Remote OK, Himalayas, Jobicy, We Work Remotely and Remote First Jobs, added the same way,
 by pasting their link.
 
 The connectors are in [`packages/core/src/connectors/`](../packages/core/src/connectors/). Each one

@@ -26,6 +26,8 @@ import { hrmdirect } from "./hrmdirect";
 import { softgarden } from "./softgarden";
 import { cornerstone } from "./cornerstone";
 import { keka } from "./keka";
+import { taleobe, taleoBeUrl } from "./taleobe";
+import { jobscore } from "./jobscore";
 import { greenhouse } from "./greenhouse";
 import { hibob } from "./hibob";
 import { icims } from "./icims";
@@ -46,6 +48,7 @@ import { hackernews } from "./hackernews";
 import { himalayas } from "./himalayas";
 import { jobicy } from "./jobicy";
 import { weworkremotely } from "./weworkremotely";
+import { remotefirstjobs } from "./remotefirstjobs";
 import { remoteok } from "./remoteok";
 import { remotive } from "./remotive";
 import type { Connector, DetectedCompany } from "./types";
@@ -100,6 +103,8 @@ export const connectors: Partial<Record<AtsType, Connector<any>>> = {
   softgarden,
   cornerstone,
   keka,
+  taleobe,
+  jobscore,
   // Job boards (JOB_BOARDS), last so a company's own board is always recognised first.
   hackernews,
   remotive,
@@ -108,6 +113,7 @@ export const connectors: Partial<Record<AtsType, Connector<any>>> = {
   himalayas,
   jobicy,
   weworkremotely,
+  remotefirstjobs,
 };
 
 export function getConnector(ats: AtsType): Connector<unknown> | undefined {
@@ -255,6 +261,10 @@ export function careersUrl(c: DetectedCompany): string {
       return `https://${c.slug}.csod.com/ux/ats/careersite/1/home?c=${c.slug}`;
     case "keka":
       return `https://${c.slug}.keka.com/careers`;
+    case "taleobe":
+      return taleoBeUrl(c);
+    case "jobscore":
+      return `https://careers.jobscore.com/careers/${c.slug}`;
     default:
       return "";
   }
