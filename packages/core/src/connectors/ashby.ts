@@ -1,5 +1,6 @@
 import type { NormalizedJob, Salary, Workplace } from "../schema";
 import { htmlToText } from "../text";
+import { urlOf } from "./parse";
 import { firstPathSegment, jobId, salaryPeriod, type Connector } from "./types";
 
 /** https://developers.ashbyhq.com/docs/public-job-posting-api */
@@ -61,6 +62,21 @@ export const ashby: Connector<AshbyJob> = {
     if (!Array.isArray(data.jobs)) throw new Error("unexpected Ashby response: no jobs array");
     // Unlisted jobs are reachable only by direct link; the company chose not to advertise them.
     return data.jobs.filter((j) => j.isListed !== false);
+  },
+
+  /**
+   * Ashby has no public address per posting, so the board's list (the scan's own request, often a
+   * saved 304) is read: a job missing from a list that loaded is gone. Links are jobs.ashbyhq.com/acme/{id}.
+   */
+  async isOpen(job, { http }) {
+    const url = urlOf(job.url);
+    const board = url ? ashby.detect(url) : null;
+    const id = board ? url?.pathname.split("/").filter(Boolean)[1] : undefined;
+    if (!board || !id || !/^[0-9a-f-]{36}$/i.test(id)) return undefined;
+    const data = await http.getJson<{ jobs?: AshbyJob[] }>(`https://api.ashbyhq.com/posting-api/job-board/${encodeURIComponent(board.slug)}?includeCompensation=true`).catch(() => undefined);
+    // An empty list could be a hiccup as easily as a closed board: only a list with jobs in it can rule one out.
+    if (!data?.jobs?.length) return undefined;
+    return data.jobs.some((j) => j.id === id);
   },
 
   normalize(raw, ref): NormalizedJob {
