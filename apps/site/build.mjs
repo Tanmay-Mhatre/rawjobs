@@ -33,55 +33,27 @@ const ANALYTICS_TOKEN = (process.env.CF_ANALYTICS_TOKEN || "").trim();
 const DATA_REPO = process.env.DATA_REPO || "Tanmay-Mhatre/rawjobs-directory";
 const APP_REPO = process.env.APP_REPO || "Tanmay-Mhatre/rawjobs";
 
-// The 44 hiring systems with a connector in packages/core (README, "Adding companies").
-const SYSTEMS = [
-  "Greenhouse",
-  "Lever",
-  "Ashby",
-  "SmartRecruiters",
-  "Workday",
-  "Workable",
-  "Recruitee",
-  "Personio",
-  "BambooHR",
-  "Breezy HR",
-  "Teamtailor",
-  "Pinpoint",
-  "Rippling",
-  "HiBob",
-  "Freshteam",
-  "JOIN",
-  "Paylocity",
-  "Paycom",
-  "Hireology",
-  "UKG Pro (UltiPro)",
-  "Eightfold AI",
-  "Phenom",
-  "CareerPlug",
-  "Dayforce",
-  "ADP Workforce Now",
-  "ApplicantPro / iSolved Hire",
-  "Paycor Recruiting",
-  "HiringThing",
-  "Manatal",
-  "Trakstar Hire",
-  "Factorial",
-  "Gem",
-  "HRMDirect (ClearCompany)",
-  "softgarden",
-  "Cornerstone OnDemand",
-  "Keka",
-  "Comeet",
-  "Oracle Recruiting",
-  "SAP SuccessFactors",
-  "Taleo",
-  "iCIMS",
-  "Jobvite",
-  "JazzHR",
-  "Zoho Recruit",
-];
-
 const read = (p) => readFileSync(p, "utf8");
+
+// ---------- hiring systems and job boards, from the app's own code ----------
+// Read from packages/core (ATS_TYPES, JOB_BOARDS) and named as the dashboard names them
+// (apps/web/src/lib/companies.ts, ATS_LABEL), so a new connector shows up here with no site edit.
+const listIn = (src, name) => {
+  const m = src.match(new RegExp(`export const ${name} = \\[([\\s\\S]*?)\\]`));
+  if (!m) throw new Error(`${name} not found in packages/core/src/schema.ts`);
+  return [...m[1].matchAll(/"([a-z0-9]+)"/g)].map((x) => x[1]);
+};
+const schemaSrc = read(join(ROOT, "packages/core/src/schema.ts"));
+const labelBlock = read(join(ROOT, "apps/web/src/lib/companies.ts")).match(/export const ATS_LABEL[^{]*\{([\s\S]*?)\n\};/);
+if (!labelBlock) throw new Error("ATS_LABEL not found in apps/web/src/lib/companies.ts");
+const LABEL = Object.fromEntries([...labelBlock[1].matchAll(/^\s*(\w+): "([^"]+)"/gm)].map((m) => [m[1], m[2]]));
+const label = (id) => {
+  if (!LABEL[id]) throw new Error(`no ATS_LABEL for "${id}" in apps/web/src/lib/companies.ts`);
+  return LABEL[id];
+};
+const SYSTEMS = listIn(schemaSrc, "ATS_TYPES").map(label);
+const BOARDS = listIn(schemaSrc, "JOB_BOARDS").map(label);
+const andList = (xs) => (xs.length < 2 ? xs.join("") : `${xs.slice(0, -1).join(", ")} and ${xs.at(-1)}`);
 
 // ---------- numbers from the directory's releases ----------
 // Last known values, used only when GitHub can't be reached (and the build log says so).
@@ -187,6 +159,9 @@ const atLeast = (x) => (x >= 1e6 ? `${Math.floor(x / 1e5) / 10}M+` : `${int(Math
 const VERSION = JSON.parse(read(join(ROOT, "package.json"))).version;
 const NUMBERS = {
   __VERSION__: VERSION,
+  __SYSTEMS_N__: String(SYSTEMS.length),
+  __BOARDS_N__: String(BOARDS.length),
+  __BOARD_NAMES__: andList(BOARDS),
   __COMPANIES__: int(n.companies),
   __COMPANIES_ROUND__: atLeast(n.companies),
   __LIVE_ROUND__: atLeast(n.liveBoards),

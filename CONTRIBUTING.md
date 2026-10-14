@@ -49,8 +49,8 @@ The contribution inbox (`services/contribute`) is a Cloudflare Worker in the sam
 - **Be polite to job boards.** Read only public postings, keep the per-host delays, identify with
   the User-Agent, back off on rate limits, and never touch apply endpoints.
 - **Data licences.** Only add sources to the shared directory whose licence allows it (see
-  `services/directory-repo-template/NOTICE.md`). Public job boards (Hacker News, Remotive, Arbeitnow,
-  Remote OK, Himalayas, Jobicy, We Work Remotely) are fetched on the user's computer only, never published.
+  `services/directory-repo-template/NOTICE.md`). Public job boards (listed in
+  `docs/hiring-systems.md`) are fetched on the user's computer only, never published.
 
 ## Adding a company
 

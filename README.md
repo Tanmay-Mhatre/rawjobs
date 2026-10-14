@@ -9,11 +9,11 @@
   <img alt="The RawJobs Radar: a list of scored jobs on the left, and on the right why the selected job matched." src="docs/images/radar-light.png">
 </picture>
 
-A free, self-hosted job radar. Tell it the roles, places and industries you want; RawJobs scans the careers pages of the companies that fit, from a directory of 47,000+ companies' hiring systems (37,000+ with live job boards), scores every opening against your profile with clear keyword rules, and shows you the matches, with the companies you'd most like to join starred and their newest jobs up top.
+A free, self-hosted job radar. Tell it the roles, places and industries you want; RawJobs scans the careers pages of the companies that fit, from a shared directory of companies' hiring systems that grows every week ([current size](https://www.rawjobs.workers.dev)), scores every opening against your profile with clear keyword rules, and shows you the matches, with the companies you'd most like to join starred and their newest jobs up top.
 
 Good roles often appear on company careers pages (Greenhouse, Lever, Ashby, Workday…) before LinkedIn, or never reach it. Checking 50 careers pages by hand doesn't happen. This does it for you.
 
-> **Status: runs on your computer, installs with one line on Windows, macOS and Linux, and keeps itself up to date.** A web dashboard and a CLI with connectors for 44 hiring systems (Greenhouse, Lever, Ashby, Workday, SmartRecruiters and [39 more](docs/hiring-systems.md)) and 7 public job boards, scoring, run history, scheduled scans and Telegram alerts. Scheduled scans in GitHub Actions are next. See [Roadmap](#roadmap).
+> **Status: runs on your computer, installs with one line on Windows, macOS and Linux, and keeps itself up to date.** A web dashboard and a CLI with connectors for Greenhouse, Lever, Ashby, Workday, SmartRecruiters and [many more hiring systems and public job boards](docs/hiring-systems.md), scoring, run history, scheduled scans and Telegram alerts. Scheduled scans in GitHub Actions are next. See [Roadmap](#roadmap).
 
 Built by Tanmay Mhatre.
 
@@ -150,15 +150,15 @@ Paste careers URLs into `detect` and copy the lines into `companies:`:
 pnpm rawjobs detect https://jobs.lever.co/somecompany https://job-boards.greenhouse.io/other
 ```
 
-RawJobs reads 44 hiring systems, including Greenhouse, Lever, Ashby, Workday and SmartRecruiters: [the full list, and what their careers links look like](docs/hiring-systems.md).
+RawJobs reads many hiring systems, including Greenhouse, Lever, Ashby, Workday and SmartRecruiters: [the full list, and what their careers links look like](docs/hiring-systems.md).
 
-Public job boards (Hacker News "Who is hiring", Remotive, Arbeitnow, Remote OK, Himalayas, Jobicy, We Work Remotely) are added the same way, by pasting their link.
+[Public job boards](docs/hiring-systems.md) are added the same way, by pasting their link.
 
 ## The shared directory and job feed
 
 Two things are built for everyone by GitHub Actions and published as releases of the directory repo. Neither knows anything about you.
 
-- **The directory** (rebuilt weekly): which companies exist, which hiring system and board each one uses, whether it's live, and its industries. 47,000+ companies (37,000+ with live job boards), 16,000+ of them with their open job titles and places indexed.
+- **The directory** (rebuilt weekly): which companies exist, which hiring system and board each one uses, whether it's live, and its industries, plus the open job titles and places at the companies we can index. The [website](https://www.rawjobs.workers.dev) shows its current size.
 - **The job feed** (daily): every open job on the live Greenhouse, Lever, Ashby, SmartRecruiters and Workday boards, as a full copy plus a small change file per day. Scans use it only to skip companies with nothing for you.
 
 How the directory is built (no AI, `scripts/catalog/`):
@@ -266,7 +266,7 @@ Connector tests use saved feed responses in `packages/core/test/fixtures`, so te
 | Phase | Scope |
 | --- | --- |
 | 0. Core ✅ | Schema, config validation, Greenhouse / Lever / Ashby, scoring, CLI, tests |
-| 1. Daily radar | ✅ 44 hiring systems, shared directory and daily job feed, run history, scheduled scans on your computer, Telegram alerts. To do: scheduled scans in your own GitHub Actions |
+| 1. Daily radar | ✅ [Hiring system connectors](docs/hiring-systems.md), shared directory and daily job feed, run history, scheduled scans on your computer, Telegram alerts. To do: scheduled scans in your own GitHub Actions |
 | 2. Dashboard | ✅ Radar, job detail, pipeline, companies, settings, light and dark themes, each with an increased-contrast version. To do: hosted deploy |
 | 3. Open-source launch | ✅ Setup wizard, contributor docs, privacy page, self-hosting guide. To do: more README screenshots |
 | 3b. Install for everyone | ✅ One-line install for Windows, macOS and Linux, start at log in, signed releases, updates that go back if a new version doesn't start ([plan](docs/plans/local-install.md)) |
