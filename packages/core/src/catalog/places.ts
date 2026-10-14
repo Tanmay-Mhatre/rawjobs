@@ -804,7 +804,8 @@ export function citiesIn(location: string): string[] {
       }
     }
     if (!city) continue;
-    city = CITY_ALIASES[city] ?? city;
+    // Own keys only: a title piece like "Constructor" must not find Object.prototype.constructor.
+    city = Object.hasOwn(CITY_ALIASES, city) ? CITY_ALIASES[city]! : city;
     if (notCityNames().has(city)) continue;
     const display = city === "washington dc" ? "Washington DC" : titleCase(city);
     found.add(country ? `${display}, ${country}` : display);

@@ -20,6 +20,7 @@
     "./catalog/seniority": "./src/catalog/seniority.ts",
     "./catalog/visa": "./src/catalog/visa.ts",
     "./dashboard": "./src/dashboard.ts",
+    "./activity": "./src/activity.ts",
     "./score": "./src/score.ts",
     "./protocol": "./src/protocol.ts",
     "./release": "./src/release.ts",

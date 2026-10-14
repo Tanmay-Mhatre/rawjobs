@@ -17,8 +17,8 @@ import { applyFeedDiff, diffFeedStates, feedStateHash, JOB_FEED_SCHEMA_V2, type 
 export const KEEP_DIFFS = 14;
 const MANIFEST = "jobs-v2-manifest.json";
 
-const brotli = (s: string) => brotliCompressSync(s, { params: { [constants.BROTLI_PARAM_QUALITY]: 11, [constants.BROTLI_PARAM_LGWIN]: 24, [constants.BROTLI_PARAM_SIZE_HINT]: s.length } });
-const sha = (b: Buffer) => createHash("sha256").update(b).digest("hex");
+export const brotli = (s: string) => brotliCompressSync(s, { params: { [constants.BROTLI_PARAM_QUALITY]: 11, [constants.BROTLI_PARAM_LGWIN]: 24, [constants.BROTLI_PARAM_SIZE_HINT]: s.length } });
+export const sha = (b: Buffer) => createHash("sha256").update(b).digest("hex");
 
 /** Today's companies (from the first format's shards) as a state: rows by id, day last read. */
 export function stateOf(companies: Record<string, { fetched_at: string; jobs: FeedRow[] }>): FeedState {
