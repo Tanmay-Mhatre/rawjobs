@@ -92,7 +92,7 @@ export const HOST_DELAYS: Record<string, number> = {
  * An API's pace in requests a second: where it starts, the most it's ever asked, and whether each of
  * its hosts also keeps its own gap (Workday: one host per employer, many employers per wdN shard).
  */
-export type PaceSpec = { key: string; start: number; ceiling: number; hostGap: boolean; hostGapMs?: number };
+export type PaceSpec = { key: string; start: number; ceiling: number; hostGap: boolean };
 const shared = (key: string, ceiling: number, start = 1): PaceSpec => ({ key, start, ceiling, hostGap: false });
 /** Hosts that serve every employer on a hiring system, paced as one. Any other host keeps its own gap only. */
 const PACES: Record<string, PaceSpec> = {
@@ -109,8 +109,8 @@ const PACES: Record<string, PaceSpec> = {
   "ats.rippling.com": shared("rippling", 3),
   "www.comeet.com": shared("comeet", 3),
 };
-/** Each Workday shard (wd1, wd5…) as a whole, on top of every employer's own gap (shorter than elsewhere: one big employer pages through up to 100 pages). */
-const WORKDAY_SHARD_PACE = { start: 4, ceiling: 8, hostGapMs: 400 };
+/** Each Workday shard (wd1, wd5…) as a whole, on top of every employer's own 1 s gap (measured: a tenant asked faster answers 429). */
+const WORKDAY_SHARD_PACE = { start: 4, ceiling: 8 };
 /** The slowest an API is ever paced at, after halving. */
 const MIN_RATE = 0.25;
 /** After a halving, the requests already in flight land before another one counts. */
@@ -317,7 +317,7 @@ export class HttpClient {
     const now = Date.now();
     const pace = this.paceFor(host);
     const slot = Math.max(now, this.nextSlot.get(host) ?? 0, pace?.next ?? 0);
-    this.nextSlot.set(host, slot + (pace && !pace.spec.hostGap ? 0 : (this.delays.get(host) ?? pace?.spec.hostGapMs ?? this.opts.hostDelayMs)));
+    this.nextSlot.set(host, slot + (pace && !pace.spec.hostGap ? 0 : (this.delays.get(host) ?? this.opts.hostDelayMs)));
     if (pace) pace.next = slot + 1000 / pace.rate;
     if (slot > now) await this.opts.sleep(slot - now);
   }
@@ -342,7 +342,8 @@ export class HttpClient {
     const usual = pace.latency;
     pace.latency = usual === undefined ? ms : usual * 0.8 + ms * 0.2;
     pace.samples++;
-    const spike = usual !== undefined && pace.samples > 5 && ms > Math.max(usual * SPIKE_FACTOR, SPIKE_MS);
+    // A shared API slowing down is straining; a Workday shard's employers answer at their own speeds, so only push-backs count there.
+    const spike = !pace.spec.hostGap && usual !== undefined && pace.samples > 5 && ms > Math.max(usual * SPIKE_FACTOR, SPIKE_MS);
     if (status === 429 || status === 503 || (status === 403 && pace.spec.key === "paylocity") || spike) this.paceDown(pace);
     else if (status < 500) pace.rate = Math.min(pace.spec.ceiling, pace.rate + pace.spec.ceiling / 20);
     this.notePace(pace);
