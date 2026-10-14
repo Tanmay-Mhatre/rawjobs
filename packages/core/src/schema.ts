@@ -159,6 +159,8 @@ export type CompanyHealth = {
   describeFailed?: number;
   /** The list was cut short (a page cap): its unseen jobs stay open instead of counting as gone. */
   partial?: boolean;
+  /** On a partial list: jobs past the cap that the board's search for your titles found (see searchTerms in run.ts). */
+  searchFound?: number;
 };
 
 export type RunSummary = {
