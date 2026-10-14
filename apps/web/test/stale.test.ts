@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { Job } from "../src/lib/data";
-import { isStale, staleReasons } from "../src/lib/stale";
+import { isRoleStale, isStale, staleReasons } from "../src/lib/stale";
 import { makeJob } from "./helpers";
 
 const NOW = Date.parse("2026-10-13T12:00:00Z");
@@ -58,5 +58,13 @@ describe("staleReasons and isStale", () => {
 
   it("a closed job is never tagged", () => {
     expect(staleReasons(job({ status: "closed", postedAt: daysAgo(200), repostedAt: daysAgo(5), repostCount: 3 }), ctx)).toEqual([]);
+  });
+});
+
+describe("isRoleStale", () => {
+  it("is false when any posting of the role is fresh, true when every one may be stale", () => {
+    const old = job({ postedAt: daysAgo(150) });
+    expect(isRoleStale([old, job()], () => ctx)).toBe(false);
+    expect(isRoleStale([old, job({ postedAt: daysAgo(200) })], () => ctx)).toBe(true);
   });
 });

@@ -1,5 +1,8 @@
+import { employmentType } from "../catalog/employment";
 import type { CompanyRef, NormalizedJob, Workplace } from "../schema";
 import { htmlToText } from "../text";
+import { HttpError } from "../http";
+import { urlOf } from "./parse";
 import { firstPathSegment, jobId, SEARCH_MAX_POSTINGS, type Connector, type Ctx } from "./types";
 
 /** https://developers.smartrecruiters.com/docs/posting-api (official, keyless for public postings) */
@@ -12,6 +15,7 @@ export type SmartRecruitersPosting = {
   department?: { label?: string };
   function?: { label?: string };
   customField?: { fieldLabel?: string; valueLabel?: string }[];
+  typeOfEmployment?: { id?: string; label?: string };
 };
 
 type Page = { totalFound: number; content: SmartRecruitersPosting[] };
@@ -93,6 +97,7 @@ export const smartrecruiters: Connector<SmartRecruitersPosting> = {
       department: raw.department?.label || raw.function?.label,
       postedAt: raw.releasedDate,
       url: `https://jobs.smartrecruiters.com/${encodeURIComponent(company)}/${raw.id}`,
+      employmentType: employmentType(raw.typeOfEmployment?.label ?? raw.typeOfEmployment?.id),
       // The list has no descriptions; run.ts asks describe() for the jobs that pass the gates.
       description: "",
     };
@@ -105,5 +110,22 @@ export const smartrecruiters: Connector<SmartRecruitersPosting> = {
       .map((k) => htmlToText(sections[k]?.text))
       .filter(Boolean)
       .join("\n\n");
+  },
+
+  /**
+   * The posting's API address: a taken-down posting still answers 200 for a while, with "active": false
+   * (checked 2026-10-14), and 404 once it's gone. Links are jobs.smartrecruiters.com/Acme/{id}[-title].
+   */
+  async isOpen(job, { http }) {
+    const url = urlOf(job.url);
+    const board = url ? smartrecruiters.detect(url) : null;
+    const id = board ? url?.pathname.split("/").filter(Boolean)[1]?.match(/^\d+/)?.[0] : undefined;
+    if (!board || !id) return undefined;
+    try {
+      const posting = await http.getJson<{ id?: string; active?: boolean }>(`${API}/${encodeURIComponent(board.slug)}/postings/${id}`);
+      return posting.id === id && typeof posting.active === "boolean" ? posting.active : undefined;
+    } catch (err) {
+      return err instanceof HttpError && (err.status === 404 || err.status === 410) ? false : undefined;
+    }
   },
 };

@@ -1,5 +1,7 @@
+import { employmentType } from "../catalog/employment";
 import type { NormalizedJob, Salary, Workplace } from "../schema";
 import { htmlToText } from "../text";
+import { urlOf } from "./parse";
 import { firstPathSegment, jobId, salaryPeriod, type Connector } from "./types";
 
 /** https://developers.ashbyhq.com/docs/public-job-posting-api */
@@ -14,6 +16,8 @@ export type AshbyJob = {
   isListed?: boolean;
   isRemote?: boolean;
   workplaceType?: "OnSite" | "Remote" | "Hybrid" | string | null;
+  /** "FullTime", "PartTime", "Intern", "Contract" or "Temporary". */
+  employmentType?: string | null;
   address?: { postalAddress?: { addressCountry?: string; addressLocality?: string } };
   jobUrl: string;
   descriptionPlain?: string;
@@ -63,6 +67,21 @@ export const ashby: Connector<AshbyJob> = {
     return data.jobs.filter((j) => j.isListed !== false);
   },
 
+  /**
+   * Ashby has no public address per posting, so the board's list (the scan's own request, often a
+   * saved 304) is read: a job missing from a list that loaded is gone. Links are jobs.ashbyhq.com/acme/{id}.
+   */
+  async isOpen(job, { http }) {
+    const url = urlOf(job.url);
+    const board = url ? ashby.detect(url) : null;
+    const id = board ? url?.pathname.split("/").filter(Boolean)[1] : undefined;
+    if (!board || !id || !/^[0-9a-f-]{36}$/i.test(id)) return undefined;
+    const data = await http.getJson<{ jobs?: AshbyJob[] }>(`https://api.ashbyhq.com/posting-api/job-board/${encodeURIComponent(board.slug)}?includeCompensation=true`).catch(() => undefined);
+    // An empty list could be a hiccup as easily as a closed board: only a list with jobs in it can rule one out.
+    if (!data?.jobs?.length) return undefined;
+    return data.jobs.some((j) => j.id === id);
+  },
+
   normalize(raw, ref): NormalizedJob {
     const location = [raw.location, ...(raw.secondaryLocations ?? []).map((l) => l.location)].filter((l): l is string => !!l?.trim()).join("; ");
     return {
@@ -77,6 +96,7 @@ export const ashby: Connector<AshbyJob> = {
       salary: salaryOf(raw),
       postedAt: raw.publishedAt,
       url: raw.jobUrl,
+      employmentType: employmentType(raw.employmentType),
       description: raw.descriptionPlain?.trim() || htmlToText(raw.descriptionHtml),
     };
   },

@@ -41,8 +41,27 @@ describe("status mapping", () => {
     expect(problemOf(seen({}, { ok: false, error: "HTTP (500)" }), { anyScans: true })).toBeNull();
   });
 
+  it("takes the start of a long failure from the board's record, past the saved scans", () => {
+    const now = Date.UTC(2026, 9, 11);
+    const all = seen({ ok: false, error: "timeout" }, { ok: false, error: "timeout" });
+    const older = new Date(Date.UTC(2026, 8, 1)).toISOString();
+    expect(problemOf(all, { anyScans: true, failingSince: older, now })).toEqual({ kind: "notAnswering", since: older, scans: 2, chronic: true });
+    // A saved scan that worked ends the streak, whatever the record says.
+    expect(problemOf([...all, ...seen({})], { anyScans: true, failingSince: older, now })).toEqual({ kind: "notAnswering", since: all[1]!.at, scans: 2 });
+    expect(problemOf(all, { anyScans: true, failingSince: new Date(Date.UTC(2026, 9, 1)).toISOString(), now })).not.toHaveProperty("chronic");
+  });
+
+  it("says 'for over a month' when a company of yours has failed that long", () => {
+    const list = [row("Initech", "initech")];
+    const m = { ...meta(2, ["initech"], () => ({ ok: false, error: "timeout" })), boardHealth: { "greenhouse:initech": { since: new Date(Date.now() - 40 * DAY).toISOString() } } };
+    const { container } = render(<MyCompanies rows={list} savedKeys={keys(list)} meta={m} onScan={() => {}} onRemove={() => {}} onRemoveMany={() => {}} />);
+    const table = within(container.querySelector("table")!);
+    expect(table.getByText("Not answering")).toBeTruthy();
+    expect(table.getByText(/^for over a month \(since /)).toBeTruthy();
+  });
+
   it("calls a 404 'not found', since the first failing scan in a row", () => {
-    expect(problemOf(seen({ ok: false, error: "Not found (404)" }, { ok: false, error: "Not found (404)" }, {}), { anyScans: true })).toEqual({
+    expect(problemOf(seen({ ok: false, error: "Not found (404)" }, { ok: false, error: "Not found (404)" }, {}), { anyScans: true, now: Date.UTC(2026, 9, 11) })).toEqual({
       kind: "notFound",
       since: new Date(Date.UTC(2026, 9, 9)).toISOString(),
     });

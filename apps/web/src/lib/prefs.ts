@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import type { Filters, Sort } from "./filters";
+import { DEFAULT_FILTERS, type Filters, type Sort } from "./filters";
 import { ruleKey, type HideRule } from "./notForMe";
 import { load, save } from "./storage";
 import { useSavedOnDisk } from "./tracking";
@@ -22,7 +22,8 @@ const EMPTY: Prefs = { views: [], hiddenCompanies: [], hideRules: [] };
 export const withDefaults = (p: Partial<Prefs>): Prefs => ({
   ...EMPTY,
   ...p,
-  views: Array.isArray(p.views) ? p.views : [],
+  // Views saved before a filter existed (Type) get its default, so every filter is there.
+  views: Array.isArray(p.views) ? p.views.map((v) => ({ ...v, filters: { ...DEFAULT_FILTERS, ...v.filters } })) : [],
   hiddenCompanies: Array.isArray(p.hiddenCompanies) ? p.hiddenCompanies : [],
   hideRules: Array.isArray(p.hideRules) ? p.hideRules : [],
 });

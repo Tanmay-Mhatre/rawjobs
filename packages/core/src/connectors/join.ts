@@ -1,3 +1,4 @@
+import { employmentType } from "../catalog/employment";
 import type { NormalizedJob, Workplace } from "../schema";
 import { jobId, type Connector } from "./types";
 
@@ -90,6 +91,7 @@ export const join: Connector<JoinJob> = {
       department: raw.category?.name,
       postedAt: raw.createdAt,
       url: `https://join.com/companies/${encodeURIComponent(ref.slug)}/${raw.idParam}`,
+      employmentType: employmentType(raw.employmentType?.name),
       // The list has no descriptions; run.ts asks describe() for the jobs that pass the gates.
       description: "",
     };

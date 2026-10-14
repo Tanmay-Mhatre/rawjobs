@@ -1,3 +1,4 @@
+import { employmentType } from "../catalog/employment";
 import type { CompanyRef, NormalizedJob, Workplace } from "../schema";
 import { htmlToText, inferWorkplace } from "../text";
 import { joinParts, jsonAfter } from "./parse";
@@ -99,6 +100,7 @@ export const ukg: Connector<UkgOpportunity> = {
       department: raw.JobCategoryName || undefined,
       postedAt: raw.PostedDate,
       url: `${board(ref)}/OpportunityDetail?opportunityId=${raw.Id}`,
+      employmentType: employmentType(raw.FullTime === undefined ? undefined : raw.FullTime ? "full-time" : "part-time"),
       // The list only has a brief; run.ts asks describe() for the jobs that pass the gates.
       description: "",
     };

@@ -22,6 +22,7 @@ import {
   type JobGroup,
   type Sort,
 } from "../../lib/filters";
+import { identityOf, roleOf } from "../../lib/identity";
 import type { Prefs, SavedView } from "../../lib/prefs";
 import type { FilterPicks } from "../../lib/profileSync";
 import { postedOrSeen, timeAgo } from "../../lib/format";
@@ -148,7 +149,10 @@ export function RadarPage(p: Props) {
   // Typing in search updates the box at once; the list catches up when React has a moment (useDeferredValue).
   const q = useDeferredValue(filters.q);
   const listFilters = useMemo(() => (q === filters.q ? filters : { ...filters, q }), [filters, q]);
-  const visible = useMemo(() => sortJobs(applyFilters(pool, listFilters, ctx), sort, p.isYours, now), [pool, listFilters, ctx, sort, p.isYours, now]);
+  const visible = useMemo(
+    () => sortJobs(applyFilters(pool, listFilters, ctx), sort, p.isYours, now, profile.salary_floor?.currency),
+    [pool, listFilters, ctx, sort, p.isYours, now, profile.salary_floor?.currency],
+  );
   const groups = useMemo(() => groupJobs(visible, now), [visible, now]);
   // One company can't fill the page ("+N more at …"), except in Newest (a plain date order) and when you've
   // picked companies yourself.
@@ -354,7 +358,7 @@ export function RadarPage(p: Props) {
     postings: selectedGroup!.jobs,
     industries: industriesByCompany.get(selected.company),
     moreFromCompany: sortJobs(
-      p.jobs.filter((j) => j.company === selected.company && j.group !== selected.group && j.status === "open"),
+      p.jobs.filter((j) => identityOf(j) === identityOf(selected) && roleOf(j) !== roleOf(selected) && j.status === "open"),
       "best",
     ).slice(0, 5),
     yours: p.isYours(selected),
@@ -469,6 +473,7 @@ export function RadarPage(p: Props) {
               <FacetMenu label="Country" searchable options={facet("countries")} selected={filters.countries} onChange={(v) => setFilters({ countries: v })} />
               <FacetMenu label="Location" searchable options={facet("locations")} selected={filters.locations} onChange={(v) => setFilters({ locations: v })} />
               <FacetMenu label="Workplace" options={facet("workplace")} selected={filters.workplace} onChange={(v) => setFilters({ workplace: v as Filters["workplace"] })} />
+              <FacetMenu label="Type" options={facet("employment")} selected={filters.employment} onChange={(v) => setFilters({ employment: v })} />
               <FacetMenu
                 label="Match"
                 single
@@ -647,8 +652,8 @@ export function RadarPage(p: Props) {
                   r.kind === "group" ? (
                     card(r.group)
                   ) : (
-                    <li key={`more:${r.company}`} className="px-4 py-2">
-                      <Button variant="ghost" size="sm" onClick={() => setOpenCompanies((s) => new Set([...s, r.company]))}>
+                    <li key={`more:${r.key}`} className="px-4 py-2">
+                      <Button variant="ghost" size="sm" onClick={() => setOpenCompanies((s) => new Set([...s, r.key]))}>
                         +{r.groups.length} more at {displayName(r.company)}
                       </Button>
                     </li>
@@ -693,6 +698,9 @@ export function RadarPage(p: Props) {
           </SheetSection>
           <SheetSection label="Workplace">
             <OptionList label="Workplace" options={facet("workplace")} selected={filters.workplace} onChange={(v) => setFilters({ workplace: v as Filters["workplace"] })} />
+          </SheetSection>
+          <SheetSection label="Type">
+            <OptionList label="Type" options={facet("employment")} selected={filters.employment} onChange={(v) => setFilters({ employment: v })} />
           </SheetSection>
           <SheetSection label="Seniority">
             <OptionList label="Seniority" options={facet("seniority")} selected={filters.seniority} onChange={(v) => setFilters({ seniority: v as Filters["seniority"] })} />

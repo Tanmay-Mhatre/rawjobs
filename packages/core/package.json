@@ -18,6 +18,7 @@
     "./catalog/places": "./src/catalog/places.ts",
     "./catalog/industries": "./src/catalog/industries.ts",
     "./catalog/seniority": "./src/catalog/seniority.ts",
+    "./catalog/employment": "./src/catalog/employment.ts",
     "./catalog/visa": "./src/catalog/visa.ts",
     "./dashboard": "./src/dashboard.ts",
     "./activity": "./src/activity.ts",
