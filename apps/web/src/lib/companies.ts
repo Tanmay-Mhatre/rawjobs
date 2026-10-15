@@ -151,8 +151,11 @@ export function toRow(c: CompanyRef): CompanyRow {
   };
 }
 
-/** Add companies not in the draft yet (adding one also unhides it): the draft patch, and the keys actually added. */
-export function addCompanies(draft: Pick<Draft, "companies" | "muted">, list: readonly CompanyRef[]): { patch: Partial<Draft> | null; keys: string[] } {
+/**
+ * Add companies not in the draft yet (adding one also unhides it, and un-forgets a link you replaced):
+ * the draft patch, and the keys actually added.
+ */
+export function addCompanies(draft: Pick<Draft, "companies" | "muted"> & Partial<Pick<Draft, "replaced">>, list: readonly CompanyRef[]): { patch: Partial<Draft> | null; keys: string[] } {
   const seen = new Set(draft.companies.map(keyOf));
   const rows = list.filter((c) => {
     const k = keyOf(c);
@@ -162,15 +165,18 @@ export function addCompanies(draft: Pick<Draft, "companies" | "muted">, list: re
   });
   if (!rows.length) return { patch: null, keys: [] };
   const keys = new Set(rows.map(keyOf));
-  return { patch: { companies: [...draft.companies, ...rows.map(toRow)], muted: draft.muted.filter((k) => !keys.has(k)) }, keys: [...keys] };
+  const patch: Partial<Draft> = { companies: [...draft.companies, ...rows.map(toRow)], muted: draft.muted.filter((k) => !keys.has(k)) };
+  if (draft.replaced?.some((k) => keys.has(k))) patch.replaced = draft.replaced.filter((k) => !keys.has(k));
+  return { patch, keys: [...keys] };
 }
 
 /**
  * Put a company's new board in place of its old one: same place in the list, same name, and the new
- * board unhidden. Null when the old one isn't in the list or the new board already is.
+ * board unhidden. The old board is remembered as replaced, so suggestions and packs don't add it back.
+ * Null when the old one isn't in the list or the new board already is.
  */
 export function replaceCompany(
-  draft: Pick<Draft, "companies" | "muted">,
+  draft: Pick<Draft, "companies" | "muted"> & Partial<Pick<Draft, "replaced">>,
   oldKey: string,
   to: Omit<CompanyRef, "careers_url"> & { careers_url?: string },
 ): { patch: Partial<Draft>; before: CompanyRow; key: string } | null {
@@ -178,5 +184,6 @@ export function replaceCompany(
   const key = keyOf(to);
   if (!before || draft.companies.some((r) => keyOf(r) === key)) return null;
   const row = { ...toRow({ ...to, name: before.name || to.name, careers_url: to.careers_url || careersUrl(to as never) }), id: before.id };
-  return { patch: { companies: draft.companies.map((r) => (r === before ? row : r)), muted: draft.muted.filter((k) => k !== key) }, before, key };
+  const replaced = [...new Set([...(draft.replaced ?? []).filter((k) => k !== key), keyOf(before)])];
+  return { patch: { companies: draft.companies.map((r) => (r === before ? row : r)), muted: draft.muted.filter((k) => k !== key), replaced }, before, key };
 }

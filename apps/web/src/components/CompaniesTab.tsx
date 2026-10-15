@@ -43,7 +43,7 @@ type Props = {
   onUnhideName: (name: string) => void;
 };
 
-const companiesKey = (d: Draft) => JSON.stringify([draftToConfig(d).companies, d.muted, d.pastEmployers]);
+const companiesKey = (d: Draft) => JSON.stringify([draftToConfig(d).companies, d.muted, d.replaced, d.pastEmployers]);
 
 type SaveState = { kind: "idle" } | { kind: "saving" } | { kind: "saved" } | { kind: "error"; message: string };
 
@@ -69,7 +69,7 @@ function useAutoSave(draft: Draft, saved: Draft, onSaved: () => Promise<void>, e
       do {
         again.current = false;
         const { draft: d, saved: s } = latest.current;
-        const res = await saveConfig(draftToConfig({ ...s, companies: d.companies, muted: d.muted, pastEmployers: d.pastEmployers }));
+        const res = await saveConfig(draftToConfig({ ...s, companies: d.companies, muted: d.muted, replaced: d.replaced, pastEmployers: d.pastEmployers }));
         if (!res.ok) return setState({ kind: "error", message: res.errors });
         await latest.current.onSaved();
       } while (again.current);
@@ -213,7 +213,8 @@ export function CompaniesTab({ configured, meta, jobs, draft, loaded, saved, upd
   const coverage = plan ? coverageLine({ plan, scope, industries: saved.industries.length, hasJobs: jobs.length > 0 }) : null;
   const savedKeys = useMemo(() => new Set(saved.companies.map(keyOf)), [saved.companies]);
   const watched = useMemo(() => new Set(draft.companies.map(keyOf)), [draft.companies]);
-  const muted = useMemo(() => new Set(draft.muted), [draft.muted]);
+  // Not offered in suggestions or packs: what you hid, and old links you replaced with a new one.
+  const notOffered = useMemo(() => new Set([...draft.muted, ...(draft.replaced ?? [])]), [draft.muted, draft.replaced]);
   // From the saved profile (not half-made Settings edits), with the past employers edited here.
   const suggestFrom = useMemo(() => ({ ...saved, pastEmployers: draft.pastEmployers }), [saved, draft.pastEmployers]);
   // Retry = switch the request off for a moment and back on, which asks again.
@@ -298,16 +299,25 @@ export function CompaniesTab({ configured, meta, jobs, draft, loaded, saved, upd
     });
   };
 
-  /** Switch a company to the board the last scan suggested (only on your click), with Undo in a toast. */
-  const switchLinkWithUndo = (oldKey: string, to: Parameters<typeof replaceCompany>[2]) => {
+  /**
+   * Switch a company to a new board (only on your click), with Undo in a toast. Whether it switched:
+   * not when the old board is gone from the list or the new one is in it already.
+   */
+  const switchLinkWithUndo = (oldKey: string, to: Parameters<typeof replaceCompany>[2]): boolean => {
     const done = replaceCompany(draft, oldKey, to);
-    if (!done) return;
+    if (!done) return false;
+    const replacedBefore = draft.replaced ?? [];
     update(done.patch);
     toast({
       message: `Updated ${companyLabel(done.before)}'s careers link.`,
       actionLabel: "Undo",
-      onAction: () => update({ companies: latest.current.companies.map((r) => (keyOf(r) === done.key ? done.before : r)) }),
+      onAction: () =>
+        update({
+          companies: latest.current.companies.map((r) => (keyOf(r) === done.key ? done.before : r)),
+          replaced: (latest.current.replaced ?? []).filter((k) => k !== keyOf(done.before) || replacedBefore.includes(k)),
+        }),
     });
+    return true;
   };
 
   /**
@@ -317,7 +327,7 @@ export function CompaniesTab({ configured, meta, jobs, draft, loaded, saved, upd
    */
   const updateLink = (oldKey: string, to: CompanyRef, opts: { otherName?: string }) => {
     const from = draft.companies.find((r) => keyOf(r) === oldKey);
-    switchLinkWithUndo(oldKey, to);
+    if (!switchLinkWithUndo(oldKey, to)) return;
     if (from?.ats && from.slug && !opts.otherName) void shareMove(companyLabel(from), { ats: from.ats, slug: from.slug, region: from.region, shard: from.shard, site: from.site }, to);
   };
   /** "Not this one" on a suggested page: not offered again on this computer, with Undo. */
@@ -457,7 +467,7 @@ export function CompaniesTab({ configured, meta, jobs, draft, loaded, saved, upd
           <ForYou
             state={suggestions}
             watched={watched}
-            muted={muted}
+            muted={notOffered}
             pastEmployers={draft.pastEmployers}
             onPastEmployers={(pastEmployers) => update({ pastEmployers })}
             onAddMany={addMany}

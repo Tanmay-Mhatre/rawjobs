@@ -348,6 +348,8 @@ export const ConfigSchema = z
     companies: z.array(CompanySchema).default([]),
     /** Companies you never want to see, as "ats:slug" keys (Workday: "workday:tenant|shard|site"). */
     companies_muted: z.array(z.string().trim().toLowerCase().min(1)).default([]),
+    /** Old boards you swapped for a new link ("Use this link"): never suggested or offered to add again. */
+    companies_replaced: z.array(z.string().trim().toLowerCase().min(1)).default([]),
     alerts: z
       .object({
         telegram: z.boolean().default(false),

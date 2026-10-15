@@ -268,6 +268,13 @@ describe("scan", () => {
     expect(meta.runs[0]!.moves?.map((m) => `${m.from.slug}>${m.to.slug}`)).toEqual(["oldco>leverco2"]);
   });
 
+  it("never suggests a board you replaced with a new link", async () => {
+    const dir = setup([...DIRECTORY, entry("lever:leverco2", { name: "Old Co" })]);
+    const cfg = { ...config(`  - { name: "Old Co", ats: ashby, slug: "oldco" }`), companies_replaced: ["lever:leverco2"] };
+    const r = await scan(cfg, { dataDir: dir, http: fakeHttp(routes).http, now, scope: "mine" });
+    expect(r.moves).toEqual([]);
+  });
+
   it("offers a move RawJobs accepted for everyone, marked as checked, even when the old board only times out", async () => {
     const dir = setup([...DIRECTORY, entry("lever:newco", { name: "Something Else" })]);
     const file = join(dir, "catalog", "directory.json");

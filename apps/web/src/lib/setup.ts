@@ -188,6 +188,8 @@ export type Draft = {
   scans: Config["scans"];
   /** Companies never shown ("ats:slug" keys). */
   muted: string[];
+  /** Old boards replaced by a new link ("ats:slug" keys): not suggested again. */
+  replaced: string[];
   /** Furthest wizard step visited, so "Continue setup" can resume there. */
   furthestStep: number;
   /** Profile block from the AI master-resume answer, used for suggestions. */
@@ -221,6 +223,7 @@ export function emptyDraft(): Draft {
     directory: { auto_update: true, share_additions: true },
     scans: { background: true, industry_boost: true },
     muted: [],
+    replaced: [],
     furthestStep: 0,
   };
 }
@@ -287,6 +290,7 @@ export function draftFromConfig(input: unknown): Draft {
     directory: { auto_update: directory.auto_update !== false, share_additions: directory.share_additions !== false },
     scans: { background: scans.background !== false, industry_boost: scans.industry_boost !== false },
     muted: strings(c.companies_muted).map((k) => k.toLowerCase()),
+    replaced: strings(c.companies_replaced).map((k) => k.toLowerCase()),
     furthestStep: STEPS.length,
     family: inferFamily(strings(t.include)),
   };
@@ -362,6 +366,7 @@ export function draftToConfig(d: Draft): Config {
     },
     companies,
     companies_muted: d.muted,
+    companies_replaced: d.replaced ?? [],
     alerts: d.alerts,
     directory: d.directory,
     scans: d.scans ?? { background: true, industry_boost: true },
