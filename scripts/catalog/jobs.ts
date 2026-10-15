@@ -29,6 +29,7 @@ import {
   JOB_BOARDS,
   jobCompanyKey,
   JOB_FEED_SCHEMA,
+  HttpError,
   NotModifiedError,
   refOfEntry,
   type CompanyRef,
@@ -79,13 +80,15 @@ const CI_HOST_DELAYS: Record<string, number> = {
 const ETAG_HOSTS = new Set(["boards-api.greenhouse.io", "api.lever.co", "api.eu.lever.co", "api.ashbyhq.com"]);
 /** Entries not refreshed for this long are dropped. */
 const DROP_AFTER_DAYS = 7;
-/** A run-over-run change this large in a system's jobs (or all jobs or companies) is flagged for a look. */
+/** A run-over-run change this large in the jobs of the same companies (or a fall this large in companies) is flagged. */
 const ALERT_CHANGE = 0.2;
 /** A system whose boards fail this often (of at least ALERT_MIN tried) is flagged. */
 const ALERT_FAILED = 0.3;
 const ALERT_MIN = 20;
 /** This many failed boards in a row stops a system for the run (a blocked runner, across all its hosts). */
 const BREAK_ATS_AFTER = 100;
+/** Failed boards printed per system and reason in the run log. */
+const FAIL_EXAMPLES = 3;
 /** Vague-location jobs ("3 Locations") looked up per company per run; the rest wait for the next run. */
 const DESCRIBES_PER_COMPANY = 25;
 
@@ -103,6 +106,10 @@ type AtsStats = {
   badRows: number;
   tripped: boolean;
   seconds: number;
+  /** Failed boards by reason ("HTTP 429", "timeout"), so an alert says what went wrong. */
+  reasons?: Record<string, number>;
+  /** Jobs before and after of the companies in both runs: a growing directory alone moves no alert. */
+  same?: { before: number; after: number };
 };
 type GroupFile = { group: string; generated_at: string; seconds: number; shards: JobFeedManifest["shards"]; stats: Record<string, AtsStats>; http: HttpClient["stats"] };
 
@@ -260,7 +267,11 @@ async function crawl(out: string, group: string, generated: string, directoryFil
               streak = 0;
             } else {
               s.failed++;
-              if (process.env.FEED_DEBUG) console.error(`${key}: ${(err as Error).message}`);
+              const reason = failReason(err);
+              const reasons = (s.reasons ??= {});
+              reasons[reason] = (reasons[reason] ?? 0) + 1;
+              // A few examples per reason in the run log; all of them with FEED_DEBUG.
+              if (process.env.FEED_DEBUG || reasons[reason] <= FAIL_EXAMPLES) console.error(`${ats} failed: ${key}: ${(err as Error).message}`);
               keep(key);
               // A blocked runner fails every board of a system, across all its hosts: stop asking.
               if (++streak >= BREAK_ATS_AFTER) s.tripped = true;
@@ -273,8 +284,15 @@ async function crawl(out: string, group: string, generated: string, directoryFil
       s.companies = result.shards[ats]!.companies;
       s.jobs = result.shards[ats]!.jobs;
       s.seconds = Math.round((Date.now() - t0) / 1000);
+      s.same = { before: 0, after: 0 };
+      for (const [key, c] of Object.entries(companies)) {
+        const p = previous[key];
+        if (!p) continue;
+        s.same.before += p.jobs.length;
+        s.same.after += c.jobs.length;
+      }
       console.error(
-        `${ats}: ${s.companies} companies, ${s.jobs} jobs (${s.fetched} fetched, ${s.notModified} unchanged, ${s.failed} failed, ${s.skipped} skipped${s.tripped ? " after too many failures in a row" : ""}, ${s.partial} capped, ${s.described} places looked up, ${s.badRows} malformed postings) in ${s.seconds} s`,
+        `${ats}: ${s.companies} companies, ${s.jobs} jobs (${s.fetched} fetched, ${s.notModified} unchanged, ${s.failed} failed${s.failed ? ` [${describeReasons(s.reasons)}]` : ""}, ${s.skipped} skipped${s.tripped ? " after too many failures in a row" : ""}, ${s.partial} capped, ${s.described} places looked up, ${s.badRows} malformed postings) in ${s.seconds} s`,
       );
     }),
   );
@@ -288,10 +306,39 @@ async function crawl(out: string, group: string, generated: string, directoryFil
 
 export type Alert = { ats?: string; text: string };
 
+/** Why a board failed, grouped across boards: "HTTP 429", "timeout", or the message without its URLs and names. */
+export function failReason(err: unknown): string {
+  if (err instanceof HttpError && err.status) return `HTTP ${err.status}`;
+  const message = err instanceof Error ? err.message : String(err);
+  if (/timed out/i.test(message)) return "timeout";
+  return (
+    message
+      .replace(/\s*\(https?:\/\/[^)]*\)/g, "")
+      .replace(/https?:\/\/\S+/g, "<url>")
+      .replace(/"[^"]*"/g, '"…"')
+      .replace(/\b[a-z0-9-]+(\.[a-z0-9-]+)*\.[a-z]{2,}\b/gi, "<host>")
+      .replace(/\d+/g, "N")
+      .slice(0, 80) || "unknown"
+  );
+}
+
+/** "HTTP 429 ×600, timeout ×259": most common first. */
+export function describeReasons(reasons: Record<string, number> | undefined, max = 3): string {
+  const sorted = Object.entries(reasons ?? {}).sort((a, b) => b[1] - a[1]);
+  const shown = sorted.slice(0, max).map(([r, n]) => `${r} ×${n}`);
+  if (sorted.length > max) shown.push(`${sorted.length - max} more`);
+  return shown.join(", ");
+}
+
+/** A swing in the jobs of the companies in both runs, or undefined when it's small (or too few jobs to tell). */
+export function sameSwing(same: { before: number; after: number } | undefined): string | undefined {
+  if (!same || same.before < 100 || Math.abs(same.after - same.before) / same.before <= ALERT_CHANGE) return undefined;
+  return `jobs at the same companies ${same.before} -> ${same.after}`;
+}
+
 /** Every group's shards into the published files. */
 function merge(out: string, generated: string) {
   const previousManifest = readJson<JobFeedManifest>(join(out, "jobs-manifest.json"));
-  const previousStats = readJson<{ ats_jobs?: Record<string, number> }>(join(out, "stats.json"));
   const stamp = stampOf(generated);
   const everyone: JobFeedShard["companies"] = {};
   const byAts: Record<string, JobFeedShard["companies"]> = {};
@@ -319,11 +366,11 @@ function merge(out: string, generated: string) {
   for (const [ats, s] of Object.entries(stats)) {
     if (!s.fresh) continue;
     const tried = s.fetched + s.notModified + s.failed;
-    if (s.tripped) alerts.push({ ats, text: `${ats}: stopped after ${BREAK_ATS_AFTER} failed boards in a row (${s.failed} failed, ${s.skipped} skipped); a host may be blocking the runner` });
-    else if (tried >= ALERT_MIN && s.failed / tried > ALERT_FAILED) alerts.push({ ats, text: `${ats}: ${Math.round((100 * s.failed) / tried)}% of ${tried} boards failed` });
-    const before = previousStats?.ats_jobs?.[ats];
-    const after = atsJobs[ats] ?? 0;
-    if (before && before >= 100 && Math.abs(after - before) / before > ALERT_CHANGE) alerts.push({ ats, text: `${ats}: jobs ${before} -> ${after}` });
+    const why = s.reasons ? ` (${describeReasons(s.reasons)})` : "";
+    if (s.tripped) alerts.push({ ats, text: `${ats}: stopped after ${BREAK_ATS_AFTER} failed boards in a row (${s.failed} failed, ${s.skipped} skipped)${why}; a host may be blocking the runner` });
+    else if (tried >= ALERT_MIN && s.failed / tried > ALERT_FAILED) alerts.push({ ats, text: `${ats}: ${Math.round((100 * s.failed) / tried)}% of ${tried} boards failed${why}` });
+    const swing = sameSwing(s.same);
+    if (swing) alerts.push({ ats, text: `${ats}: ${swing}` });
   }
 
   // The first format: the original five systems, as before (five columns, no capped flag).
@@ -341,12 +388,11 @@ function merge(out: string, generated: string) {
     manifest.shards[ats] = writeShard(out, ats, stamp, { schema: JOB_FEED_SCHEMA, ats, generated_at: generated, companies: slim });
   }
   const total = (m: JobFeedManifest | undefined, f: "jobs" | "companies") => Object.values(m?.shards ?? {}).reduce((n, x) => n + x[f], 0);
+  // Its jobs are watched per system above. More companies is the directory growing; far fewer means boards dropped.
   if (previousManifest) {
-    for (const f of ["jobs", "companies"] as const) {
-      const before = total(previousManifest, f);
-      const after = total(manifest, f);
-      if (before > 0 && Math.abs(after - before) / before > ALERT_CHANGE) alerts.push({ text: `first format ${f}: ${before} -> ${after}` });
-    }
+    const before = total(previousManifest, "companies");
+    const after = total(manifest, "companies");
+    if (before > 0 && (before - after) / before > ALERT_CHANGE) alerts.push({ text: `first format companies: ${before} -> ${after}` });
   }
   // The previous run's shards stay published one more run: an app may be part-way through downloading them.
   const current = new Set(Object.values(manifest.shards).map((x) => x.file));
