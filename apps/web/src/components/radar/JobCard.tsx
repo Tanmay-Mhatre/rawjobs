@@ -6,7 +6,7 @@ import type { JobGroup } from "../../lib/filters";
 import { atsLabel, evergreenReason, isOlder } from "../../lib/filters";
 import { isRoleStale, staleReasons } from "../../lib/stale";
 import { cleanLocation, companyName, eligibilityNotes, formatSalary, jobTitle, placeSummary, postedOrSeen, shortAge, timeAgo, workplaceBeside } from "../../lib/format";
-import { STATUS_LABEL, type Entry, type Status } from "../../lib/userState";
+import { type Entry, followUpDue, type Status, statusLabel } from "../../lib/userState";
 import { IconButton, ScoreBadge, SourceTag } from "../primitives";
 import { cx } from "../ui";
 
@@ -128,7 +128,8 @@ export const JobCard = forwardRef<HTMLLIElement, Props>(function JobCard({ group
   const workplace = workplaceBeside(place, WORKPLACE[job.workplace]);
   if (workplace) meta.push(workplace);
   // Your own progress always shows; then the one fact that matters most.
-  if (status && status !== "dismissed") meta.push(<span className="text-ink">{STATUS_LABEL[status]}</span>);
+  if (entry && status && status !== "dismissed")
+    meta.push(followUpDue(entry) ? <span className="text-warning-text">Applied, follow up now</span> : <span className="text-ink">{statusLabel(entry)}</span>);
   const flag = rowFlag(group);
   if (flag) meta.push(flag);
 

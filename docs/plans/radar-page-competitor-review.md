@@ -6,8 +6,9 @@ folded into the phases below.
 
 Progress:
 - Phase 1 shipped in PR #243.
-- Phase 2 is the PR that adds this note.
-- Phases 3–5 wait for the user's go.
+- Phase 2 shipped in PR #245.
+- Phase 3 is the PR that adds this line.
+- Phases 4–5 wait for the user's go.
 
 ## The team
 

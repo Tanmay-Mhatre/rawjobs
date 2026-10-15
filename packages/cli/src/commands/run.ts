@@ -17,6 +17,7 @@ import {
   finishedMessage,
   sendTelegram,
   telegramSecrets,
+  remindFollowUps,
   recordScheduledRun,
   type MergeResult,
   type RunResult,
@@ -243,6 +244,11 @@ export async function cmdRun(args: string[]): Promise<number> {
       const notified = values.notify && !values["dry-run"] ? await notifyScan(config, result, merged, scope) : undefined;
       if (notified)
         console.error(`Telegram: ${notified === "sent" ? "sent the new jobs" : notified === "nothing-new" ? "nothing new to send" : notified === "off" ? "not set up (Settings → Alerts)" : notified}`);
+      // Jobs you applied to that are due a follow-up ride along with the scan's alerts.
+      if (values.notify && !values["dry-run"] && alertsOn(config)) {
+        const followUps = await remindFollowUps(dataDir, telegramSecrets());
+        if (followUps !== "nothing-due") console.error(`Telegram: ${followUps === "sent" ? "sent a follow-up reminder" : followUps}`);
+      }
       let newMatches = fresh;
       if (wantsBackground(config, values, scope, { stopped, fallback })) {
         const bg = await backgroundCheck(config, session, stage1Started);

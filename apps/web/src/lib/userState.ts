@@ -18,12 +18,28 @@ export const STATUS_LABEL: Record<Status, string> = {
   dismissed: "Not interested",
 };
 
+/** How a job you're out of the running for ended (status "rejected", shown as Closed). */
+export const CLOSED_AS = { rejected: "Rejected", withdrew: "I withdrew", "no-response": "No response" } as const;
+export type ClosedAs = keyof typeof CLOSED_AS;
+
+/** Days after you apply that RawJobs reminds you to follow up. */
+export const FOLLOW_UP_DAYS = 7;
+const HISTORY_MAX = 20;
+
 /** Your own tracking for one job. Saved on this computer (profile/tracking.json) and in this browser; export/import to move it. */
 export type Entry = {
   status?: Status;
   note?: string;
   /** Why it's Not interested, when you said (one tap, optional). Only kept while the status is "dismissed". */
   reason?: Reason;
+  /** Each status change and when, oldest first; `null` when the status was cleared. */
+  history?: { status: Status | null; at: string }[];
+  /** How it ended, only while the status is "rejected". */
+  closedAs?: ClosedAs;
+  /** When to chase it (YYYY-MM-DD): a week after you apply, yours to change. Only while the status is "applied". */
+  followUp?: string;
+  /** Which CV you sent ("Fintech PM v3"). */
+  cv?: string;
   updatedAt: string;
   /** Copy of the job's basics, so the pipeline survives the job leaving jobs.json. */
   snapshot: { title: string; company: string; url: string; location: string; score: number };
@@ -36,18 +52,47 @@ export type JobLike = Pick<Job, "id" | "title" | "company" | "url" | "location" 
 
 const KEY = "rawjobs.state.v1";
 
+/** What a change to one job's tracking can set; a key given as undefined clears it. */
+export type EntryPatch = Partial<Pick<Entry, "status" | "note" | "reason" | "closedAs" | "followUp" | "cv">>;
+
+/** "2026-10-22": a date `days` after `iso`, in local time. */
+export function dayAfter(iso: string, days: number): string {
+  const d = new Date(iso);
+  d.setDate(d.getDate() + days);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
+
+/** Today as YYYY-MM-DD, in local time. */
+export const today = (now = new Date()) => dayAfter(now.toISOString(), 0);
+
+/** The follow-up date has come (applied, and the date is today or past). */
+export const followUpDue = (e: Entry | undefined, now = new Date()) => !!e?.followUp && e.status === "applied" && e.followUp <= today(now);
+
 /** One job's entry after a change; null when nothing is left to keep. */
-function applyPatch(prev: Entry | undefined, job: JobLike, patch: Partial<Pick<Entry, "status" | "note" | "reason">>): Entry | null {
+export function applyPatch(prev: Entry | undefined, job: JobLike, patch: EntryPatch, now = new Date().toISOString()): Entry | null {
   const next: Entry = {
     ...prev,
     ...patch,
-    updatedAt: new Date().toISOString(),
+    updatedAt: now,
     snapshot: { title: job.title, company: job.company, url: job.url, location: job.location, score: job.score },
   };
-  // A reason belongs to Not interested: moving the job anywhere else drops it.
+  const changed = "status" in patch && patch.status !== prev?.status;
+  if (changed) {
+    // Tracked before history existed: its current status counts from when it was last changed.
+    const before = prev?.history ?? (prev?.status ? [{ status: prev.status, at: prev.updatedAt }] : []);
+    next.history = [...before, { status: patch.status ?? null, at: now }].slice(-HISTORY_MAX);
+  }
+  // Each extra belongs to one status: moving the job anywhere else drops it.
   if (next.status !== "dismissed") delete next.reason;
-  return next.status || next.note ? next : null;
+  if (next.status !== "rejected") delete next.closedAs;
+  if (next.status !== "applied") delete next.followUp;
+  else if (changed && !("followUp" in patch)) next.followUp = dayAfter(now, FOLLOW_UP_DAYS);
+  for (const k of ["note", "cv", "followUp", "closedAs", "reason"] as const) if (!next[k]) delete next[k];
+  return next.status || next.note || next.cv ? next : null;
 }
+
+/** "Rejected", or how a closed job ended ("I withdrew"). */
+export const statusLabel = (e: Pick<Entry, "status" | "closedAs">) => (e.status === "rejected" && e.closedAs ? CLOSED_AS[e.closedAs] : e.status ? STATUS_LABEL[e.status] : "");
 
 function withEntry(s: UserState, id: string, entry: Entry | null): UserState {
   if (entry) return { ...s, [id]: entry };
@@ -76,7 +121,7 @@ export function useUserState() {
     return () => window.removeEventListener("storage", onStorage);
   }, []);
 
-  const update = useCallback((job: JobLike, patch: Partial<Pick<Entry, "status" | "note" | "reason">>) => {
+  const update = useCallback((job: JobLike, patch: EntryPatch) => {
     setState((s) => withEntry(s, job.id, applyPatch(s[job.id], job, patch)));
   }, []);
 
@@ -115,11 +160,18 @@ function entryFrom(v: unknown): Entry | undefined {
   if (!snap || typeof snap !== "object" || !isText(snap.title) || !isText(snap.company) || !isText(e.updatedAt)) return undefined;
   if (e.status !== undefined && !(isText(e.status) && STATUSES.has(e.status))) return undefined;
   if (e.note !== undefined && !isText(e.note)) return undefined;
-  if (!e.status && !e.note) return undefined;
+  if (!e.status && !e.note && !isText(e.cv)) return undefined;
+  const history = Array.isArray(e.history)
+    ? e.history.filter((h): h is { status: Status | null; at: string } => !!h && isText(h.at) && (h.status === null || (isText(h.status) && STATUSES.has(h.status))))
+    : [];
   return {
     ...(e.status ? { status: e.status as Status } : {}),
     ...(e.note ? { note: e.note as string } : {}),
     ...(e.status === "dismissed" && isText(e.reason) ? { reason: e.reason as Reason } : {}),
+    ...(history.length ? { history } : {}),
+    ...(e.status === "rejected" && isText(e.closedAs) && e.closedAs in CLOSED_AS ? { closedAs: e.closedAs as ClosedAs } : {}),
+    ...(e.status === "applied" && isText(e.followUp) && /^\d{4}-\d{2}-\d{2}$/.test(e.followUp) ? { followUp: e.followUp } : {}),
+    ...(isText(e.cv) && e.cv ? { cv: e.cv } : {}),
     updatedAt: e.updatedAt,
     snapshot: {
       title: snap.title,

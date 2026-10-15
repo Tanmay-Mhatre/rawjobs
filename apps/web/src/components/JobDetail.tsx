@@ -4,7 +4,26 @@ import { SENIORITY_LEVELS } from "@rawjobs/core/catalog/seniority";
 import { fromJobBoard } from "@rawjobs/core/dashboard";
 import { sponsorOf, sponsorSentence, sponsorTitle, VISA_REGISTERS } from "@rawjobs/core/catalog/visa";
 import { matchesTitle, safeUrl } from "@rawjobs/core/text";
-import { ArrowLeft, Bookmark, Check, ChevronDown, ChevronUp, CircleCheck, Copy, Ellipsis, ExternalLink, Info, LoaderCircle, Maximize2, Plus, RefreshCw, Star, StickyNote, X } from "lucide-react";
+import {
+  ArrowLeft,
+  Bookmark,
+  Check,
+  ChevronDown,
+  ChevronUp,
+  CircleCheck,
+  Copy,
+  Ellipsis,
+  ExternalLink,
+  FileText,
+  Info,
+  LoaderCircle,
+  Maximize2,
+  Plus,
+  RefreshCw,
+  Star,
+  StickyNote,
+  X,
+} from "lucide-react";
 import { Fragment, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { copyText } from "../lib/clipboard";
 import { useDescription, useHiring, type Job, type Profile } from "../lib/data";
@@ -12,7 +31,7 @@ import { cleanLocation, companyName, eligibilityNotes, formatDate, formatSalary,
 import { atsLabel, evergreenReason, INDEX_MAX_AGE_DAYS, isOlder } from "../lib/filters";
 import { isRoleStale, isStale, staleReasons } from "../lib/stale";
 import { load, save } from "../lib/storage";
-import { PIPELINE, STATUS_LABEL, type Entry, type Status } from "../lib/userState";
+import { CLOSED_AS, type ClosedAs, type Entry, type EntryPatch, followUpDue, PIPELINE, STATUS_LABEL, type Status, statusLabel } from "../lib/userState";
 import { Dialog } from "./Dialog";
 import { HiringActivity } from "./HiringActivity";
 import { ReasonPicker, useNotForMe } from "./NotForMe";
@@ -29,7 +48,7 @@ export type JobDetailProps = {
   industries?: string[];
   moreFromCompany?: Job[];
   companyHidden?: boolean;
-  onUpdate: (patch: { status?: Status; note?: string }) => void;
+  onUpdate: (patch: EntryPatch) => void;
   onApply?: (job: Job) => void;
   onHideCompany?: (hidden: boolean) => void;
   onOpenJob?: (job: Job) => void;
@@ -242,6 +261,12 @@ export function JobDetail(p: JobDetailProps) {
     // Beside the list the job leaves at once, so the reasons go in a toast; in a drawer they're right below.
     if (next === "dismissed" && !p.onClose) notForMe?.askWhy(job, status);
   };
+  /** The progress dropdown's value: a status, or "rejected:<how it ended>". */
+  const setProgress = (value: string) => {
+    const [next, closedAs] = value.split(":") as [Status | "", ClosedAs | undefined];
+    if (next === "rejected") p.onUpdate({ status: "rejected", closedAs: closedAs ?? "rejected" });
+    else setStatus(next || undefined);
+  };
 
   const preview = !p.expanded && !fullText && (description?.length ?? 0) > PREVIEW_CHARS;
   const descriptionSection = (
@@ -353,16 +378,24 @@ export function JobDetail(p: JobDetailProps) {
               <label htmlFor={`status-${job.id}`} className="font-medium text-ink">
                 Your progress
               </label>
-              <Select id={`status-${job.id}`} value={status ?? ""} onChange={(e) => setStatus((e.target.value || undefined) as Status | undefined)}>
+              <Select id={`status-${job.id}`} value={progressValue(entry)} onChange={(e) => setProgress(e.target.value)}>
                 <option value="">Not tracked</option>
-                {[...PIPELINE, "dismissed" as const].map((s) => (
+                {PIPELINE.filter((s) => s !== "rejected").map((s) => (
                   <option key={s} value={s}>
                     {STATUS_LABEL[s]}
                   </option>
                 ))}
+                {(Object.keys(CLOSED_AS) as ClosedAs[]).map((c) => (
+                  <option key={c} value={`rejected:${c}`}>
+                    Closed: {CLOSED_AS[c].toLowerCase()}
+                  </option>
+                ))}
+                <option value="dismissed">{STATUS_LABEL.dismissed}</option>
               </Select>
               <NotesField key={job.id} id={`notes-${job.id}`} note={entry?.note ?? ""} onSave={(note) => p.onUpdate({ note: note || undefined })} />
+              <CvField key={`cv:${job.id}`} id={`cv-${job.id}`} cv={entry?.cv ?? ""} onSave={(cv) => p.onUpdate({ cv: cv || undefined })} />
             </div>
+            {entry && <ProgressLine entry={entry} onFollowUp={(followUp) => p.onUpdate({ followUp: followUp || undefined })} id={`follow-${job.id}`} />}
             {status === "dismissed" && <ReasonPicker key={`why:${job.id}`} job={job} label="Why not? Optional." live />}
           </section>
 
@@ -763,6 +796,68 @@ function industryText(points: number, job: Job, profile: Profile, yours: boolean
   if (yours) return "One of your companies, so its industry counts";
   if (!profile.industries.length) return "No industries picked, so every company counts";
   return "In one of your industries";
+}
+
+/** The progress dropdown's value for an entry: its status, or "rejected:<how it ended>" for a closed job. */
+const progressValue = (e: Entry | undefined) => (e?.status === "rejected" ? `rejected:${e.closedAs ?? "rejected"}` : (e?.status ?? ""));
+
+const shortDay = (iso: string) => new Date(iso.length === 10 ? `${iso}T12:00:00` : iso).toLocaleDateString(undefined, { month: "short", day: "numeric" });
+
+/**
+ * Where a tracked job stands, with dates: "Saved Oct 15 › Applied Oct 16", then, while applied, when to
+ * follow up (changeable, amber once it's due).
+ */
+function ProgressLine({ entry, id, onFollowUp }: { entry: Entry; id: string; onFollowUp: (date: string) => void }) {
+  // Only the steps still standing: a status set and later cleared drops out of the line.
+  const steps = (entry.history ?? []).filter((h): h is { status: Status; at: string } => h.status !== null).slice(-4);
+  const due = followUpDue(entry);
+  if (!steps.length && entry.status !== "applied") return null;
+  return (
+    <div className="flex flex-wrap items-center gap-x-4 gap-y-2 type-small text-muted">
+      {steps.length > 0 && (
+        <p>
+          {steps.map((h, i) => (
+            <Fragment key={h.at}>
+              {i > 0 && <span aria-hidden> › </span>}
+              {statusLabel({ status: h.status, closedAs: h.status === entry.status ? entry.closedAs : undefined })} {shortDay(h.at)}
+            </Fragment>
+          ))}
+        </p>
+      )}
+      {entry.status === "applied" && (
+        <label htmlFor={id} className={cx("flex items-center gap-2", due && "font-medium text-warning-text")}>
+          {due ? "Follow up now" : "Follow up on"}
+          <input id={id} type="date" value={entry.followUp ?? ""} onChange={(e) => onFollowUp(e.target.value)} className="h-8 rounded-md border border-line bg-raised px-2 type-small text-ink" />
+        </label>
+      )}
+    </div>
+  );
+}
+
+/** Which CV you sent: folded to a small button until there is one, saved on blur. */
+function CvField({ id, cv, onSave }: { id: string; cv: string; onSave: (cv: string) => void }) {
+  const [open, setOpen] = useState(!!cv);
+  if (!open)
+    return (
+      <Button size="sm" variant="quiet" icon={<FileText className="rj-icon" />} onClick={() => setOpen(true)}>
+        CV used
+      </Button>
+    );
+  return (
+    <label htmlFor={id} className="flex items-center gap-2 type-small text-muted">
+      CV used
+      <input
+        id={id}
+        // Opened from "CV used": straight into typing.
+        // biome-ignore lint/a11y/noAutofocus: focus moves into what was just opened, as the pattern expects
+        autoFocus={!cv}
+        defaultValue={cv}
+        onBlur={(e) => e.target.value.trim() !== cv && onSave(e.target.value.trim())}
+        placeholder="Fintech PM v3"
+        className="h-8 w-40 rounded-md border border-line bg-inset px-2 type-small text-ink placeholder:text-muted"
+      />
+    </label>
+  );
 }
 
 /**
