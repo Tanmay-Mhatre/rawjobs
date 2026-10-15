@@ -83,6 +83,9 @@ function fakeIssues() {
       issues.get(n)!.state = "CLOSED";
       issues.get(n)!.comments.push(comment);
     },
+    comment: (n, body) => {
+      issues.get(n)!.comments.push(body);
+    },
   };
   return { api, issues };
 }

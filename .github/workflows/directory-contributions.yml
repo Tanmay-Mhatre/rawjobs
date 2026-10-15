@@ -3,7 +3,8 @@
 # With nothing in the inbox, spend up to 30 minutes on the board-check backlog instead, so it
 # drains between weekly rebuilds (the results ship with the next release).
 # Each run also reads the public job boards for links to companies' own boards (feed-boards.ts).
-# Then review moved careers pages users reported (record-only: scripts/catalog/moves.ts).
+# Then review moved careers pages users reported (scripts/catalog/moves.ts): gates, company-page
+# evidence, review issues, auto-accept when MOVES_AUTO_ACCEPT is set (docs/plans/auto-accept-moves.md).
 # Setup: docs/shared-directory.md
 name: Directory · contributions
 
@@ -242,7 +243,8 @@ jobs:
           GH_TOKEN: ${{ secrets.DATA_REPO_TOKEN }}
           ISSUES_TOKEN: ${{ github.token }}
           DENYLIST_FILE: ${{ github.workspace }}/directory-repo/denylist.json
-          # Placeholder, off: auto-accept isn't built yet (scripts/catalog/lib/moves.ts autoAcceptEnabled).
+          # Off (unset): shadow mode, the verdict is only shown on review issues. "true": moves with
+          # company-owned evidence are accepted without a person (scripts/catalog/lib/moves.ts autoAcceptEnabled).
           AUTO_ACCEPT: ${{ vars.MOVES_AUTO_ACCEPT || '' }}
         # The gates need the current directory: the live release's (merged.json isn't kept between runs).
         run: |
@@ -258,16 +260,19 @@ jobs:
         id: moves_commit
         continue-on-error: true
         working-directory: directory-repo
-        # The approval workflow may have pushed moves.json since the checkout: rebase onto it.
+        # The approval workflow may have pushed moves.json since the checkout: rebase onto it, and check
+        # there's still one active move per old board before pushing (both may have accepted one).
         run: |
           git config user.name "rawjobs-bot"
           git config user.email "rawjobs-bot@users.noreply.github.com"
-          git add moves-pending.json
-          [ -f moves.json ] && git add moves.json
+          for f in moves-pending.json moves.json moves-blocked.json moves-baselines.json; do [ -f "$f" ] && git add "$f"; done
           if git diff --cached --quiet; then echo "Nothing changed."; exit 0; fi
-          git commit -m "Move reports: $(jq -r '"\(.inbox) new, \(.passed) passing, \(.held) held, \(.rejected) rejected"' "$RUNNER_TEMP/moves-summary.json")"
+          git commit -m "Move reports: $(jq -r '"\(.inbox) new, \(.passed) passing, \(.held) held, \(.rejected) rejected, \(.accepted) accepted"' "$RUNNER_TEMP/moves-summary.json")"
           for try in 1 2 3; do
-            git pull --rebase --quiet && git push && exit 0
+            if git pull --rebase --quiet; then
+              (cd .. && pnpm exec tsx scripts/catalog/moves-lint.ts directory-repo/moves.json) || exit 1
+              git push && exit 0
+            fi
             sleep $((try * 5))
           done
           exit 1
@@ -301,17 +306,21 @@ jobs:
             exit 0
           fi
           {
-            echo "### Move reports (record-only)"
+            echo "### Move reports (auto-accept $(jq -r 'if .auto_accept then "on" else "off: shadow mode" end' "$s"))"
             echo
             echo "| New reports | Passing (review issue) | Held | Rejected | Removals | Expired | Accepted | Issues opened |"
             echo "|---|---|---|---|---|---|---|---|"
             jq -r '"| \(.inbox) | \(.passed) | \(.held) | \(.rejected) | \(.removals) | \(.expired) | \(.accepted) | \(.issues_opened) |"' "$s"
+            echo
+            echo "| Would auto-accept | Fast-track | Page unreadable | Unreported board | Auto confirmed | Auto reverted | Re-check unknown | Blocked | Baselines |"
+            echo "|---|---|---|---|---|---|---|---|---|"
+            jq -r '"| \(.would_auto) | \(.fast_track) | \(.evidence_unknown) | \(.unreported) | \(.confirmed) | \(.reverted) | \(.reverify_unknown) | \(.blocked_added) | \(.baselines_taken) |"' "$s"
             jq -r 'if .cap_hit then "\nThe check cap (50 a run) was hit: the rest wait for the next run." else empty end' "$s"
           } >> "$GITHUB_STEP_SUMMARY"
-          spike=$(jq '(.held + .rejected) > 100 or (.rejected > 50)' "$s")
+          spike=$(jq '(.held + .rejected) > 100 or (.rejected > 50) or (.reverted > 0)' "$s")
           if [ "$spike" != true ] && [ "$INBOX_FULL" != true ] && [ "$(jq .cap_hit "$s")" != true ]; then exit 0; fi
           title="Move reports need a look"
-          body=$(printf 'Unusual move reports in this run: %s\n\nA spike of held or rejected reports can mean someone is flooding the inbox; a full inbox or a hit check cap means reports wait longer. Nothing is accepted without a maintainer.\n\nRun: %s' "$(jq -c 'del(.processed, .rejections)' "$s")" "$RUN_URL")
+          body=$(printf 'Unusual move reports in this run: %s\n\nA spike of held or rejected reports can mean someone is flooding the inbox; a full inbox or a hit check cap means reports wait longer; a reverted auto move means a company page now points somewhere else (it is blocked for good). Auto-accept is %s.\n\nRun: %s' "$(jq -c 'del(.processed, .rejections)' "$s")" "$(jq -r 'if .auto_accept then "on" else "off" end' "$s")" "$RUN_URL")
           open=$(gh issue list -R "$REPO" --state open --search "\"$title\" in:title" --json number -q '.[0].number')
           if [ -n "$open" ]; then gh issue comment "$open" -R "$REPO" --body "$body"; else gh issue create -R "$REPO" --title "$title" --body "$body"; fi
 

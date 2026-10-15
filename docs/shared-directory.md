@@ -35,7 +35,7 @@ user is ever uploaded.
 | Directory download | `packages/core/src/directory.ts`, `rawjobs directory update` | Reads `manifest.json`, downloads newer files, checks SHA-256, swaps them in. The dev server runs it weekly in the background (`directory.auto_update`). |
 | Contribution inbox | `services/contribute` | Cloudflare Worker. `POST /v1/contributions` (public, rate-limited, shape-checked, capped at `DAILY_CAP` boards a day for everyone, repeats within 7 days skipped); `GET /v1/pending` (500 a page, `?cursor=` for the next) and `POST /v1/ack` (up to 1,000 ids) for the workflow (token). Move reports ("this careers page moved"): `POST /v1/moves` (public, same rate limiter, up to 10 moves, each two boards and a company name; at most `MOVES_DAILY_CAP` new ones a day; distinct reporters counted with a keyed hash of IP + old board, made with `REPORTER_SECRET`, 503 without it); `GET /v1/moves/pending` (reporter count only, never the hashes) and `POST /v1/moves/ack` for the workflow (token). Moves are kept under `m:` keys, which `/v1/pending` never lists. |
 | Contributions workflow | `.github/workflows/directory-contributions.yml` | Every 3 hours: read the job boards for links to companies' own boards (`feed-boards.ts`, see [Coverage](#coverage)), accept, publish incrementally, commit `contributions.json`, acknowledge. Then review move reports (below). |
-| Move review | `scripts/catalog/moves.ts`, `moves-approve.ts`, `lib/moves.ts`, `.github/workflows/directory-move-approval.yml` | Moved careers pages users report: checked and recorded every 3 hours by the contributions workflow, approved by a maintainer on a GitHub issue. Record-only: nothing is accepted automatically. See [Moved careers pages](#moved-careers-pages). |
+| Move review | `scripts/catalog/moves.ts`, `moves-approve.ts`, `lib/moves.ts`, `.github/workflows/directory-move-approval.yml` | Moved careers pages users report: checked and recorded every 3 hours by the contributions workflow, approved by a maintainer on a GitHub issue, or accepted automatically with company-owned evidence when `MOVES_AUTO_ACCEPT` is set. See [Moved careers pages](#moved-careers-pages). |
 | Weekly rebuild | `.github/workflows/directory-rebuild.yml` | Full rebuild and a dated release, in two jobs: `collect` gathers and checks boards, `publish` builds, gates and releases, and runs even if `collect` failed or ran out of time. The working state is saved as the `state` release, so the next run skips recently checked boards. Each collector runs under its own time cap (`scripts/catalog/capped.sh`) and may stop early without stopping the rebuild, so build and publish always get their turn. A run that doesn't publish opens a "Directory rebuild did not publish" issue. GitHub's schedules are best effort, so Monday has backup times (03:07, 05:37, 09:41, and Tuesday 03:13); each runs only if no rebuild has published in the last 5 days. The contributions, Common Crawl and job-feed workflows also start it when it's overdue (`scripts/catalog/watchdog.sh`: nothing for 8 days, or none yet this week by Monday 12:00 UTC), at most once a day and not while a "did not publish" issue is open; they also keep the scheduled workflows from being switched off after 60 quiet days. The directory runs share one concurrency group with `queue: max`, so a waiting run is never cancelled by a newer one. A published rebuild starts the site deploy. To test the workflow without publishing: `gh workflow run directory-rebuild.yml -f smoke=true` (about 25 minutes). |
 | Releases | `rawjobs-directory` releases | Every publish is a new dated release, so earlier ones stay: `directory-YYYY-MM-DD` from the weekly rebuild, `directory-YYYY-MM-DD-HHMM-shared` when users' companies are added in between. Apps read the one marked latest. **Roll back:** `gh release edit <tag> -R Tanmay-Mhatre/rawjobs-directory --latest`. |
 | Daily Common Crawl | `.github/workflows/directory-commoncrawl.yml` | 45 minutes a day of the Common Crawl URL index (the 12 newest crawls), on top of the rebuild's 35 minutes a week. Resumes per query; stops when the index keeps failing. The boards it finds are merged and checked by the next contributions run or rebuild. |
@@ -184,15 +184,22 @@ How it's applied (`scripts/catalog/lib/denylist.ts`, read from `DENYLIST_FILE`):
 ## Moved careers pages
 
 When a company's board stops working and a user finds its new one, the app can report the move
-(`POST /v1/moves` on the inbox; plan: `docs/plans/update-careers-link-plan.md`, PR 3). Moves are
-**record-only** for now: every report is checked and recorded, and a maintainer approves the good
-ones. Nothing is accepted automatically.
+(`POST /v1/moves` on the inbox; plan: `docs/plans/update-careers-link-plan.md`, PR 3). Every report
+is checked and recorded, and a maintainer approves the good ones. A move whose company page proves it
+can also be accepted automatically, but only with the `MOVES_AUTO_ACCEPT` repo variable set (see
+[Company evidence and auto-accept](#company-evidence-and-auto-accept); plan: `docs/plans/auto-accept-moves.md`).
 
 **Files in the directory repo** (written by the workflows, next to `denylist.json`):
 - `moves-pending.json`: reports waiting, keyed by the old board (`ats:slug|shard|site`), each with its
   candidate new boards, reporter counts, the old board's checks, each candidate's gate results and its
   review issue. Holds expire 30 days after the first report.
-- `moves.json`: accepted moves (`by: "review"`), and later reverts (`reverted: true`, `reverted_at`).
+- `moves.json`: accepted moves (`by: "review"` or `"auto"`), and later reverts (`reverted: true`,
+  `reverted_at`). Auto moves also keep `evidence_url`, `verified` and `confirmed_at`.
+- `moves-blocked.json`: moves nobody may make again: a maintainer closed the review, or an auto move
+  was reverted. Gate 0 rejects them, for the scheduled run and for approvals. Only editing this file
+  lifts a block.
+- `moves-baselines.json`: snapshots of company careers pages (which boards each one linked, and when),
+  taken 40 a run, so a later before/after swap can be proven.
 
 **Every 3 hours** (`directory-contributions.yml`, after the contributions): `scripts/catalog/moves.ts`
 pulls `GET /v1/moves/pending` (an inbox without it answers 404 and the steps are skipped), copies the
@@ -239,9 +246,50 @@ moved-away board, or that adds more than 50 moves since the live release. Older 
 `companies` and ignore `moves`. An approval reaches apps with the next release (the next
 contributions publish or the weekly rebuild).
 
-**Auto-accept** isn't built. `AUTO_ACCEPT` (the `MOVES_AUTO_ACCEPT` repo variable) is a placeholder
-that changes nothing yet; the TODO in `scripts/catalog/lib/moves.ts` lists the company-owned evidence
-it will need (a redirect from the old careers URL, or the company's own site linking the new board).
+### Company evidence and auto-accept
+
+Only the company itself can point at its new board, so evidence comes from one page: the
+company-hosted careers page the directory already had for the old board (its `careers_url` on a host
+that isn't a hiring system), plus that same host's homepage. Never a sibling subdomain, never anything
+a reporter or a board owner typed, never a name match (`scripts/catalog/lib/evidence.ts`).
+- **S1:** the page links exactly one hiring-system board, and it's the candidate. URLs are pulled out
+  (after undoing JSON and HTML escapes) and run through the board detectors, so `acme` never matches
+  `acme-fake`, and an Oracle board on another career site doesn't count. Several boards on the page
+  (group or subsidiary sites) go to a person.
+- **S2:** the old careers URL now redirects to the candidate, every hop before the last on the trusted host.
+- **Old board gone:** besides 404/410 on Greenhouse, Lever and Ashby, a vendor-provisioned host (Taleo,
+  Workday, Oracle, SuccessFactors) that is NXDOMAIN on two checks 24 h apart is proven gone.
+- **Domain age:** RDAP (IANA bootstrap): the domain must be over a year old, and not registered after
+  our first snapshot of the page. Some TLDs have no RDAP (`.ae`, `.io`, `.co`): unknown age means a
+  person approves.
+
+Pages are fetched by `lib/safe-fetch.ts`: https on port 443 only, every hop's host resolved and refused
+if it's private, loopback, link-local or CGNAT, redirects followed by hand (5 at most), a 2 MB body cap,
+no cookies, and a strict robots.txt (a 4xx allows, a 5xx or no answer disallows).
+
+Each passing candidate gets a **verdict**, shown in a "Company evidence" block on the review issue:
+- `auto`: S1 or S2, the old board proven gone (or a before/after swap against a snapshot from before
+  the report), a domain old enough, and not a pack company (an industry-tagged one; those always get a person);
+- `fast`: S1 or S2, but something above is missing. The issue opens with that candidate's box ticked,
+  and a maintainer adds `move-approved`;
+- `manual`: no usable evidence.
+A company page that points at a board no one reported is flagged on the issue for a person.
+
+With `MOVES_AUTO_ACCEPT` unset (the default), that's all: **shadow mode**. The run summary counts
+"would auto-accept" and fast-track, so you can see the volume before switching it on. Set it to `true`
+and the scheduled run accepts `auto` verdicts itself, at most 10 a run and 20 a day:
+- the move is written with `by: "auto"` but **not published** until a look at the company page at
+  least a day later still shows it (`confirmed_at`). Until then nothing is delisted and no app sees it;
+- the review issue is closed with the evidence;
+- for 30 days the page is checked again every 6 hours. Only a contradiction (the page now points at a
+  different board) reverts the move and blocks it for good; an unreadable or bot-blocked page doesn't,
+  it's just looked at again later. A revert opens or comments on the "Move reports need a look" issue.
+  An auto move never confirmed within those 30 days is dropped (reverted, but not blocked).
+Apps show auto moves like approved ones ("checked by RawJobs").
+
+Undo an auto move by hand: set `reverted: true` (and `reverted_at`) on it in `moves.json`, and add the
+pair to `moves-blocked.json`. Both workflows run `scripts/catalog/moves-lint.ts` after rebasing, so a
+race between an approval and an auto-accept can't leave two active moves for one old board.
 
 **Setup** (once): create the two labels in the code repo, then deploy the inbox Worker with `/v1/moves`:
 

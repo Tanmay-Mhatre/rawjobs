@@ -9,8 +9,12 @@
  *   directory.json      moves: [{ from: fromKey, to: toKey, name, accepted_at }] (accepted, not reverted)
  * A board key is `ats:slug|shard|site`, lowercased (the inbox Worker's boardKey).
  *
- * Record-only: nothing here accepts a move by itself. A move reaches moves.json only through a
- * maintainer's approval (moves-approve.ts). AUTO_ACCEPT is a placeholder; see autoAcceptEnabled.
+ *   moves-blocked.json  { version: 1, blocked: BlockedMove[] }   refused or reverted: never reviewed again
+ *   moves-baselines.json { version: 1, pages: { [dirKey]: Baseline } } (lib/evidence.ts)
+ *
+ * A move reaches moves.json through a maintainer's approval (moves-approve.ts, by: "review"), or, with
+ * AUTO_ACCEPT on, through company-owned evidence (moves.ts, by: "auto"; docs/plans/auto-accept-moves.md).
+ * An auto move ships only once a second check of that evidence, a day later, confirms it (confirmed_at).
  */
 import { createHash } from "node:crypto";
 import { careersUrl, companyKey } from "@rawjobs/core";
@@ -20,7 +24,13 @@ import type { CheckResult } from "./live-check";
 import { normalizeName, sameCompany } from "./slugs";
 
 export type MoveBoard = { ats: string; slug: string; region?: string; shard?: string; site?: string };
-export type MoveCheck = { at: string; status: CheckResult["status"]; http?: number };
+export type MoveCheck = {
+  at: string;
+  status: CheckResult["status"];
+  http?: number;
+  /** The board's own host (a vendor-provisioned one) doesn't exist in DNS. */
+  nxdomain?: true;
+};
 export type GoneVerdict = "proven" | "not_proven" | "waiting" | "live" | "unchecked";
 export type GateResult = "pass" | "hold" | "reject" | "removal";
 export type Gates = {
@@ -42,7 +52,21 @@ export type Gates = {
   /** 7. Another live board of the same company (then it's a removal, not a move). */
   other_live_board?: string;
 };
-export type Candidate = { to: MoveBoard; reporters: number; first_at: string; last_at: string; gates?: Gates; issue?: number };
+/** What the company's own page says about a candidate, and what that allows (lib/evidence.ts decide). */
+export type CandidateEvidence = {
+  at: string;
+  finding: "match" | "other" | "several" | "none" | "unknown";
+  kind?: "S1" | "S2";
+  /** auto: accepted without a person (when AUTO_ACCEPT is on); fast: the evidence holds, a person approves; manual: no usable evidence. */
+  verdict: "auto" | "fast" | "manual";
+  /** Why not auto (or not fast). */
+  reasons: string[];
+  /** The board the page points at, when it isn't this candidate. */
+  points?: string;
+  registered?: string;
+  baseline_swap?: boolean;
+};
+export type Candidate = { to: MoveBoard; reporters: number; first_at: string; last_at: string; gates?: Gates; issue?: number; evidence?: CandidateEvidence };
 export type PendingMove = {
   name: string;
   from: MoveBoard;
@@ -53,6 +77,10 @@ export type PendingMove = {
   expires_at: string;
   /** When `from` was last seen in the directory under this name (the build drops dead boards, so it may be gone since). */
   in_directory_at?: string;
+  /** The company-hosted careers page the directory had for `from` (lib/evidence.ts trustedUrlOf), kept from the first sight. */
+  trusted_url?: string;
+  /** The company page points at a board no one reported (a person checks it). */
+  unreported?: string;
 };
 export type PendingFile = { version: 1; moves: Record<string, PendingMove> };
 export type MoveRecord = {
@@ -65,11 +93,18 @@ export type MoveRecord = {
   issue?: number;
   reverted?: true;
   reverted_at?: string;
+  /** Auto moves: the company page the evidence came from, each time it was seen to still hold, and when a check a day later confirmed it (only then is it published). */
+  evidence_url?: string;
+  verified?: string[];
+  confirmed_at?: string;
 };
 export type MovesFile = { version: 1; moves: MoveRecord[] };
 export type DirectoryMove = { from: string; to: string; name: string; accepted_at: string };
 /** One row of the published directory, as far as the gates need it. */
-export type DirRow = { key: string; name: string; status?: string };
+export type DirRow = { key: string; name: string; status?: string; careers_url?: string; tags?: string[] };
+/** A move nobody may make again: a maintainer closed its review, or an auto move was reverted. Lifted only by editing the file. */
+export type BlockedMove = { from: string; to: string; at: string; why: string; issue?: number };
+export type BlockedFile = { version: 1; blocked: BlockedMove[] };
 /** An inbox item from GET /v1/moves/pending. */
 export type InboxMove = { id: string; name?: unknown; from?: unknown; to?: unknown; reporters?: unknown; first_at?: unknown; last_at?: unknown };
 
@@ -127,6 +162,14 @@ const isoOr = (v: unknown, fallback: string) => (typeof v === "string" && !Numbe
 
 export const emptyPending = (): PendingFile => ({ version: 1, moves: {} });
 export const emptyMoves = (): MovesFile => ({ version: 1, moves: [] });
+export const emptyBlocked = (): BlockedFile => ({ version: 1, blocked: [] });
+const pairKey = (from: string, to: string) => `${from}>${to}`;
+/** Block a move for good (once). Returns whether it was new. */
+export function block(file: BlockedFile, entry: BlockedMove): boolean {
+  if (file.blocked.some((b) => b.from === entry.from && b.to === entry.to)) return false;
+  file.blocked.push(entry);
+  return true;
+}
 
 /**
  * Copy inbox items into the pending file, keyed by the old board, with a set of candidate new
@@ -192,7 +235,8 @@ export const activeMoves = (file: MovesFile): MoveRecord[] => file.moves.filter(
 
 /**
  * Gate 3: is the old board gone? Looks at the checks since the last one that answered (200).
- * Proven: a 404/410 on two checks at least 24 h apart, on a system where that means deleted.
+ * Proven: a 404/410 on two checks at least 24 h apart, on a system where that means deleted, or a
+ * vendor-provisioned host (lib/evidence.ts VENDOR_HOST_SUFFIXES) that is NXDOMAIN on two checks 24 h apart.
  * Not proven: no answer for 24 h, but not that kind of proof (SmartRecruiters' 0 jobs, a page read's
  * "not found", Workday, timeouts): a maintainer decides. Waiting: not 24 h yet. Live: it answers.
  */
@@ -207,6 +251,9 @@ export function goneVerdict(ats: string, checks: readonly MoveCheck[]): GoneVerd
   const t = (c: MoveCheck) => Date.parse(c.at);
   const hard = tail.filter((c) => PROVABLE_GONE.has(ats) && c.status === "dead" && (c.http === 404 || c.http === 410));
   if (hard.length >= 2 && t(hard[hard.length - 1]!) - t(hard[0]!) >= DAY_MS) return "proven";
+  // A vendor-provisioned host (Taleo, Workday, Oracle, SuccessFactors) that doesn't exist in DNS, twice, a day apart.
+  const nx = tail.filter((c) => c.nxdomain);
+  if (nx.length >= 2 && t(nx[nx.length - 1]!) - t(nx[0]!) >= DAY_MS) return "proven";
   if (t(tail[tail.length - 1]!) - t(tail[0]!) >= DAY_MS) return "not_proven";
   return "waiting";
 }
@@ -222,6 +269,8 @@ export type GateContext = {
   accepted: readonly MoveRecord[];
   /** Every old board with a pending report. */
   pendingFrom: ReadonlySet<string>;
+  /** Blocked moves, as "from>to" board keys. */
+  blocked: ReadonlySet<string>;
 };
 
 export function gateContext(opts: {
@@ -231,6 +280,7 @@ export function gateContext(opts: {
   contributions?: readonly { key: string; added_at?: string }[];
   moves: MovesFile;
   pending: PendingFile;
+  blocked?: BlockedFile;
 }): GateContext {
   const contributedAt = new Map<string, string>();
   for (const c of opts.contributions ?? []) if (c.key && c.added_at && !contributedAt.has(c.key)) contributedAt.set(c.key, c.added_at);
@@ -241,6 +291,7 @@ export function gateContext(opts: {
     contributedAt,
     accepted: activeMoves(opts.moves),
     pendingFrom: new Set(Object.keys(opts.pending.moves)),
+    blocked: new Set((opts.blocked?.blocked ?? []).map((b) => pairKey(b.from, b.to))),
   };
 }
 
@@ -261,6 +312,9 @@ export function evaluate(fromKey: string, entry: PendingMove, toKey: string, can
   const done = (result: GateResult, reason: string): Gates => ({ ...gates, result, reason });
   const fromDir = companyKey(entry.from);
   const toDir = companyKey(cand.to);
+
+  // 0. Refused or reverted before: never again (lifted only by editing moves-blocked.json).
+  if (ctx.blocked.has(pairKey(fromKey, toKey))) return done("reject", "blocked: refused or reverted before");
 
   // 1. Denylist: neither side, nor the name.
   if (
@@ -325,14 +379,11 @@ export function evaluate(fromKey: string, entry: PendingMove, toKey: string, can
   return gates;
 }
 
-/** AUTO_ACCEPT=1|true. Not implemented: every move goes to a maintainer for now. */
+/**
+ * AUTO_ACCEPT=1|true (the MOVES_AUTO_ACCEPT repo variable): accept moves whose verdict is "auto"
+ * without a person. Off, the verdict is still worked out and shown on the review issue (shadow mode).
+ */
 export function autoAcceptEnabled(env = process.env): boolean {
-  // TODO(auto-accept): accept a move without review only with company-owned evidence, checked here:
-  //   - the old careers URL redirects (every hop checked, robots.txt respected) to `to`, or
-  //   - the company's own website (a domain that isn't a hiring-system host) links to `to`.
-  // A name match and crossprobe are not evidence. Budget: website fetches time-boxed to 5 min, the
-  // existing HttpClient, only the old careers URL and the homepage. Pack companies always go to review,
-  // and so does any move with more than one passing candidate. Until then this switch changes nothing.
   return env.AUTO_ACCEPT === "1" || env.AUTO_ACCEPT === "true";
 }
 
@@ -360,7 +411,7 @@ const link = (b: MoveBoard) => {
   return /^https:\/\/[A-Za-z0-9.-]+(\/[A-Za-z0-9._~/?=&%-]*)?$/.test(url) ? `<${url}>` : "(no link)";
 };
 const goneText: Record<GoneVerdict, string> = {
-  proven: "gone (404/410 on two checks 24 h apart)",
+  proven: "gone (404/410, or its host missing from DNS, on two checks 24 h apart)",
   not_proven: "not answering for 24 h, but not proven gone: check it",
   waiting: "waiting for a second check",
   live: "still answers",
@@ -387,6 +438,9 @@ export function issueBody(fromKey: string, e: PendingMove, previousBody = ""): s
   const ticked = new Set(tickedIds(previousBody));
   const cands = Object.entries(e.candidates).sort(([, a], [, b]) => b.reporters - a.reporters);
   const passing = cands.filter(([, c]) => c.gates?.result === "pass");
+  // Fast-track: the company's own page points at exactly one passing candidate; its box starts ticked.
+  const fast = passing.filter(([, c]) => c.evidence && c.evidence.verdict !== "manual");
+  if (!tickedIds(previousBody).length && fast.length === 1) ticked.add(candidateId(fromKey, fast[0]![0]));
   const code = [
     `name: ${codeSafe(e.name)}`,
     `from: ${boardLine(e.from)}`,
@@ -395,7 +449,7 @@ export function issueBody(fromKey: string, e: PendingMove, previousBody = ""): s
   ];
   const lines = [
     "<!-- rawjobs move review v1 -->",
-    "Users reported that this company's careers page moved. Nothing changes until a maintainer approves it.",
+    "Users reported that this company's careers page moved. Nothing changes until a maintainer approves it, or, with auto-accept on, the company's own careers page proves it.",
     "",
     "Reported names and boards (as sent, not links):",
     "",
@@ -414,6 +468,7 @@ export function issueBody(fromKey: string, e: PendingMove, previousBody = ""): s
       return `${head}: ${link(c.to)} · ${c.reporters} report${c.reporters === 1 ? "" : "s"} · ${gatesText(c.gates)}`;
     }),
     "",
+    ...evidenceLines(fromKey, e, cands),
     "### To approve",
     "",
     passing.length > 1
@@ -425,6 +480,38 @@ export function issueBody(fromKey: string, e: PendingMove, previousBody = ""): s
     "",
   ];
   return lines.join("\n");
+}
+
+const verdictText: Record<CandidateEvidence["verdict"], string> = {
+  auto: "would be accepted automatically (when auto-accept is on)",
+  fast: "fast-track: the company's own page points here; approve if it looks right",
+  manual: "no usable company evidence",
+};
+const findingText: Record<CandidateEvidence["finding"], string> = {
+  match: "the company page points at this board",
+  other: "the company page points at another board",
+  several: "the company page links several boards",
+  none: "the company page links no board",
+  unknown: "the company page couldn't be read",
+};
+
+/** The evidence section of a review issue: computed values only, inside a code block, no links. */
+function evidenceLines(fromKey: string, e: PendingMove, cands: [string, Candidate][]): string[] {
+  const withEv = cands.filter(([, c]) => c.evidence);
+  if (!withEv.length && !e.unreported) return [];
+  const code: string[] = [];
+  if (e.trusted_url) code.push(`company page: ${codeSafe(e.trusted_url)}`);
+  for (const [toKey, c] of withEv) {
+    const ev = c.evidence!;
+    code.push(`${candidateId(fromKey, toKey)}: ${findingText[ev.finding]}${ev.kind ? ` (${ev.kind})` : ""}`);
+    code.push(`      ${verdictText[ev.verdict]}`);
+    if (ev.points) code.push(`      points at ${codeSafe(ev.points)}`);
+    if (ev.registered) code.push(`      domain registered ${ev.registered.slice(0, 10)}`);
+    if (ev.baseline_swap) code.push("      the page linked the old board before the report, and only this one now");
+    for (const r of ev.reasons.slice(0, 6)) code.push(`      not auto: ${codeSafe(r)}`);
+  }
+  if (e.unreported) code.push(`the company page points at ${codeSafe(e.unreported)}, which no one reported: check it by hand`);
+  return ["### Company evidence", "", "```text", ...code, "```", ""];
 }
 
 /**
@@ -470,6 +557,8 @@ export function directoryMoves(file: MovesFile, companyKeys: ReadonlySet<string>
   const missingTo: string[] = [];
   const seen = new Set<string>();
   for (const m of activeMoves(file)) {
+    // An auto move ships only once a second look at the company page, a day later, confirmed it.
+    if (m.by === "auto" && !m.confirmed_at) continue;
     const from = boardKey(m.from);
     if (seen.has(from)) continue; // one move per old board: the first accepted wins
     seen.add(from);
@@ -481,4 +570,21 @@ export function directoryMoves(file: MovesFile, companyKeys: ReadonlySet<string>
     moves.push({ from, to: boardKey(m.to), name: m.name, accepted_at: m.accepted_at });
   }
   return { moves, movedAway, missingTo };
+}
+
+/**
+ * moves.json is consistent: at most one active move per old board. The approval and the scheduled run
+ * both write it and rebase before pushing, so this runs again after every rebase (moves-lint.ts).
+ */
+export function checkMoves(file: MovesFile): string[] {
+  const problems: string[] = [];
+  const seen = new Map<string, string>();
+  for (const m of activeMoves(file)) {
+    const from = boardKey(m.from);
+    const to = boardKey(m.to);
+    const earlier = seen.get(from);
+    if (earlier !== undefined && earlier !== to) problems.push(`${from} has two active moves (${earlier}, ${to})`);
+    seen.set(from, to);
+  }
+  return problems;
 }

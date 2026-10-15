@@ -24,11 +24,13 @@ import { readDenylist, type Denylist } from "./lib/denylist";
 import { writeFileAtomic } from "./lib/fs";
 import type { CheckResult } from "./lib/live-check";
 import {
+  type BlockedFile,
   boardKey,
   canApprove,
   chooseCandidate,
   codeSafe,
   type DirRow,
+  emptyBlocked,
   emptyMoves,
   emptyPending,
   evaluate,
@@ -56,6 +58,8 @@ export async function approve(input: {
   denied: Denylist;
   check: (b: MoveBoard) => Promise<CheckResult>;
   now?: Date;
+  /** Refused or reverted moves: never approved again. */
+  blocked?: BlockedFile;
 }): Promise<ApproveResult> {
   if (!canApprove(input.role)) return { action: "ignore" };
   const now = input.now ?? new Date();
@@ -74,7 +78,15 @@ export async function approve(input: {
     ...stored,
     checks: [...stored.checks, { at: now.toISOString(), status: fromCheck.status, ...(fromCheck.http ? { http: fromCheck.http } : ok ? { http: 200 } : {}) }].slice(-MAX_CHECKS_KEPT),
   };
-  const ctx = gateContext({ now, directory: input.directory, denied: input.denied, contributions: input.contributions, moves: input.moves, pending: input.pending });
+  const ctx = gateContext({
+    now,
+    directory: input.directory,
+    denied: input.denied,
+    contributions: input.contributions,
+    moves: input.moves,
+    pending: input.pending,
+    blocked: input.blocked ?? emptyBlocked(),
+  });
   // This move's own old board is pending, of course; only other pending old boards make a chain.
   const pendingFrom = new Set(ctx.pendingFrom);
   pendingFrom.delete(fromKey);
@@ -82,9 +94,10 @@ export async function approve(input: {
   if (g.result !== "pass") return { action: "refuse", comment: `The gates don't pass any more (${g.result}: ${g.reason ?? "no reason"}). Nothing was changed.` };
 
   const evidence = [
-    `old board: ${g.gone === "proven" ? "gone (404/410 on two checks 24 h apart)" : "not answering for 24 h (not proven gone)"}`,
+    `old board: ${g.gone === "proven" ? "gone (404/410, or its host missing from DNS, on two checks 24 h apart)" : "not answering for 24 h (not proven gone)"}`,
     `new board: live${g.to_live?.jobs !== null && g.to_live?.jobs !== undefined ? ` with ${g.to_live.jobs} jobs` : ""}`,
     `reports: ${cand.reporters}`,
+    ...(cand.evidence?.finding === "match" ? [`company page ${stored.trusted_url ?? ""} points at the new board (${cand.evidence.kind ?? "S1"})`] : []),
     `approved in issue #${input.issue}`,
   ];
   input.moves.moves.push({ from: stored.from, to: cand.to, name: stored.name, accepted_at: now.toISOString(), by: "review", evidence, issue: input.issue });
@@ -144,6 +157,7 @@ async function main() {
     contributions: readJson<{ companies: { key: string; added_at?: string }[] }>(join(dir, "contributions.json"), { companies: [] }).companies,
     denied: readDenylist(),
     check: checkerFor(http),
+    blocked: readJson<BlockedFile>(join(dir, "moves-blocked.json"), emptyBlocked()),
   });
   if (result.action === "approve") writeFileAtomic(movesFile, `${JSON.stringify(moves, null, 1)}\n`);
   writeFileAtomic(out, JSON.stringify(result));
