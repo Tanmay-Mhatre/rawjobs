@@ -2,6 +2,7 @@ import { INDUSTRY_BY_ID } from "./catalog/industries";
 import { seniorityCue, seniorityGap, seniorityOf, type Seniority } from "./catalog/seniority";
 import { allPlaceNames, countriesIn, expandPlaces, LOCATION_SEGMENTS, placeOwner, placeOwnerName, spellOutPlaces, SUBDIVISIONS } from "./catalog/places";
 import { dealbreakers } from "./dealbreakers";
+import { regionOnly } from "./posting";
 import type { NormalizedJob, Profile, ScoreBreakdown } from "./schema";
 import { matchesAny, matchesTerm, matchesTitle, mayMatchTitle, termRegex, titleForms } from "./text";
 
@@ -68,7 +69,7 @@ const NON_KEYWORD_MAX = POINTS.titleMatch + POINTS.seniority + POINTS.locationCi
 export function scoreJob(job: Scorable, profile: Profile, company: CompanyFit = {}): { score: number; why: ScoreBreakdown } {
   const title = job.title;
   const forms = titleForms(title);
-  const location = gateLocation(job);
+  const location = withTitleRegion(gateLocation(job), title);
   const titleOk = titlePasses(title, profile, forms);
   const titlePts = titleOk ? POINTS.titleMatch + seniorityPoints(title, profile, forms) : 0;
   const fit = workplaceFit(job, profile) ?? locationFit(location, profile);
@@ -216,6 +217,16 @@ function workplaceFit(job: Pick<NormalizedJob, "workplace">, profile: Profile): 
 /** A remote job counts as "remote" even when its location text doesn't say so. */
 function gateLocation(job: Pick<NormalizedJob, "location" | "workplace">): string {
   return job.workplace === "remote" && !matchesTerm(job.location, "remote") ? `${job.location} remote` : job.location;
+}
+
+/**
+ * A remote job whose title limits it to one region ("Product Owner (EU only)") is remote there only:
+ * the region joins the location, so locationFit checks it like "Remote - EU".
+ */
+function withTitleRegion(location: string, title: string): string {
+  if (!matchesTerm(location, "remote")) return location;
+  const region = regionOnly(title);
+  return region && !matchesTerm(location, region) ? `${location} - ${region}` : location;
 }
 
 /** Include and exclude terms are read the same way (matchesTitle): "Sr. PMM" is still "product marketing". */

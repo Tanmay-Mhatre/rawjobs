@@ -81,6 +81,13 @@ export function DealbreakersStep({ draft, update }: Props) {
         onChange={(workAuthorization) => update({ workAuthorization })}
       />
       <ListField
+        label="Countries you're a citizen of"
+        help="Separate with commas. A role only another country's nationals can take (an Emiratisation role, “UAE nationals only”) then counts. Leave empty and those roles are only flagged."
+        placeholder="india"
+        value={draft.citizenship ?? []}
+        onChange={(citizenship) => update({ citizenship })}
+      />
+      <ListField
         label="Work you won't do"
         help="Separate with commas. Counts when the title says it, or the description keeps coming back to it, not a passing mention."
         placeholder="frontend, credit risk, accounts payable"

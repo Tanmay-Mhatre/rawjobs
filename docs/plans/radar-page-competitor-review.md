@@ -7,8 +7,9 @@ folded into the phases below.
 Progress:
 - Phase 1 shipped in PR #243.
 - Phase 2 shipped in PR #245.
-- Phase 3 is the PR that adds this line.
-- Phases 4–5 wait for the user's go.
+- Phase 3 shipped in PR #246.
+- Phase 4 is the PR that adds this line.
+- Phase 5 waits for the user's go.
 
 ## The team
 

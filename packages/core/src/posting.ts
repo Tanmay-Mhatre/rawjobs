@@ -299,3 +299,42 @@ export function regionOnly(text: string | undefined): string | undefined {
   if (ACRONYMS.has(upper)) return upper;
   return m[1]!.replace(/\b\p{L}/gu, (c) => c.toUpperCase());
 }
+
+// ---------- roles only a country's nationals can take ----------
+
+/** Gulf countries with nationalisation quotas (Emiratisation, Saudization…): how postings name their people, and the program. */
+const NATIONALS: { country: string; label: string; people: string; demonym: string; program: string }[] = [
+  { country: "united arab emirates", label: "UAE", people: "uae|emiratis?", demonym: "emiratis?", program: "emirati[sz]ation" },
+  { country: "saudi arabia", label: "Saudi", people: "saudis?|ksa", demonym: "saudis?", program: "saudi[sz]ation|saudi[sz]ed" },
+  { country: "qatar", label: "Qatari", people: "qataris?", demonym: "qataris?", program: "qatari[sz]ation" },
+  { country: "oman", label: "Omani", people: "omanis?", demonym: "omanis?", program: "omani[sz]ation" },
+  { country: "kuwait", label: "Kuwaiti", people: "kuwaitis?", demonym: "kuwaitis?", program: "kuwaiti[sz]ation" },
+  { country: "bahrain", label: "Bahraini", people: "bahrainis?", demonym: "bahrainis?", program: "bahraini[sz]ation" },
+];
+const WHO = "(?:nationals?|citizens?)";
+const NATIONALS_RES = NATIONALS.map((n) => ({
+  ...n,
+  // Said outright in the text: "UAE nationals only", "reserved for Emirati nationals", "an Emiratisation role".
+  text: new RegExp(
+    [
+      `\\b(?:${n.people})\\s+${WHO}\\s+only\\b`,
+      `\\bonly\\s+(?:open\\s+to\\s+|for\\s+|accept(?:ing)?\\s+)?(?:${n.people})\\s+${WHO}\\b`,
+      // Never plain "open to UAE nationals": "…and expats" often follows.
+      `\\b(?:exclusively\\s+(?:for|to|open\\s+to)|restricted\\s+to|reserved\\s+for|limited\\s+to)\\s+(?:${n.people})\\s+${WHO}\\b`,
+      // "Emiratis only", never "UAE only" (that's where you live, not who you are).
+      `\\b(?:${n.demonym})\\s+only\\b`,
+      `\\b(?:${n.program})\\s+(?:role|position|vacancy|opportunity|program(?:me)?|hire|hiring|job|initiative)\\b`,
+    ].join("|"),
+    "i",
+  ),
+  // In a title the country's people alone say it: "Relationship Manager - UAE National".
+  title: new RegExp(`\\b(?:${n.people})\\s+${WHO}\\b|\\b(?:${n.program})\\b`, "i"),
+}));
+
+/** The country whose nationals alone can take this job, from its title or description ("united arab emirates"), if it says so. */
+export function nationalsOnly(title: string, description?: string): string | undefined {
+  return NATIONALS_RES.find((n) => n.title.test(title) || (!!description && n.text.test(description)))?.country;
+}
+
+/** "UAE", "Saudi": how a nationals-only limit is written for a country nationalsOnly returns. */
+export const nationalsLabel = (country: string) => NATIONALS.find((n) => n.country === country)?.label ?? country.replace(/\b\p{L}/gu, (c) => c.toUpperCase());

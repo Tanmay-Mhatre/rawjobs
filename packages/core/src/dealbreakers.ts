@@ -1,5 +1,5 @@
 import { placeOwner } from "./catalog/places";
-import { countryOfLocation, extractEligibility, payOf, type Pay, type Period } from "./posting";
+import { countryOfLocation, extractEligibility, nationalsLabel, nationalsOnly, payOf, type Pay, type Period } from "./posting";
 import type { NormalizedJob, Profile } from "./schema";
 import { matchesTitle, termRegex } from "./text";
 
@@ -127,6 +127,9 @@ export function dealbreakers(job: Checkable, profile: Profile): string[] {
     if (country && !authorised.has(country)) out.push(`No visa sponsorship, and you need one for ${title(country)}`);
   }
   if (e.residentIn && home.size && !home.has(e.residentIn)) out.push(`Only for people already living in ${title(e.residentIn)}`);
+  // An Emiratisation-style role: only when you said where you're a citizen (an Emirati may use RawJobs too).
+  const nationals = profile.citizenship?.length ? nationalsOnly(job.title, job.description) : undefined;
+  if (nationals && !countriesOfTerms(profile.citizenship!).has(nationals)) out.push(`Only for ${nationalsLabel(nationals)} nationals`);
   if (e.relocation === "no" && home.size && (e.onsiteIn || job.workplace === "onsite")) {
     const country = e.onsiteIn ? countriesOfTerms([e.onsiteIn]).values().next().value : located;
     if (country && !home.has(country) && country !== e.residentIn) out.push(`On-site in ${e.onsiteIn ?? title(country)}, with no relocation`);
