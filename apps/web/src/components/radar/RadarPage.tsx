@@ -344,7 +344,6 @@ export function RadarPage(p: Props) {
       onSelect={() => select(g.lead)}
       onStatus={(st) => p.onStatus(g.lead, st)}
       yours={p.isYours(g.lead)}
-      yourIndustry={!p.isYours(g.lead) && (industriesByCompany.get(g.lead.company) ?? []).some((i) => profile.industries.includes(i))}
     />
   );
 

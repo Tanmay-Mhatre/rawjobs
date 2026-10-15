@@ -44,8 +44,9 @@ describe("feed row (design/components/Feed)", () => {
     expect([...row.children].map((c) => c.className.split(" ")[0] || c.firstElementChild?.className.split(" ")[0])).toEqual(["rj-score", "rj-row__main", "rj-row__side"]);
     expect(screen.getByRole("img", { name: "Strong match, score 74" })).toBeTruthy();
     expect(container.querySelector(".rj-row__meta")!.textContent).toBe("Acme Exchange·Dubai·Hybrid");
-    // Where it came from and how old it is; the new dot has a name.
-    expect(container.querySelector(".rj-source")!.textContent).toBe("Greenhouse2d");
+    // How old it is, with where it came from in the tooltip; the new dot has a name.
+    expect(container.querySelector(".rj-source")!.textContent).toBe("2d");
+    expect(container.querySelector(".rj-source")!.getAttribute("title")).toMatch(/^From Greenhouse/);
     expect(screen.getByRole("img", { name: "New this scan" })).toBeTruthy();
     expect(screen.getByRole("img", { name: "My company" }).getAttribute("class")).toContain("rj-star");
   });

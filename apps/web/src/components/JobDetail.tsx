@@ -1,11 +1,10 @@
-import { surgeTitle } from "@rawjobs/core/activity";
 import { EMPLOYMENT_LABEL } from "@rawjobs/core/catalog/employment";
 import { INDUSTRY_BY_ID } from "@rawjobs/core/catalog/industries";
 import { SENIORITY_LEVELS } from "@rawjobs/core/catalog/seniority";
 import { fromJobBoard } from "@rawjobs/core/dashboard";
 import { sponsorOf, sponsorSentence, sponsorTitle, VISA_REGISTERS } from "@rawjobs/core/catalog/visa";
 import { matchesTitle, safeUrl } from "@rawjobs/core/text";
-import { ArrowLeft, Bookmark, Check, ChevronDown, ChevronUp, CircleCheck, Copy, ExternalLink, Info, LoaderCircle, Maximize2, Plus, RefreshCw, Star, StickyNote, X } from "lucide-react";
+import { ArrowLeft, Bookmark, Check, ChevronDown, ChevronUp, CircleCheck, Copy, Ellipsis, ExternalLink, Info, LoaderCircle, Maximize2, Plus, RefreshCw, Star, StickyNote, X } from "lucide-react";
 import { Fragment, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { copyText } from "../lib/clipboard";
 import { useDescription, useHiring, type Job, type Profile } from "../lib/data";
@@ -17,8 +16,9 @@ import { PIPELINE, STATUS_LABEL, type Entry, type Status } from "../lib/userStat
 import { Dialog } from "./Dialog";
 import { HiringActivity } from "./HiringActivity";
 import { ReasonPicker, useNotForMe } from "./NotForMe";
-import { Button, buttonClass, Chip, ChipGroup, IconButton, ScoreBadge, scoreBandOf, ScoreBreakdown, scoreParts, SourceTag } from "./primitives";
-import { cx } from "./ui";
+import { Button, buttonClass, IconButton, Menu, ScoreBadge, scoreBandOf, ScoreBreakdown, scoreParts } from "./primitives";
+import { toast } from "./Toast";
+import { cx, Select } from "./ui";
 
 export type JobDetailProps = {
   job: Job;
@@ -54,6 +54,8 @@ export type JobDetailProps = {
 const SENIORITY_LABEL = Object.fromEntries(SENIORITY_LEVELS.map((s) => [s.id, s.label]));
 const WORKPLACE_LABEL: Record<Job["workplace"], string | null> = { onsite: "On-site", hybrid: "Hybrid", remote: "Remote", unknown: null };
 const BAND_WORD = { strong: "Strong", fair: "Fair", weak: "Weak" } as const;
+/** Descriptions longer than this start as a preview. */
+const PREVIEW_CHARS = 900;
 
 /** Plain text pieces joined by the kit's " · " separator. */
 function MetaLine({ parts, className }: { parts: ReactNode[]; className?: string }) {
@@ -75,6 +77,23 @@ function MetaLine({ parts, className }: { parts: ReactNode[]; className?: string
   );
 }
 
+type Fact = { label: string; value: ReactNode; note?: string; muted?: boolean; tone?: "warn" | "good" };
+
+/** The decision facts as a grid of small boxes: label, value, and where the value came from. */
+function KeyFacts({ facts }: { facts: Fact[] }) {
+  return (
+    <dl className="rj-facts">
+      {facts.map((f) => (
+        <div key={f.label} className="rj-fact">
+          <dt>{f.label}</dt>
+          <dd className={cx(f.muted && "!text-muted", f.tone === "warn" && "!text-warning-text", f.tone === "good" && "!text-success-text")}>{f.value}</dd>
+          {f.note && <dd className="rj-fact__note">{f.note}</dd>}
+        </div>
+      ))}
+    </dl>
+  );
+}
+
 /** Everything about one job (design/components/Drawer): head with source, title and meta; body with the score, status, description and details; foot with the actions. */
 export function JobDetail(p: JobDetailProps) {
   const { job, entry, profile } = p;
@@ -83,6 +102,8 @@ export function JobDetail(p: JobDetailProps) {
   const [copied, setCopied] = useState(false);
   /** The full-window reader, for reading the whole description in one view. */
   const [expanded, setExpanded] = useState(false);
+  /** The description past its preview, in place. */
+  const [fullText, setFullText] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
   const rootRef = useRef<HTMLDivElement>(null);
   const salary = formatSalary(job.salary);
@@ -94,6 +115,7 @@ export function JobDetail(p: JobDetailProps) {
   useEffect(() => {
     scrollRef.current?.scrollTo({ top: 0 });
     setCopied(false);
+    setFullText(false);
   }, [job.id]);
 
   const copyJd = async () => {
@@ -142,52 +164,29 @@ export function JobDetail(p: JobDetailProps) {
   const stale = isRoleStale(postings ?? [job], (j) => (j.id === job.id ? staleCtx : undefined)) ? staleReasons(job, staleCtx) : null;
   // A register listing ("Sponsors visas") already says it: the posting's own "we sponsor" would repeat it.
   const eligibility = eligibilityNotes(job.eligibility).filter((n) => !(sponsor && n.text === "Sponsors a visa"));
-  const meta: ReactNode[] = [
-    companyName(job.company),
-    places,
-    ...(workplace ? [workplace] : []),
-    ...(job.employmentType ? [EMPLOYMENT_LABEL[job.employmentType]] : []),
-    SENIORITY_LABEL[job.seniority],
-    // The stale callout says how old it is: the meta keeps the plain date then.
+  // Under the title: where and what the job is, then how fresh it is.
+  const factsLine: ReactNode[] = [places, ...(workplace ? [workplace] : []), ...(job.employmentType ? [EMPLOYMENT_LABEL[job.employmentType]] : []), SENIORITY_LABEL[job.seniority]];
+  const freshLine: ReactNode[] = [
+    // The stale callout says how old it is: this line keeps the plain age then.
     isOlder(job) && job.status === "open" && !stale ? (
       <span key="older" className="text-warning-text" title="Most roles are filled within two months. It's still listed, but may no longer be hiring.">
         {job.postedAt ? "Posted" : "First seen"} {age} ago, may be filled
       </span>
-    ) : job.postedAt ? (
-      `Posted ${formatDate(job.postedAt)}`
     ) : (
-      `First seen ${formatDate(job.firstSeen)}`
-    ),
-    ...(salary
-      ? [
-          job.salaryFrom === "description" ? (
-            <span key="salary" title="Read from the job description">
-              {salary}
-            </span>
-          ) : (
-            salary
-          ),
-        ]
-      : []),
-    ...eligibility.map((n) => (
-      <span key={n.text} className={n.limit ? "text-warning-text" : "text-success-text"}>
-        {n.text}
+      <span key="age" title={job.postedAt ? `Posted ${formatDate(job.postedAt)}` : `First seen ${formatDate(job.firstSeen)}`}>
+        {job.postedAt ? "Posted" : "First seen"} {age} ago
       </span>
-    )),
-    ...(sponsor
+    ),
+    // We read it off the company's own board: say when, so "is this still open?" has an answer.
+    ...(job.status === "closed"
       ? [
-          <span key="visa" className="text-success-text" title={sponsorTitle(sponsor)}>
-            Sponsors visas
+          <span key="closed" className="text-danger-text">
+            Closed
           </span>,
         ]
-      : []),
-    ...(job.surge
-      ? [
-          <span key="surge" className="text-ink" title={surgeTitle(companyName(job.company), job.surge)}>
-            Hiring surge
-          </span>,
-        ]
-      : []),
+      : job.estimated
+        ? []
+        : [`still listed, checked ${timeAgo(job.lastSeen)}`]),
     ...(evergreen === "pool"
       ? [
           <span key="pool" className="text-warning-text" title="A talent pool or open application: it collects applications rather than filling one role">
@@ -202,20 +201,70 @@ export function JobDetail(p: JobDetailProps) {
           </span>,
         ]
       : []),
-    // We read it off the company's own board: say when, so "is this still open?" has an answer.
-    ...(job.status === "closed" ? ["Closed"] : job.estimated ? [] : [`Still listed, checked ${timeAgo(job.lastSeen)}`]),
+  ];
+  const limits = eligibility.filter((n) => n.limit);
+  // "EU only" is read from the title or location; every other limit from the description.
+  const limitsFrom = limits.every((n) => n.text === `${job.eligibility?.regionOnly} only`) ? "From the title or location" : "From the description";
+  const pluses = [...(sponsor ? ["Sponsors visas"] : []), ...eligibility.filter((n) => !n.limit).map((n) => n.text)];
+  const last30 = hiring?.last30 ?? job.surge?.n;
+  const usual = hiring?.usual ?? job.surge?.usual;
+  const surge = hiring ? hiring.surge : !!job.surge;
+  // The decisions a job seeker makes first, each saying where its answer came from (or that there's none).
+  const facts: Fact[] = [
+    salary
+      ? { label: "Salary", value: salary, note: job.salaryFrom === "description" ? "Read from the description" : "From the posting" }
+      : { label: "Salary", value: "Not listed", muted: true, note: job.hasDescription ? "Not in the posting or description" : "Not in the posting" },
+    WORKPLACE_LABEL[job.workplace] ? { label: "Work mode", value: WORKPLACE_LABEL[job.workplace] } : { label: "Work mode", value: "Not stated", muted: true, note: "No on-site or remote wording" },
+    { label: "Seniority", value: SENIORITY_LABEL[job.seniority], note: "Read from the title" },
+    limits.length
+      ? { label: "Who can apply", value: limits.map((n) => n.text).join(", "), tone: "warn", note: pluses.join(", ") || limitsFrom }
+      : pluses.length
+        ? { label: "Who can apply", value: pluses.join(", "), tone: "good", note: sponsor ? sponsorTitle(sponsor) : "From the description" }
+        : { label: "Who can apply", value: "No limits stated", muted: true, note: "Visa, residency, relocation not mentioned" },
+    last30 !== undefined
+      ? {
+          label: "Company hiring",
+          value: `${last30} ${last30 === 1 ? "role" : "roles"} in 30 days`,
+          tone: surge ? "good" : undefined,
+          note: surge ? "Hiring surge: far more than usual" : usual !== undefined ? `Usually about ${Math.round(usual)}` : undefined,
+        }
+      : { label: "Company hiring", value: "Not known yet", muted: true },
+    job.employmentType ? { label: "Type", value: EMPLOYMENT_LABEL[job.employmentType], note: `Via ${source}` } : { label: "Type", value: "Not stated", muted: true, note: `Via ${source}` },
   ];
   const saved = status === "saved";
+  // Add or remove the company from My companies; an error comes back as a toast.
+  const track = async () => {
+    const error = await p.onTrack?.(!p.yours);
+    if (error) toast({ message: error });
+  };
+  const setStatus = (next: Status | undefined) => {
+    p.onUpdate({ status: next });
+    // Beside the list the job leaves at once, so the reasons go in a toast; in a drawer they're right below.
+    if (next === "dismissed" && !p.onClose) notForMe?.askWhy(job, status);
+  };
 
+  const preview = !p.expanded && !fullText && (description?.length ?? 0) > PREVIEW_CHARS;
   const descriptionSection = (
     <section className="rj-drawer__section">
-      <h3 className="rj-h">Description</h3>
+      <h3 className="rj-h">About the role</h3>
       {description === undefined ? (
         <p className="flex items-center gap-2 type-small text-muted">
           <LoaderCircle className="size-4 animate-spin" /> Loading…
         </p>
       ) : description ? (
-        <Highlighted text={description} terms={job.why.keywords} wide={p.expanded} />
+        // A long description starts as a preview beside the list; the reader (F) always shows it all.
+        preview ? (
+          <>
+            <div className="rj-preview">
+              <Highlighted text={description} terms={job.why.keywords} wide={p.expanded} />
+            </div>
+            <Button size="sm" variant="quiet" className="justify-self-start" onClick={() => setFullText(true)}>
+              Read full description
+            </Button>
+          </>
+        ) : (
+          <Highlighted text={description} terms={job.why.keywords} wide={p.expanded} />
+        )
       ) : (
         <p className="type-small text-muted">
           {job.estimated ? "Not scanned yet, so no description." : job.why.gate ? "Not stored for jobs that fail your filters." : "The hiring system didn't include a description."} Open the job page
@@ -226,10 +275,17 @@ export function JobDetail(p: JobDetailProps) {
   );
 
   return (
-    <div ref={rootRef} className="flex h-full min-h-0 flex-col">
+    <section ref={rootRef} aria-label="Job details" className="flex h-full min-h-0 flex-col">
+      {/* Picking another job changes this panel without moving focus: say so to screen readers. */}
+      <p className="sr-only" aria-live="polite">
+        Showing {jobTitle(job.title)} at {companyName(job.company)}
+      </p>
       <header className="rj-drawer__head">
         <div className="rj-drawer__top">
-          <SourceTag source={source} age={age} isNew={p.isNew} older={isOlder(job)} />
+          <span className="flex min-w-0 items-center gap-2 font-medium text-ink">
+            {p.isNew && <span className="rj-dot" role="img" aria-label="New this scan" />}
+            <span className="truncate">{companyName(job.company)}</span>
+          </span>
           <div className="flex shrink-0 items-center gap-1">
             {p.onClose && (
               <IconButton label="Back" title="Back (Esc)" aria-keyshortcuts="Escape" size="sm" onClick={p.onClose} className={p.expanded ? "hidden" : "lg:hidden"}>
@@ -263,7 +319,8 @@ export function JobDetail(p: JobDetailProps) {
           {p.yours && <Star className="rj-star" role="img" aria-label="My company" />}
           <span className="min-w-0">{jobTitle(job.title)}</span>
         </h2>
-        <MetaLine className="rj-drawer__meta" parts={meta} />
+        <MetaLine className="rj-drawer__meta !text-ink" parts={factsLine} />
+        <MetaLine className="rj-drawer__meta" parts={freshLine} />
       </header>
 
       <div ref={scrollRef} className={cx("rj-drawer__body min-h-0 flex-1", p.expanded && "md:grid-cols-[minmax(0,1fr)_20rem] md:gap-x-10")}>
@@ -282,9 +339,32 @@ export function JobDetail(p: JobDetailProps) {
             </section>
           )}
 
+          {!job.estimated && <KeyFacts facts={facts} />}
+
           <WhyItMatches job={job} profile={profile} yours={!!p.yours} />
 
           {job.estimated && <NotCheckedYet indexGeneratedAt={p.indexGeneratedAt} onCheck={p.onCheck} />}
+
+          {!p.expanded && descriptionSection}
+
+          <section className="rj-drawer__section border-t border-line pt-4">
+            {/* The one place to set any status; Save and Not interested in the foot are shortcuts. */}
+            <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+              <label htmlFor={`status-${job.id}`} className="font-medium text-ink">
+                Your progress
+              </label>
+              <Select id={`status-${job.id}`} value={status ?? ""} onChange={(e) => setStatus((e.target.value || undefined) as Status | undefined)}>
+                <option value="">Not tracked</option>
+                {[...PIPELINE, "dismissed" as const].map((s) => (
+                  <option key={s} value={s}>
+                    {STATUS_LABEL[s]}
+                  </option>
+                ))}
+              </Select>
+              <NotesField key={job.id} id={`notes-${job.id}`} note={entry?.note ?? ""} onSave={(note) => p.onUpdate({ note: note || undefined })} />
+            </div>
+            {status === "dismissed" && <ReasonPicker key={`why:${job.id}`} job={job} label="Why not? Optional." live />}
+          </section>
 
           {sponsor && (
             <section className="rj-drawer__section">
@@ -293,29 +373,6 @@ export function JobDetail(p: JobDetailProps) {
               <p className="type-small text-muted">That means it can sponsor, not that this role will. Source: {VISA_REGISTERS[sponsor.country].source}.</p>
             </section>
           )}
-
-          <section className="rj-drawer__section">
-            <h3 className="rj-h">Your status</h3>
-            {/* The one place to set any status; Save in the foot is a shortcut for "Saved". */}
-            <ChipGroup label="Your status">
-              {[...PIPELINE, "dismissed" as const].map((s) => (
-                <Chip
-                  key={s}
-                  pressed={status === s}
-                  onClick={() => {
-                    const next = status === s ? undefined : s;
-                    p.onUpdate({ status: next });
-                    // Beside the list the job leaves at once, so the reasons go in a toast; in a drawer they're right below.
-                    if (next === "dismissed" && !p.onClose) notForMe?.askWhy(job, status);
-                  }}
-                >
-                  {STATUS_LABEL[s]}
-                </Chip>
-              ))}
-            </ChipGroup>
-            {status === "dismissed" && <ReasonPicker key={`why:${job.id}`} job={job} label="Why not? Optional." live />}
-            <NotesField key={job.id} id={`notes-${job.id}`} note={entry?.note ?? ""} onSave={(note) => p.onUpdate({ note: note || undefined })} />
-          </section>
 
           {postings && (
             <section className="rj-drawer__section">
@@ -345,8 +402,6 @@ export function JobDetail(p: JobDetailProps) {
               </ul>
             </section>
           )}
-
-          {!p.expanded && descriptionSection}
 
           <section className="rj-drawer__section">
             <h3 className="rj-h">Details</h3>
@@ -435,18 +490,44 @@ export function JobDetail(p: JobDetailProps) {
         >
           {saved ? "Saved" : "Save"}
         </Button>
-        {p.onTrack && <TrackButton yours={!!p.yours} onTrack={p.onTrack} />}
-        {job.hasDescription && (
-          <IconButton
-            label={copied ? "Copied description" : "Copy description"}
-            shortcut={description ? "C" : undefined}
-            onClick={() => void copyJd()}
-            disabled={!description}
-            aria-live="polite"
+        <Button
+          icon={<X className="rj-icon" />}
+          shortcut="X"
+          onClick={() => setStatus(status === "dismissed" ? undefined : "dismissed")}
+          aria-pressed={status === "dismissed"}
+          className="aria-pressed:border-ink aria-pressed:bg-active"
+        >
+          Not interested
+        </Button>
+        {(p.onTrack || job.hasDescription) && (
+          <Menu
+            label="More job actions"
+            side="above"
             className="ml-auto"
-          >
-            {copied ? <Check className="rj-icon text-success-text" /> : description === undefined ? <LoaderCircle className="rj-icon animate-spin" /> : <Copy className="rj-icon" />}
-          </IconButton>
+            trigger={(t) => (
+              <button type="button" className={buttonClass("secondary", "md", "rj-btn--icon")} aria-label="More job actions" title="More job actions" {...t}>
+                {copied ? <Check className="rj-icon text-success-text" aria-hidden /> : <Ellipsis className="rj-icon" aria-hidden />}
+              </button>
+            )}
+            items={[
+              ...(p.onTrack
+                ? [
+                    {
+                      id: "track",
+                      label: p.yours ? "Remove from My companies" : "Add company to My companies",
+                      icon: p.yours ? <Check className="rj-icon" aria-hidden /> : <Plus className="rj-icon" aria-hidden />,
+                      onSelect: () => void track(),
+                    },
+                  ]
+                : []),
+              ...(job.hasDescription && description ? [{ id: "copy", label: "Copy description", icon: <Copy className="rj-icon" aria-hidden />, shortcut: "C", onSelect: () => void copyJd() }] : []),
+            ]}
+          />
+        )}
+        {copied && (
+          <span className="sr-only" role="status">
+            Copied description
+          </span>
         )}
       </footer>
 
@@ -457,40 +538,7 @@ export function JobDetail(p: JobDetailProps) {
           </div>
         </Dialog>
       )}
-    </div>
-  );
-}
-
-/** Add the job's company to your companies (or remove it), with a short busy state and any error. */
-function TrackButton({ yours, onTrack }: { yours: boolean; onTrack: (on: boolean) => Promise<string | null> }) {
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  // biome-ignore lint/correctness/useExhaustiveDependencies: a change of `yours` clears the last error
-  useEffect(() => setError(null), [yours]);
-  const click = async () => {
-    setBusy(true);
-    setError(await onTrack(!yours));
-    setBusy(false);
-  };
-  return (
-    <>
-      <Button
-        icon={busy ? <LoaderCircle className="rj-icon animate-spin" /> : yours ? <Check className="rj-icon" /> : <Plus className="rj-icon" />}
-        onClick={() => void click()}
-        disabled={busy}
-        aria-pressed={yours}
-        className="aria-pressed:border-ink aria-pressed:bg-active"
-        title={yours ? "Remove from My companies" : "Add to My companies: scanned every time, its jobs listed first"}
-      >
-        {/* Short enough for half a phone screen, and the same everywhere; the tooltip says the rest. */}
-        {yours ? "In My companies" : "Add company"}
-      </Button>
-      {error && (
-        <p role="alert" className="col-span-full w-full type-small text-danger-text">
-          {error}
-        </p>
-      )}
-    </>
+    </section>
   );
 }
 
@@ -620,10 +668,11 @@ function WhyItMatches({ job, profile, yours }: { job: Job; profile: Profile; you
   const parts = scoreParts(w);
   const misses = items.filter((it) => !it.ok);
   return (
-    <section className={cx("rj-drawer__section", open && "gap-4")}>
-      <div className="flex items-center gap-3">
+    <section className={cx("rj-drawer__section rj-fit", open && "gap-4")}>
+      {/* On a phone the toggle drops under the verdict rather than squeezing it. */}
+      <div className="flex flex-wrap items-center gap-3">
         <ScoreBadge score={job.score} threshold={min} estimated={job.estimated} word />
-        <div className="min-w-0 flex-1">
+        <div className="min-w-[11rem] flex-1">
           <h3 className="rj-h">Why it matched</h3>
           <p className="type-small text-muted">
             {band} match, {cutOff}. {job.estimated ? "Estimated from title, place and industry." : null}{" "}
@@ -635,20 +684,37 @@ function WhyItMatches({ job, profile, yours }: { job: Job; profile: Profile; you
           </p>
         </div>
         <Button size="sm" variant="quiet" onClick={toggle} aria-expanded={open} aria-controls={`why-${job.id}`} icon={open ? <ChevronUp className="rj-icon" /> : <ChevronDown className="rj-icon" />}>
-          {open ? "Less" : "Details"}
+          {open ? "Hide breakdown" : "Show breakdown"}
         </Button>
       </div>
       {!open && (
-        <div className="grid gap-1 type-small">
-          <p className="text-muted">{parts.map((p) => `${p.label} ${p.earned}/${p.max}`).join(" · ")}</p>
+        <ul className="rj-pills">
+          {parts.map((p) => (
+            <li key={p.label} className="rj-pill">
+              {p.earned > 0 ? <CircleCheck className="size-4 text-success-text" aria-hidden /> : <X className="size-4 text-muted" aria-hidden />}
+              {p.label}{" "}
+              <span>
+                <b>{p.earned}</b>/{p.max}
+              </span>
+            </li>
+          ))}
           {misses.map((it, i) => (
             // biome-ignore lint/suspicious/noArrayIndexKey: a fixed list rebuilt from the same input, never reordered: the index is a stable key
-            <p key={i} className="flex items-start gap-2 text-warning-text">
-              <X className="mt-0.5 size-4 shrink-0" aria-hidden />
+            <li key={i} className="rj-pill rj-pill--miss">
+              <X className="size-4 shrink-0" aria-hidden />
               <span>{it.text}</span>
-            </p>
+            </li>
           ))}
-        </div>
+        </ul>
+      )}
+      {/* A gate or a dealbreaker changes the score past the sum: their own lines below say how. */}
+      {w.scale && !w.gate && !w.dealbreakers?.length && (
+        <p className="type-small">
+          <b>
+            {parts.reduce((n, p) => n + p.earned, 0)} of {parts.reduce((n, p) => n + p.max, 0)} points, shown as {job.score} out of 100.
+          </b>{" "}
+          <span className="text-muted">You have no topics yet, so title, place and industry make up the whole score.</span>
+        </p>
       )}
       {w.gate && <p className="type-small text-warning-text">Failed your {w.gate} filter, so the score is 0.</p>}
       {!!w.dealbreakers?.length && (
@@ -676,15 +742,6 @@ function WhyItMatches({ job, profile, yours }: { job: Job; profile: Profile; you
               </li>
             ))}
           </ul>
-          {/* A gate or a dealbreaker changes the score past the sum: their own lines above say how. */}
-          {w.scale && !w.gate && !w.dealbreakers?.length && (
-            <p className="type-small">
-              <b>
-                {parts.reduce((n, p) => n + p.earned, 0)} of {parts.reduce((n, p) => n + p.max, 0)} points, shown as {job.score} out of 100.
-              </b>{" "}
-              <span className="text-muted">You have no topics yet, so title, place and industry make up the whole score.</span>
-            </p>
-          )}
           <p className="type-small text-muted">Best match also lists newer jobs{yours ? " and your companies" : ""} higher. The score itself doesn't change.</p>
         </div>
       )}
@@ -734,7 +791,7 @@ function NotesField({ id, note, onSave }: { id: string; note: string; onSave: (n
       </div>
     );
   return (
-    <div className="mt-2 grid gap-1">
+    <div className="grid basis-full gap-1">
       <label htmlFor={id} className="type-label">
         Notes
       </label>

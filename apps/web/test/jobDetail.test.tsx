@@ -30,14 +30,31 @@ const job = (over: Partial<Job> = {}): Job =>
   });
 
 const renderDetail = (j: Job) => render(<JobDetail job={j} profile={profile} onUpdate={() => {}} isNew />);
+/** Both lines under the title: what the job is, then how fresh it is. */
+const metaText = (c: HTMLElement) => [...c.querySelectorAll(".rj-drawer__meta")].map((m) => m.textContent).join(" | ");
 
 describe("JobDetail", () => {
-  it("shows the source tag with the hiring system and age in the head", () => {
+  it("names the company above the title, with the new dot, and says how old the posting is", () => {
     const { container } = renderDetail(job());
-    const tag = container.querySelector(".rj-drawer__head .rj-source");
-    expect(tag?.textContent).toContain("Greenhouse");
-    expect(tag?.querySelector(".rj-source__age")?.textContent).toBe("2d");
-    expect(tag?.querySelector(".rj-dot")).not.toBeNull();
+    const top = container.querySelector(".rj-drawer__top")!;
+    expect(top.textContent).toContain("Acme");
+    expect(top.querySelector(".rj-dot")).not.toBeNull();
+    expect(container.querySelector(".rj-drawer__head .rj-source")).toBeNull();
+    expect(metaText(container)).toMatch(/Posted 2d ago/);
+  });
+
+  it("leads with the decision facts, saying when one isn't known", () => {
+    const { container } = renderDetail(job());
+    const facts = [...container.querySelectorAll(".rj-fact dt")].map((d) => d.textContent);
+    expect(facts).toEqual(["Salary", "Work mode", "Seniority", "Who can apply", "Company hiring", "Type"]);
+    expect(container.querySelector(".rj-fact")!.textContent).toContain("Not listed");
+  });
+
+  it("sets your progress from one dropdown", () => {
+    const onUpdate = vi.fn();
+    render(<JobDetail job={job()} profile={profile} onUpdate={onUpdate} onClose={() => {}} />);
+    fireEvent.change(screen.getByLabelText("Your progress"), { target: { value: "applied" } });
+    expect(onUpdate).toHaveBeenCalledWith({ status: "applied" });
   });
 
   it("lists why a job may be stale near the top, and the meta keeps the plain date", () => {
@@ -49,7 +66,7 @@ describe("JobDetail", () => {
     const items = [...heading.parentElement!.querySelectorAll("li")].map((li) => li.textContent);
     expect(items).toEqual(["Posted 4 months ago", expect.stringMatching(/^Taken down and posted again once/)]);
     expect(heading.parentElement!.textContent).toContain("It's still on the company's board, so it may be real.");
-    const meta = container.querySelector(".rj-drawer__meta")!.textContent!;
+    const meta = metaText(container);
     expect(meta).not.toContain("may be filled");
     expect(meta).not.toContain("Reposted");
     expect(meta).toContain("Posted ");
@@ -57,7 +74,7 @@ describe("JobDetail", () => {
     // Just old: no callout, the meta says it may be filled as before.
     const { container: c2 } = renderDetail(job({ postedAt: new Date(Date.now() - 70 * day).toISOString() }));
     expect(screen.queryByRole("heading", { name: "May be stale" })).toBeNull();
-    expect(c2.querySelector(".rj-drawer__meta")!.textContent).toContain("may be filled");
+    expect(metaText(c2)).toContain("may be filled");
   });
 
   it("marks a role's stale postings, with the callout only when every posting may be stale", () => {
@@ -73,7 +90,7 @@ describe("JobDetail", () => {
     expect(notes[0]!.className).toContain("text-warning-text");
     expect(notes[0]!.title).toMatch(/^Taken down and posted again twice/);
     expect(notes[0]!.closest("li")!.textContent).toContain("Dubai");
-    expect(container.querySelector(".rj-drawer__meta")!.textContent).toContain("Reposted");
+    expect(metaText(container)).toContain("Reposted");
     cleanup();
     // Both stale: the callout is back, and each posting is marked.
     const londonStale = { ...london, ...reposted };
@@ -111,33 +128,36 @@ describe("JobDetail", () => {
     expect((screen.getByLabelText("Notes") as HTMLTextAreaElement).value).toBe("Ask Sam for a referral");
   });
 
-  it("hides Copy description when the job has no description, and shows it while one loads", () => {
+  it("keeps Add company and Copy description in the More menu, and has no menu with nothing in it", () => {
     renderDetail(job());
-    expect(screen.queryByRole("button", { name: /description/i })).toBeNull();
+    expect(screen.queryByRole("button", { name: "More job actions" })).toBeNull();
     cleanup();
-    // descriptions.json never arrives, so the button stays in its loading state.
-    vi.stubGlobal("fetch", () => new Promise(() => {}));
-    renderDetail(job({ hasDescription: true }));
-    const copy = screen.getByRole("button", { name: "Copy description" }) as HTMLButtonElement;
-    expect(copy.disabled).toBe(true);
-    vi.unstubAllGlobals();
+    render(<JobDetail job={job()} profile={profile} onUpdate={() => {}} onTrack={async () => null} />);
+    fireEvent.click(screen.getByRole("button", { name: "More job actions" }));
+    expect(screen.getByRole("menuitem", { name: /Add company to My companies/ })).toBeTruthy();
   });
 
-  it("puts the meta on one plain line", () => {
+  it("puts Not interested in the foot, next to Save", () => {
+    const onUpdate = vi.fn();
+    render(<JobDetail job={job()} profile={profile} onUpdate={onUpdate} onClose={() => {}} />);
+    fireEvent.click(screen.getByRole("button", { name: /Not interested/ }));
+    expect(onUpdate).toHaveBeenCalledWith({ status: "dismissed" });
+  });
+
+  it("puts where and what the job is on one plain line under the title", () => {
     const { container } = renderDetail(job());
     const meta = container.querySelector(".rj-drawer__meta");
-    expect(meta?.textContent).toContain("Acme");
     expect(meta?.textContent).toContain("Hybrid");
-    expect(meta?.querySelectorAll(".rj-sep").length).toBeGreaterThan(2);
+    expect(meta?.querySelectorAll(".rj-sep").length).toBeGreaterThan(1);
   });
 });
 
 describe("Why it matched", () => {
   const scored = (over: Partial<Job> = {}) => job({ why: { title: 30, location: 20, keywords: ["payments"], keywordPoints: 14, industry: 10 }, ...over });
-  // The checklist sits behind Details (remembered once opened).
+  // The checklist sits behind Show breakdown (remembered once opened).
   const why = () => {
     const section = screen.getByRole("heading", { name: "Why it matched" }).closest("section")!;
-    const details = screen.queryByRole("button", { name: "Details" });
+    const details = screen.queryByRole("button", { name: "Show breakdown" });
     if (details) fireEvent.click(details);
     return section.textContent!;
   };
