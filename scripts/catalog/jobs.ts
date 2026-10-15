@@ -76,6 +76,21 @@ const CI_HOST_DELAYS: Record<string, number> = {
   "recruiting.paylocity.com": 550,
   "www.paycomonline.net": 667,
 };
+/**
+ * Hiring systems whose every board is its own host, with the gap the feed keeps on each. Eightfold refuses
+ * (403) a CI runner that pages a board at 1 a second, partway through; home connections aren't refused.
+ */
+const CI_BOARD_GAPS: Record<string, number> = { eightfold: 2_500 };
+
+/** The gap per board host for CI_BOARD_GAPS' systems, from the directory (slug = host, own hosts included). */
+export function slowHosts(directory: { ats: string; slug: string }[]): Record<string, number> {
+  const out: Record<string, number> = {};
+  for (const e of directory) {
+    const gap = CI_BOARD_GAPS[e.ats];
+    if (gap) out[e.slug.toLowerCase()] = gap;
+  }
+  return out;
+}
 /** Feeds that are one request per board, so a 304 means nothing changed. */
 const ETAG_HOSTS = new Set(["boards-api.greenhouse.io", "api.lever.co", "api.eu.lever.co", "api.ashbyhq.com"]);
 /** Entries not refreshed for this long are dropped. */
@@ -175,7 +190,7 @@ async function crawl(out: string, group: string, generated: string, directoryFil
     retries: 2,
     backoffMs: 3_000,
     breakAfter: 8,
-    hostDelays: CI_HOST_DELAYS,
+    hostDelays: { ...CI_HOST_DELAYS, ...slowHosts(directory) },
     userAgent: "RawJobs-feed/0.2 (open-source job radar; one read per board every 6 hours; https://github.com/Tanmay-Mhatre/rawjobs)",
   });
   const now = new Date(generated);
@@ -271,7 +286,8 @@ async function crawl(out: string, group: string, generated: string, directoryFil
               const reasons = (s.reasons ??= {});
               reasons[reason] = (reasons[reason] ?? 0) + 1;
               // A few examples per reason in the run log; all of them with FEED_DEBUG.
-              if (process.env.FEED_DEBUG || reasons[reason] <= FAIL_EXAMPLES) console.error(`${ats} failed: ${key}: ${(err as Error).message}`);
+              if (process.env.FEED_DEBUG || reasons[reason] <= FAIL_EXAMPLES)
+                console.error(`${ats} failed: ${key}: ${(err as Error).message}${err instanceof HttpError && err.detail ? ` [${err.detail}]` : ""}`);
               keep(key);
               // A blocked runner fails every board of a system, across all its hosts: stop asking.
               if (++streak >= BREAK_ATS_AFTER) s.tripped = true;
@@ -284,15 +300,9 @@ async function crawl(out: string, group: string, generated: string, directoryFil
       s.companies = result.shards[ats]!.companies;
       s.jobs = result.shards[ats]!.jobs;
       s.seconds = Math.round((Date.now() - t0) / 1000);
-      s.same = { before: 0, after: 0 };
-      for (const [key, c] of Object.entries(companies)) {
-        const p = previous[key];
-        if (!p) continue;
-        s.same.before += p.jobs.length;
-        s.same.after += c.jobs.length;
-      }
+      s.same = sameJobs(previous, companies);
       console.error(
-        `${ats}: ${s.companies} companies, ${s.jobs} jobs (${s.fetched} fetched, ${s.notModified} unchanged, ${s.failed} failed${s.failed ? ` [${describeReasons(s.reasons)}]` : ""}, ${s.skipped} skipped${s.tripped ? " after too many failures in a row" : ""}, ${s.partial} capped, ${s.described} places looked up, ${s.badRows} malformed postings) in ${s.seconds} s`,
+        `${ats}: ${s.companies} companies, ${s.jobs} jobs (${s.fetched} fetched, ${s.notModified} unchanged, ${s.failed} failed${s.failed ? ` [${describeReasons(s.reasons)}]` : ""}, ${s.skipped} skipped${s.tripped ? " after too many failures in a row" : ""}, ${s.partial} partial, ${s.described} places looked up, ${s.badRows} malformed postings) in ${s.seconds} s`,
       );
     }),
   );
@@ -328,6 +338,18 @@ export function describeReasons(reasons: Record<string, number> | undefined, max
   const shown = sorted.slice(0, max).map(([r, n]) => `${r} ×${n}`);
   if (sorted.length > max) shown.push(`${sorted.length - max} more`);
   return shown.join(", ");
+}
+
+/** Jobs before and after of the companies in both runs, leaving out partial boards (capped, or refused partway). */
+export function sameJobs(previous: JobFeedShard["companies"], current: JobFeedShard["companies"]): { before: number; after: number } {
+  const same = { before: 0, after: 0 };
+  for (const [key, c] of Object.entries(current)) {
+    const p = previous[key];
+    if (!p || c.partial) continue;
+    same.before += p.jobs.length;
+    same.after += c.jobs.length;
+  }
+  return same;
 }
 
 /** A swing in the jobs of the companies in both runs, or undefined when it's small (or too few jobs to tell). */

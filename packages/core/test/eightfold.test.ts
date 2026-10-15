@@ -86,6 +86,42 @@ describe("eightfold", () => {
     expect(calls).toEqual(["https://explore.jobs.netflix.net/api/apply/v2/jobs/9?domain=netflix.com"]);
   });
 
+  describe("refused partway (403 on a later page)", () => {
+    const page = (start: number) => Array.from({ length: 10 }, (_, i) => pos(start + i + 1));
+    async function fetchPartial(route: (url: string) => Response) {
+      const { http } = fakeHttp(route);
+      const c = getConnector("eightfold")!;
+      const r = { name: "Acme", enabled: true, ats: "eightfold", slug: "acme.eightfold.ai", shard: "acme.com" } as CompanyRef;
+      let partial = false;
+      const raws = await c.fetch(r, { http, now: new Date(), partial: () => (partial = true) });
+      return { raws, partial };
+    }
+
+    it("keeps the pages read and marks the board partial", async () => {
+      const { raws, partial } = await fetchPartial((url) => {
+        const start = Number(new URL(url).searchParams.get("start"));
+        return start >= 20 ? json({ message: "" }, 403) : json({ data: { count: 50, positions: page(start) } });
+      });
+      expect(raws).toHaveLength(20);
+      expect(partial).toBe(true);
+    });
+
+    it("does the same on the v2 API after pcsx isn't enabled", async () => {
+      const { raws, partial } = await fetchPartial((url) => {
+        if (url.includes("/api/pcsx/")) return json({ message: "PCSX is not enabled for this user." }, 403);
+        const start = Number(new URL(url).searchParams.get("start"));
+        if (start >= 10) return json({ message: "" }, 403);
+        return json({ count: 30, positions: page(start).map((p) => ({ id: p.id, name: p.name, locations: p.locations })) });
+      });
+      expect(raws).toHaveLength(10);
+      expect(partial).toBe(true);
+    });
+
+    it("still fails when the first page is refused on both APIs", async () => {
+      await expect(fetchPartial(() => json({ message: "" }, 403))).rejects.toMatchObject({ status: 403 });
+    });
+  });
+
   it("reads the tenant domain off the careers page when a list didn't give it", async () => {
     const { calls } = await run(
       (url) =>
