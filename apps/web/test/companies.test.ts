@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { AtsType } from "@rawjobs/core/schema";
-import { groupBoards, replaceCompany } from "../src/lib/companies";
+import { addCompanies, groupBoards, replaceCompany } from "../src/lib/companies";
 import type { CompanyRow } from "../src/lib/setup";
 
 const b = (key: string, name: string, status = "live", open_jobs: number | null = 10) => ({ key, name, ats: key.split(":")[0]!, status, open_jobs });
@@ -46,6 +46,17 @@ describe("replaceCompany", () => {
     expect(done.patch.companies![0]!.input).toBe("https://jobs.ashbyhq.com/acme-co");
     expect(done.patch.muted).toEqual([]);
     expect(done.before.slug).toBe("acme");
+  });
+
+  it("remembers the old board as replaced, and forgets the new one if it was", () => {
+    const done = replaceCompany({ ...draft, replaced: ["ashby:acme-co", "lever:gone"] }, "greenhouse:acme", { name: "Acme", ats: "ashby", slug: "acme-co" })!;
+    expect(done.patch.replaced).toEqual(["lever:gone", "greenhouse:acme"]);
+  });
+
+  it("adding a replaced board back on purpose un-forgets it", () => {
+    const { patch } = addCompanies({ ...draft, replaced: ["taleo:mashreqbank"] }, [{ name: "Mashreq", ats: "taleo", slug: "mashreqbank", careers_url: "https://www.mashreq.com/careers" }]);
+    expect(patch!.replaced).toEqual([]);
+    expect(addCompanies({ ...draft, replaced: ["taleo:other"] }, [{ name: "X", ats: "lever", slug: "x", careers_url: "https://jobs.lever.co/x" }]).patch!.replaced).toBeUndefined();
   });
 
   it("does nothing when the old one is gone or the new board is already yours", () => {

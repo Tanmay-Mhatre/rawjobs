@@ -179,7 +179,7 @@ Stopped after ${Math.round(timeoutMs / 1000)} s without finishing.`.trim(),
       let part = stamp;
       try {
         const { config } = loadConfig(findConfigPath(home));
-        part = JSON.stringify([config.companies.map(companyKey), config.companies_muted ?? [], config.profile]);
+        part = JSON.stringify([config.companies.map(companyKey), config.companies_muted ?? [], config.companies_replaced ?? [], config.profile]);
       } catch {
         // No config yet, or one that doesn't load: its stamp.
       }

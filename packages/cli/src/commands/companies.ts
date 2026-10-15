@@ -60,7 +60,7 @@ export async function cmdCompanies(args: string[]): Promise<number> {
   const others = directory.filter((c) => !c.indexed);
   // Leave out companies already watched and ones the user said no to.
   const watched = new Set((input.watched ?? config?.companies.map(companyKey) ?? []).map((k) => k.toLowerCase()));
-  const skip = new Set([...(input.hidden ?? []), ...(config?.companies_muted ?? [])].map((k) => k.toLowerCase()));
+  const skip = new Set([...(input.hidden ?? []), ...(config?.companies_muted ?? []), ...(config?.companies_replaced ?? [])].map((k) => k.toLowerCase()));
   const exclude = new Set([...watched, ...skip]);
   const started = Date.now();
   const limit = Number(values.limit) || 30;

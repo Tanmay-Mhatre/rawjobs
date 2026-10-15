@@ -58,13 +58,13 @@ profile:
   locations: { include: ["dubai"] }
 `;
   it("defaults to nothing hidden, and still reads a config with the old discovery setting", () => {
-    expect(parseConfig(base)).toMatchObject({ companies_muted: [] });
+    expect(parseConfig(base)).toMatchObject({ companies_muted: [], companies_replaced: [] });
     expect(parseConfig(`${base}discovery: { check_per_scan: 0 }\n`)).not.toHaveProperty("discovery");
   });
 
   it("survives a save from the dashboard (YAML round trip)", async () => {
     const { configToYaml } = await import("../src/yaml-writer");
-    const config = parseConfig(`${base}companies_muted: ["Lever:Foo"]\n`);
-    expect(parseConfig(configToYaml(config))).toMatchObject({ companies_muted: ["lever:foo"] });
+    const config = parseConfig(`${base}companies_muted: ["Lever:Foo"]\ncompanies_replaced: ["Taleo:Old"]\n`);
+    expect(parseConfig(configToYaml(config))).toMatchObject({ companies_muted: ["lever:foo"], companies_replaced: ["taleo:old"] });
   });
 });

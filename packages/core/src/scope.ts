@@ -238,7 +238,8 @@ export function findMoves(config: Config, directory: readonly DirectoryEntry[], 
   const failed = (ok: (h: CompanyHealth) => boolean) => new Set(health.filter((h) => !h.ok && ok(h)).map((h) => `${h.ats}:${h.slug}`.toLowerCase()));
   const gone = failed((h) => /\(404\)/.test(h.error ?? ""));
   const failing = failed(() => true);
-  const yours = new Set(config.companies.map(companyKey));
+  // Boards you have, and old ones you replaced with a new link: never suggested as where a company moved.
+  const yours = new Set([...config.companies.map(companyKey), ...(config.companies_replaced ?? [])]);
   const byBoard = new Map(directory.map((d) => [boardKey(d), d]));
   const acceptedFrom = new Map(accepted.map((m) => [m.from.toLowerCase(), m]));
   const moves: BoardMove[] = [];
