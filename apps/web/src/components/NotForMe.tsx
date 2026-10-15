@@ -1,5 +1,6 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import type { Job } from "../lib/data";
+import { companyName } from "../lib/format";
 import { hiddenByRules, offerCopy, offerFor, offerWhat, REASONS, ruleHides, ruleKey, type HideRule, type Offer, type Reason } from "../lib/notForMe";
 import type { Prefs } from "../lib/prefs";
 import type { Entry, JobLike, Status, UserState } from "../lib/userState";
@@ -87,8 +88,8 @@ function WhyToast({ job, prev, onDone }: { job: Job; prev?: Status; onDone: () =
     <div className="grid gap-2">
       <p className="flex items-start gap-2">
         {/* Two lines at most, so a long title never makes the toast tall; the full title is in the label. */}
-        <span className="line-clamp-2 min-w-0 flex-1 pt-1" title={`${job.title}, ${job.company}`}>
-          Not interested: <b className="font-medium">{job.title}</b>, {job.company}.
+        <span className="line-clamp-2 min-w-0 flex-1 pt-1" title={`${job.title}, ${companyName(job.company)}`}>
+          Not interested: <b className="font-medium">{job.title}</b>, {companyName(job.company)}.
         </span>
         {!open && (
           <Button size="sm" variant="quiet" className="shrink-0" aria-expanded={false} onClick={() => setOpen(true)}>

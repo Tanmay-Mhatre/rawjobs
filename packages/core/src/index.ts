@@ -45,6 +45,7 @@ export * from "./employers";
 export * from "./scope";
 export * from "./stages";
 export * from "./notify";
+export * from "./followups";
 export * from "./liveness";
 export * from "./schedule";
 export * from "./companies-page";

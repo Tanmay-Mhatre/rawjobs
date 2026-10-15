@@ -149,15 +149,13 @@ h3 {
 }
 
 /* On desktop the feed is a column beside the job, narrower than the kit's 560px phone breakpoint while
-   the window is wide. Lay its rows out by the panel's width instead: the title gets two lines and the
-   source moves under it, as on phones (design/components/bundle.css, @media max-width 560px). */
+   the window is wide. Lay its rows out by the panel's width instead: the title gets two lines, and the
+   age stays top right with the row actions under it, so a row is two lines, not three. */
 .rj-feed {
   container-type: inline-size;
 }
 @container (max-width: 560px) {
   .rj-row {
-    grid-template-columns: 56px minmax(0, 1fr);
-    row-gap: var(--space-2);
     align-items: start;
   }
   .rj-row__title {
@@ -173,9 +171,9 @@ h3 {
     -webkit-box-orient: vertical;
   }
   .rj-row__side {
-    grid-column: 2;
-    justify-content: space-between;
-    flex-direction: row-reverse;
+    flex-direction: column-reverse;
+    align-items: flex-end;
+    gap: var(--space-1);
   }
 }
 
@@ -234,15 +232,75 @@ h3 {
   max-width: calc(100vw - 2rem);
 }
 
-/* "Your industry" on a Radar row: a quiet outlined tag after the place. */
-.rj-ind {
-  display: inline-block;
-  margin-left: 2px;
-  padding: 0 4px;
+/* The job's decision facts (salary, work mode, seniority, who can apply, company hiring, type): a grid of
+   small boxes, each with where its value came from underneath. */
+.rj-facts {
+  display: grid;
+  /* At most three across (two rows of three), two on a phone. */
+  grid-template-columns: repeat(auto-fill, minmax(max(9rem, calc((100% - 2 * var(--space-2)) / 3)), 1fr));
+  gap: var(--space-2);
+  margin: 0;
+}
+.rj-fact {
+  display: grid;
+  align-content: start;
+  gap: 2px;
+  padding: var(--space-3);
   border: 1px solid var(--border-subtle);
-  border-radius: 2px;
-  font: 500 12px/16px var(--font-sans);
+  border-radius: var(--radius-md);
+}
+.rj-fact dt {
+  font: var(--text-meta, 400 12px/16px var(--font-sans));
   color: var(--text-secondary);
+}
+.rj-fact dd {
+  margin: 0;
+  font: var(--text-body-strong, 500 15px/22px var(--font-sans));
+  color: var(--text-primary);
+}
+.rj-fact dd.rj-fact__note {
+  font: var(--text-meta, 400 12px/16px var(--font-sans));
+  color: var(--text-secondary);
+}
+
+/* "Why it matched" as a card: score, verdict, then a pill per part and one per miss. */
+.rj-fit {
+  padding: var(--space-4);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+}
+.rj-pills {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+.rj-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 2px 10px;
+  border: 1px solid var(--border-subtle);
+  border-radius: 999px;
+  font: var(--text-small, 400 14px/21px var(--font-sans));
+  font-variant-numeric: tabular-nums;
+}
+.rj-pill--miss {
+  border-color: currentColor;
+  color: var(--warning-text, var(--text-secondary));
+}
+
+/* The description starts as a preview; "Read full description" opens the rest in place. */
+.rj-preview {
+  position: relative;
+  max-height: 18rem;
+  overflow: hidden;
+}
+.rj-preview::after {
+  content: "";
+  position: absolute;
+  inset: auto 0 0;
+  height: 4rem;
+  background: linear-gradient(to bottom, transparent, var(--bg-raised));
 }
 
 /* bundle.css marks a focused menu item with its hover fill only; design/README.md (Interaction) asks for the

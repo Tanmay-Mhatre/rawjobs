@@ -243,6 +243,22 @@ export type DashboardJob = Omit<Job, "description" | "missedRuns"> & {
   visa?: VisaInfo;
   /** The company is opening far more roles than usual (activity.ts isSurge): new roles in the last 30 days, and its usual 30 days. */
   surge?: { n: number; usual: number };
+  /** `salary` was read from the description (posting.ts extractPay), not the hiring system's own field. */
+  salaryFrom?: "description";
+  /** Who can take the job, only what the posting says: set when it says anything. */
+  eligibility?: JobEligibility;
+};
+
+/** posting.ts extractEligibility and regionOnly, kept to what the posting states. Countries are lower case. */
+export type JobEligibility = {
+  sponsorship?: "yes" | "no";
+  relocation?: "yes" | "no";
+  /** Must already be authorised to work in this country. */
+  authorisedIn?: string;
+  /** Must already live in this country. */
+  residentIn?: string;
+  /** The title or location limits the job to one region ("EU only"). */
+  regionOnly?: string;
 };
 
 /** data/jobs.json (jobs that pass your filters) and data/jobs-other.json (the rest). */

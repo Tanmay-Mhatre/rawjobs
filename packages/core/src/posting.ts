@@ -284,3 +284,18 @@ export function countryOfLocation(location: string): string | undefined {
   const found = countriesIn(location);
   return found.length === 1 ? found[0]!.toLowerCase() : undefined;
 }
+
+const REGION_ONLY =
+  /\b(EU|EEA|UK|US|USA|EMEA|APAC|LATAM|Europe|North America|Canada|India|Germany|Spain|France|Netherlands|Poland|Portugal|Ireland|Australia|Brazil|Mexico)(?:[\s-]+(?:based|residents?))?[\s-]+only\b/i;
+
+const ACRONYMS = new Set(["EU", "EEA", "UK", "US", "EMEA", "APAC", "LATAM"]);
+
+/** "Product Owner (EU only)", "Remote - US only": the one region a title or location limits the job to. */
+export function regionOnly(text: string | undefined): string | undefined {
+  const m = text ? REGION_ONLY.exec(text) : null;
+  if (!m) return undefined;
+  const upper = m[1]!.toUpperCase();
+  if (upper === "USA") return "US";
+  if (ACRONYMS.has(upper)) return upper;
+  return m[1]!.replace(/\b\p{L}/gu, (c) => c.toUpperCase());
+}
