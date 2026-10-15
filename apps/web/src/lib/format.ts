@@ -31,6 +31,7 @@ export function companyName(company: string): string {
 export function eligibilityNotes(e: Job["eligibility"]): { text: string; limit: boolean }[] {
   if (!e) return [];
   const notes: { text: string; limit: boolean }[] = [];
+  if (e.nationalsOnly) notes.push({ text: `${e.nationalsOnly} nationals only`, limit: true });
   if (e.regionOnly) notes.push({ text: `${e.regionOnly} only`, limit: true });
   if (e.residentIn) notes.push({ text: `Must live in ${displayPlace(e.residentIn)}`, limit: true });
   else if (e.authorisedIn) notes.push({ text: `Must be allowed to work in ${displayPlace(e.authorisedIn)}`, limit: true });

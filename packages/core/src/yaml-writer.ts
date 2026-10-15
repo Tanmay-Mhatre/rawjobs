@@ -67,6 +67,8 @@ export function configToYaml(config: Config): string {
       : '  # salary_floor: { amount: 85000, currency: "EUR", period: year }',
     '  # Countries you can work in without a visa sponsor ("eu" for the EU/EEA; ["none"] if you need one everywhere).',
     p.work_authorization?.length ? `  work_authorization: ${list(p.work_authorization)}` : '  # work_authorization: ["united kingdom"]',
+    "  # Countries you're a citizen of: a role only another country's nationals can take (Emiratisation) is a dealbreaker.",
+    p.citizenship?.length ? `  citizenship: ${list(p.citizenship)}` : '  # citizenship: ["india"]',
     "  # Work you won't do: matched in the title, or said again and again in the description.",
     p.avoid?.length ? `  avoid: ${list(p.avoid)}` : '  # avoid: ["frontend", "credit risk"]',
     "",

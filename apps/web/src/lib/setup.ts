@@ -177,6 +177,8 @@ export type Draft = {
   salaryFloor?: { amount: number; currency: string; period: "year" | "month" };
   /** Countries you can work in without a visa sponsor. Empty = not checked. */
   workAuthorization: string[];
+  /** Countries you're a citizen of: a nationals-only role elsewhere is a dealbreaker. Empty = only flagged. */
+  citizenship: string[];
   /** Work you won't do ("frontend", "credit risk"). */
   avoid: string[];
   companies: CompanyRow[];
@@ -216,6 +218,7 @@ export function emptyDraft(): Draft {
     industries: [],
     pastEmployers: [],
     workAuthorization: [],
+    citizenship: [],
     avoid: [],
     companies: [],
     minScore: 70,
@@ -279,6 +282,7 @@ export function draftFromConfig(input: unknown): Draft {
     pastEmployers: strings(p.past_employers),
     salaryFloor: salaryFloorFromConfig(p.salary_floor),
     workAuthorization: strings(p.work_authorization),
+    citizenship: strings(p.citizenship),
     avoid: strings(p.avoid),
     companies,
     minScore: typeof p.min_score === "number" ? p.min_score : d.minScore,
@@ -362,6 +366,7 @@ export function draftToConfig(d: Draft): Config {
       // Dealbreakers only when set, so a config without them reads exactly as before.
       ...(salaryFloorToConfig(d.salaryFloor) ? { salary_floor: salaryFloorToConfig(d.salaryFloor) } : {}),
       ...(d.workAuthorization?.length ? { work_authorization: d.workAuthorization } : {}),
+      ...(d.citizenship?.length ? { citizenship: d.citizenship } : {}),
       ...(d.avoid?.length ? { avoid: d.avoid } : {}),
     },
     companies,

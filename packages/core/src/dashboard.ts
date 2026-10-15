@@ -3,7 +3,7 @@ import { citiesIn, countriesIn } from "./catalog/places";
 import { seniorityOf } from "./catalog/seniority";
 import { TITLE_HEADS } from "./catalog/titles";
 import { displayName } from "./display-name";
-import { extractEligibility, extractPay, regionOnly } from "./posting";
+import { extractEligibility, extractPay, nationalsLabel, nationalsOnly, regionOnly } from "./posting";
 import type { DashboardJob, Job, JOB_BOARDS, JobEligibility } from "./schema";
 
 /**
@@ -36,7 +36,9 @@ export function toDashboardJob(job: Job): DashboardJob {
 export function eligibilityOf(job: Pick<Job, "title" | "location">, description: string | undefined): JobEligibility | undefined {
   const e = extractEligibility(description);
   const region = regionOnly(job.title) ?? regionOnly(job.location);
+  const nationals = nationalsOnly(job.title, description);
   const out: JobEligibility = {
+    ...(nationals ? { nationalsOnly: nationalsLabel(nationals) } : {}),
     ...(e.sponsorship !== "unknown" ? { sponsorship: e.sponsorship } : {}),
     ...(e.relocation !== "unknown" ? { relocation: e.relocation } : {}),
     ...(e.authorisedIn ? { authorisedIn: e.authorisedIn } : {}),
