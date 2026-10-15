@@ -87,9 +87,10 @@ describe("JobDetail", () => {
     expect(container.querySelector('[class*="uppercase"]')).toBeNull();
   });
 
-  it("applies on the hiring system by name", () => {
+  it("applies at the company by name, with the hiring system in the tooltip", () => {
     renderDetail(job());
-    const apply = screen.getByRole("link", { name: "Apply on Greenhouse" });
+    const apply = screen.getByRole("link", { name: /^Apply at / });
+    expect(apply.getAttribute("title")).toBe("Opens the posting on Greenhouse");
     expect(apply.getAttribute("href")).toBe("https://acme.example/jobs/1");
     expect(apply.className).toContain("rj-btn--primary");
   });

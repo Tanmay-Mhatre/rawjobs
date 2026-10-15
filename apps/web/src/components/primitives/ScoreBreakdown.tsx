@@ -70,8 +70,7 @@ export function ScoreBreakdown({
       <div className="rj-breakdown__legend" aria-hidden style={columns}>
         {parts.map((p) => (
           <span key={p.label}>
-            {p.label} <b>{p.earned}</b>
-            {p.earned < p.max && `/${p.max}`}
+            {p.label} <b>{p.earned}</b>/{p.max}
           </span>
         ))}
       </div>

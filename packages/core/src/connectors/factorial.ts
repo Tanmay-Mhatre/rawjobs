@@ -70,7 +70,9 @@ export const factorial: Connector<FactorialJob> = {
   },
 
   normalize(raw, ref): NormalizedJob {
-    const location = [raw.office, raw.remote ? "Remote" : undefined].filter(Boolean).join(", ");
+    // An office already called "Remote" isn't a place plus remote ("Remote, Remote").
+    const remote = raw.remote && !/\bremote\b/i.test(raw.office ?? "");
+    const location = [raw.office, remote ? "Remote" : undefined].filter(Boolean).join(", ");
     return {
       id: jobId("factorial", ref.slug, raw.id),
       ats: "factorial",

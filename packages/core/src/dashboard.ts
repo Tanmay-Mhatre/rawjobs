@@ -3,7 +3,8 @@ import { citiesIn, countriesIn } from "./catalog/places";
 import { seniorityOf } from "./catalog/seniority";
 import { TITLE_HEADS } from "./catalog/titles";
 import { displayName } from "./display-name";
-import type { DashboardJob, Job, JOB_BOARDS } from "./schema";
+import { extractEligibility, extractPay, regionOnly } from "./posting";
+import type { DashboardJob, Job, JOB_BOARDS, JobEligibility } from "./schema";
 
 /**
  * The dashboard's view of a job: no description (that's in descriptions.json), plus countries,
@@ -13,8 +14,14 @@ export function toDashboardJob(job: Job): DashboardJob {
   const { description, missedRuns: _missed, ...rest } = job;
   // Older saves and hiring systems that don't say: from the title's own words ("Intern", "(Contract)").
   const employmentType = job.employmentType ?? employmentTypeOfTitle(job.title);
+  // The hiring system's pay field wins; else pay the description states ("AED 28,000 - 32,000 per month").
+  const statedPay = job.salary?.currency && (job.salary.min || job.salary.max);
+  const pay = statedPay ? undefined : extractPay(description);
+  const eligibility = eligibilityOf(job, description);
   return {
     ...rest,
+    ...(pay ? { salary: pay, salaryFrom: "description" as const } : {}),
+    ...(eligibility ? { eligibility } : {}),
     countries: countriesIn(job.location, job.country),
     cities: citiesIn(job.location),
     seniority: seniorityOf(job.title),
@@ -23,6 +30,20 @@ export function toDashboardJob(job: Job): DashboardJob {
     hasDescription: !!description,
     ...(description ? { descriptionLength: description.trim().length } : {}),
   };
+}
+
+/** What the posting says about who can take the job; undefined when it says nothing. */
+export function eligibilityOf(job: Pick<Job, "title" | "location">, description: string | undefined): JobEligibility | undefined {
+  const e = extractEligibility(description);
+  const region = regionOnly(job.title) ?? regionOnly(job.location);
+  const out: JobEligibility = {
+    ...(e.sponsorship !== "unknown" ? { sponsorship: e.sponsorship } : {}),
+    ...(e.relocation !== "unknown" ? { relocation: e.relocation } : {}),
+    ...(e.authorisedIn ? { authorisedIn: e.authorisedIn } : {}),
+    ...(e.residentIn ? { residentIn: e.residentIn } : {}),
+    ...(region ? { regionOnly: region } : {}),
+  };
+  return Object.keys(out).length ? out : undefined;
 }
 
 /** A title's pieces: "Team Lead, Android Core Product - Manchester, United Kingdom" -> two. */
