@@ -17,7 +17,8 @@ on:
     types: [labeled]
 
 # One approval at a time; separate from the "directory" group so it never waits behind a rebuild.
-# The contributions run only writes moves-pending.json and rebases before pushing.
+# The contributions run may also write moves.json (auto-accept): both rebase before pushing, and
+# moves-lint.ts refuses two active moves for one old board after the rebase.
 concurrency:
   group: directory-move-approval
   cancel-in-progress: false
@@ -99,7 +100,10 @@ jobs:
           git add moves.json
           git commit -m "Approve a move (code repo issue #$ISSUE_NUMBER)"
           for try in 1 2 3; do
-            git pull --rebase --quiet && git push && exit 0
+            if git pull --rebase --quiet; then
+              (cd .. && pnpm exec tsx scripts/catalog/moves-lint.ts directory-repo/moves.json) || exit 1
+              git push && exit 0
+            fi
             sleep $((try * 5))
           done
           exit 1
