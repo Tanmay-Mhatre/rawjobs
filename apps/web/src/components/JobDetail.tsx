@@ -7,6 +7,7 @@ import { matchesTitle, safeUrl } from "@rawjobs/core/text";
 import {
   ArrowLeft,
   Bookmark,
+  BookmarkCheck,
   Check,
   ChevronDown,
   ChevronUp,
@@ -35,7 +36,7 @@ import { CLOSED_AS, type ClosedAs, type Entry, type EntryPatch, followUpDue, PIP
 import { Dialog } from "./Dialog";
 import { HiringActivity } from "./HiringActivity";
 import { ReasonPicker, useNotForMe } from "./NotForMe";
-import { Button, buttonClass, IconButton, Menu, ScoreBadge, scoreBandOf, ScoreBreakdown, scoreParts } from "./primitives";
+import { Button, buttonClass, IconButton, Menu, ScoreBadge, scoreBandOf, ScoreBreakdown, scoreParts, Tooltip } from "./primitives";
 import { toast } from "./Toast";
 import { cx, Select } from "./ui";
 
@@ -513,38 +514,45 @@ export function JobDetail(p: JobDetailProps) {
           target="_blank"
           rel="noreferrer"
           onClick={() => p.onApply?.(job)}
-          className={buttonClass("primary")}
-          title={job.estimated ? undefined : `Opens the posting on ${source}`}
+          className={buttonClass("primary", "md", "rj-foot__apply")}
+          title={job.estimated ? undefined : `Apply at ${companyName(job.company)}, opens the posting on ${source}`}
         >
           <ExternalLink className="rj-icon" />
-          {job.estimated ? "Open careers page" : `Apply at ${companyName(job.company)}`}
+          {/* A long company name ends in "…" rather than pushing the other actions to a second row. */}
+          <span className="truncate">{job.estimated ? "Open careers page" : `Apply at ${companyName(job.company)}`}</span>
         </a>
+        {/* Labelled on phones; on wider screens an icon with a tooltip (rj-foot__act), named by aria-label either way. */}
         <Button
-          icon={saved ? <Check className="rj-icon" /> : <Bookmark className="rj-icon" />}
+          icon={saved ? <BookmarkCheck className="rj-icon" /> : <Bookmark className="rj-icon" />}
           shortcut="S"
           onClick={() => p.onUpdate({ status: saved ? undefined : "saved" })}
           aria-pressed={saved}
-          className="aria-pressed:border-ink aria-pressed:bg-active"
+          aria-label={saved ? "Saved" : "Save"}
+          className="rj-foot__act aria-pressed:border-ink aria-pressed:bg-active"
         >
-          {saved ? "Saved" : "Save"}
+          <span className="rj-foot__text">{saved ? "Saved" : "Save"}</span>
+          <Tooltip label={saved ? "Saved" : "Save"} shortcut="S" side="above" />
         </Button>
         <Button
           icon={<X className="rj-icon" />}
           shortcut="X"
           onClick={() => setStatus(status === "dismissed" ? undefined : "dismissed")}
           aria-pressed={status === "dismissed"}
-          className="aria-pressed:border-ink aria-pressed:bg-active"
+          aria-label="Not interested"
+          className="rj-foot__act aria-pressed:border-ink aria-pressed:bg-active"
         >
-          Not interested
+          <span className="rj-foot__text">Not interested</span>
+          <Tooltip label="Not interested" shortcut="X" side="above" />
         </Button>
         {(p.onTrack || job.hasDescription) && (
           <Menu
             label="More job actions"
             side="above"
-            className="ml-auto"
+            className="ml-auto shrink-0"
             trigger={(t) => (
-              <button type="button" className={buttonClass("secondary", "md", "rj-btn--icon")} aria-label="More job actions" title="More job actions" {...t}>
+              <button type="button" className={buttonClass("secondary", "md", "rj-btn--icon")} aria-label="More job actions" {...t}>
                 {copied ? <Check className="rj-icon text-success-text" aria-hidden /> : <Ellipsis className="rj-icon" aria-hidden />}
+                <Tooltip label="More" side="above" />
               </button>
             )}
             items={[

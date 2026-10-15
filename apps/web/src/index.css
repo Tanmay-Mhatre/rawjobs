@@ -177,18 +177,40 @@ h3 {
   }
 }
 
-/* The job's footer is one row on laptops: Apply, Save, Add company, then Copy description as an icon
-   at the far end. On phones Apply takes its own row and the rest share the next one: the labelled
-   buttons split it (they may shrink; "Add company" fits half of a 375px screen), the icon keeps its
-   square 44px. */
 /* A section's one column never grows past the drawer (the description's 65ch line would push it sideways on phones). */
 .rj-drawer__section {
   grid-template-columns: minmax(0, 1fr);
 }
+/* The job's footer is one 60px row beside the list: Apply (a long company name ends in "…"), then Save
+   and Not interested as icons with tooltips, and More at the far end. On phones Apply takes its own row
+   and Save and Not interested keep their words, as there is no hover to show a tooltip. */
 .rj-drawer__foot {
   align-items: center;
 }
+@media (min-width: 721px) {
+  .rj-drawer__foot {
+    flex-wrap: nowrap;
+    padding-top: var(--space-3);
+    padding-bottom: var(--space-3);
+  }
+  .rj-foot__apply {
+    min-width: 0;
+  }
+  .rj-foot__act {
+    position: relative;
+    flex: none;
+    width: var(--control-md, 36px);
+    padding: 0;
+  }
+  .rj-foot__act > .rj-foot__text,
+  .rj-foot__act > .rj-kbd {
+    display: none;
+  }
+}
 @media (max-width: 720px) {
+  .rj-foot__act > .rj-tip {
+    display: none;
+  }
   .rj-drawer__foot {
     display: flex;
     flex-wrap: wrap;

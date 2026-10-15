@@ -2,7 +2,7 @@
  * The RawJobs primitives (design/IMPLEMENT.md, Phase 2). Each reproduces design/components/<Name>/preview.html:
  * the same rj- classes (styled by design/components/bundle.css), roles and states.
  */
-export { Button, IconButton, buttonClass, type ButtonProps, type ButtonVariant } from "./Button";
+export { Button, IconButton, Tooltip, buttonClass, type ButtonProps, type ButtonVariant } from "./Button";
 export { Chip, ChipGroup } from "./Chip";
 export { Field, SearchField } from "./Field";
 export { Kbd } from "./Kbd";

@@ -45,7 +45,12 @@ describe("Button", () => {
       </IconButton>,
     );
     const b = screen.getByRole("button", { name: "Copy job description" });
-    expect(b.title).toBe("Copy job description (C)");
+    // A real tooltip (hover and keyboard focus), not a native title; hidden from screen readers, which hear the name and key.
+    expect(b.title).toBe("");
+    const tip = b.querySelector(".rj-tip")!;
+    expect(tip.textContent).toBe("Copy job descriptionC");
+    expect(tip.getAttribute("aria-hidden")).toBe("true");
+    expect(b.getAttribute("aria-keyshortcuts")).toBe("C");
     expect(b.className).toContain("rj-btn--icon");
     expect(b.className).toContain("rj-btn--quiet");
   });

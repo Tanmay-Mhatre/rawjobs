@@ -427,7 +427,7 @@ export function RadarPage(p: Props) {
           <SearchField
             ref={searchRef}
             label="Search jobs"
-            className="order-1 min-w-0 flex-1 basis-40 lg:order-none lg:w-48 lg:flex-none lg:basis-auto xl:w-64"
+            className="order-1 min-w-0 flex-1 basis-40 lg:order-none lg:w-52 lg:flex-none lg:basis-auto xl:w-60"
             value={filters.q}
             onChange={(e) => setFilters({ q: e.target.value })}
             onKeyDown={(e) => {
@@ -440,7 +440,7 @@ export function RadarPage(p: Props) {
           {/* Phones sort in the filter sheet, so search and Filters share one row. */}
           <label className="relative hidden shrink-0 items-center lg:inline-flex">
             <ArrowUpDown className="pointer-events-none absolute left-2.5 size-3.5 text-muted" />
-            <select value={sort} onChange={(e) => setSort(e.target.value as Sort)} aria-label="Sort" className="h-9 appearance-none rounded-md border border-line bg-raised pl-8 pr-3 type-small">
+            <select value={sort} onChange={(e) => setSort(e.target.value as Sort)} aria-label="Sort" className="h-9 appearance-none rounded-md border border-control bg-raised pl-8 pr-3 type-small">
               {SORTS.map((s) => (
                 <option key={s.value} value={s.value}>
                   {s.label}
