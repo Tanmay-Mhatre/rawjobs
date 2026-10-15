@@ -95,11 +95,18 @@ async function list(ref: CompanyRef, http: Ctx["http"], query: string, max: numb
     return v2(0);
   });
   const out = [...page.jobs];
-  for (let start = PAGE; page.jobs.length && start < Math.min(page.total, max); start += PAGE) {
-    page = await read(start);
+  const total = page.total;
+  for (let start = PAGE; page.jobs.length && start < Math.min(total, max); start += PAGE) {
+    try {
+      page = await read(start);
+    } catch (err) {
+      // Refused partway (a rate limit on busy IPs, such as CI runners): keep what was read; the board is partial.
+      if (!isForbidden(err)) throw err;
+      return { out, total, cut: true };
+    }
     out.push(...page.jobs);
   }
-  return { out, total: page.total };
+  return { out, total: page.total, cut: false };
 }
 
 export const eightfold: Connector<EightfoldJob> = {
@@ -114,9 +121,9 @@ export const eightfold: Connector<EightfoldJob> = {
   },
 
   async fetch(ref, { http, partial }) {
-    const { out, total } = await list(ref, http, "", MAX_POSTINGS);
-    // Stopped at the cap (or the API stopped early) well short of the total it reports.
-    if (total - out.length >= PAGE) partial?.();
+    const { out, total, cut } = await list(ref, http, "", MAX_POSTINGS);
+    // Refused partway, or stopped at the cap (or the API stopped early) well short of the total it reports.
+    if (cut || total - out.length >= PAGE) partial?.();
     return out;
   },
 

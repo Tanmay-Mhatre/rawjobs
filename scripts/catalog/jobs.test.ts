@@ -1,6 +1,6 @@
-import { HostSkippedError, HttpError } from "@rawjobs/core";
+import { type FeedRow, HostSkippedError, HttpError } from "@rawjobs/core";
 import { describe, expect, it } from "vitest";
-import { describeReasons, failReason, sameSwing } from "./jobs";
+import { describeReasons, failReason, sameJobs, sameSwing, slowHosts } from "./jobs";
 
 describe("failReason", () => {
   it("groups HTTP errors by status", () => {
@@ -41,5 +41,32 @@ describe("sameSwing", () => {
   it("needs enough jobs to tell, and a count from the crawl", () => {
     expect(sameSwing({ before: 50, after: 0 })).toBeUndefined();
     expect(sameSwing(undefined)).toBeUndefined();
+  });
+});
+
+describe("sameJobs", () => {
+  const board = (n: number, partial?: boolean) => ({
+    fetched_at: "2026-10-15T00:00:00Z",
+    jobs: Array.from({ length: n }, (_, i) => [String(i), "t", "", "onsite", null] as FeedRow),
+    ...(partial ? { partial } : {}),
+  });
+
+  it("counts only companies in both runs, and leaves out partial boards", () => {
+    const previous = { a: board(100), b: board(300), c: board(50) };
+    // b was refused partway this run: 20 of its 300 jobs read. d is new.
+    const current = { a: board(110), b: board(20, true), d: board(500) };
+    expect(sameJobs(previous, current)).toEqual({ before: 100, after: 110 });
+  });
+});
+
+describe("slowHosts", () => {
+  it("gives every Eightfold board host, companies' own included, the feed's slower gap", () => {
+    expect(
+      slowHosts([
+        { ats: "eightfold", slug: "Bayer.eightfold.ai" },
+        { ats: "eightfold", slug: "explore.jobs.netflix.net" },
+        { ats: "greenhouse", slug: "acme" },
+      ]),
+    ).toEqual({ "bayer.eightfold.ai": 1250, "explore.jobs.netflix.net": 1250 });
   });
 });

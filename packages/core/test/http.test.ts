@@ -41,6 +41,17 @@ describe("HttpClient", () => {
     expect(seen[0]!.ua).toBe("test-agent");
   });
 
+  it("says who refused a 403: CDN and firewall headers and the start of the body", async () => {
+    const refused = new Response("<html><body>Request blocked.</body></html>", {
+      status: 403,
+      headers: { server: "CloudFront", "x-cache": "Error from cloudfront", "x-amzn-waf-action": "block", "content-type": "text/html" },
+    });
+    const { http } = client([refused]);
+    const err = await http.getJson("https://a.example/x").catch((e: unknown) => e);
+    expect(err).toMatchObject({ status: 403, message: "HTTP 403 (https://a.example/x)" });
+    expect((err as { detail: string }).detail).toBe("server: CloudFront; x-amzn-waf-action: block; x-cache: Error from cloudfront; body: <html><body>Request blocked.</body></html>");
+  });
+
   it("names the page when it answers with something that isn't JSON", async () => {
     const { http } = client([new Response("<html><body>Maintenance</body></html>", { headers: { "content-type": "text/html" } })]);
     await expect(http.getJson("https://a.example/board")).rejects.toThrow("not JSON (text/html): <html><body>Maintenance</body></html> (https://a.example/board)");

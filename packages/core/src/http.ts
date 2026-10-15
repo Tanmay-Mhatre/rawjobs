@@ -15,9 +15,23 @@ export class HttpError extends Error {
     message: string,
     readonly url: string,
     readonly status?: number,
+    /** On a 403: who refused (server, CDN and firewall headers, the start of the body), to tell a rate limit from a block. */
+    readonly detail?: string,
   ) {
     super(message);
   }
+}
+
+/** Headers that say who answered a 403: the server, a CDN, or a firewall in front of it. */
+const REFUSAL_HEADERS = /^(server|x-cache|retry-after|cf-ray|x-amzn-waf-.*|x-amz-cf-pop)$/i;
+
+/** A 403's headers and the start of its body, on one line. The body read has its own short clock. */
+async function refusalDetail(res: Response, ctrl: AbortController, ms: number): Promise<string> {
+  const headers = [...res.headers].filter(([k]) => REFUSAL_HEADERS.test(k)).map(([k, v]) => `${k}: ${v}`);
+  const timer = setTimeout(() => ctrl.abort(), ms);
+  const body = await res.text().catch(() => "");
+  clearTimeout(timer);
+  return [...headers, `body: ${body.slice(0, 120).replace(/\s+/g, " ").trim()}`].join("; ");
 }
 
 /**
@@ -295,6 +309,7 @@ export class HttpClient {
       // Paylocity says "slow down" with a 403: retried like a 429 when pacing.
       const pushback = res.status === 429 || (pace?.spec.key === "paylocity" && res.status === 403);
       if (!pushback && res.status < 500) {
+        if (res.status === 403) throw new HttpError(lastError.message, url, 403, await refusalDetail(res, ctrl, 5_000));
         // 4xx won't fix itself; free the connection now rather than when it's collected.
         await res.body?.cancel().catch(() => {});
         throw lastError;
