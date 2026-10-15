@@ -30,7 +30,7 @@ import { newSinceLastVisit } from "../../lib/newSince";
 import { useDensity, useMaxAge } from "../../lib/theme";
 import { ignoreShortcut } from "../../lib/keys";
 import { load, save } from "../../lib/storage";
-import type { Status, UserState } from "../../lib/userState";
+import type { EntryPatch, Status, UserState } from "../../lib/userState";
 import { JobDetail } from "../JobDetail";
 import { toast } from "../Toast";
 import { Chip, SearchField } from "../primitives";
@@ -55,7 +55,7 @@ type Props = {
   onOpenOverlay: (job: Job) => void;
   overlayOpen: boolean;
   onStatus: (job: Job, s: Status) => void;
-  onUpdate: (job: Job, patch: { status?: Status; note?: string }) => void;
+  onUpdate: (job: Job, patch: EntryPatch) => void;
   onApply: (job: Job) => void;
   onSaveView: (name: string, filters: Filters, sort: Sort) => SavedView;
   onRenameView: (id: string, name: string) => void;
@@ -366,7 +366,7 @@ export function RadarPage(p: Props) {
     onTrack: p.onTrack && ((on: boolean) => p.onTrack!(selected, on)),
     onCheck: p.onCheck && selected.estimated ? () => p.onCheck!(selected) : undefined,
     companyHidden: hidden.has(selected.company),
-    onUpdate: (patch: { status?: Status; note?: string }) => p.onUpdate(selected, patch),
+    onUpdate: (patch: EntryPatch) => p.onUpdate(selected, patch),
     onApply: p.onApply,
     onHideCompany: (h: boolean) => hideCompany(selected.company, h),
     onOpenJob: (j: Job) => setSelectedId(j.id),

@@ -3,7 +3,7 @@ import { ArrowRight, StickyNote } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import type { Job } from "../lib/data";
 import { timeAgo } from "../lib/format";
-import { PIPELINE, STATUS_LABEL, type Entry, type PipelineStatus, type Status, type UserState } from "../lib/userState";
+import { type Entry, followUpDue, PIPELINE, type PipelineStatus, STATUS_LABEL, type Status, statusLabel, type UserState } from "../lib/userState";
 import { EmptyState } from "./EmptyState";
 import { Chip, ChipGroup, Kbd, ScoreBadge } from "./primitives";
 import { Button, cx, Select } from "./ui";
@@ -173,6 +173,12 @@ export function Pipeline({ user, jobsById, min, onOpen, onMove, onSetup, goRadar
                         <p className="mt-2 line-clamp-2 flex gap-1 type-small text-muted">
                           <StickyNote className="mt-1 size-3.5 shrink-0" aria-hidden />
                           {e.note}
+                        </p>
+                      )}
+                      {e.status === "rejected" && e.closedAs && e.closedAs !== "rejected" && <p className="mt-2 type-meta text-muted">{statusLabel(e)}</p>}
+                      {e.followUp && (
+                        <p className={cx("mt-2 type-meta", followUpDue(e) ? "font-medium text-warning-text" : "text-muted")}>
+                          {followUpDue(e) ? "Follow up now" : `Follow up ${new Date(`${e.followUp}T12:00:00`).toLocaleDateString(undefined, { month: "short", day: "numeric" })}`}
                         </p>
                       )}
                       <div className="mt-2 flex items-center justify-between gap-2">
