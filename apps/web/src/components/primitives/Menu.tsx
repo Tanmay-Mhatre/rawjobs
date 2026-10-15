@@ -18,6 +18,7 @@ export function Menu({
   trigger,
   items,
   align = "end",
+  side = "below",
   className,
 }: {
   /** Names the menu ("Job actions"). */
@@ -33,6 +34,8 @@ export function Menu({
   }) => ReactNode;
   items: MenuItem[];
   align?: "start" | "end";
+  /** "above" for a trigger at the bottom of a panel (the job's foot), so the menu isn't cut off. */
+  side?: "below" | "above";
   className?: string;
 }) {
   const [open, setOpen] = useState(false);
@@ -112,7 +115,7 @@ export function Menu({
           data-state={state}
           onAnimationEnd={done}
           onKeyDown={onMenuKey}
-          className={cx("rj-menu absolute top-full z-menu mt-1", align === "end" ? "right-0" : "left-0")}
+          className={cx("rj-menu absolute z-menu", side === "above" ? "bottom-full mb-1" : "top-full mt-1", align === "end" ? "right-0" : "left-0")}
         >
           {items.map((item) => {
             // biome-ignore lint/a11y/useSemanticElements: an ARIA role on purpose: the native element (fieldset, output, input, hr, ul) would change layout or behaviour here

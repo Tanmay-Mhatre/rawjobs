@@ -1,8 +1,13 @@
 # Radar page: competitor review and what to show (2026-10-15)
 
 Status: **design approved 2026-10-15** (board "Recommended" on the mock canvas
-https://claude.ai/artifact/SavyR2gnvbJEtYsQViv11T). Not built: wait for the user's go. The UX fixes
-in `radar-list-detail-ux.md` are folded into the phases below.
+https://claude.ai/artifact/SavyR2gnvbJEtYsQViv11T). The UX fixes in `radar-list-detail-ux.md` are
+folded into the phases below.
+
+Progress:
+- Phase 1 shipped in PR #243.
+- Phase 2 is the PR that adds this note.
+- Phases 3–5 wait for the user's go.
 
 ## The team
 
