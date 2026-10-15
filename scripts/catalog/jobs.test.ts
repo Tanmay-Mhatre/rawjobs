@@ -67,6 +67,6 @@ describe("slowHosts", () => {
         { ats: "eightfold", slug: "explore.jobs.netflix.net" },
         { ats: "greenhouse", slug: "acme" },
       ]),
-    ).toEqual({ "bayer.eightfold.ai": 2500, "explore.jobs.netflix.net": 2500 });
+    ).toEqual({ "bayer.eightfold.ai": 1250, "explore.jobs.netflix.net": 1250 });
   });
 });

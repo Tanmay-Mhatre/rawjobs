@@ -19,6 +19,10 @@
 3. **Slower pace for Eightfold in the feed only.** `scripts/catalog/jobs.ts`: when crawling, add each Eightfold board's host (the directory's slug, which also covers companies' own hosts such as `explore.jobs.netflix.net`) to the feed's host gaps at 2.5 s, keeping 4 boards in flight. That's ~1.6 requests a second in total, lower both per host and overall, so it tests both readings. Worst case ~32 boards × 100 pages × 2.5 s ÷ 4 ≈ 33 min, alongside Workday's ~2 h in the same group. The desktop app's pace is unchanged (`CI_HOST_DELAYS` is the feed's own).
 4. **Don't count a partial board as a swing.** `scripts/catalog/jobs.ts`: leave boards saved as partial this run out of the `same` jobs count, so partial boards don't trip `sameSwing`. The log's "capped" count becomes "partial", since a board can now be cut short as well as capped.
 
+## Test run 1 (2.5 s, 4 boards in flight) and the change it led to
+
+Run 38721164398: 9 fetched (6 of them partial), 23 failed. Every refusal came from CloudFront itself (`server: CloudFront; x-cache: Error from cloudfront`, its HTML error page). After about 4 minutes at ~1.6 requests a second, each new board was refused on its first page. So the limit covers the runner's IP for all of Eightfold, not each board. Changed step 3 to one board at a time (`WORKERS.eightfold = 1`) with a 1.25 s gap: ~0.8 requests a second overall, ~45–55 min for ~32 boards, alongside Workday's ~2 h.
+
 ## Check before merging
 
 - Unit tests (fake client): a later page answers 403 → pages so far plus `partial()`; pcsx page 1 answers 403 → v2, then a later v2 page answers 403 → partial, not failed; page 1 answers 403 on v2 too → failed as today. `HttpError.detail` filled on a 403. `same` leaves out partial boards.

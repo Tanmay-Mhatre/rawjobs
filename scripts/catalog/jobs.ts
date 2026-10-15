@@ -64,8 +64,11 @@ export const atsOfGroup = (group: string): string[] => {
   return group === "rest" ? FEED_ATS.filter((a) => !named.has(a)) : (GROUPS[group] ?? []).filter((a) => FEED_ATS.includes(a));
 };
 
-/** Companies in flight per hiring system: shared API hosts just queue (HttpClient paces each host). */
-const WORKERS: Record<string, number> = { workday: 20, icims: 10, successfactors: 8 };
+/**
+ * Companies in flight per hiring system: shared API hosts just queue (HttpClient paces each host).
+ * Eightfold one at a time: its CDN refuses a CI runner's whole IP past about a request a second overall.
+ */
+const WORKERS: Record<string, number> = { workday: 20, icims: 10, successfactors: 8, eightfold: 1 };
 /**
  * The feed's pace per shared API host, faster than the app's own (HOST_DELAYS): one read per board per
  * run, from CI only. Any 429 still slows a host down for the rest of the run.
@@ -77,10 +80,11 @@ const CI_HOST_DELAYS: Record<string, number> = {
   "www.paycomonline.net": 667,
 };
 /**
- * Hiring systems whose every board is its own host, with the gap the feed keeps on each. Eightfold refuses
- * (403) a CI runner that pages a board at 1 a second, partway through; home connections aren't refused.
+ * Hiring systems whose every board is its own host, with the gap the feed keeps on each. Eightfold's CDN
+ * (CloudFront) refuses (403) a CI runner's IP for every board after a few minutes at ~1.6 requests a second
+ * across boards; with one board in flight (WORKERS), 1.25 s keeps it at ~0.8. Home connections aren't refused.
  */
-const CI_BOARD_GAPS: Record<string, number> = { eightfold: 2_500 };
+const CI_BOARD_GAPS: Record<string, number> = { eightfold: 1_250 };
 
 /** The gap per board host for CI_BOARD_GAPS' systems, from the directory (slug = host, own hosts included). */
 export function slowHosts(directory: { ats: string; slug: string }[]): Record<string, number> {
