@@ -1,13 +1,12 @@
 import { surgeTitle } from "@rawjobs/core/activity";
 import { sponsorOf, sponsorTitle } from "@rawjobs/core/catalog/visa";
 import { fromJobBoard } from "@rawjobs/core/dashboard";
-import { displayName } from "@rawjobs/core/display-name";
 import { Bookmark, Star, X } from "lucide-react";
 import { forwardRef, type ReactNode } from "react";
 import type { JobGroup } from "../../lib/filters";
 import { atsLabel, evergreenReason, isOlder } from "../../lib/filters";
 import { isRoleStale, staleReasons } from "../../lib/stale";
-import { formatSalary, placeSummary, postedOrSeen, shortAge, timeAgo } from "../../lib/format";
+import { cleanLocation, companyName, eligibilityNotes, formatSalary, jobTitle, placeSummary, postedOrSeen, shortAge, timeAgo, workplaceBeside } from "../../lib/format";
 import { STATUS_LABEL, type Entry, type Status } from "../../lib/userState";
 import { IconButton, ScoreBadge, SourceTag } from "../primitives";
 import { cx } from "../ui";
@@ -30,9 +29,9 @@ type Props = {
 function placeLine(group: JobGroup): string {
   const cities = group.jobs.flatMap((j) => j.cities);
   if (cities.length) return placeSummary(cities);
-  const lead = group.lead.location || "Location not listed";
+  const lead = cleanLocation(group.lead.location) || "Location not listed";
   // A job board's copy of the same posting isn't another place.
-  const others = new Set(group.jobs.map((j) => j.location || "Location not listed")).size - 1;
+  const others = new Set(group.jobs.map((j) => cleanLocation(j.location) || "Location not listed")).size - 1;
   return others > 0 ? `${lead} +${others}` : lead;
 }
 
@@ -68,14 +67,19 @@ export const JobCard = forwardRef<HTMLLIElement, Props>(function JobCard({ group
   const status = entry?.status;
   const muted = job.status === "closed" || status === "dismissed" || !!job.why.gate;
 
-  const meta: ReactNode[] = [displayName(job.company), placeLine(group)];
-  if (WORKPLACE[job.workplace]) meta.push(WORKPLACE[job.workplace]);
+  const place = placeLine(group);
+  const meta: ReactNode[] = [companyName(job.company), place];
+  const workplace = workplaceBeside(place, WORKPLACE[job.workplace]);
+  if (workplace) meta.push(workplace);
   if (yourIndustry)
     meta[meta.length - 1] = (
       <>
         {meta[meta.length - 1]} <span className="rj-ind">Your industry</span>
       </>
     );
+  // A limit on who can take the job comes early, so a long line never cuts it off.
+  const limit = eligibilityNotes(job.eligibility).find((n) => n.limit);
+  if (limit) meta.push(<span className="text-warning-text">{limit.text}</span>);
   // Before the salary: a long salary would cut it off the line.
   const sponsor = sponsorOf(group.jobs);
   if (sponsor)
@@ -87,11 +91,11 @@ export const JobCard = forwardRef<HTMLLIElement, Props>(function JobCard({ group
   // The company is opening far more roles than usual (data/activity.json); never part of the score.
   if (job.surge)
     meta.push(
-      <span className="text-ink" title={surgeTitle(displayName(job.company), job.surge)}>
+      <span className="text-ink" title={surgeTitle(companyName(job.company), job.surge)}>
         Hiring surge
       </span>,
     );
-  if (salary) meta.push(salary);
+  if (salary) meta.push(job.salaryFrom === "description" ? <span title="Read from the job description">{salary}</span> : salary);
   // The company's own posting leads; its job-board copies are named, not shown as more rows.
   const boards = fromJobBoard(job) ? [] : [...new Set(group.jobs.filter(fromJobBoard).map((j) => atsLabel(j.ats)))];
   if (boards.length) meta.push(boards.length === 1 ? `Also on ${boards[0]}` : `Also on ${boards.length} job boards`);
@@ -133,13 +137,13 @@ export const JobCard = forwardRef<HTMLLIElement, Props>(function JobCard({ group
   return (
     <li ref={ref} className={cx("rj-row", muted && "opacity-60")} aria-current={selected ? "true" : undefined}>
       <span title={job.estimated ? "Estimated: scored on title, place and industry only, until the full posting is fetched" : undefined}>
-        <ScoreBadge score={job.score} threshold={min} estimated={job.estimated} />
+        <ScoreBadge score={job.score} threshold={min} estimated={job.estimated} word />
       </span>
       <span className="rj-row__main">
         <span className="rj-row__title">
           {yours && <Star className="rj-star" role="img" aria-label="My company" />}
           <button type="button" onClick={onSelect} className="rj-row__link min-w-0 cursor-pointer text-left" data-job-link>
-            {job.title}
+            {jobTitle(job.title)}
           </button>
         </span>
         <Meta parts={meta} />

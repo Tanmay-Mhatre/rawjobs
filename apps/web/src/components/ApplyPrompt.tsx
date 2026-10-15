@@ -1,6 +1,7 @@
 import { CircleCheck } from "lucide-react";
 import { useEffect, useState } from "react";
 import type { Job } from "../lib/data";
+import { companyName } from "../lib/format";
 import { Button } from "./ui";
 
 /**
@@ -31,7 +32,7 @@ export function ApplyPrompt({ job, onAnswer }: { job: Job | null; onAnswer: (app
       <div className="pointer-events-auto flex max-w-xl flex-wrap items-center gap-3 rounded-md border border-line bg-raised p-3 pl-4 shadow-l3">
         <CircleCheck className="size-5 shrink-0 text-muted" aria-hidden="true" />
         <p className="min-w-0 flex-1 type-small">
-          Did you apply to <b>{job.title}</b> at <b>{job.company}</b>?
+          Did you apply to <b>{job.title}</b> at <b>{companyName(job.company)}</b>?
         </p>
         <div className="flex gap-2">
           <Button size="sm" variant="primary" onClick={() => onAnswer(true)}>

@@ -1,5 +1,4 @@
 import { surgeTitle } from "@rawjobs/core/activity";
-import { displayName } from "@rawjobs/core/display-name";
 import { EMPLOYMENT_LABEL } from "@rawjobs/core/catalog/employment";
 import { INDUSTRY_BY_ID } from "@rawjobs/core/catalog/industries";
 import { SENIORITY_LEVELS } from "@rawjobs/core/catalog/seniority";
@@ -10,7 +9,7 @@ import { ArrowLeft, Bookmark, Check, ChevronDown, ChevronUp, CircleCheck, Copy, 
 import { Fragment, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { copyText } from "../lib/clipboard";
 import { useDescription, useHiring, type Job, type Profile } from "../lib/data";
-import { formatDate, formatSalary, placeSummary, postedOrSeen, timeAgo } from "../lib/format";
+import { cleanLocation, companyName, eligibilityNotes, formatDate, formatSalary, jobTitle, placeSummary, postedOrSeen, timeAgo, workplaceBeside } from "../lib/format";
 import { atsLabel, evergreenReason, INDEX_MAX_AGE_DAYS, isOlder } from "../lib/filters";
 import { isRoleStale, isStale, staleReasons } from "../lib/stale";
 import { load, save } from "../lib/storage";
@@ -130,10 +129,10 @@ export function JobDetail(p: JobDetailProps) {
   // A job board's copy of the role is a posting, not another place.
   const placeCount = postings ? new Set(postings.map((j) => j.location || "Location not listed")).size : 0;
   const places = postings
-    ? placeSummary(postings.flatMap((j) => (j.cities.length ? j.cities : j.location ? [j.location] : [])))
-    : placeSummary(job.cities.length ? job.cities : job.location ? [job.location] : []);
+    ? placeSummary(postings.flatMap((j) => (j.cities.length ? j.cities : j.location ? [cleanLocation(j.location)] : [])))
+    : placeSummary(job.cities.length ? job.cities : job.location ? [cleanLocation(job.location)] : []);
   const age = timeAgo(postedOrSeen(job)).replace(/ ago$/, "");
-  const workplace = WORKPLACE_LABEL[job.workplace];
+  const workplace = workplaceBeside(places, WORKPLACE_LABEL[job.workplace]);
   const evergreen = evergreenReason(job);
   // On a government list of visa sponsors for the job's country (any of the role's places).
   const sponsor = sponsorOf(postings ?? [job]);
@@ -141,8 +140,10 @@ export function JobDetail(p: JobDetailProps) {
   const staleCtx = { descriptionLength: description ? description.trim().length : undefined };
   // The callout is for the role: one fresh posting of it and it's still live (the stale ones are marked in the list).
   const stale = isRoleStale(postings ?? [job], (j) => (j.id === job.id ? staleCtx : undefined)) ? staleReasons(job, staleCtx) : null;
+  // A register listing ("Sponsors visas") already says it: the posting's own "we sponsor" would repeat it.
+  const eligibility = eligibilityNotes(job.eligibility).filter((n) => !(sponsor && n.text === "Sponsors a visa"));
   const meta: ReactNode[] = [
-    job.company,
+    companyName(job.company),
     places,
     ...(workplace ? [workplace] : []),
     ...(job.employmentType ? [EMPLOYMENT_LABEL[job.employmentType]] : []),
@@ -150,14 +151,29 @@ export function JobDetail(p: JobDetailProps) {
     // The stale callout says how old it is: the meta keeps the plain date then.
     isOlder(job) && job.status === "open" && !stale ? (
       <span key="older" className="text-warning-text" title="Most roles are filled within two months. It's still listed, but may no longer be hiring.">
-        {job.postedAt ? "Posted" : "First seen"} {age} ago · may be filled
+        {job.postedAt ? "Posted" : "First seen"} {age} ago, may be filled
       </span>
     ) : job.postedAt ? (
       `Posted ${formatDate(job.postedAt)}`
     ) : (
       `First seen ${formatDate(job.firstSeen)}`
     ),
-    ...(salary ? [salary] : []),
+    ...(salary
+      ? [
+          job.salaryFrom === "description" ? (
+            <span key="salary" title="Read from the job description">
+              {salary}
+            </span>
+          ) : (
+            salary
+          ),
+        ]
+      : []),
+    ...eligibility.map((n) => (
+      <span key={n.text} className={n.limit ? "text-warning-text" : "text-success-text"}>
+        {n.text}
+      </span>
+    )),
     ...(sponsor
       ? [
           <span key="visa" className="text-success-text" title={sponsorTitle(sponsor)}>
@@ -167,7 +183,7 @@ export function JobDetail(p: JobDetailProps) {
       : []),
     ...(job.surge
       ? [
-          <span key="surge" className="text-ink" title={surgeTitle(displayName(job.company), job.surge)}>
+          <span key="surge" className="text-ink" title={surgeTitle(companyName(job.company), job.surge)}>
             Hiring surge
           </span>,
         ]
@@ -187,7 +203,7 @@ export function JobDetail(p: JobDetailProps) {
         ]
       : []),
     // We read it off the company's own board: say when, so "is this still open?" has an answer.
-    ...(job.status === "closed" ? ["Closed"] : job.estimated ? [] : [`Still listed · checked ${timeAgo(job.lastSeen)}`]),
+    ...(job.status === "closed" ? ["Closed"] : job.estimated ? [] : [`Still listed, checked ${timeAgo(job.lastSeen)}`]),
   ];
   const saved = status === "saved";
 
@@ -245,7 +261,7 @@ export function JobDetail(p: JobDetailProps) {
         </div>
         <h2 className="rj-drawer__title">
           {p.yours && <Star className="rj-star" role="img" aria-label="My company" />}
-          <span className="min-w-0">{job.title}</span>
+          <span className="min-w-0">{jobTitle(job.title)}</span>
         </h2>
         <MetaLine className="rj-drawer__meta" parts={meta} />
       </header>
@@ -273,7 +289,7 @@ export function JobDetail(p: JobDetailProps) {
           {sponsor && (
             <section className="rj-drawer__section">
               <h3 className="rj-h text-success-text">Sponsors visas</h3>
-              <p className="type-small">{sponsorSentence(displayName(job.company), sponsor)}</p>
+              <p className="type-small">{sponsorSentence(companyName(job.company), sponsor)}</p>
               <p className="type-small text-muted">That means it can sponsor, not that this role will. Source: {VISA_REGISTERS[sponsor.country].source}.</p>
             </section>
           )}
@@ -364,12 +380,12 @@ export function JobDetail(p: JobDetailProps) {
             </dl>
           </section>
 
-          {hiring && <HiringActivity company={displayName(job.company)} summary={hiring} />}
+          {hiring && <HiringActivity company={companyName(job.company)} summary={hiring} />}
 
           {(p.moreFromCompany?.length || p.onHideCompany) && (
             <section className="rj-drawer__section">
               <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
-                <h3 className="rj-h">More from {displayName(job.company)}</h3>
+                <h3 className="rj-h">More from {companyName(job.company)}</h3>
                 {p.onHideCompany && (
                   <button type="button" className="type-small text-muted hover:text-danger-text" onClick={() => p.onHideCompany!(!p.companyHidden)}>
                     {p.companyHidden ? "Show this company again" : "Hide this company"}
@@ -399,9 +415,16 @@ export function JobDetail(p: JobDetailProps) {
       </div>
 
       <footer className="rj-drawer__foot">
-        <a href={safeUrl(job.url)} target="_blank" rel="noreferrer" onClick={() => p.onApply?.(job)} className={buttonClass("primary")}>
+        <a
+          href={safeUrl(job.url)}
+          target="_blank"
+          rel="noreferrer"
+          onClick={() => p.onApply?.(job)}
+          className={buttonClass("primary")}
+          title={job.estimated ? undefined : `Opens the posting on ${source}`}
+        >
           <ExternalLink className="rj-icon" />
-          {job.estimated ? "Open careers page" : `Apply on ${source}`}
+          {job.estimated ? "Open careers page" : `Apply at ${companyName(job.company)}`}
         </a>
         <Button
           icon={saved ? <Check className="rj-icon" /> : <Bookmark className="rj-icon" />}
@@ -592,14 +615,18 @@ function WhyItMatches({ job, profile, yours }: { job: Job; profile: Profile; you
       ? { ok: (w.freshness ?? 0) >= 6, text: w.freshness === 10 ? "Posted in the last 3 days" : w.freshness === 6 ? "Posted this week" : "Posted more than a week ago" }
       : { ok: w.industry > 0, text: industryText(w.industry, job, profile, yours) },
   ];
+  const min = profile.min_score;
+  const cutOff = job.score > min ? `above your ${min} cut-off` : job.score === min ? `at your ${min} cut-off` : `below your ${min} cut-off`;
+  const parts = scoreParts(w);
+  const misses = items.filter((it) => !it.ok);
   return (
     <section className={cx("rj-drawer__section", open && "gap-4")}>
       <div className="flex items-center gap-3">
-        <ScoreBadge score={job.score} threshold={profile.min_score} estimated={job.estimated} />
+        <ScoreBadge score={job.score} threshold={min} estimated={job.estimated} word />
         <div className="min-w-0 flex-1">
           <h3 className="rj-h">Why it matched</h3>
           <p className="type-small text-muted">
-            {band} match. {job.estimated ? "Estimated from title, place and industry." : `Threshold ${profile.min_score}.`}{" "}
+            {band} match, {cutOff}. {job.estimated ? "Estimated from title, place and industry." : null}{" "}
             {!open && (
               <span className="sr-only">
                 {items.filter((it) => it.ok).length} of {items.length} checks pass.
@@ -611,6 +638,18 @@ function WhyItMatches({ job, profile, yours }: { job: Job; profile: Profile; you
           {open ? "Less" : "Details"}
         </Button>
       </div>
+      {!open && (
+        <div className="grid gap-1 type-small">
+          <p className="text-muted">{parts.map((p) => `${p.label} ${p.earned}/${p.max}`).join(" · ")}</p>
+          {misses.map((it, i) => (
+            // biome-ignore lint/suspicious/noArrayIndexKey: a fixed list rebuilt from the same input, never reordered: the index is a stable key
+            <p key={i} className="flex items-start gap-2 text-warning-text">
+              <X className="mt-0.5 size-4 shrink-0" aria-hidden />
+              <span>{it.text}</span>
+            </p>
+          ))}
+        </div>
+      )}
       {w.gate && <p className="type-small text-warning-text">Failed your {w.gate} filter, so the score is 0.</p>}
       {!!w.dealbreakers?.length && (
         <div className="type-small text-warning-text" data-dealbreakers>
@@ -627,7 +666,7 @@ function WhyItMatches({ job, profile, yours }: { job: Job; profile: Profile; you
       )}
       {open && (
         <div id={`why-${job.id}`} className="grid gap-4">
-          <ScoreBreakdown score={job.score} parts={scoreParts(w)} missing={missing} />
+          <ScoreBreakdown score={job.score} parts={parts} missing={missing} />
           <ul className="space-y-1.5 type-small">
             {items.map((it, i) => (
               // biome-ignore lint/suspicious/noArrayIndexKey: a fixed list rebuilt from the same input, never reordered: the index is a stable key
@@ -637,10 +676,16 @@ function WhyItMatches({ job, profile, yours }: { job: Job; profile: Profile; you
               </li>
             ))}
           </ul>
-          {w.scale && <p className="type-small text-muted">No topics set: title, place and industry make up the whole score.</p>}
-          <p className="type-small text-muted">
-            The score is how well the job fits. In Best match, newer jobs rank higher (the boost halves every 3 days){yours ? ", and your companies get +10" : ""}.
-          </p>
+          {/* A gate or a dealbreaker changes the score past the sum: their own lines above say how. */}
+          {w.scale && !w.gate && !w.dealbreakers?.length && (
+            <p className="type-small">
+              <b>
+                {parts.reduce((n, p) => n + p.earned, 0)} of {parts.reduce((n, p) => n + p.max, 0)} points, shown as {job.score} out of 100.
+              </b>{" "}
+              <span className="text-muted">You have no topics yet, so title, place and industry make up the whole score.</span>
+            </p>
+          )}
+          <p className="type-small text-muted">Best match also lists newer jobs{yours ? " and your companies" : ""} higher. The score itself doesn't change.</p>
         </div>
       )}
     </section>

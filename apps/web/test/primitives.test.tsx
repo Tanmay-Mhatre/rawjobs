@@ -111,7 +111,7 @@ describe("ScoreBreakdown", () => {
     const { container } = render(<ScoreBreakdown score={74} parts={scoreParts(why)} found={["crypto", "exchange"]} missing={["payments"]} />);
     expect(screen.getByRole("img", { name: "Score 74: title 30 of 30, place 20 of 20, keywords 14 of 40, fresh 10 of 10" })).toBeTruthy();
     expect(container.querySelector(".rj-breakdown__legend")!.getAttribute("aria-hidden")).toBe("true");
-    expect(container.querySelector(".rj-breakdown__legend")!.textContent).toBe("Title 30Place 20Keywords 14/40Fresh 10");
+    expect(container.querySelector(".rj-breakdown__legend")!.textContent).toBe("Title 30/30Place 20/20Keywords 14/40Fresh 10/10");
     const fills = [...container.querySelectorAll<HTMLElement>(".rj-breakdown__seg > i")].map((i) => i.style.transform);
     expect(fills).toEqual(["scaleX(1)", "scaleX(1)", "scaleX(0.35)", "scaleX(1)"]);
     expect([...container.querySelectorAll("mark")].map((m) => m.textContent)).toEqual(["crypto", "exchange"]);
