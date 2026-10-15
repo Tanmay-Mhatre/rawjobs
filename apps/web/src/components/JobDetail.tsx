@@ -222,8 +222,13 @@ export function JobDetail(p: JobDetailProps) {
       : []),
   ];
   const limits = eligibility.filter((n) => n.limit);
-  // "EU only" is read from the title or location; every other limit from the description.
-  const limitsFrom = limits.every((n) => n.text === `${job.eligibility?.regionOnly} only`) ? "From the title or location" : "From the description";
+  // "EU only" is read from the title or location, "UAE nationals only" from either the title or the description, the rest from the description.
+  const fromTitle = (n: { text: string }) => n.text === `${job.eligibility?.regionOnly} only`;
+  const limitsFrom = limits.every(fromTitle)
+    ? "From the title or location"
+    : job.eligibility?.nationalsOnly && limits.some((n) => n.text.endsWith("nationals only"))
+      ? "From the posting"
+      : "From the description";
   const pluses = [...(sponsor ? ["Sponsors visas"] : []), ...eligibility.filter((n) => !n.limit).map((n) => n.text)];
   const last30 = hiring?.last30 ?? job.surge?.n;
   const usual = hiring?.usual ?? job.surge?.usual;

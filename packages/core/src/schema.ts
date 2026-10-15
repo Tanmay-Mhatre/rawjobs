@@ -259,6 +259,8 @@ export type JobEligibility = {
   residentIn?: string;
   /** The title or location limits the job to one region ("EU only"). */
   regionOnly?: string;
+  /** Only this country's nationals can take it (posting.ts nationalsOnly), written as nationalsLabel says: "UAE". */
+  nationalsOnly?: string;
 };
 
 /** data/jobs.json (jobs that pass your filters) and data/jobs-other.json (the rest). */
@@ -352,6 +354,12 @@ export const ProfileSchema = z.object({
    * won't sponsor, in a country not listed, is a dealbreaker. ["none"] if you need sponsorship everywhere.
    */
   work_authorization: terms.optional(),
+  /**
+   * Countries you're a citizen of ("india"). A role only that country's nationals can take (an
+   * Emiratisation role, "UAE nationals only") is a dealbreaker when it isn't one of them. Left out, such
+   * roles are only flagged.
+   */
+  citizenship: terms.optional(),
   /** Work you won't do ("frontend", "credit risk"): a job whose title, or the role it describes, is about one is a dealbreaker. */
   avoid: terms.optional(),
 });
