@@ -12,7 +12,7 @@ export function shortcutRows(canScan: boolean): [string[], string][] {
     [["F"], "Expand job to full window"],
     ...(canScan ? [[["R"], "Scan now"] as [string[], string]] : []),
     [["/"], "Search (the Radar, or Settings)"],
-    [["1", "5"], "Radar quick filters (on or off), then Saved and Applied"],
+    [["1", "3"], "Radar quick filters: My companies, New, Strong (on or off)"],
     [["1", "4"], "Switch section, outside the Radar"],
     [["G", "R"], "Go to Radar"],
     [["G", "P"], "Go to Pipeline"],

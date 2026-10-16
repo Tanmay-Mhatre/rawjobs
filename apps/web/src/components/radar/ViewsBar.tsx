@@ -17,20 +17,14 @@ const CHIPS: { id: ChipId; label: string; on: (f: Filters) => boolean; set: (on:
 ];
 export type ChipId = "mine" | "new" | "strong";
 
-/** Saved and Applied: pipeline states, one at a time, in the Views menu with your own views. */
-const MENU_VIEWS: { id: "saved" | "applied"; label: string; filters: Partial<Filters> }[] = [
-  { id: "saved", label: "Saved", filters: { status: "saved" } },
-  { id: "applied", label: "Applied", filters: { status: "applied" } },
-];
-
-export type ViewCounts = Record<ChipId | "saved" | "applied", number>;
+export type ViewCounts = Record<ChipId, number>;
 
 /**
- * What keys 1-5 do, in the order they show: the chips (toggled), then Saved and Applied (picked). The
- * first scan has no New chip (every job would be new), so the keys after it move up one.
+ * The chips keys 1-3 toggle, in the order they show. The first scan has no New chip (every job would be
+ * new), so Strong moves up to 2. Saved and applied jobs live on the Pipeline, not here.
  */
-export function viewKeys(hideNew?: boolean): ({ kind: "chip"; id: ChipId } | { kind: "view"; filters: Partial<Filters> })[] {
-  return [...CHIPS.filter((c) => !(c.id === "new" && hideNew)).map((c) => ({ kind: "chip" as const, id: c.id })), ...MENU_VIEWS.map((v) => ({ kind: "view" as const, filters: v.filters }))];
+export function chipKeys(hideNew?: boolean): ChipId[] {
+  return CHIPS.filter((c) => !(c.id === "new" && hideNew)).map((c) => c.id);
 }
 
 /** The filters with one chip turned the other way. */
@@ -46,7 +40,7 @@ export function ViewsBar(props: {
   filters: Filters;
   sort: Sort;
   views: SavedView[];
-  /** Each chip's count with the other chips that are on; Saved and Applied on their own. */
+  /** Each chip's count with the other chips that are on. */
   counts: ViewCounts;
   /** First scan: every job would be new, so there's no New chip. */
   hideNew?: boolean;
@@ -57,7 +51,6 @@ export function ViewsBar(props: {
 }) {
   const [naming, setNaming] = useState<{ id?: string; value: string } | null>(null);
   const matchesView = (f: Filters) => sameFilters(f, props.filters);
-  const menuActive = MENU_VIEWS.find((v) => matchesView({ ...props.base, ...v.filters }));
   const customActive = props.views.find((v) => matchesView(v.filters) && v.sort === props.sort);
   const submit = () => {
     if (!naming?.value.trim()) return setNaming(null);
@@ -67,18 +60,17 @@ export function ViewsBar(props: {
   };
 
   const chips = CHIPS.filter((c) => !(c.id === "new" && props.hideNew));
-  const keys = viewKeys(props.hideNew);
-  const keyOf = (match: (k: ReturnType<typeof viewKeys>[number]) => boolean) => String(keys.findIndex(match) + 1);
+  const keys = chipKeys(props.hideNew);
   // Anything other than your profile's own list (in Best match) can be kept as a view.
-  const canSave = !customActive && !menuActive && (!sameFilters(props.base, props.filters) || props.sort !== "best");
-  const menuLabel = customActive?.name ?? menuActive?.label ?? "Views";
+  const canSave = !customActive && (!sameFilters(props.base, props.filters) || props.sort !== "best");
+  const menuLabel = customActive?.name ?? "Views";
   return (
     // One wrapping row for the chips and Views, so a phone needs two rows, not three.
     // biome-ignore lint/a11y/useSemanticElements: an ARIA role on purpose: a fieldset would change the layout
     <div role="group" aria-label="Quick filters" className={cx("flex flex-wrap items-center gap-2", props.className)}>
       {chips.map((c) => {
         const on = c.on(props.filters);
-        const key = keyOf((k) => k.kind === "chip" && k.id === c.id);
+        const key = String(keys.indexOf(c.id) + 1);
         return (
           <button
             key={c.id}
@@ -98,39 +90,30 @@ export function ViewsBar(props: {
       {naming ? (
         <NameInput value={naming.value} onChange={(value) => setNaming({ ...naming, value })} onSubmit={submit} onCancel={() => setNaming(null)} />
       ) : (
-        // Saved, Applied and your own views in one menu: one at a time, they replace the chips.
-        <Menu
-          label="Views"
-          align="start"
-          trigger={(t) => (
-            <button
-              type="button"
-              {...t}
-              className={cx("rj-chip max-w-48 border-dashed", (customActive || menuActive) && "border-solid border-[var(--chip-on-bg)] bg-[var(--chip-on-bg)] text-[var(--chip-on-fg)]")}
-            >
-              <span className="truncate">{menuLabel}</span>
-              <ChevronDown className="size-3.5 shrink-0" aria-hidden />
-            </button>
-          )}
-          items={[
-            ...MENU_VIEWS.map((v) => ({
-              id: v.id,
-              label: `${v.label} · ${props.counts[v.id].toLocaleString()}`,
-              shortcut: keyOf((k) => k.kind === "view" && k.filters.status === v.filters.status),
-              onSelect: () => props.onPick({ ...props.base, ...v.filters }, props.sort),
-            })),
-            ...(props.views.length ? [{ separator: true as const, id: "sep-views" }] : []),
-            ...props.views.map((v) => ({ id: v.id, label: v.name, onSelect: () => props.onPick(v.filters, v.sort) })),
-            ...(canSave || customActive ? [{ separator: true as const, id: "sep" }] : []),
-            ...(canSave ? [{ id: "save", label: "Save current view…", onSelect: () => setNaming({ value: "" }) }] : []),
-            ...(customActive
-              ? [
-                  { id: "rename", label: `Rename "${customActive.name}"…`, onSelect: () => setNaming({ id: customActive.id, value: customActive.name }) },
-                  { id: "delete", label: `Delete "${customActive.name}"`, danger: true, onSelect: () => props.onDelete(customActive) },
-                ]
-              : []),
-          ]}
-        />
+        // Your own views, and saving the current one; nothing to show until there's one or the other.
+        (props.views.length > 0 || canSave || customActive) && (
+          <Menu
+            label="Views"
+            align="start"
+            trigger={(t) => (
+              <button type="button" {...t} className={cx("rj-chip max-w-48 border-dashed", customActive && "border-solid border-[var(--chip-on-bg)] bg-[var(--chip-on-bg)] text-[var(--chip-on-fg)]")}>
+                <span className="truncate">{menuLabel}</span>
+                <ChevronDown className="size-3.5 shrink-0" aria-hidden />
+              </button>
+            )}
+            items={[
+              ...props.views.map((v) => ({ id: v.id, label: v.name, onSelect: () => props.onPick(v.filters, v.sort) })),
+              ...(props.views.length && (canSave || customActive) ? [{ separator: true as const, id: "sep" }] : []),
+              ...(canSave ? [{ id: "save", label: "Save current view…", onSelect: () => setNaming({ value: "" }) }] : []),
+              ...(customActive
+                ? [
+                    { id: "rename", label: `Rename "${customActive.name}"…`, onSelect: () => setNaming({ id: customActive.id, value: customActive.name }) },
+                    { id: "delete", label: `Delete "${customActive.name}"`, danger: true, onSelect: () => props.onDelete(customActive) },
+                  ]
+                : []),
+            ]}
+          />
+        )
       )}
     </div>
   );

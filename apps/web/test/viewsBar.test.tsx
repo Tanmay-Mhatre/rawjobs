@@ -7,7 +7,7 @@ import { ViewsBar } from "../src/components/radar/ViewsBar";
 import type { Filters } from "../src/lib/filters";
 
 const base = {} as Filters;
-const counts = { mine: 71, new: 22, strong: 130, saved: 0, applied: 2 };
+const counts = { mine: 71, new: 22, strong: 130 };
 const bar = (over: Partial<Parameters<typeof ViewsBar>[0]> = {}) => {
   const onPick = vi.fn();
   render(<ViewsBar base={base} filters={base} sort="best" views={[]} counts={counts} onPick={onPick} onSave={vi.fn()} onRename={vi.fn()} onDelete={vi.fn()} {...over} />);
@@ -40,12 +40,13 @@ describe("Radar views", () => {
     expect(screen.queryByRole("button", { name: /^New/ })).toBeNull();
   });
 
-  it("keeps Saved and Applied, with their counts and keys, in the Views menu", () => {
-    const { onPick } = bar();
+  it("leaves saved and applied jobs to the Pipeline, and shows no empty Views menu", () => {
+    bar();
+    expect(screen.queryByRole("button", { name: /Views/ })).toBeNull();
+    cleanup();
+    bar({ views: [{ id: "v1", name: "Dubai fintech", filters: base, sort: "best" }] as never, sort: "newest" });
     fireEvent.click(screen.getByRole("button", { name: /Views/ }));
-    expect(screen.getByRole("menuitem", { name: /Saved · 0/ })).toBeTruthy();
-    fireEvent.click(screen.getByRole("menuitem", { name: /Applied · 2/ }));
-    expect(onPick).toHaveBeenCalledWith({ status: "applied" }, "best");
+    expect(screen.getAllByRole("menuitem").map((m) => m.textContent)).toEqual(["Dubai fintech", "Save current view…"]);
   });
 
   it("offers to save the current view from the menu, not a separate button", () => {
