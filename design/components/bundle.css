@@ -93,11 +93,11 @@
 .rj-score--word { flex-direction: column; gap: 0; height: auto; padding: var(--space-1) var(--space-2); }
 .rj-score__word { font: var(--text-meta, 500 11px/14px var(--font-sans)); font-size: 11px; line-height: 14px; letter-spacing: 0.04em; text-transform: uppercase; }
 .rj-score--strong { background: var(--score-strong-bg); border-color: var(--score-strong-bg); color: var(--score-strong-fg); }
-.rj-score--fair { background: var(--score-fair-bg); border-color: var(--score-fair-bg); color: var(--score-fair-fg); }
+.rj-score--fair { background: var(--score-fair-bg); border-color: var(--score-fair-border); color: var(--score-fair-fg); }
 .rj-score--weak { background: transparent; border-color: var(--score-weak-border); color: var(--score-weak-fg); }
 .rj-score--estimated { background: transparent; border-style: dashed; }
 .rj-score--estimated.rj-score--strong { color: var(--score-strong-estimated); border-color: var(--score-strong-estimated); }
-.rj-score--estimated.rj-score--fair { color: var(--score-fair-estimated); border-color: var(--score-fair-estimated); }
+.rj-score--estimated.rj-score--fair { color: var(--score-fair-fg); border-color: var(--score-fair-estimated); }
 .rj-score--lg { min-width: 88px; height: 48px; padding: 0 var(--space-3); gap: var(--space-2); font: var(--text-score-lg, 600 32px/36px var(--font-sans)); letter-spacing: -0.02em; }
 
 /* ---------- score breakdown ---------- */
