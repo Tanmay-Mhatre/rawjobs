@@ -25,7 +25,8 @@ describe("findCandidates", () => {
     expect(c[0]!.postedAt).toBe(new Date(built.getTime() - DAY).toISOString());
     // Equal fit (the estimate has no age in it): the fresher one ranks first.
     expect(c[0]!.estimate).toBe(c[1]!.estimate);
-    expect(c[0]!.why.keywordPoints).toBe(0);
+    // No description: topics are unknown, so they count part of the bar.
+    expect(c[0]!.why.keywordPoints).toBe(15);
   });
 
   it("counts a company's ages from when it was fetched, which can be before the index was built", () => {

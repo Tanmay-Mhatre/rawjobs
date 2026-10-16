@@ -1,15 +1,15 @@
 {
   "overall": {
-    "ndcg5": 0.915,
-    "ndcg10": 0.926,
-    "p5": 0.5,
+    "ndcg5": 0.921,
+    "ndcg10": 0.922,
+    "p5": 0.533,
     "spearman": 0.692,
     "ties": 0.013,
-    "tiesNoTopics": 0.037,
+    "tiesNoTopics": 0.032,
     "confusion": {
       "strong": {
-        "strong": 12,
-        "good": 4,
+        "strong": 16,
+        "good": 0,
         "weak": 3
       },
       "good": {
@@ -18,9 +18,9 @@
         "weak": 1
       },
       "weak": {
-        "strong": 1,
-        "good": 4,
-        "weak": 264
+        "strong": 0,
+        "good": 3,
+        "weak": 266
       }
     },
     "pairs": 294
@@ -36,8 +36,8 @@
       "tiesNoTopics": 0,
       "confusion": {
         "strong": {
-          "strong": 1,
-          "good": 1,
+          "strong": 2,
+          "good": 0,
           "weak": 1
         },
         "good": {
@@ -54,16 +54,16 @@
     },
     {
       "id": "finance-analyst",
-      "ndcg5": 0.985,
-      "ndcg10": 0.986,
+      "ndcg5": 0.948,
+      "ndcg10": 0.949,
       "p5": 0.6,
       "spearman": 0.581,
       "ties": 0.048,
       "tiesNoTopics": 0.048,
       "confusion": {
         "strong": {
-          "strong": 2,
-          "good": 1,
+          "strong": 3,
+          "good": 0,
           "weak": 0
         },
         "good": {
@@ -73,8 +73,8 @@
         },
         "weak": {
           "strong": 0,
-          "good": 1,
-          "weak": 45
+          "good": 0,
+          "weak": 46
         }
       }
     },
@@ -88,8 +88,8 @@
       "tiesNoTopics": 0.048,
       "confusion": {
         "strong": {
-          "strong": 2,
-          "good": 1,
+          "strong": 3,
+          "good": 0,
           "weak": 1
         },
         "good": {
@@ -106,10 +106,10 @@
     },
     {
       "id": "ml-ds",
-      "ndcg5": 0.882,
-      "ndcg10": 0.877,
+      "ndcg5": 0.891,
+      "ndcg10": 0.886,
       "p5": 0.4,
-      "spearman": 0.82,
+      "spearman": 0.821,
       "ties": 0,
       "tiesNoTopics": 0,
       "confusion": {
@@ -124,24 +124,24 @@
           "weak": 0
         },
         "weak": {
-          "strong": 1,
-          "good": 0,
+          "strong": 0,
+          "good": 1,
           "weak": 43
         }
       }
     },
     {
       "id": "platform-eng",
-      "ndcg5": 0.908,
-      "ndcg10": 0.967,
-      "p5": 0.6,
-      "spearman": 0.841,
+      "ndcg5": 0.972,
+      "ndcg10": 0.972,
+      "p5": 0.8,
+      "spearman": 0.842,
       "ties": 0.028,
-      "tiesNoTopics": 0.056,
+      "tiesNoTopics": 0.028,
       "confusion": {
         "strong": {
-          "strong": 3,
-          "good": 1,
+          "strong": 4,
+          "good": 0,
           "weak": 0
         },
         "good": {
@@ -151,8 +151,8 @@
         },
         "weak": {
           "strong": 0,
-          "good": 2,
-          "weak": 42
+          "good": 1,
+          "weak": 43
         }
       }
     },
@@ -215,36 +215,6 @@
       "gap": -3
     },
     {
-      "profile": "ml-ds",
-      "job": "ml-05",
-      "title": "Staff Applied Scientist",
-      "company": "Glyphic AI",
-      "score": 83,
-      "label": 1,
-      "why": "Staff Applied Scientist leading four: PhD, 10+ years post-PhD and publications required; she has an MS and 4 years (far level).",
-      "gap": 2.32
-    },
-    {
-      "profile": "finance-analyst",
-      "job": "fin-06",
-      "title": "Senior Business Analyst",
-      "company": "Halcyon Bank",
-      "score": 55,
-      "label": 0,
-      "why": "Core-banking IT business analyst (requirements, UAT, BPMN, 5+ years BA): a different job from FP&A; only the title word matches.",
-      "gap": 2.2
-    },
-    {
-      "profile": "platform-eng",
-      "job": "eng-05",
-      "title": "Senior Software Engineer (Web)",
-      "company": "Pixelmint",
-      "score": 50,
-      "label": 0,
-      "why": "React/TypeScript canvas editor: a frontend role, his dealbreaker; the Go/Kubernetes mentions are about other teams.",
-      "gap": 2
-    },
-    {
       "profile": "product-designer",
       "job": "des-06",
       "title": "Senior UX Researcher",
@@ -253,6 +223,16 @@
       "label": 2,
       "why": "UX researcher: an adjacent function; she runs research as a designer but lacks the required 5+ years dedicated research. Design background is a plus there.",
       "gap": -2
+    },
+    {
+      "profile": "platform-eng",
+      "job": "eng-05",
+      "title": "Senior Software Engineer (Web)",
+      "company": "Pixelmint",
+      "score": 49,
+      "label": 0,
+      "why": "React/TypeScript canvas editor: a frontend role, his dealbreaker; the Go/Kubernetes mentions are about other teams.",
+      "gap": 1.96
     },
     {
       "profile": "finance-analyst",
@@ -283,6 +263,26 @@
       "label": 0,
       "why": "EUR 65-78k tops out 8% under his 85k floor (more than 5%: salary blocker); also a level down (2+ years).",
       "gap": 1.92
+    },
+    {
+      "profile": "platform-eng",
+      "job": "eng-07",
+      "title": "Senior Platform Engineer",
+      "company": "Northbeam Systems",
+      "score": 48,
+      "label": 0,
+      "why": "Remote for US residents only, no sponsorship: US-only remote is his dealbreaker.",
+      "gap": 1.92
+    },
+    {
+      "profile": "finance-analyst",
+      "job": "fin-06",
+      "title": "Senior Business Analyst",
+      "company": "Halcyon Bank",
+      "score": 47,
+      "label": 0,
+      "why": "Core-banking IT business analyst (requirements, UAT, BPMN, 5+ years BA): a different job from FP&A; only the title word matches.",
+      "gap": 1.88
     }
   ],
   "scores": {
@@ -332,7 +332,7 @@
     "b2b-ae/ae-02": 43,
     "b2b-ae/ae-03": 58,
     "b2b-ae/ae-04": 28,
-    "b2b-ae/ae-05": 60,
+    "b2b-ae/ae-05": 75,
     "b2b-ae/ae-06": 0,
     "b2b-ae/ae-07": 0,
     "finance-analyst/ml-01": 0,
@@ -363,8 +363,8 @@
     "finance-analyst/fin-03": 70,
     "finance-analyst/fin-04": 48,
     "finance-analyst/fin-05": 44,
-    "finance-analyst/fin-06": 55,
-    "finance-analyst/fin-07": 60,
+    "finance-analyst/fin-06": 47,
+    "finance-analyst/fin-07": 75,
     "finance-analyst/fin-08": 0,
     "finance-analyst/pm-01": 0,
     "finance-analyst/pm-02": 0,
@@ -416,14 +416,14 @@
     "fintech-pm/fin-07": 0,
     "fintech-pm/fin-08": 0,
     "fintech-pm/pm-01": 100,
-    "fintech-pm/pm-02": 42,
+    "fintech-pm/pm-02": 39,
     "fintech-pm/pm-03": 0,
     "fintech-pm/pm-04": 0,
     "fintech-pm/pm-05": 47,
     "fintech-pm/pm-06": 0,
     "fintech-pm/pm-07": 0,
-    "fintech-pm/pm-08": 94,
-    "fintech-pm/pm-09": 60,
+    "fintech-pm/pm-08": 92,
+    "fintech-pm/pm-09": 75,
     "fintech-pm/pm-10": 59,
     "fintech-pm/pm-11": 43,
     "fintech-pm/ae-01": 0,
@@ -434,10 +434,10 @@
     "fintech-pm/ae-06": 0,
     "fintech-pm/ae-07": 0,
     "ml-ds/ml-01": 100,
-    "ml-ds/ml-02": 95,
+    "ml-ds/ml-02": 92,
     "ml-ds/ml-03": 45,
     "ml-ds/ml-04": 81,
-    "ml-ds/ml-05": 83,
+    "ml-ds/ml-05": 68,
     "ml-ds/ml-06": 0,
     "ml-ds/ml-07": 76,
     "ml-ds/des-01": 0,
@@ -498,12 +498,12 @@
     "platform-eng/des-07": 0,
     "platform-eng/eng-01": 100,
     "platform-eng/eng-02": 48,
-    "platform-eng/eng-03": 95,
-    "platform-eng/eng-04": 76,
-    "platform-eng/eng-05": 50,
+    "platform-eng/eng-03": 81,
+    "platform-eng/eng-04": 71,
+    "platform-eng/eng-05": 49,
     "platform-eng/eng-06": 67,
     "platform-eng/eng-07": 48,
-    "platform-eng/eng-08": 55,
+    "platform-eng/eng-08": 70,
     "platform-eng/eng-09": 98,
     "platform-eng/fin-01": 0,
     "platform-eng/fin-02": 0,

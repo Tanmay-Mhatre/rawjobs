@@ -338,3 +338,111 @@ export function nationalsOnly(title: string, description?: string): string | und
 
 /** "UAE", "Saudi": how a nationals-only limit is written for a country nationalsOnly returns. */
 export const nationalsLabel = (country: string) => NATIONALS.find((n) => n.country === country)?.label ?? country.replace(/\b\p{L}/gu, (c) => c.toUpperCase());
+
+// ---------- what the job requires ----------
+
+/** What a posting asks for: its must-have lines, its nice-to-have lines and the years of experience it wants. */
+export type Requirements = {
+  must: string[];
+  nice: string[];
+  /** The highest minimum years a must line asks for ("5+ years of…" -> 5), with that line. */
+  years?: { min: number; line: string };
+  /** The text without its nice-to-have parts: a topic only in `nice` is a nice-to-have. */
+  rest: string;
+  /** A must or nice heading was found: the lines come from sections, not only cue words. */
+  structured: boolean;
+};
+
+const MUST_HEADING =
+  /^(?:(?:minimum|basic|required|key|essential|core)\s+)?(?:requirements?|qualifications?|skills(?: and experience)?|experience)$|^what (?:you(?:'ll| will)? need|we(?:'re| are) looking for|you(?:'ll| will)? bring|you bring|we need|we expect)(?: from you)?$|^(?:you have|you bring|you are|you'll have|you will have|who you are|about you|your profile|your background|your experience|your skills|must[- ]haves?|essentials?|ideal candidate|the ideal candidate|requirements and qualifications|is this you)$/;
+const NICE_HEADING =
+  /^(?:nice[- ]to[- ]haves?|(?:it's |it is )?nice if you have|bonus(?: points)?(?: if you have)?|preferred(?: qualifications| skills| experience)?|desirable(?: skills)?|extra credit|pluses|plus points|good to have|even better if(?: you have)?|ideally(?: you have)?)$/;
+/** Headings of the other parts of a posting: they end a must or nice section. */
+const OTHER_HEADING =
+  /^(?:what you(?:'ll| will)? (?:do|work on|own|be doing)|(?:key |your |main |core )?(?:responsibilities|duties|tasks)|in this role(?: you will)?|you will|your (?:mission|role|day|impact|tasks)|the (?:role|opportunity|team|job|position)|about (?:the |this |our )?(?:role|team|company|us|job|position|[a-z]+)|(?:what )?we offer|what's in it for you|benefits(?: and perks)?|perks(?: and benefits)?|why (?:join|work)\b.*|compensation(?: and benefits)?|salary|pay|location(?: and eligibility)?|how to apply|our (?:values|culture|stack|team|process)|hiring process|interview process|equal opportunity.*|diversity.*|who we are|life at .*)$/;
+/** Lines that read as a nice-to-have wherever they are. */
+const NICE_CUE = /\b(?:is|are|would be|as) (?:a )?(?:plus|bonus|advantage)\b|\bnice[- ]to[- ]have\b|\bpreferred\b|\bideally\b|\bdesirable\b|\bbonus\b|\bnot required\b|\bgood to have\b/i;
+/** Lines that read as a must-have outside a section. */
+const MUST_CUE = /\b(?:must|required|requirement|minimum|essential|at least|you have|you bring|you'll need|you will need)\b/i;
+
+/** A short line that isn't a sentence: a heading, read without its bullet, colon or trailing words. */
+function headingOf(line: string): string | undefined {
+  const t = line.replace(/^[\s#*•\-–]+|[\s*:]+$/g, "").trim();
+  if (!t || t.length > 60 || /[.!?;]$/.test(t) || t.split(/\s+/).length > 9) return undefined;
+  return t.toLowerCase().replace(/[’‘]/g, "'").replace(/\s+/g, " ").replace(/\?$/, "");
+}
+
+const WORD_NUM: Record<string, number> = { one: 1, two: 2, three: 3, four: 4, five: 5, six: 6, seven: 7, eight: 8, nine: 9, ten: 10, twelve: 12, fifteen: 15 };
+/**
+ * "5+ years", "3-5 years", "at least 5 years", "minimum of five years", "10 yrs": the number before "years".
+ * The years must be of experience: followed by "of", "in", "experience" or "working", or on a line that says experience.
+ */
+const YEARS_RE = new RegExp(
+  `\\b(\\d{1,2}|${Object.keys(WORD_NUM).join("|")})\\s*(?:\\+|plus)?\\s*(?:(?:-|–|to)\\s*\\d{1,2}\\s*\\+?\\s*)?(?:years?|yrs?)\\b(?:\\s*\\+)?(\\s*(?:'|’)?\\s*(?:of|in|experience|working|hands-on|professional|relevant|post|building|leading|as|with)\\b)?`,
+  "gi",
+);
+const NOT_EXPERIENCE = /\b(?:ago|old|founded|contract|warranty|history|anniversary|track record of \d+ years? of growth)\b/i;
+
+function yearsIn(line: string): number | undefined {
+  let best: number | undefined;
+  for (const m of line.matchAll(YEARS_RE)) {
+    const n = /^\d/.test(m[1]!) ? Number(m[1]) : WORD_NUM[m[1]!.toLowerCase()];
+    const after = line.slice((m.index ?? 0) + m[0].length - (m[2]?.length ?? 0), (m.index ?? 0) + m[0].length + 30);
+    const experience = !!m[2] || /\bexperience\b/i.test(line);
+    if (!n || n > 25 || !experience || NOT_EXPERIENCE.test(after) || NOT_EXPERIENCE.test(line.slice(0, m.index ?? 0).slice(-20))) continue;
+    if (best === undefined || n > best) best = n;
+  }
+  return best;
+}
+
+/**
+ * The must-have and nice-to-have lines of a posting, and the years it asks for. Sections first ("Requirements",
+ * "What you'll need", "Nice to have", "Preferred"); any other heading ("What you'll do", "Benefits") ends one.
+ * A line with a nice cue ("SQL is a plus") is nice even inside a must section; outside sections, lines
+ * with a must or nice cue are sorted by it. Years come from must lines only, the highest minimum.
+ */
+export function extractRequirements(text: string | undefined): Requirements {
+  const out: Requirements = { must: [], nice: [], rest: "", structured: false };
+  if (!text) return out;
+  const rest: string[] = [];
+  let section: "must" | "nice" | "other" | undefined;
+  for (const raw of text.split(/\n/)) {
+    const line = raw.replace(/^[\s•*\-–]+/, "").trim();
+    if (!line) continue;
+    const h = headingOf(raw);
+    if (h !== undefined && (MUST_HEADING.test(h) || NICE_HEADING.test(h))) {
+      section = MUST_HEADING.test(h) ? "must" : "nice";
+      out.structured = true;
+      continue;
+    }
+    // Any other heading ends the section: a known one ("What you'll do", "Benefits"), or a short line ending in a colon.
+    if (h !== undefined && (OTHER_HEADING.test(h) || /:\s*$/.test(raw))) {
+      section = "other";
+      continue;
+    }
+    if (section === "nice") {
+      out.nice.push(line);
+      continue;
+    }
+    // A paragraph is read a sentence at a time. In each, the first clause decides: "4+ years in data science,
+    // ideally in lending" is a must, and its later clause with a nice cue is a nice on its own.
+    for (const sentence of line.split(/(?<=[.!?])\s+(?=[A-Z])/)) {
+      const [first = sentence, ...clauses] = sentence.split(/\s*;\s*|,\s+(?=(?:and\s+)?(?:ideally|preferably|bonus|nice)\b)/i);
+      if (NICE_CUE.test(first)) {
+        out.nice.push(sentence);
+        continue;
+      }
+      const extra = clauses.filter((c) => NICE_CUE.test(c));
+      const kept = extra.length ? [first, ...clauses.filter((c) => !extra.includes(c))].join("; ") : sentence;
+      rest.push(kept);
+      if (extra.length) out.nice.push(extra.join("; "));
+      if (section === "must" || MUST_CUE.test(kept)) out.must.push(kept);
+    }
+  }
+  out.rest = rest.join("\n");
+  for (const line of out.must) {
+    const n = yearsIn(line);
+    if (n !== undefined && (!out.years || n > out.years.min)) out.years = { min: n, line };
+  }
+  return out;
+}

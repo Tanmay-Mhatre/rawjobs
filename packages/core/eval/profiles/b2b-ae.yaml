@@ -23,6 +23,7 @@ profile:
   industries: [saas, hrtech, fintech]
   keywords: { saas: 5, new business: 4, mid-market: 4, quota: 3, meddic: 3, gcc: 3, salesforce: 2 }
   min_score: 70
+  experience_years: 5
   # From `about`: floor and dealbreakers. No work authorisation: his UAE visa comes with the job.
   salary_floor: { amount: 25000, currency: AED, period: month }
   avoid: [sdr, bdr, commission only, insurance, retail sales]

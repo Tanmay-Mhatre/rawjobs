@@ -37,25 +37,26 @@ describe("title gate reads titles the way people write them", () => {
 });
 
 describe("topics from the title when there's no description", () => {
-  it("a topic in the title counts, up to half the bar", () => {
-    // payments (3) of top weight 5: 20 * 3/5 = 12, more than 40 * 3/12 = 10.
-    expect(scoreJob(job({ title: "Senior Product Manager, Payments" }), profile()).why).toMatchObject({ keywords: ["payments"], keywordPoints: 12 });
-    // Your top topic fills the title's half: 20.
-    expect(scoreJob(job({ title: "Crypto PM" }), profile())).toMatchObject({ score: 25 + 20 + 20 + 10, why: { keywordPoints: 20 } });
-    expect(scoreJob(job({ title: "Product Manager" }), profile()).why.keywordPoints).toBe(0);
+  it("topics are unknown, so they count 15, and a topic in the title adds up to 10", () => {
+    // payments (3) of top weight 5: 15 + 10 * 3/5 = 21.
+    expect(scoreJob(job({ title: "Senior Product Manager, Payments" }), profile()).why).toMatchObject({ keywords: ["payments"], keywordPoints: 21 });
+    // Your top topic adds the full 10.
+    expect(scoreJob(job({ title: "Crypto PM" }), profile())).toMatchObject({ score: 25 + 20 + 25 + 10, why: { keywordPoints: 25 } });
+    expect(scoreJob(job({ title: "Product Manager" }), profile()).why.keywordPoints).toBe(15);
   });
 
   it("short forms in the title count as the topic", () => {
     const ml = profile({ titles: { include: ["engineer"], exclude: [] }, keywords: { "machine learning": 4, python: 4, "distributed systems": 4 } });
-    expect(scoreJob(job({ title: "Senior ML Engineer" }), ml).why).toMatchObject({ keywords: ["machine learning"], keywordPoints: 20 });
+    expect(scoreJob(job({ title: "Senior ML Engineer" }), ml).why).toMatchObject({ keywords: ["machine learning"], keywordPoints: 25 });
   });
 
-  it("never puts a job without a description ahead of the same job with one", () => {
-    for (const title of ["Senior Product Manager, Payments", "Crypto PM", "AI Product Manager", "Product Manager"])
-      for (const description of ["", "We build things.", "Payments and KYC.", "crypto exchange stablecoin tokenization"]) {
-        const bare = scoreJob(job({ title }), profile()).score;
-        expect(scoreJob(job({ title, description }), profile()).score, `${title} / ${description}`).toBeGreaterThanOrEqual(bare);
-      }
+  it("puts a job whose description names your topics ahead of the same job with none, and one that names none behind", () => {
+    const named = "crypto exchange, stablecoin and tokenization payments";
+    for (const title of ["Senior Product Manager, Payments", "Crypto PM", "AI Product Manager", "Product Manager"]) {
+      const bare = scoreJob(job({ title }), profile()).score;
+      expect(scoreJob(job({ title, description: named }), profile()).score, title).toBeGreaterThan(bare);
+      expect(scoreJob(job({ title, description: "We build things." }), profile()).score, title).toBeLessThan(bare);
+    }
   });
 
   it("keeps the 0..100 bounds", () => {

@@ -657,12 +657,12 @@ function WhyItMatches({ job, profile, yours }: { job: Job; profile: Profile; you
   // Scores from before `level` existed carried it in the title points (30 / 25).
   const lv = w.level ?? (w.title === 30 ? 10 : w.title === 25 ? 5 : 0);
   const level = lv === 10 ? ", at your level" : lv === 5 ? ", one level from yours" : profile.seniority_boost.length ? ", not near your level" : "";
-  // Pay and visa: met, missed, or unknown when the posting doesn't say (never shown as a pass).
-  const eligibility = (w.checks ?? []).filter((c) => c.id === "pay" || c.id === "visa");
+  // Pay, visa, must-haves and years: met, missed, or unknown when the posting doesn't say (never shown as a pass).
+  const eligibility = (w.checks ?? []).filter((c) => c.id !== "place" && c.id !== "level");
   // One-click fixes for checks your profile got wrong, when your profile can be saved from here.
   const fixer = useProfileFix();
   const fixes = fixer ? fitFixes(job).filter((f) => !fixApplied(f, fixer.draft)) : [];
-  const fixFor = (check: FitFix["check"]) => fixes.find((f) => f.check === check);
+  const fixFor = (check: string) => fixes.find((f) => f.check === check);
   const items: { ok: boolean; unknown?: boolean; text: ReactNode; fix?: FitFix }[] = [
     {
       ok: w.title > 0,
@@ -717,7 +717,8 @@ function WhyItMatches({ job, profile, yours }: { job: Job; profile: Profile; you
             ),
           },
         ]),
-    ...eligibility.map((c) => ({ ok: c.status === "met", unknown: c.status === "unknown", text: c.note, fix: fixFor(c.id as "pay" | "visa") })),
+    // One year short of the years asked is close enough to count.
+    ...eligibility.map((c) => ({ ok: c.status === "met" || (c.id === "experience" && c.status === "near"), unknown: c.status === "unknown", text: c.note, fix: fixFor(c.id) })),
     w.industry === undefined
       ? { ok: (w.freshness ?? 0) >= 6, text: w.freshness === 10 ? "Posted in the last 3 days" : w.freshness === 6 ? "Posted this week" : "Posted more than a week ago" }
       : { ok: w.industry === 10, unknown: w.industry === 5, text: industryText(w.industry, job, profile, yours) },
