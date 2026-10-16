@@ -58,9 +58,10 @@ export function demoScore(state, job) {
   var inTitle = matched.filter(function (k) {
     return word(job.title, k);
   });
-  /* a keyword in the title counts in full; the description names each of the others once: three quarters */
+  /* a keyword in the title counts in full; the description names each of the others once (three quarters),
+     except tokenization, which "real-world assets" names a second time (packages/core/src/catalog/concepts.ts) */
   var strength = matched.reduce(function (sum, k) {
-    return sum + (word(job.title, k) ? 1 : 0.75);
+    return sum + (word(job.title, k) ? 1 : k === "tokenization" ? 0.875 : 0.75);
   }, 0);
   var k = Math.max(
     40 * Math.min(1, (strength * W) / Math.min(state.kw.length * W, 12)),

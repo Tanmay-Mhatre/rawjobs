@@ -55,7 +55,7 @@ export const BASE_CONCEPTS: Record<string, string[]> = {
   fraud: ["fraud prevention", "fraud detection", "chargebacks", "risk scoring", "account takeover"],
   risk: ["risk management", "credit risk", "market risk", "operational risk", "risk modelling", "risk modeling"],
   banking: ["core banking", "retail banking", "digital banking", "neobank", "challenger bank"],
-  crypto: ["cryptocurrency", "cryptocurrencies", "digital assets", "bitcoin", "ethereum", "stablecoins", "web3", "blockchain", "DeFi", "custody"],
+  crypto: ["cryptocurrency", "cryptocurrencies", "digital assets", "bitcoin", "ethereum", "stablecoins", "web3", "blockchain", "DeFi"],
   blockchain: ["distributed ledger", "smart contracts", "web3", "on-chain", "onchain"],
   defi: ["decentralized finance", "decentralised finance", "liquidity pools", "AMM"],
   tokenization: ["tokenisation", "tokenized assets", "tokenised assets", "real-world assets", "RWA"],

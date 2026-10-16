@@ -122,6 +122,8 @@ export type ScoreBreakdown = {
   yearsGap?: number;
   /** Topics found through a word that proves them, not their own name: { payments: "PSP" }. Missing when none. */
   via?: Record<string, string>;
+  /** "resume" when the topics scored were read from your résumé because you set none yourself. */
+  topicsFrom?: "resume";
   /** The weekly word list (concepts.ts) a score used, when it wasn't the built-in one. */
   concepts?: string;
   /** Topics you listed that the job doesn't mention, heaviest first (at most 5). Missing on older scores. */
@@ -370,6 +372,8 @@ export const ProfileSchema = z.object({
   past_employers: z.array(z.string().trim().min(1)).max(20).default([]),
   /** keyword -> weight 1..5, matched as whole words in title + description. */
   keywords: z.record(term, z.number().int().min(1).max(5)).default({}),
+  /** Set only on the copy a scan scores with, when `keywords` came from your résumé (resume-topics.ts), never saved. */
+  keywords_from: z.literal("resume").optional(),
   min_score: z.number().int().min(0).max(100).default(70),
   /** Years of work experience. A job whose must-haves ask for more than a year beyond it is a level down (score.ts); left out, nothing is checked. */
   experience_years: z.number().min(0).max(60).optional(),
