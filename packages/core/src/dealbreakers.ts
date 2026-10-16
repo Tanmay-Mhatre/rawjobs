@@ -1,7 +1,7 @@
 import { placeOwner } from "./catalog/places";
 import { countryOfLocation, extractEligibility, nationalsLabel, nationalsOnly, payOf, type Pay, type Period } from "./posting";
-import type { NormalizedJob, Profile } from "./schema";
-import { matchesTitle, termRegex } from "./text";
+import type { FitCheck, NormalizedJob, Profile } from "./schema";
+import { globalTermRegex, matchesTitle } from "./text";
 
 /**
  * Dealbreakers: things a posting says that rule it out for you, whatever else fits. Each one is a
@@ -92,14 +92,6 @@ export function salaryBreaker(pay: Pay | undefined, floor: NonNullable<Profile["
   return `Pay below your floor: up to ${pay.currency} ${short(inFloorPeriod)} vs your ${short(floor.amount)}${per}`;
 }
 
-/** termRegex as a global pattern, made once per phrase: this runs for every job and every avoided phrase. */
-const globalTerms = new Map<string, RegExp>();
-function globalTermRegex(phrase: string): RegExp {
-  let re = globalTerms.get(phrase);
-  if (!re) globalTerms.set(phrase, (re = new RegExp(termRegex(phrase).source, "giu")));
-  return re;
-}
-
 /** Does the role itself look like one you avoid? In the title, or said again and again (or early and again) in the description. */
 export function avoidHit(job: Pick<Checkable, "title" | "description">, phrase: string): boolean {
   if (matchesTitle(job.title, [phrase])) return true;
@@ -137,6 +129,36 @@ export function dealbreakers(job: Checkable, profile: Profile): string[] {
 
   for (const phrase of profile.avoid ?? []) {
     if (avoidHit(job, phrase)) out.push(`About ${phrase}, which you avoid`);
+  }
+  return out;
+}
+
+/**
+ * Pay and visa, checked when your profile sets them (a pay floor, where you can work): met, missed, or
+ * unknown when the posting doesn't say. The same reading as the dealbreakers, so a missed check is a dealbreaker.
+ */
+export function eligibilityChecks(job: Checkable, profile: Profile): FitCheck[] {
+  const out: FitCheck[] = [];
+  const floor = profile.salary_floor;
+  if (floor) {
+    const pay = payOf(job);
+    const breaker = salaryBreaker(pay, floor);
+    const top = pay?.max ?? pay?.min;
+    if (breaker) out.push({ id: "pay", status: "missed", note: breaker });
+    else if (!pay || !top) out.push({ id: "pay", status: "unknown", note: "Pay not listed" });
+    else if (pay.currency !== floor.currency.toUpperCase()) out.push({ id: "pay", status: "unknown", note: `Pay in ${pay.currency}, your floor is in ${floor.currency.toUpperCase()}` });
+    else out.push({ id: "pay", status: "met", note: `Up to ${pay.currency} ${short(top)}, at or above your floor` });
+  }
+  if (profile.work_authorization?.length) {
+    const e = extractEligibility(job.description);
+    const country = e.authorisedIn ?? countryOfLocation(job.location);
+    const authorised = countriesOfTerms(profile.work_authorization, { eu: true });
+    if (country && authorised.has(country)) out.push({ id: "visa", status: "met", note: `You can work in ${title(country)}` });
+    else if (e.sponsorship === "yes") out.push({ id: "visa", status: "met", note: "Says it sponsors visas" });
+    else if (e.sponsorship === "no" && country) out.push({ id: "visa", status: "missed", note: `No visa sponsorship, and you need one for ${title(country)}` });
+    // A remote job in no one country: there's nothing to sponsor, so nothing to say.
+    else if (!country && job.workplace === "remote") return out;
+    else out.push({ id: "visa", status: "unknown", note: "Doesn't say if it sponsors visas" });
   }
   return out;
 }

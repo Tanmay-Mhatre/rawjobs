@@ -1215,7 +1215,7 @@ html.intro .rj-intro { display: block; position: fixed; inset: 0; z-index: calc(
           <h3>Your Radar, best match first</h3>
           <p>Every job gets a score from 0 to 100, with the reason written out.</p>
           <div class="step__demo" aria-hidden="true">
-            <div style="display:flex;gap:8px;align-items:center"><span class="rj-score rj-score--strong"><i class="rj-glyph rj-glyph--full"></i>87</span><span style="font:var(--text-label)">Head of Product, Exchange</span></div>
+            <div style="display:flex;gap:8px;align-items:center"><span class="rj-score rj-score--strong"><i class="rj-glyph rj-glyph--full"></i>83</span><span style="font:var(--text-label)">Head of Product, Exchange</span></div>
             <div class="log"><div>title 30 · place 20 · keywords 27 · industry 10</div></div>
           </div>
         </li>
@@ -1248,7 +1248,7 @@ html.intro .rj-intro { display: block; position: fixed; inset: 0; z-index: calc(
     <div class="split__body">
       <div class="rj-panel lab" id="lab">
         <form class="lab__controls" id="lab-form" aria-label="What you're looking for">
-          <div class="lab__peek" aria-hidden="true"><span class="rj-score rj-score--strong" id="peek-score"><i class="rj-glyph rj-glyph--full"></i>87</span><span class="lab__peek-why" id="peek-why">title 30, place 20, keywords 27, industry 10</span></div>
+          <div class="lab__peek" aria-hidden="true"><span class="rj-score rj-score--strong" id="peek-score"><i class="rj-glyph rj-glyph--full"></i>83</span><span class="lab__peek-why" id="peek-why">title 30, place 20, keywords 23.3, industry 10</span></div>
           <fieldset aria-describedby="hint-0">
             <legend>Titles you want</legend>
             <p class="hint" id="hint-0">The job title must contain one of these.</p>
@@ -1310,7 +1310,7 @@ html.intro .rj-intro { display: block; position: fixed; inset: 0; z-index: calc(
             <p class="jobcard__text" id="lab-text">Own the roadmap for our regulated <mark data-kw="crypto">crypto</mark> <mark data-kw="exchange">exchange</mark>: spot trading, custody and <mark data-kw="tokenization">tokenization</mark> of real-world assets. You'll work with compliance on KYC and launch new markets.</p>
           </div>
           <div class="verdict">
-            <span class="rj-score rj-score--lg rj-score--strong" id="lab-score" role="img" aria-label="Strong match, score 87"><i class="rj-glyph rj-glyph--full" id="lab-glyph"></i><span id="lab-num">87</span></span>
+            <span class="rj-score rj-score--lg rj-score--strong" id="lab-score" role="img" aria-label="Strong match, score 83"><i class="rj-glyph rj-glyph--full" id="lab-glyph"></i><span id="lab-num">83</span></span>
             <span class="verdict__label" id="lab-verdict">Strong match<span>Shown near the top of your Radar</span></span>
           </div>
           <div class="rj-breakdown">
@@ -1322,7 +1322,7 @@ html.intro .rj-intro { display: block; position: fixed; inset: 0; z-index: calc(
             </div>
             <div class="rj-breakdown__legend num" id="lab-legend" aria-hidden="true"><span>Title <b>30</b></span><span>Place <b>20</b></span><span>Keywords <b>27</b>/40</span><span>Industry <b>10</b></span></div>
           </div>
-          <p class="why-line num" id="lab-why" aria-live="polite">87: title 30, place 20, keywords 27 (crypto, exchange), industry 10</p>
+          <p class="why-line num" id="lab-why" aria-live="polite">83: title 30, place 20, keywords 23.3 (crypto, exchange), industry 10</p>
           <p class="lab__fine">A made-up job. 70 and up is a strong match, 40 and up is fair. You can change both.</p>
         </div>
       </div>
@@ -1648,7 +1648,7 @@ html.intro .rj-intro { display: block; position: fixed; inset: 0; z-index: calc(
 
   /* ---------- scoring: score.js, checked against packages/core by packages/core/test/site-demo.test.ts ---------- */
 /*__SCORE__*/
-  var form = $('#lab-form'), last = 87;
+  var form = $('#lab-form'), last = 83;
   function state() {
     var on = function (g) { return $$('[data-group="' + g + '"][aria-pressed="true"]').map(function (b) { return b.getAttribute('data-v'); }); };
     var pick = function (n, d) { var el = form.querySelector('input[name="' + n + '"]:checked'); return el ? el.value : d; };

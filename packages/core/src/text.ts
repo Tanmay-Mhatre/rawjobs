@@ -73,6 +73,25 @@ export function matchesTerm(text: string, term: string): boolean {
   return termRegex(term).test(text);
 }
 
+/** termRegex as a global pattern, made once per term, for counting or finding every mention. */
+const globalTerms = new Map<string, RegExp>();
+export function globalTermRegex(term: string): RegExp {
+  let re = globalTerms.get(term);
+  if (!re) {
+    if (globalTerms.size > 5_000) globalTerms.clear();
+    globalTerms.set(term, (re = new RegExp(termRegex(term).source, "giu")));
+  }
+  return re;
+}
+
+/** How many times a text mentions a term, counting no further than `cap`. */
+export function mentionsOf(text: string, term: string, cap = Infinity): number {
+  if (!text) return 0;
+  let n = 0;
+  for (const _ of text.matchAll(globalTermRegex(term))) if (++n >= cap) break;
+  return n;
+}
+
 const anyCache = new Map<string, RegExp | null>();
 
 /**

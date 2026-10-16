@@ -29,6 +29,8 @@ const KEYS: [keyof Metrics, string][] = [
   ["ndcg10", "NDCG@10"],
   ["p5", "P@5"],
   ["spearman", "Spearman"],
+  ["ties", "Ties"],
+  ["tiesNoTopics", "Ties (no topics)"],
 ];
 const fmt = (x: number) => x.toFixed(3);
 const delta = (now: number, was: number | undefined) => {

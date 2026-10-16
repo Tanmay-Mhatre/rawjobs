@@ -25,29 +25,39 @@ describe("scoreJob", () => {
 
   it("adds up title, location, keywords and industry", () => {
     const r = scoreJob(job({ description: "Crypto exchange, payments and KYC." }), profile());
-    expect(r.why).toEqual({
+    expect(r.why).toMatchObject({
       title: 30,
+      level: 10,
+      focus: 1,
       location: 20,
       keywords: ["crypto", "exchange", "payments", "kyc"],
-      keywordPoints: 40,
+      // Each named once: three quarters of its weight.
+      keywordPoints: 35,
       industry: 10,
+      checks: [
+        { id: "place", status: "met" },
+        { id: "level", status: "met" },
+      ],
     });
-    expect(r.score).toBe(100);
+    expect(r.score).toBe(95);
   });
 
   it("topic points are the share of min(total weight, 12) matched", () => {
-    // Matched weight 5 of 12: 40 * 5/12 = 16.7 -> 17.
+    // Weight 5, named once (three quarters), of 12: 40 * 3.75/12 = 12.5.
     const r = scoreJob(job({ description: "A crypto company." }), profile());
-    expect(r.why).toMatchObject({ keywords: ["crypto"], keywordPoints: 17 });
+    expect(r.why).toMatchObject({ keywords: ["crypto"], keywordPoints: 12.5 });
     expect(r.why.scale).toBeUndefined();
-    expect(r.score).toBe(30 + 20 + 17 + 10);
+    expect(r.score).toBe(Math.round(30 + 20 + 12.5 + 10));
   });
 
   it("three topics at weight 3 can fill the topic bar", () => {
     const three = profile({ keywords: { crypto: 3, payments: 3, kyc: 3 } });
-    expect(scoreJob(job({ description: "crypto payments kyc" }), three)).toMatchObject({ score: 100, why: { keywordPoints: 40 } });
-    expect(scoreJob(job({ description: "crypto payments" }), three)).toMatchObject({ score: 87, why: { keywordPoints: 27 } });
-    expect(scoreJob(job({ title: "Product Manager", location: "Remote - EMEA", description: "crypto" }), three).score).toBe(25 + 15 + 13 + 10);
+    const thrice = "crypto payments kyc. ".repeat(3);
+    expect(scoreJob(job({ description: thrice }), three)).toMatchObject({ score: 100, why: { keywordPoints: 40 } });
+    // Named once each: three quarters of the bar.
+    expect(scoreJob(job({ description: "crypto payments kyc" }), three)).toMatchObject({ score: 90, why: { keywordPoints: 30 } });
+    expect(scoreJob(job({ description: "crypto payments" }), three)).toMatchObject({ score: 80, why: { keywordPoints: 20, missing: ["kyc"] } });
+    expect(scoreJob(job({ title: "Product Manager", location: "Remote - EMEA", description: "crypto" }), three).score).toBe(25 + 15 + 10 + 10);
   });
 
   it("with no topics, title + location + industry are scaled to 0..100", () => {
@@ -145,7 +155,7 @@ describe("scoreJob", () => {
     expect(r.why.keywordPoints).toBeGreaterThan(0);
     // Together they're a lift, never a full bar: at most two topics' worth of weight.
     const full = scoreJob(job({ description: "payments checkout merchant acquiring issuing remittance" }), crypto);
-    expect(full.why.keywordPoints).toBe(Math.round((40 * 4) / 12));
+    expect(full.why.keywordPoints).toBe(Math.round((40 * 4 * 10) / 12) / 10);
     // Topics you listed keep your weight, and with no topics of your own none are added.
     expect(topicsOf(profile({ keywords: { payments: 5 }, industries: ["payments"] })).payments).toBe(5);
     expect(topicsOf(profile({ keywords: {}, industries: ["payments"] }))).toEqual({});

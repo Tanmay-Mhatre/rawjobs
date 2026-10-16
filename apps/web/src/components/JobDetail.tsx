@@ -12,6 +12,7 @@ import {
   ChevronDown,
   ChevronUp,
   CircleCheck,
+  CircleHelp,
   Copy,
   Ellipsis,
   ExternalLink,
@@ -651,8 +652,12 @@ function WhyItMatches({ job, profile, yours }: { job: Job; profile: Profile; you
         .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
         .map(([k]) => k)
     : [];
-  const level = w.title === 30 ? ", at your level" : w.title === 25 ? ", one level from yours" : profile.seniority_boost.length ? ", not near your level" : "";
-  const items: { ok: boolean; text: ReactNode }[] = [
+  // Scores from before `level` existed carried it in the title points (30 / 25).
+  const lv = w.level ?? (w.title === 30 ? 10 : w.title === 25 ? 5 : 0);
+  const level = lv === 10 ? ", at your level" : lv === 5 ? ", one level from yours" : profile.seniority_boost.length ? ", not near your level" : "";
+  // Pay and visa: met, missed, or unknown when the posting doesn't say (never shown as a pass).
+  const eligibility = (w.checks ?? []).filter((c) => c.id === "pay" || c.id === "visa");
+  const items: { ok: boolean; unknown?: boolean; text: ReactNode }[] = [
     {
       ok: w.title > 0,
       text:
@@ -705,14 +710,16 @@ function WhyItMatches({ job, profile, yours }: { job: Job; profile: Profile; you
             ),
           },
         ]),
+    ...eligibility.map((c) => ({ ok: c.status === "met", unknown: c.status === "unknown", text: c.note })),
     w.industry === undefined
       ? { ok: (w.freshness ?? 0) >= 6, text: w.freshness === 10 ? "Posted in the last 3 days" : w.freshness === 6 ? "Posted this week" : "Posted more than a week ago" }
-      : { ok: w.industry > 0, text: industryText(w.industry, job, profile, yours) },
+      : { ok: w.industry === 10, unknown: w.industry === 5, text: industryText(w.industry, job, profile, yours) },
   ];
   const min = profile.min_score;
   const cutOff = job.score > min ? `above your ${min} cut-off` : job.score === min ? `at your ${min} cut-off` : `below your ${min} cut-off`;
   const parts = scoreParts(w);
-  const misses = items.filter((it) => !it.ok);
+  const misses = items.filter((it) => !it.ok && !it.unknown);
+  const unknowns = items.filter((it) => it.unknown);
   return (
     <section className={cx("rj-drawer__section rj-fit", open && "gap-4")}>
       {/* On a phone the toggle drops under the verdict rather than squeezing it. */}
@@ -751,6 +758,13 @@ function WhyItMatches({ job, profile, yours }: { job: Job; profile: Profile; you
               <span>{it.text}</span>
             </li>
           ))}
+          {unknowns.map((it, i) => (
+            // biome-ignore lint/suspicious/noArrayIndexKey: a fixed list rebuilt from the same input, never reordered: the index is a stable key
+            <li key={`u${i}`} className="rj-pill">
+              <CircleHelp className="size-4 shrink-0 text-muted" aria-label="Not stated:" />
+              <span>{it.text}</span>
+            </li>
+          ))}
         </ul>
       )}
       {/* A gate or a dealbreaker changes the score past the sum: their own lines below say how. */}
@@ -783,12 +797,21 @@ function WhyItMatches({ job, profile, yours }: { job: Job; profile: Profile; you
             {items.map((it, i) => (
               // biome-ignore lint/suspicious/noArrayIndexKey: a fixed list rebuilt from the same input, never reordered: the index is a stable key
               <li key={i} className="flex items-start gap-2">
-                {it.ok ? <CircleCheck className="mt-0.5 size-4 shrink-0 text-success-text" /> : <X className="mt-0.5 size-4 shrink-0 text-muted" />}
+                {it.ok ? (
+                  <CircleCheck className="mt-0.5 size-4 shrink-0 text-success-text" />
+                ) : it.unknown ? (
+                  <CircleHelp className="mt-0.5 size-4 shrink-0 text-muted" aria-label="Not stated:" />
+                ) : (
+                  <X className="mt-0.5 size-4 shrink-0 text-muted" />
+                )}
                 <span className={cx(!it.ok && "text-muted")}>{it.text}</span>
               </li>
             ))}
           </ul>
-          <p className="type-small text-muted">Best match also lists newer jobs{yours ? " and your companies" : ""} higher. The score itself doesn't change.</p>
+          <p className="type-small text-muted">
+            The score is how well the job fits what you asked for, not your odds of an interview. Best match also lists newer jobs{yours ? " and your companies" : ""} higher. The score itself doesn't
+            change.
+          </p>
         </div>
       )}
     </section>
