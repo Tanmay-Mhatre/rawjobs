@@ -23,6 +23,7 @@ profile:
   industries: [ecommerce, saas, fintech]
   keywords: { fp&a: 5, forecasting: 4, budgeting: 4, sql: 3, excel: 3, variance analysis: 3, unit economics: 2 }
   min_score: 70
+  experience_years: 3
   # From `about`: floor, work authorisation, dealbreakers.
   salary_floor: { amount: 6500, currency: SGD, period: month }
   work_authorization: [singapore]

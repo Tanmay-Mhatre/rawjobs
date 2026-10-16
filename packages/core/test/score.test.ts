@@ -288,3 +288,43 @@ describe("rankScore", () => {
     expect(rankScore(70, daysAgo(5), t)).toBeGreaterThan(rankScore(75, daysAgo(150), t));
   });
 });
+
+describe("scoreJob requirements", () => {
+  const desc = (nice: string, must = "Payments experience") => `What you'll do\n- Build the product\n\nRequirements\n- 5+ years of product management\n- ${must}\n\nNice to have\n- ${nice}`;
+
+  it("counts a topic named only among the nice-to-haves at half", () => {
+    const p = profile({ keywords: { payments: 3, kyc: 3 } });
+    const must = scoreJob(job({ description: desc("SQL", "Payments and KYC experience") }), p);
+    const nice = scoreJob(job({ description: desc("KYC") }), p);
+    expect(nice.why.keywords).toContain("kyc");
+    expect(nice.why.keywordPoints).toBeLessThan(must.why.keywordPoints);
+  });
+
+  it("says how many checkable must-haves name your topics", () => {
+    const s = scoreJob(job({ description: desc("SQL") }), profile({ keywords: { payments: 3 } }));
+    expect(s.why.musts).toEqual({ met: 1, of: 1 });
+    expect(s.why.checks).toContainEqual({ id: "musts", status: "met", note: "Names 1 of 1 must-haves you can check" });
+  });
+
+  it("checks the years asked against yours, and takes points off past one year short", () => {
+    const d = desc("SQL");
+    expect(scoreJob(job({ description: d }), profile()).why.checks).toContainEqual(expect.objectContaining({ id: "experience", status: "unknown" }));
+    const met = scoreJob(job({ description: d }), profile({ experience_years: 6 }));
+    const near = scoreJob(job({ description: d }), profile({ experience_years: 4 }));
+    const far = scoreJob(job({ description: d }), profile({ experience_years: 2 }));
+    expect(met.why.checks).toContainEqual({ id: "experience", status: "met", note: "Asks for 5+ years; you have 6" });
+    expect(near.score).toBe(met.score);
+    expect(far.why.checks).toContainEqual(expect.objectContaining({ id: "experience", status: "missed" }));
+    expect(far.why.yearsGap).toBe(6);
+    expect(far.why.level).toBe(5);
+    expect(far.score).toBeLessThan(met.score - 10);
+  });
+
+  it("counts unknown topics as part of the bar when there's no description", () => {
+    const p = profile();
+    expect(scoreJob(job({ title: "Senior Product Manager" }), p).why.keywordPoints).toBe(15);
+    expect(scoreJob(job({ title: "Senior Product Manager, Payments" }), p).why.keywordPoints).toBe(21);
+    // A described job that names your topics still beats one with no description.
+    expect(scoreJob(job({ description: "Payments, crypto and stablecoin work on our exchange, tokenization of fintech." }), p).score).toBeGreaterThan(scoreJob(job(), p).score);
+  });
+});

@@ -3,6 +3,7 @@ import { allTitles, COMMON_EXCLUDES, ROLE_FAMILIES, SENIORITY, type RoleFamily }
 import { Check } from "lucide-react";
 import { useCallback, useState } from "react";
 import { Combobox, type ComboItem } from "../components/Combobox";
+import { Field as InputField } from "../components/primitives";
 import { ToggleChips } from "../components/ToggleChips";
 import { Button, cx } from "../components/ui";
 import type { Suggestions } from "../lib/suggest";
@@ -209,7 +210,15 @@ export function RolesStep({ draft, update, suggest }: StepProps) {
         </div>
       </Section>
 
-      <MoreOptions summary={[draft.exclude.length && `${draft.exclude.length} hidden`, draft.seniority.length && `${draft.seniority.length} seniority`].filter(Boolean).join(" · ")}>
+      <MoreOptions
+        summary={[
+          draft.exclude.length && `${draft.exclude.length} hidden`,
+          draft.seniority.length && `${draft.seniority.length} seniority`,
+          draft.experienceYears !== undefined && `${draft.experienceYears} years`,
+        ]
+          .filter(Boolean)
+          .join(" · ")}
+      >
         <Field
           label="Never show me"
           hint="Hide titles with these words."
@@ -238,6 +247,20 @@ export function RolesStep({ draft, update, suggest }: StepProps) {
             addPlaceholder="Add another…"
           />
         </Field>
+        <InputField
+          label="Years of experience"
+          help="Jobs whose must-haves ask for more than a year beyond this rank lower. Leave empty to skip."
+          className="max-w-[24rem]"
+          inputClassName="max-w-[6rem]"
+          inputMode="numeric"
+          placeholder="6"
+          maxLength={2}
+          value={draft.experienceYears === undefined ? "" : String(draft.experienceYears)}
+          onChange={(e) => {
+            const digits = e.target.value.replace(/\D/g, "");
+            update({ experienceYears: digits ? Number(digits) : undefined });
+          }}
+        />
       </MoreOptions>
     </div>
   );

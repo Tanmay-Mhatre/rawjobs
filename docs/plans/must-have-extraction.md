@@ -1,6 +1,6 @@
 # Must-have extraction (matching phase 3)
 
-Status: plan, awaiting go (2026-10-16).
+Status: go given 2026-10-16; built in one PR. "As built" below records where tuning moved the plan.
 
 Read what a posting requires (must-haves, nice-to-haves, years of experience) with plain rules, and let the
 score use it. No AI in the app. Open models (TechWolf ConTeXT, ESCO) stay a later option for the offline
@@ -86,7 +86,7 @@ NDCG@10 or raises ties past the gate is tuned or left out. Accepted state: `pnpm
 
 ## Tests
 
-- `posting.test.ts`: headings, cue words, years forms and the false friends ("founded 10 years ago").
+- `requirements.test.ts`: headings, cue words, years forms and the false friends ("founded 10 years ago").
 - `score.test.ts`: must vs nice weight, N of M, years check and level step, the no-description score.
 - Eval before/after numbers in the PR.
 
@@ -96,8 +96,31 @@ NDCG@10 or raises ties past the gate is tuned or left out. Accepted state: `pnpm
   chemicals"): next rules pass, or ConTeXT/ESCO in the directory pipeline.
 - Files PR #255 touches: `learn.ts`, `filters.ts`, `RadarPage.tsx`.
 
-## Decisions for the user
+## Decisions (2026-10-16)
 
-1. Add `experience_years` to the profile (set in Settings later; résumé fill as a follow-up)? Without it the
-   years check is always unknown and `ml-05` stays too high.
-2. No-description jobs: unknown topics count as half (max 90). OK?
+1. `experience_years` goes on the profile, set in Settings → Roles → More options. Résumé fill is a follow-up.
+2. No-description jobs: unknown topics count part of the bar.
+
+## As built
+
+| Metric | Before | After |
+|---|---|---|
+| NDCG@10 | 0.926 | 0.922 |
+| NDCG@5 | 0.915 | 0.921 |
+| P@5 | 0.500 | 0.533 |
+| Spearman | 0.692 | 0.692 |
+| Ties | 0.013 | 0.013 |
+| Ties, no topics | 0.037 | 0.032 |
+| Same band | 278 / 294 | 284 / 294 |
+
+- No description: 15 for unknown topics, not 20, plus up to 10 for title topics (max 85). At 20 the three
+  title-only postings (label 3) jumped described label-4 ones; at 10-12 ties rose past the gate.
+- Years: missed also takes 3 points a year past the first year short, at most 10 (`why.yearsGap`), on top
+  of the level step. The level step alone moved `ml-05` only 83 to 78; now 68. At 2.5 a year a new tie
+  appeared in finance-analyst.
+- The years line isn't one of the M must-haves: it has its own `experience` check, so it isn't counted twice.
+- Lines are read a sentence at a time, and only a clause after ", ideally" / "; … is a plus" is nice
+  ("5+ years in research, ideally in B2B SaaS" stays a must-have).
+- The small NDCG@10 drop is the title-only lift: `fin-07` (label 3, no description) now sits above
+  `fin-03` (label 4), whose description says "forecasts" and "budgets", which the topic match doesn't
+  read as "forecasting" and "budgeting". Word forms are a separate fix.

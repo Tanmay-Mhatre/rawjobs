@@ -1,8 +1,8 @@
-import { INDUSTRY_BY_ID } from "./catalog/industries";
+import { INDUSTRIES, INDUSTRY_BY_ID } from "./catalog/industries";
 import { SENIORITY_LEVELS, seniorityCue, seniorityGap, seniorityOf, type Seniority } from "./catalog/seniority";
 import { allPlaceNames, countriesIn, expandPlaces, LOCATION_SEGMENTS, placeOwner, placeOwnerName, spellOutPlaces, SUBDIVISIONS } from "./catalog/places";
 import { dealbreakers, eligibilityChecks } from "./dealbreakers";
-import { regionOnly } from "./posting";
+import { extractRequirements, regionOnly, type Requirements } from "./posting";
 import type { FitCheck, NormalizedJob, Profile, ScoreBreakdown } from "./schema";
 import { matchesAny, matchesTerm, matchesTitle, mayMatchTitle, mentionsOf, termRegex, titleForms } from "./text";
 
@@ -32,6 +32,16 @@ export const POINTS = {
   oneMention: 0.75,
   /** ...and in full from this many mentions (or when it's in the title). */
   fullMentions: 3,
+  /** A topic the posting names only as a nice-to-have ("Kafka is a plus") counts this share of it. */
+  niceOnly: 0.5,
+  /** No description: the topics are unknown, so they count half the bar (like an unknown industry)... */
+  unknownTopics: 15,
+  /** ...and topics in the title add up to this much more. */
+  unknownTitleTopics: 10,
+  /** Each year short of what the must-haves ask, past the first, costs this much (on top of a level step)... */
+  yearShort: 3,
+  /** ...up to this much. */
+  yearsShortCap: 10,
 } as const;
 
 type Scorable = Pick<NormalizedJob, "title" | "location" | "workplace" | "description"> & Partial<Pick<NormalizedJob, "salary">>;
@@ -59,14 +69,19 @@ const NON_KEYWORD_MAX = POINTS.titleMatch + POINTS.seniority + POINTS.locationCi
  *   topics     up to 40: the share of your topic weight a job mentions, where min(total weight, 12)
  *              fills the bar (so three core topics are enough; a short list isn't penalised). A topic
  *              named once counts three quarters of its weight, three times (or in the title) in full.
- *              A topic in the title counts on its own too: up to 20, your top topic filling it, so
- *              jobs with no description ("Payments PM") aren't 0 on topics. The title is part of
- *              every job, so this never puts a job without a description ahead of the same job with one.
+ *              A topic in the title counts on its own too: up to 20, your top topic filling it, so a
+ *              description that names few topics never scores under its title alone.
  *              Your industries add their topics you didn't list at weight 2, at most 4 together (topicsOf).
+ *              A topic the posting names only among its nice-to-haves counts half (extractRequirements).
+ *              No description: topics are unknown, so 15, plus up to 10 for topics in the title. Such a job
+ *              ranks under the same job whose description names your topics, above one that names none.
  *   industry   10 the company is in one of your industries (or is yours), 5 not known, 0 another industry
+ *   years      when the must-haves ask for more years than your experience_years: one year short is fine,
+ *              further takes the level a step down and 3 points a year past the first (at most 10, `why.yearsGap`)
  * With no topics at all, title + location + industry (max 60) is scaled to 0..100 (`why.scale`).
  * Parts are kept unrounded until the end, so jobs that differ a little score a little differently.
- * `why.checks` says, for place, level, pay and visa, whether the job meets yours or the posting doesn't say.
+ * `why.checks` says, for place, level, pay, visa, must-haves ("names 3 of 4 you can check") and years, whether
+ * the job meets yours or the posting doesn't say.
  *
  * Dealbreakers (dealbreakers.ts: pay under your floor, no sponsorship where you'd need it, residents of
  * another country only, work you avoid) halve the score and keep it under your min_score, with the
@@ -84,19 +99,27 @@ export function scoreJob(job: Scorable, profile: Profile, company: CompanyFit = 
   const location = withTitleRegion(gateLocation(job), title);
   const titleOk = titlePasses(title, profile, forms);
   const focus = titleOk ? titleFocus(title, profile) : 0;
-  const level = titleOk ? seniorityPoints(title, profile, forms) : 0;
+  const description = job.description ?? "";
+  const req = extractRequirements(description);
+  const experience = experienceCheck(req, profile);
+  // Asking for more years than you have takes the level a step down: a "Senior" title wanting 10+ years isn't your senior.
+  const level = Math.max(0, (titleOk ? seniorityPoints(title, profile, forms) : 0) - (experience?.status === "missed" ? POINTS.seniorityNear : 0));
+  const short = req.years && profile.experience_years !== undefined ? req.years.min - profile.experience_years : 0;
+  const yearsGap = short > 1 ? Math.min(POINTS.yearsShortCap, POINTS.yearShort * (short - 1)) : 0;
   const titlePts = titleOk ? POINTS.titleMatch - POINTS.titleFocus * (1 - focus) + level : 0;
   const fit = workplaceFit(job, profile) ?? locationFit(location, profile);
   const locationPts = fit.points;
 
-  const description = job.description ?? "";
   const keywords = topicsOf(profile);
   const inTitle = new Set(Object.keys(keywords).filter((k) => matchesTitle(title, [k], forms)));
   // How strongly each topic is there: in full in the title or from fullMentions mentions, oneMention for one.
   const strength = new Map<string, number>();
   for (const k of Object.keys(keywords)) {
     const n = inTitle.has(k) ? POINTS.fullMentions : mentionsOf(description, k, POINTS.fullMentions);
-    if (n) strength.set(k, POINTS.oneMention + ((1 - POINTS.oneMention) * (n - 1)) / (POINTS.fullMentions - 1));
+    if (!n) continue;
+    // Named only among the nice-to-haves: worth less than a must-have or the work itself.
+    const nice = !inTitle.has(k) && req.nice.length > 0 && !matchesTerm(req.rest, k);
+    strength.set(k, (POINTS.oneMention + ((1 - POINTS.oneMention) * (n - 1)) / (POINTS.fullMentions - 1)) * (nice ? POINTS.niceOnly : 1));
   }
   const matched = Object.entries(keywords)
     .filter(([k]) => strength.has(k))
@@ -116,10 +139,13 @@ export function scoreJob(job: Scorable, profile: Profile, company: CompanyFit = 
     matched.filter(([k]) => inTitle.has(k)),
     () => 1,
   );
+  const titleShare = totalWeight > 0 ? Math.min(1, titleWeight / Math.max(...weights)) : 0;
   const keywordPoints =
-    totalWeight > 0
-      ? Math.max(POINTS.keywordCap * Math.min(1, matchedWeight / Math.min(totalWeight, POINTS.keywordTarget)), POINTS.titleKeywordCap * Math.min(1, titleWeight / Math.max(...weights)))
-      : 0;
+    totalWeight === 0
+      ? 0
+      : description.trim()
+        ? Math.max(POINTS.keywordCap * Math.min(1, matchedWeight / Math.min(totalWeight, POINTS.keywordTarget)), POINTS.titleKeywordCap * titleShare)
+        : POINTS.unknownTopics + POINTS.unknownTitleTopics * titleShare;
   const missing = Object.entries(profile.keywords)
     .filter(([k]) => !strength.has(k))
     .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
@@ -127,6 +153,7 @@ export function scoreJob(job: Scorable, profile: Profile, company: CompanyFit = 
     .map(([k]) => k);
 
   const industry = industryFit(company, profile);
+  const musts = mustsMet(req, keywords);
 
   const why: ScoreBreakdown = {
     title: tenths(titlePts),
@@ -137,18 +164,52 @@ export function scoreJob(job: Scorable, profile: Profile, company: CompanyFit = 
     keywordPoints: tenths(keywordPoints),
     industry,
     ...(missing.length ? { missing } : {}),
+    ...(musts ? { musts } : {}),
+    ...(req.years ? { years: req.years.min } : {}),
+    ...(yearsGap ? { yearsGap } : {}),
     ...(totalWeight > 0 ? {} : { scale: 100 / NON_KEYWORD_MAX }),
   };
   if (!titleOk) return { score: 0, why: { ...why, gate: "title" } };
   if (locationPts === 0) return { score: 0, why: { ...why, gate: "location", ...(fit.note ? { locationNote: fit.note } : {}) } };
-  why.checks = [...fitChecks(job.title, locationPts, level, profile), ...eligibilityChecks(job, profile)];
-  const exact = Math.min(100, (titlePts + locationPts + keywordPoints + industry) * (why.scale ?? 1));
+  why.checks = [...fitChecks(job.title, locationPts, level, profile), ...eligibilityChecks(job, profile), ...(musts ? [mustsCheck(musts)] : []), ...(experience ? [experience] : [])];
+  const exact = Math.max(0, Math.min(100, (titlePts + locationPts + keywordPoints + industry) * (why.scale ?? 1) - yearsGap));
   const broken = dealbreakers(job, profile);
   if (!broken.length) return { score: Math.round(exact), why };
   return { score: Math.max(0, Math.min(Math.round(exact / 2), profile.min_score - 1)), why: { ...why, dealbreakers: broken } };
 }
 
 const tenths = (n: number) => Math.round(n * 10) / 10;
+
+/** Every topic RawJobs knows: yours, and every industry's. A must line naming none of them can't be checked. */
+const KNOWN_TOPICS = [...new Set(INDUSTRIES.flatMap((i) => i.topics.map((t) => t.toLowerCase())))];
+
+/** Must-have lines naming a known topic (`of`), and how many name one of yours (`met`). Undefined when none can be checked. */
+function mustsMet(req: Requirements, keywords: Record<string, number>): { met: number; of: number } | undefined {
+  const yours = Object.keys(keywords);
+  let met = 0;
+  let of = 0;
+  for (const line of req.must) {
+    if (matchesAny(line, yours)) met++;
+    else if (!matchesAny(line, KNOWN_TOPICS)) continue;
+    of++;
+  }
+  return of ? { met, of } : undefined;
+}
+
+function mustsCheck({ met, of }: { met: number; of: number }): FitCheck {
+  const note = `Names ${met} of ${of} must-haves you can check`;
+  return { id: "musts", status: met === of ? "met" : met > 0 ? "near" : "missed", note };
+}
+
+/** The years the must-haves ask for against yours: met, one year short (near), or missed. Unknown when you haven't said. */
+function experienceCheck(req: Requirements, profile: Profile): FitCheck | undefined {
+  if (!req.years) return undefined;
+  const asked = `Asks for ${req.years.min}+ years`;
+  const have = profile.experience_years;
+  if (have === undefined) return { id: "experience", status: "unknown", note: `${asked}: add your years of experience to check` };
+  const status = have >= req.years.min ? "met" : have >= req.years.min - 1 ? "near" : "missed";
+  return { id: "experience", status, note: `${asked}; you have ${have}` };
+}
 
 /** Place (always met once the job passes the location gate) and level (when your seniority words name one). */
 function fitChecks(title: string, locationPts: number, level: number, profile: Profile): FitCheck[] {

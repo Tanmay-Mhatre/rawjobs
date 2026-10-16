@@ -24,6 +24,7 @@ profile:
   industries: [ai, healthtech, saas]
   keywords: { machine learning: 5, nlp: 4, python: 4, experimentation: 3, pytorch: 3, llm: 3, sql: 2 }
   min_score: 70
+  experience_years: 4
   # From `about`: floor, work authorisation ("none": she needs sponsorship everywhere), dealbreakers.
   salary_floor: { amount: 150000, currency: USD, period: year }
   work_authorization: [none]

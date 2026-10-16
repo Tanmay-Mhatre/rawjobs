@@ -181,6 +181,8 @@ export type Draft = {
   citizenship: string[];
   /** Work you won't do ("frontend", "credit risk"). */
   avoid: string[];
+  /** Years of work experience: postings that ask for more rank lower. Undefined = not checked. */
+  experienceYears?: number;
   companies: CompanyRow[];
   minScore: number;
   alerts: Config["alerts"];
@@ -284,6 +286,7 @@ export function draftFromConfig(input: unknown): Draft {
     workAuthorization: strings(p.work_authorization),
     citizenship: strings(p.citizenship),
     avoid: strings(p.avoid),
+    ...(typeof p.experience_years === "number" ? { experienceYears: p.experience_years } : {}),
     companies,
     minScore: typeof p.min_score === "number" ? p.min_score : d.minScore,
     alerts: {
@@ -368,6 +371,7 @@ export function draftToConfig(d: Draft): Config {
       ...(d.workAuthorization?.length ? { work_authorization: d.workAuthorization } : {}),
       ...(d.citizenship?.length ? { citizenship: d.citizenship } : {}),
       ...(d.avoid?.length ? { avoid: d.avoid } : {}),
+      ...(d.experienceYears !== undefined ? { experience_years: d.experienceYears } : {}),
     },
     companies,
     companies_muted: d.muted,

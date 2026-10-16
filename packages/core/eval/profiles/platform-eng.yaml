@@ -24,6 +24,7 @@ profile:
   industries: [cloud, devtools, saas]
   keywords: { kubernetes: 5, go: 4, aws: 4, terraform: 3, postgres: 3, distributed systems: 3, observability: 2 }
   min_score: 70
+  experience_years: 6
   # From `about`: floor, work authorisation, dealbreakers ("react" for frontend work that doesn't say "frontend").
   salary_floor: { amount: 85000, currency: EUR, period: year }
   work_authorization: [eu]

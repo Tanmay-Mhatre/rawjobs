@@ -75,7 +75,7 @@ export type Salary = { min?: number; max?: number; currency?: string; period?: s
  * says: met, one step off ("near", a level away), missed, or unknown when the posting doesn't say.
  * Unknown is never a pass.
  */
-export type FitCheck = { id: "place" | "level" | "pay" | "visa"; status: "met" | "near" | "missed" | "unknown"; note: string };
+export type FitCheck = { id: "place" | "level" | "pay" | "visa" | "musts" | "experience"; status: "met" | "near" | "missed" | "unknown"; note: string };
 
 export type ScoreBreakdown = {
   /** Title points: 15 for a match, up to 5 more by focus, plus `level`. */
@@ -84,7 +84,7 @@ export type ScoreBreakdown = {
   level?: number;
   /** Share of the title's words your role and level words explain, 0..1 ("Senior Product Designer" 1). Missing on older scores. */
   focus?: number;
-  /** Place, level, pay and visa, each met / near / missed / unknown. Missing on older scores. */
+  /** Place, level, pay, visa, must-haves and experience, each met / near / missed / unknown. Missing on older scores. */
   checks?: FitCheck[];
   location: number;
   keywords: string[];
@@ -111,6 +111,15 @@ export type ScoreBreakdown = {
    * When set, the score is halved and kept under min_score.
    */
   dealbreakers?: string[];
+  /**
+   * Must-have lines that name a skill RawJobs knows (`of`), and how many of them name one of your topics (`met`).
+   * Lines with nothing checkable ("strong communication") aren't counted. Missing when the posting lists none.
+   */
+  musts?: { met: number; of: number };
+  /** The years of experience the must-haves ask for ("5+ years" -> 5). */
+  years?: number;
+  /** Points taken off for being more than a year short of `years` (3 a year past the first, at most 10). */
+  yearsGap?: number;
   /** Topics you listed that the job doesn't mention, heaviest first (at most 5). Missing on older scores. */
   missing?: string[];
 };
@@ -358,6 +367,8 @@ export const ProfileSchema = z.object({
   /** keyword -> weight 1..5, matched as whole words in title + description. */
   keywords: z.record(term, z.number().int().min(1).max(5)).default({}),
   min_score: z.number().int().min(0).max(100).default(70),
+  /** Years of work experience. A job whose must-haves ask for more than a year beyond it is a level down (score.ts); left out, nothing is checked. */
+  experience_years: z.number().min(0).max(60).optional(),
   // Dealbreakers (dealbreakers.ts). Each is optional: left out, nothing is checked. A job that breaks one
   // keeps showing, with the reason, but its score is halved and kept under min_score.
   /** The lowest base pay you'd take. A posted range that tops out more than 5% under it is a dealbreaker. */
