@@ -2,6 +2,7 @@ import { INDUSTRIES, INDUSTRY_BY_ID } from "./catalog/industries";
 import { SENIORITY_LEVELS, seniorityCue, seniorityGap, seniorityOf, type Seniority } from "./catalog/seniority";
 import { allPlaceNames, countriesIn, expandPlaces, LOCATION_SEGMENTS, placeOwner, placeOwnerName, spellOutPlaces, SUBDIVISIONS } from "./catalog/places";
 import { dealbreakers, eligibilityChecks } from "./dealbreakers";
+import { aliasesOf, conceptsVersion, knownConceptTerms, namesTopic, topicMentions } from "./concepts";
 import { extractRequirements, regionOnly, type Requirements } from "./posting";
 import type { FitCheck, NormalizedJob, Profile, ScoreBreakdown } from "./schema";
 import { matchesAny, matchesTerm, matchesTitle, mayMatchTitle, mentionsOf, termRegex, titleForms } from "./text";
@@ -111,14 +112,18 @@ export function scoreJob(job: Scorable, profile: Profile, company: CompanyFit = 
   const locationPts = fit.points;
 
   const keywords = topicsOf(profile);
-  const inTitle = new Set(Object.keys(keywords).filter((k) => matchesTitle(title, [k], forms)));
+  const inTitle = new Set(Object.keys(keywords).filter((k) => matchesTitle(title, [k], forms) || aliasesOf(k).some((a) => namesTopic(title, a))));
   // How strongly each topic is there: in full in the title or from fullMentions mentions, oneMention for one.
+  // A topic counts when the posting names it, a word form of it, or a word that proves it ("PSP": payments).
   const strength = new Map<string, number>();
+  const via: Record<string, string> = {};
   for (const k of Object.keys(keywords)) {
-    const n = inTitle.has(k) ? POINTS.fullMentions : mentionsOf(description, k, POINTS.fullMentions);
+    const found = inTitle.has(k) ? { n: POINTS.fullMentions } : topicMentions(description, k, POINTS.fullMentions);
+    const n = found.n;
     if (!n) continue;
+    if (found.via) via[k] = found.via;
     // Named only among the nice-to-haves: worth less than a must-have or the work itself.
-    const nice = !inTitle.has(k) && req.nice.length > 0 && !matchesTerm(req.rest, k);
+    const nice = !inTitle.has(k) && req.nice.length > 0 && !namesTopic(req.rest, k);
     strength.set(k, (POINTS.oneMention + ((1 - POINTS.oneMention) * (n - 1)) / (POINTS.fullMentions - 1)) * (nice ? POINTS.niceOnly : 1));
   }
   const matched = Object.entries(keywords)
@@ -164,11 +169,13 @@ export function scoreJob(job: Scorable, profile: Profile, company: CompanyFit = 
     keywords: matched.map(([k]) => k),
     keywordPoints: tenths(keywordPoints),
     industry,
+    ...(Object.keys(via).length ? { via } : {}),
     ...(missing.length ? { missing } : {}),
     ...(musts ? { musts } : {}),
     ...(req.years ? { years: req.years.min } : {}),
     ...(yearsGap ? { yearsGap } : {}),
     ...(totalWeight > 0 ? {} : { scale: 100 / NON_KEYWORD_MAX }),
+    ...(conceptsVersion() !== "base" ? { concepts: conceptsVersion() } : {}),
   };
   if (!titleOk) return { score: 0, why: { ...why, gate: "title" } };
   if (locationPts === 0) return { score: 0, why: { ...why, gate: "location", ...(fit.note ? { locationNote: fit.note } : {}) } };
@@ -188,7 +195,9 @@ const BROAD_TOPICS = new Set(
   ),
 );
 /** Every topic RawJobs knows that names a skill or domain: yours, and every industry's. A must line naming none of them can't be checked. */
-const KNOWN_TOPICS = [...new Set(INDUSTRIES.flatMap((i) => i.topics.map((t) => t.toLowerCase())))].filter((t) => !BROAD_TOPICS.has(t));
+const knownTopics = () => [...new Set([...INDUSTRIES.flatMap((i) => i.topics), ...knownConceptTerms()].map((t) => t.toLowerCase()))].filter((t) => !BROAD_TOPICS.has(t));
+let known: { version: string; terms: string[] } | undefined;
+const KNOWN = () => (known?.version === conceptsVersion() ? known.terms : (known = { version: conceptsVersion(), terms: knownTopics() }).terms);
 
 /** Must-have lines naming a known topic (`of`), and how many name one of yours (`met`). Undefined when none can be checked. */
 function mustsMet(req: Requirements, keywords: Record<string, number>): { met: number; of: number } | undefined {
@@ -196,8 +205,8 @@ function mustsMet(req: Requirements, keywords: Record<string, number>): { met: n
   let met = 0;
   let of = 0;
   for (const line of req.must) {
-    if (matchesAny(line, yours)) met++;
-    else if (!matchesAny(line, KNOWN_TOPICS)) continue;
+    if (yours.some((k) => namesTopic(line, k))) met++;
+    else if (!matchesAny(line, KNOWN())) continue;
     of++;
   }
   return of ? { met, of } : undefined;

@@ -120,6 +120,10 @@ export type ScoreBreakdown = {
   years?: number;
   /** Points taken off for being more than a year short of `years` (3 a year past the first, at most 10). */
   yearsGap?: number;
+  /** Topics found through a word that proves them, not their own name: { payments: "PSP" }. Missing when none. */
+  via?: Record<string, string>;
+  /** The weekly word list (concepts.ts) a score used, when it wasn't the built-in one. */
+  concepts?: string;
   /** Topics you listed that the job doesn't mention, heaviest first (at most 5). Missing on older scores. */
   missing?: string[];
 };

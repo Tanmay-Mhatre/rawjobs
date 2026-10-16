@@ -1,10 +1,10 @@
 {
   "overall": {
     "ndcg5": 0.921,
-    "ndcg10": 0.922,
-    "p5": 0.533,
+    "ndcg10": 0.931,
+    "p5": 0.5,
     "spearman": 0.692,
-    "ties": 0.013,
+    "ties": 0.037,
     "tiesNoTopics": 0.032,
     "confusion": {
       "strong": {
@@ -18,9 +18,9 @@
         "weak": 1
       },
       "weak": {
-        "strong": 0,
-        "good": 3,
-        "weak": 266
+        "strong": 2,
+        "good": 2,
+        "weak": 265
       }
     },
     "pairs": 294
@@ -54,8 +54,8 @@
     },
     {
       "id": "finance-analyst",
-      "ndcg5": 0.948,
-      "ndcg10": 0.949,
+      "ndcg5": 0.985,
+      "ndcg10": 0.986,
       "p5": 0.6,
       "spearman": 0.581,
       "ties": 0.048,
@@ -84,7 +84,7 @@
       "ndcg10": 0.906,
       "p5": 0.6,
       "spearman": 0.62,
-      "ties": 0,
+      "ties": 0.143,
       "tiesNoTopics": 0.048,
       "confusion": {
         "strong": {
@@ -124,17 +124,17 @@
           "weak": 0
         },
         "weak": {
-          "strong": 0,
-          "good": 1,
+          "strong": 1,
+          "good": 0,
           "weak": 43
         }
       }
     },
     {
       "id": "platform-eng",
-      "ndcg5": 0.972,
-      "ndcg10": 0.972,
-      "p5": 0.8,
+      "ndcg5": 0.931,
+      "ndcg10": 0.99,
+      "p5": 0.6,
       "spearman": 0.842,
       "ties": 0.028,
       "tiesNoTopics": 0.028,
@@ -150,9 +150,9 @@
           "weak": 0
         },
         "weak": {
-          "strong": 0,
+          "strong": 1,
           "good": 1,
-          "weak": 43
+          "weak": 42
         }
       }
     },
@@ -215,6 +215,36 @@
       "gap": -3
     },
     {
+      "profile": "platform-eng",
+      "job": "eng-06",
+      "title": "Senior Backend Engineer (Java)",
+      "company": "Hartwell Versicherung",
+      "score": 80,
+      "label": 1,
+      "why": "Two real gaps: 5+ years Java/Spring (his own 'stretch') and German B2 for a team that works in German, which his profile doesn't show.",
+      "gap": 2.2
+    },
+    {
+      "profile": "ml-ds",
+      "job": "ml-05",
+      "title": "Staff Applied Scientist",
+      "company": "Glyphic AI",
+      "score": 76,
+      "label": 1,
+      "why": "Staff Applied Scientist leading four: PhD, 10+ years post-PhD and publications required; she has an MS and 4 years (far level).",
+      "gap": 2.04
+    },
+    {
+      "profile": "platform-eng",
+      "job": "eng-05",
+      "title": "Senior Software Engineer (Web)",
+      "company": "Pixelmint",
+      "score": 50,
+      "label": 0,
+      "why": "React/TypeScript canvas editor: a frontend role, his dealbreaker; the Go/Kubernetes mentions are about other teams.",
+      "gap": 2
+    },
+    {
       "profile": "product-designer",
       "job": "des-06",
       "title": "Senior UX Researcher",
@@ -225,13 +255,13 @@
       "gap": -2
     },
     {
-      "profile": "platform-eng",
-      "job": "eng-05",
-      "title": "Senior Software Engineer (Web)",
-      "company": "Pixelmint",
+      "profile": "finance-analyst",
+      "job": "fin-04",
+      "title": "Senior Financial Analyst, Credit Risk",
+      "company": "Brindle Lending",
       "score": 49,
       "label": 0,
-      "why": "React/TypeScript canvas editor: a frontend role, his dealbreaker; the Go/Kubernetes mentions are about other teams.",
+      "why": "Credit risk and IFRS 9 provisioning: credit/lending risk is her stated dealbreaker.",
       "gap": 1.96
     },
     {
@@ -245,16 +275,6 @@
       "gap": 1.92
     },
     {
-      "profile": "finance-analyst",
-      "job": "fin-04",
-      "title": "Senior Financial Analyst, Credit Risk",
-      "company": "Brindle Lending",
-      "score": 48,
-      "label": 0,
-      "why": "Credit risk and IFRS 9 provisioning: credit/lending risk is her stated dealbreaker.",
-      "gap": 1.92
-    },
-    {
       "profile": "platform-eng",
       "job": "eng-02",
       "title": "Platform Engineer",
@@ -263,26 +283,6 @@
       "label": 0,
       "why": "EUR 65-78k tops out 8% under his 85k floor (more than 5%: salary blocker); also a level down (2+ years).",
       "gap": 1.92
-    },
-    {
-      "profile": "platform-eng",
-      "job": "eng-07",
-      "title": "Senior Platform Engineer",
-      "company": "Northbeam Systems",
-      "score": 48,
-      "label": 0,
-      "why": "Remote for US residents only, no sponsorship: US-only remote is his dealbreaker.",
-      "gap": 1.92
-    },
-    {
-      "profile": "finance-analyst",
-      "job": "fin-06",
-      "title": "Senior Business Analyst",
-      "company": "Halcyon Bank",
-      "score": 47,
-      "label": 0,
-      "why": "Core-banking IT business analyst (requirements, UAT, BPMN, 5+ years BA): a different job from FP&A; only the title word matches.",
-      "gap": 1.88
     }
   ],
   "scores": {
@@ -360,9 +360,9 @@
     "finance-analyst/eng-09": 0,
     "finance-analyst/fin-01": 100,
     "finance-analyst/fin-02": 48,
-    "finance-analyst/fin-03": 70,
-    "finance-analyst/fin-04": 48,
-    "finance-analyst/fin-05": 44,
+    "finance-analyst/fin-03": 88,
+    "finance-analyst/fin-04": 49,
+    "finance-analyst/fin-05": 47,
     "finance-analyst/fin-06": 47,
     "finance-analyst/fin-07": 75,
     "finance-analyst/fin-08": 0,
@@ -416,16 +416,16 @@
     "fintech-pm/fin-07": 0,
     "fintech-pm/fin-08": 0,
     "fintech-pm/pm-01": 100,
-    "fintech-pm/pm-02": 39,
+    "fintech-pm/pm-02": 47,
     "fintech-pm/pm-03": 0,
     "fintech-pm/pm-04": 0,
     "fintech-pm/pm-05": 47,
     "fintech-pm/pm-06": 0,
     "fintech-pm/pm-07": 0,
-    "fintech-pm/pm-08": 92,
+    "fintech-pm/pm-08": 94,
     "fintech-pm/pm-09": 75,
     "fintech-pm/pm-10": 59,
-    "fintech-pm/pm-11": 43,
+    "fintech-pm/pm-11": 47,
     "fintech-pm/ae-01": 0,
     "fintech-pm/ae-02": 0,
     "fintech-pm/ae-03": 0,
@@ -434,12 +434,12 @@
     "fintech-pm/ae-06": 0,
     "fintech-pm/ae-07": 0,
     "ml-ds/ml-01": 100,
-    "ml-ds/ml-02": 92,
+    "ml-ds/ml-02": 95,
     "ml-ds/ml-03": 45,
-    "ml-ds/ml-04": 81,
-    "ml-ds/ml-05": 68,
+    "ml-ds/ml-04": 89,
+    "ml-ds/ml-05": 76,
     "ml-ds/ml-06": 0,
-    "ml-ds/ml-07": 76,
+    "ml-ds/ml-07": 81,
     "ml-ds/des-01": 0,
     "ml-ds/des-02": 0,
     "ml-ds/des-03": 0,
@@ -499,9 +499,9 @@
     "platform-eng/eng-01": 100,
     "platform-eng/eng-02": 48,
     "platform-eng/eng-03": 81,
-    "platform-eng/eng-04": 71,
-    "platform-eng/eng-05": 49,
-    "platform-eng/eng-06": 67,
+    "platform-eng/eng-04": 85,
+    "platform-eng/eng-05": 50,
+    "platform-eng/eng-06": 80,
     "platform-eng/eng-07": 48,
     "platform-eng/eng-08": 70,
     "platform-eng/eng-09": 98,
@@ -539,12 +539,12 @@
     "product-designer/ml-06": 0,
     "product-designer/ml-07": 0,
     "product-designer/des-01": 95,
-    "product-designer/des-02": 35,
+    "product-designer/des-02": 45,
     "product-designer/des-03": 100,
     "product-designer/des-04": 47,
-    "product-designer/des-05": 30,
+    "product-designer/des-05": 34,
     "product-designer/des-06": 0,
-    "product-designer/des-07": 66,
+    "product-designer/des-07": 68,
     "product-designer/eng-01": 0,
     "product-designer/eng-02": 0,
     "product-designer/eng-03": 0,

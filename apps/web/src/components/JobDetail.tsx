@@ -645,6 +645,8 @@ function WhyItMatches({ job, profile, yours }: { job: Job; profile: Profile; you
   // The include term the scorer matched, read the same way ("Sr. PM" is "product manager").
   const titleTerm = useMemo(() => profile.titles.include.find((t) => matchesTitle(job.title, [t])), [job.title, profile]);
   // Topics you listed vs the ones your industries added; and your own topics the posting doesn't mention.
+  // A topic found through a word that proves it says which: "payments (as PSP)".
+  const named = (k: string) => (w.via?.[k] ? `${k} (as ${w.via[k]})` : k);
   const own = w.keywords.filter((k) => k in profile.keywords);
   const added = w.keywords.filter((k) => !(k in profile.keywords));
   const checked = !job.estimated && job.hasDescription;
@@ -703,12 +705,12 @@ function WhyItMatches({ job, profile, yours }: { job: Job; profile: Profile; you
             ok: own.length > 0 || added.length > 0,
             text: own.length ? (
               <>
-                Mentions your topics: <b>{own.join(", ")}</b>
-                {added.length ? <>; also {added.join(", ")} from your industries</> : null}
+                Mentions your topics: <b>{own.map(named).join(", ")}</b>
+                {added.length ? <>; also {added.map(named).join(", ")} from your industries</> : null}
               </>
             ) : added.length ? (
               <>
-                Mentions topics from your industries: <b>{added.join(", ")}</b>
+                Mentions topics from your industries: <b>{added.map(named).join(", ")}</b>
               </>
             ) : checked ? (
               "Doesn't mention your topics"
