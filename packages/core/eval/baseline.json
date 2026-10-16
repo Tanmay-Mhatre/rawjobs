@@ -1,10 +1,10 @@
 {
   "overall": {
-    "ndcg5": 0.921,
-    "ndcg10": 0.931,
-    "p5": 0.5,
+    "ndcg5": 0.927,
+    "ndcg10": 0.932,
+    "p5": 0.533,
     "spearman": 0.692,
-    "ties": 0.037,
+    "ties": 0.021,
     "tiesNoTopics": 0.032,
     "confusion": {
       "strong": {
@@ -13,13 +13,13 @@
         "weak": 3
       },
       "good": {
-        "strong": 3,
-        "good": 2,
+        "strong": 2,
+        "good": 3,
         "weak": 1
       },
       "weak": {
-        "strong": 2,
-        "good": 2,
+        "strong": 1,
+        "good": 3,
         "weak": 265
       }
     },
@@ -84,7 +84,7 @@
       "ndcg10": 0.906,
       "p5": 0.6,
       "spearman": 0.62,
-      "ties": 0.143,
+      "ties": 0.048,
       "tiesNoTopics": 0.048,
       "confusion": {
         "strong": {
@@ -124,17 +124,17 @@
           "weak": 0
         },
         "weak": {
-          "strong": 1,
-          "good": 0,
+          "strong": 0,
+          "good": 1,
           "weak": 43
         }
       }
     },
     {
       "id": "platform-eng",
-      "ndcg5": 0.931,
-      "ndcg10": 0.99,
-      "p5": 0.6,
+      "ndcg5": 0.971,
+      "ndcg10": 0.991,
+      "p5": 0.8,
       "spearman": 0.842,
       "ties": 0.028,
       "tiesNoTopics": 0.028,
@@ -145,8 +145,8 @@
           "weak": 0
         },
         "good": {
-          "strong": 1,
-          "good": 0,
+          "strong": 0,
+          "good": 1,
           "weak": 0
         },
         "weak": {
@@ -219,20 +219,10 @@
       "job": "eng-06",
       "title": "Senior Backend Engineer (Java)",
       "company": "Hartwell Versicherung",
-      "score": 80,
+      "score": 83,
       "label": 1,
       "why": "Two real gaps: 5+ years Java/Spring (his own 'stretch') and German B2 for a team that works in German, which his profile doesn't show.",
-      "gap": 2.2
-    },
-    {
-      "profile": "ml-ds",
-      "job": "ml-05",
-      "title": "Staff Applied Scientist",
-      "company": "Glyphic AI",
-      "score": 76,
-      "label": 1,
-      "why": "Staff Applied Scientist leading four: PhD, 10+ years post-PhD and publications required; she has an MS and 4 years (far level).",
-      "gap": 2.04
+      "gap": 2.32
     },
     {
       "profile": "platform-eng",
@@ -272,6 +262,16 @@
       "score": 48,
       "label": 0,
       "why": "SGD 5-6k tops out 8% under her 6.5k floor (more than 5%: salary blocker); also a 1-2 year support role.",
+      "gap": 1.92
+    },
+    {
+      "profile": "fintech-pm",
+      "job": "pm-02",
+      "title": "Product Manager, Payments",
+      "company": "Ledgerline",
+      "score": 48,
+      "label": 0,
+      "why": "GBP 70-85k tops out 11% under her 95k floor (salary blocker); also a mid-level role reporting to a Senior PM.",
       "gap": 1.92
     },
     {
@@ -416,7 +416,7 @@
     "fintech-pm/fin-07": 0,
     "fintech-pm/fin-08": 0,
     "fintech-pm/pm-01": 100,
-    "fintech-pm/pm-02": 47,
+    "fintech-pm/pm-02": 48,
     "fintech-pm/pm-03": 0,
     "fintech-pm/pm-04": 0,
     "fintech-pm/pm-05": 47,
@@ -424,7 +424,7 @@
     "fintech-pm/pm-07": 0,
     "fintech-pm/pm-08": 94,
     "fintech-pm/pm-09": 75,
-    "fintech-pm/pm-10": 59,
+    "fintech-pm/pm-10": 60,
     "fintech-pm/pm-11": 47,
     "fintech-pm/ae-01": 0,
     "fintech-pm/ae-02": 0,
@@ -437,7 +437,7 @@
     "ml-ds/ml-02": 95,
     "ml-ds/ml-03": 45,
     "ml-ds/ml-04": 89,
-    "ml-ds/ml-05": 76,
+    "ml-ds/ml-05": 69,
     "ml-ds/ml-06": 0,
     "ml-ds/ml-07": 81,
     "ml-ds/des-01": 0,
@@ -498,10 +498,10 @@
     "platform-eng/des-07": 0,
     "platform-eng/eng-01": 100,
     "platform-eng/eng-02": 48,
-    "platform-eng/eng-03": 81,
+    "platform-eng/eng-03": 69,
     "platform-eng/eng-04": 85,
     "platform-eng/eng-05": 50,
-    "platform-eng/eng-06": 80,
+    "platform-eng/eng-06": 83,
     "platform-eng/eng-07": 48,
     "platform-eng/eng-08": 70,
     "platform-eng/eng-09": 98,

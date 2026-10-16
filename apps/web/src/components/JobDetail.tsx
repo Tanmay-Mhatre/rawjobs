@@ -649,8 +649,8 @@ function WhyItMatches({ job, profile, yours }: { job: Job; profile: Profile; you
   const named = (k: string) => (w.via?.[k] ? `${k} (as ${w.via[k]})` : k);
   // Topics read from your résumé (you set none yourself) count as yours.
   const fromResume = w.topicsFrom === "resume";
-  const own = w.keywords.filter((k) => fromResume || k in profile.keywords);
-  const added = w.keywords.filter((k) => !fromResume && !(k in profile.keywords));
+  const own = fromResume ? (w.ownTopics ?? []) : w.keywords.filter((k) => k in profile.keywords);
+  const added = w.keywords.filter((k) => !own.includes(k));
   const checked = !job.estimated && job.hasDescription;
   const missing =
     checked && fromResume

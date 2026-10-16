@@ -126,6 +126,8 @@ export type ScoreBreakdown = {
   heldBack?: string;
   /** "resume" when the topics scored were read from your résumé because you set none yourself. */
   topicsFrom?: "resume";
+  /** With topicsFrom: the matched topics that came from your résumé (the rest are your industries'). */
+  ownTopics?: string[];
   /** The weekly word list (concepts.ts) a score used, when it wasn't the built-in one. */
   concepts?: string;
   /** Topics you listed that the job doesn't mention, heaviest first (at most 5). Missing on older scores. */

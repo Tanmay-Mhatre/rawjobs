@@ -176,7 +176,7 @@ export function scoreJob(job: Scorable, profile: Profile, company: CompanyFit = 
     ...(yearsGap ? { yearsGap } : {}),
     ...(totalWeight > 0 ? {} : { scale: 100 / NON_KEYWORD_MAX }),
     ...(conceptsVersion() !== "base" ? { concepts: conceptsVersion() } : {}),
-    ...(profile.keywords_from ? { topicsFrom: profile.keywords_from } : {}),
+    ...(profile.keywords_from ? { topicsFrom: profile.keywords_from, ownTopics: matched.filter(([k]) => own(k)).map(([k]) => k) } : {}),
   };
   if (!titleOk) return { score: 0, why: { ...why, gate: "title" } };
   if (locationPts === 0) return { score: 0, why: { ...why, gate: "location", ...(fit.note ? { locationNote: fit.note } : {}) } };
@@ -184,8 +184,8 @@ export function scoreJob(job: Scorable, profile: Profile, company: CompanyFit = 
   const exact = Math.max(0, Math.min(100, (titlePts + locationPts + keywordPoints + industry) * (why.scale ?? 1) - yearsGap));
   const broken = dealbreakers(job, profile);
   // Strong means it fits on every count you can check: a job a level or more off yours, or naming none
-  // of its checkable must-haves, stays just under your cut-off, with the reason.
-  const off = why.checks.find((c) => (c.id === "level" || c.id === "musts") && c.status === "missed");
+  // of two or more checkable must-haves (one line is too little to go on), stays just under your cut-off.
+  const off = why.checks.find((c) => c.status === "missed" && (c.id === "level" || (c.id === "musts" && (musts?.of ?? 0) >= 2)));
   if (!broken.length && off && Math.round(exact) >= profile.min_score) return { score: profile.min_score - 1, why: { ...why, heldBack: off.note } };
   if (!broken.length) return { score: Math.round(exact), why };
   return { score: Math.max(0, Math.min(Math.round(exact / 2), profile.min_score - 1)), why: { ...why, dealbreakers: broken } };
