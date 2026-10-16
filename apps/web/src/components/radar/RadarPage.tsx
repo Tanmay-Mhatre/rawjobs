@@ -427,7 +427,7 @@ export function RadarPage(p: Props) {
           <SearchField
             ref={searchRef}
             label="Search jobs"
-            className="order-1 min-w-0 flex-1 basis-40 lg:order-none lg:w-52 lg:flex-none lg:basis-auto xl:w-60"
+            className="order-1 min-w-0 flex-1 basis-40 lg:order-none lg:w-44 lg:flex-none lg:basis-auto xl:w-60"
             value={filters.q}
             onChange={(e) => setFilters({ q: e.target.value })}
             onKeyDown={(e) => {
@@ -435,7 +435,7 @@ export function RadarPage(p: Props) {
               e.currentTarget.blur();
               setFilters({ q: "" });
             }}
-            placeholder="Search jobs"
+            placeholder="Search"
           />
           {/* Phones sort in the filter sheet, so search and Filters share one row. */}
           <label className="relative hidden shrink-0 items-center lg:inline-flex">
