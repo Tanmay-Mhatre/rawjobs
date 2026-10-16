@@ -23,6 +23,7 @@
     "./dashboard": "./src/dashboard.ts",
     "./activity": "./src/activity.ts",
     "./fit": "./src/fit.ts",
+    "./learn": "./src/learn.ts",
     "./score": "./src/score.ts",
     "./protocol": "./src/protocol.ts",
     "./release": "./src/release.ts",
