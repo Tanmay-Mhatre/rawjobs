@@ -351,10 +351,11 @@ function salaryOrder(jobs: readonly Job[], currency?: string): (a: Job, b: Job) 
 /**
  * Sort the list. Every sort means what it says: your companies are never pinned on top. In "best",
  * `isYours` gives them a nudge (rankScore), and freshness counts, worked out at `now`. In "salary",
- * `currency` (your salary floor's) is the one compared first.
+ * `currency` (your salary floor's) is the one compared first. `nudge` moves a job in "best" by what
+ * your own picks taught (learnedNudge), a few points either way.
  */
-export function sortJobs(jobs: Job[], sort: Sort, isYours?: (j: Job) => boolean, now = Date.now(), currency?: string): Job[] {
-  const rank = sort === "best" ? new Map(jobs.map((j) => [j, rankScore(j.score, postedOrSeen(j), now, !!isYours?.(j)) - evergreenCost(j, now)])) : undefined;
+export function sortJobs(jobs: Job[], sort: Sort, isYours?: (j: Job) => boolean, now = Date.now(), currency?: string, nudge?: (j: Job) => number): Job[] {
+  const rank = sort === "best" ? new Map(jobs.map((j) => [j, rankScore(j.score, postedOrSeen(j), now, !!isYours?.(j)) - evergreenCost(j, now) + (nudge?.(j) ?? 0)])) : undefined;
   const by: Record<Sort, (a: Job, b: Job) => number> = {
     // Equal ranks go to the one mentioning more of your topics, then the newer.
     best: (a, b) => rank!.get(b)! - rank!.get(a)! || b.why.keywords.length - a.why.keywords.length || postedOrSeen(b).localeCompare(postedOrSeen(a)),

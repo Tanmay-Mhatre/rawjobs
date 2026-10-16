@@ -1,4 +1,5 @@
 import { displayName } from "@rawjobs/core/display-name";
+import { learnedNudge, learnOrder } from "@rawjobs/core/learn";
 import { ArrowRight, ArrowUpDown, SlidersHorizontal, UserRound, X } from "lucide-react";
 import { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from "react";
 import { useOtherJobs, type DataMeta, type Job, type Profile } from "../../lib/data";
@@ -45,6 +46,9 @@ import { useHourlyNow, useIsWide, useLatestKeydown } from "./hooks";
 import { useClosedSinceToast } from "./useClosedSinceToast";
 import { useRadarFilters } from "./useRadarFilters";
 import { settingsHash } from "../settings/registry";
+
+/** When Best match last started learning afresh (Reset); picks before it are left out. */
+const LEARN_SINCE_KEY = "rawjobs.learnSince";
 
 type Props = {
   jobs: Job[];
@@ -147,11 +151,32 @@ export function RadarPage(p: Props) {
 
   // One list, in the order you picked: your companies are starred and nudged up in Best match, never pinned.
   // Typing in search updates the box at once; the list catches up when React has a moment (useDeferredValue).
+  // Best match learns from what you save, apply to and mark Not interested (since your last Reset), on this computer only.
+  const [learnSince, setLearnSince] = useState(() => load<string>(LEARN_SINCE_KEY, ""));
+  const learned = useMemo(() => {
+    const byId = new Map(p.jobs.map((j) => [j.id, j]));
+    const picks = Object.entries(p.user).flatMap(([id, e]) => {
+      const job = byId.get(id);
+      return job && e.status && e.updatedAt > learnSince ? [{ why: job.why, liked: e.status !== "dismissed" }] : [];
+    });
+    return learnOrder(picks);
+  }, [p.jobs, p.user, learnSince]);
+  const nudge = useMemo(() => (learned ? (j: Job) => learnedNudge(learned, j.why) : undefined), [learned]);
+  const resetLearned = () => {
+    const was = learnSince;
+    const set = (v: string) => {
+      save(LEARN_SINCE_KEY, v);
+      setLearnSince(v);
+    };
+    set(new Date().toISOString());
+    toast({ message: "Best match order reset: it learns again from your next picks", actionLabel: "Undo", onAction: () => set(was) });
+  };
+
   const q = useDeferredValue(filters.q);
   const listFilters = useMemo(() => (q === filters.q ? filters : { ...filters, q }), [filters, q]);
   const visible = useMemo(
-    () => sortJobs(applyFilters(pool, listFilters, ctx), sort, p.isYours, now, profile.salary_floor?.currency),
-    [pool, listFilters, ctx, sort, p.isYours, now, profile.salary_floor?.currency],
+    () => sortJobs(applyFilters(pool, listFilters, ctx), sort, p.isYours, now, profile.salary_floor?.currency, nudge),
+    [pool, listFilters, ctx, sort, p.isYours, now, profile.salary_floor?.currency, nudge],
   );
   const groups = useMemo(() => groupJobs(visible, now), [visible, now]);
   // One company can't fill the page ("+N more at …"), except in Newest (a plain date order) and when you've
@@ -607,6 +632,17 @@ export function RadarPage(p: Props) {
                   </>
                 )}
                 {p.meta.runs[0] && ` · ${p.meta.runs[0].everyCompany ? "every company checked" : "checked"} ${timeAgo(p.meta.runs[0].finishedAt)}`}
+                {sort === "best" && learned && (
+                  <>
+                    {" · "}
+                    <span title={`Learned from ${learned.liked} jobs you saved or applied to and ${learned.disliked} you marked Not interested, on this computer only. Scores don't change.`}>
+                      order tuned to your picks
+                    </span>{" "}
+                    <button type="button" className="underline underline-offset-2" onClick={resetLearned}>
+                      Reset
+                    </button>
+                  </>
+                )}
               </span>
               {/* Laptops show the sort control just above, and keep your profile line in the Filters panel:
                   this opens it, so what's being matched is one click away. Phones sort in the filter
