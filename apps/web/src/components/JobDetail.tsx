@@ -32,9 +32,11 @@ import { useDescription, useHiring, type Job, type Profile } from "../lib/data";
 import { cleanLocation, companyName, eligibilityNotes, formatDate, formatSalary, jobTitle, placeSummary, postedOrSeen, timeAgo, workplaceBeside } from "../lib/format";
 import { atsLabel, evergreenReason, INDEX_MAX_AGE_DAYS, isOlder } from "../lib/filters";
 import { isRoleStale, isStale, staleReasons } from "../lib/stale";
+import { type FitFix, fitFixes, fixApplied, useProfileFix } from "../lib/profileFix";
 import { load, save } from "../lib/storage";
 import { CLOSED_AS, type ClosedAs, type Entry, type EntryPatch, followUpDue, PIPELINE, STATUS_LABEL, type Status, statusLabel } from "../lib/userState";
 import { Dialog } from "./Dialog";
+import { settingsHash } from "./settings/registry";
 import { HiringActivity } from "./HiringActivity";
 import { ReasonPicker, useNotForMe } from "./NotForMe";
 import { Button, buttonClass, IconButton, Menu, ScoreBadge, scoreBandOf, ScoreBreakdown, scoreParts, Tooltip } from "./primitives";
@@ -657,9 +659,14 @@ function WhyItMatches({ job, profile, yours }: { job: Job; profile: Profile; you
   const level = lv === 10 ? ", at your level" : lv === 5 ? ", one level from yours" : profile.seniority_boost.length ? ", not near your level" : "";
   // Pay, visa, must-haves and years: met, missed, or unknown when the posting doesn't say (never shown as a pass).
   const eligibility = (w.checks ?? []).filter((c) => c.id !== "place" && c.id !== "level");
-  const items: { ok: boolean; unknown?: boolean; text: ReactNode }[] = [
+  // One-click fixes for checks your profile got wrong, when your profile can be saved from here.
+  const fixer = useProfileFix();
+  const fixes = fixer ? fitFixes(job).filter((f) => !fixApplied(f, fixer.draft)) : [];
+  const fixFor = (check: string) => fixes.find((f) => f.check === check);
+  const items: { ok: boolean; unknown?: boolean; text: ReactNode; fix?: FitFix }[] = [
     {
       ok: w.title > 0,
+      fix: fixFor("level"),
       text:
         w.title > 0 ? (
           <>
@@ -711,7 +718,7 @@ function WhyItMatches({ job, profile, yours }: { job: Job; profile: Profile; you
           },
         ]),
     // One year short of the years asked is close enough to count.
-    ...eligibility.map((c) => ({ ok: c.status === "met" || (c.id === "experience" && c.status === "near"), unknown: c.status === "unknown", text: c.note })),
+    ...eligibility.map((c) => ({ ok: c.status === "met" || (c.id === "experience" && c.status === "near"), unknown: c.status === "unknown", text: c.note, fix: fixFor(c.id) })),
     w.industry === undefined
       ? { ok: (w.freshness ?? 0) >= 6, text: w.freshness === 10 ? "Posted in the last 3 days" : w.freshness === 6 ? "Posted this week" : "Posted more than a week ago" }
       : { ok: w.industry === 10, unknown: w.industry === 5, text: industryText(w.industry, job, profile, yours) },
@@ -719,7 +726,12 @@ function WhyItMatches({ job, profile, yours }: { job: Job; profile: Profile; you
   const min = profile.min_score;
   const cutOff = job.score > min ? `above your ${min} cut-off` : job.score === min ? `at your ${min} cut-off` : `below your ${min} cut-off`;
   const parts = scoreParts(w);
-  const misses = items.filter((it) => !it.ok && !it.unknown);
+  // The level sits inside the title line (a pass); folded, its fix gets a pill of its own.
+  const levelFix = fixFor("level");
+  const misses = [
+    ...items.filter((it) => !it.ok && !it.unknown),
+    ...(levelFix && w.title > 0 ? [{ text: w.checks?.find((c) => c.id === "level")?.note ?? "Not near your level", fix: levelFix }] : []),
+  ];
   const unknowns = items.filter((it) => it.unknown);
   return (
     <section className={cx("rj-drawer__section rj-fit", open && "gap-4")}>
@@ -757,6 +769,7 @@ function WhyItMatches({ job, profile, yours }: { job: Job; profile: Profile; you
             <li key={i} className="rj-pill rj-pill--miss">
               <X className="size-4 shrink-0" aria-hidden />
               <span>{it.text}</span>
+              {it.fix && <FixButton fix={it.fix} />}
             </li>
           ))}
           {unknowns.map((it, i) => (
@@ -764,6 +777,7 @@ function WhyItMatches({ job, profile, yours }: { job: Job; profile: Profile; you
             <li key={`u${i}`} className="rj-pill">
               <CircleHelp className="size-4 shrink-0 text-muted" aria-label="Not stated:" />
               <span>{it.text}</span>
+              {it.fix && <FixButton fix={it.fix} />}
             </li>
           ))}
         </ul>
@@ -806,6 +820,7 @@ function WhyItMatches({ job, profile, yours }: { job: Job; profile: Profile; you
                   <X className="mt-0.5 size-4 shrink-0 text-muted" />
                 )}
                 <span className={cx(!it.ok && "text-muted")}>{it.text}</span>
+                {it.fix && <FixButton fix={it.fix} />}
               </li>
             ))}
           </ul>
@@ -816,6 +831,30 @@ function WhyItMatches({ job, profile, yours }: { job: Job; profile: Profile; you
         </div>
       )}
     </section>
+  );
+}
+
+/** A fix beside a check: saves one word to your profile (re-scored on the next scan), or opens the setting. */
+function FixButton({ fix }: { fix: FitFix }) {
+  const fixer = useProfileFix();
+  const [saving, setSaving] = useState(false);
+  if (!("field" in fix))
+    return (
+      <a href={`#${settingsHash(fix.section)}`} className="ml-auto shrink-0 font-medium text-ink underline underline-offset-2 hover:text-muted">
+        {fix.label}
+      </a>
+    );
+  const apply = async () => {
+    if (!fixer) return;
+    setSaving(true);
+    const error = await fixer.add(fix.field, fix.value);
+    setSaving(false);
+    toast({ message: error ?? `${fix.done} Scores update on the next scan.` });
+  };
+  return (
+    <button type="button" onClick={apply} disabled={saving} className="ml-auto shrink-0 font-medium text-ink underline underline-offset-2 hover:text-muted disabled:opacity-60">
+      {saving ? "Saving…" : fix.label}
+    </button>
   );
 }
 
