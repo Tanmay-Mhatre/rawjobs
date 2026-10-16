@@ -138,23 +138,29 @@ const renderRadar = (onStatus: (job: Job, status: string) => void = noop, extra:
       />
     </>,
   );
-describe("Radar 1-6 pick the views", () => {
-  const selectedTab = () => screen.getAllByRole("tab").find((t) => t.getAttribute("aria-selected") === "true")?.textContent ?? "";
+describe("Radar 1-5 toggle the quick filters", () => {
+  const pressed = () =>
+    screen
+      .queryAllByRole("button", { pressed: true })
+      .map((b) => b.textContent?.replace(/[\d,]+$/, "").trim())
+      .filter((t) => t === "My companies" || t === "New" || t === "Strong");
 
-  it("each number picks the view in its tab position (first scan: no New view)", () => {
+  it("each number toggles the chip in its position, and they stack (first scan: no New chip)", () => {
     renderRadar();
-    expect(selectedTab()).toMatch(/^All/);
-    act(() => void fireEvent.keyDown(window, { key: "3" }));
-    expect(selectedTab()).toMatch(/^Strong/);
+    expect(pressed()).toEqual([]);
+    act(() => void fireEvent.keyDown(window, { key: "2" }));
+    expect(pressed()).toEqual(["Strong"]);
     act(() => void fireEvent.keyDown(window, { key: "1" }));
-    expect(selectedTab()).toMatch(/^All/);
+    expect(pressed()).toEqual(["My companies", "Strong"]);
+    act(() => void fireEvent.keyDown(window, { key: "2" }));
+    expect(pressed()).toEqual(["My companies"]);
   });
 
   it("not while typing in search", () => {
     renderRadar();
     const search = screen.getByRole("searchbox", { name: "Search jobs" });
-    act(() => void fireEvent.keyDown(search, { key: "3" }));
-    expect(selectedTab()).toMatch(/^All/);
+    act(() => void fireEvent.keyDown(search, { key: "2" }));
+    expect(pressed()).toEqual([]);
   });
 });
 

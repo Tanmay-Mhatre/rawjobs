@@ -41,7 +41,7 @@ import { FilterSheet, SheetSection, SORTS, SortOptions } from "./FilterSheet";
 import { JobCard } from "./JobCard";
 import { ageLimit, MoreMenu, MoreToggles } from "./MoreFilters";
 import { ProfileBar } from "./ProfileBar";
-import { builtInViews, ViewsBar } from "./ViewsBar";
+import { type ChipId, chipKeys, toggleChip, ViewsBar } from "./ViewsBar";
 import { useHourlyNow, useIsWide, useLatestKeydown } from "./hooks";
 import { useClosedSinceToast } from "./useClosedSinceToast";
 import { useRadarFilters } from "./useRadarFilters";
@@ -212,10 +212,14 @@ export function RadarPage(p: Props) {
   const open = useMemo(() => applyFilters(p.jobs, base, ctx), [p.jobs, base, ctx]);
   // Every count is roles, like the list's rows: one role posted in three cities counts once.
   const newCount = roleCount(open.filter((j) => isNewJob(j, ctx)));
-  const strongCount = roleCount(open.filter((j) => j.score >= min));
-  // Saved and Applied keep jobs that closed or aged out, so they're counted with their own view's filters.
-  const savedCount = useMemo(() => roleCount(applyFilters(p.jobs, { ...base, status: "saved" }, ctx)), [p.jobs, base, ctx]);
-  const appliedCount = useMemo(() => roleCount(applyFilters(p.jobs, { ...base, status: "applied" }, ctx)), [p.jobs, base, ctx]);
+  // A quick-filter chip counts what it shows with the other chips that are on: with Strong on, New says how many new strong jobs.
+  const chipOn: Record<ChipId, boolean> = { mine: !!filters.mine, new: filters.status === "new", strong: filters.match === "strong" };
+  const chipTest: Record<ChipId, (j: Job) => boolean> = { mine: p.isYours, new: (j) => isNewJob(j, ctx), strong: (j) => j.score >= min };
+  const chipIds = Object.keys(chipTest) as ChipId[];
+  const chipCounts = Object.fromEntries(chipIds.map((id) => [id, roleCount(open.filter((j) => chipTest[id](j) && chipIds.every((o) => o === id || !chipOn[o] || chipTest[o](j))))])) as Record<
+    ChipId,
+    number
+  >;
   const yourGroups = groups.filter((g) => p.isYours(g.lead)).length;
   // The newest job in the list, said in the head when the list isn't sorted by date.
   const newest = useMemo(() => (sort === "newest" ? undefined : visible.reduce<string | undefined>((m, j) => (!m || postedOrSeen(j) > m ? postedOrSeen(j) : m), undefined)), [sort, visible]);
@@ -278,7 +282,7 @@ export function RadarPage(p: Props) {
     [navGroups, rows, index, limit, wide, p],
   );
 
-  // ----- keyboard: j/k move, s/a/x status, Enter opens (phones), "/" search, 1-6 views -----
+  // ----- keyboard: j/k move, s/a/x status, Enter opens (phones), "/" search, 1-3 quick filters -----
   const searchRef = useRef<HTMLInputElement>(null);
   // One listener for the page's life; it calls the latest handler (props change on every render).
   useLatestKeydown((e: KeyboardEvent) => {
@@ -293,8 +297,8 @@ export function RadarPage(p: Props) {
       return;
     }
     if (phoneJob && !["j", "k", "ArrowDown", "ArrowUp"].includes(e.key)) return;
-    const view = /^[1-6]$/.test(e.key) ? builtInViews(firstScan)[Number(e.key) - 1] : undefined;
-    if (view) return replace({ ...base, ...view.filters }, sort);
+    const chip = /^[1-3]$/.test(e.key) ? chipKeys(firstScan)[Number(e.key) - 1] : undefined;
+    if (chip) return replace(toggleChip(filters, base, chip), sort);
     if (e.key === "Enter" && t?.closest?.("button, a, [role=button]")) return;
     if (e.key === "j" || e.key === "ArrowDown") {
       e.preventDefault();
@@ -442,7 +446,7 @@ export function RadarPage(p: Props) {
             filters={filters}
             sort={sort}
             views={p.prefs.views}
-            counts={{ all: roleCount(open), mine: roleCount(open.filter(p.isYours)), new: newCount, strong: strongCount, saved: savedCount, applied: appliedCount }}
+            counts={chipCounts}
             hideNew={firstScan}
             onPick={replace}
             onSave={(name) => p.onSaveView(name, filters, sort)}

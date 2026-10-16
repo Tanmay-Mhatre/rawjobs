@@ -1,31 +1,48 @@
-import { Check, ChevronDown } from "lucide-react";
+import { Check, ChevronDown, X } from "lucide-react";
 import { useState } from "react";
 import { type Filters, sameFilters, type Sort } from "../../lib/filters";
 import type { SavedView } from "../../lib/prefs";
-import { IconButton, Menu, Tabs } from "../primitives";
+import { IconButton, Menu } from "../primitives";
 import { cx } from "../ui";
 
-const BUILT_IN: { id: string; label: string; filters: Partial<Filters>; count: keyof ViewCounts }[] = [
-  { id: "all", label: "All", filters: {}, count: "all" },
-  { id: "mine", label: "My companies", filters: { mine: true }, count: "mine" },
-  { id: "new", label: "New", filters: { status: "new" }, count: "new" },
-  { id: "strong", label: "Strong", filters: { match: "strong" }, count: "strong" },
-  { id: "saved", label: "Saved", filters: { status: "saved" }, count: "saved" },
-  { id: "applied", label: "Applied", filters: { status: "applied" }, count: "applied" },
+/**
+ * The quick filters as chips that stack: each turns one filter field on or off and leaves the rest
+ * (search, the Filters panel) as it is, so "New" + "Strong" is new strong jobs. They are the same fields
+ * the Filters panel shows, so the two always agree.
+ */
+const CHIPS: { id: ChipId; label: string; on: (f: Filters) => boolean; set: (on: boolean, base: Filters) => Partial<Filters> }[] = [
+  { id: "mine", label: "My companies", on: (f) => !!f.mine, set: (on) => ({ mine: on }) },
+  { id: "new", label: "New", on: (f) => f.status === "new", set: (on, base) => ({ status: on ? "new" : base.status }) },
+  { id: "strong", label: "Strong", on: (f) => f.match === "strong", set: (on, base) => ({ match: on ? "strong" : base.match }) },
 ];
-/** The built-in views in tab order; the first scan has no New view (every job would be new). Keys 1-6 pick them. */
-export const builtInViews = (hideNew?: boolean) => BUILT_IN.filter((b) => !(b.id === "new" && hideNew));
-export type ViewCounts = { all: number; mine: number; new: number; strong: number; saved: number; applied: number };
+export type ChipId = "mine" | "new" | "strong";
+
+export type ViewCounts = Record<ChipId, number>;
+
+/**
+ * The chips keys 1-3 toggle, in the order they show. The first scan has no New chip (every job would be
+ * new), so Strong moves up to 2. Saved and applied jobs live on the Pipeline, not here.
+ */
+export function chipKeys(hideNew?: boolean): ChipId[] {
+  return CHIPS.filter((c) => !(c.id === "new" && hideNew)).map((c) => c.id);
+}
+
+/** The filters with one chip turned the other way. */
+export function toggleChip(filters: Filters, base: Filters, id: ChipId): Filters {
+  const chip = CHIPS.find((c) => c.id === id)!;
+  return { ...filters, ...chip.set(!chip.on(filters), base) };
+}
 
 export function ViewsBar(props: {
   className?: string;
-  /** Your profile's filters: the built-in views start from them. */
+  /** Your profile's filters: a chip turned off goes back to them. */
   base: Filters;
   filters: Filters;
   sort: Sort;
   views: SavedView[];
+  /** Each chip's count with the other chips that are on. */
   counts: ViewCounts;
-  /** First scan: every job would be new, so there's no New view. */
+  /** First scan: every job would be new, so there's no New chip. */
   hideNew?: boolean;
   onPick: (f: Filters, s: Sort) => void;
   onSave: (name: string) => SavedView;
@@ -34,7 +51,6 @@ export function ViewsBar(props: {
 }) {
   const [naming, setNaming] = useState<{ id?: string; value: string } | null>(null);
   const matchesView = (f: Filters) => sameFilters(f, props.filters);
-  const builtInActive = BUILT_IN.find((b) => matchesView({ ...props.base, ...b.filters }));
   const customActive = props.views.find((v) => matchesView(v.filters) && v.sort === props.sort);
   const submit = () => {
     if (!naming?.value.trim()) return setNaming(null);
@@ -43,57 +59,51 @@ export function ViewsBar(props: {
     setNaming(null);
   };
 
-  /** Something worth saving: not a saved view already, and not just a built-in tab in Best match. */
-  const canSave = !customActive && (!builtInActive || props.sort !== "best");
-  const builtIns = builtInViews(props.hideNew);
-  // The triage views are tabs; Saved and Applied (pipeline states) live in the Views menu with your own views.
-  const tabs = builtIns.filter((b) => TAB_IDS.has(b.id));
-  const inMenu = builtIns.filter((b) => !TAB_IDS.has(b.id));
-  const menuActive = !customActive && builtInActive && !TAB_IDS.has(builtInActive.id) ? builtInActive : undefined;
-  const tabValue = builtInActive && !customActive && TAB_IDS.has(builtInActive.id) ? builtInActive.id : "";
-  const menuLabel = customActive?.name ?? menuActive?.label ?? "Views";
+  const chips = CHIPS.filter((c) => !(c.id === "new" && props.hideNew));
+  const keys = chipKeys(props.hideNew);
+  // Anything other than your profile's own list (in Best match) can be kept as a view.
+  const canSave = !customActive && (!sameFilters(props.base, props.filters) || props.sort !== "best");
+  const menuLabel = customActive?.name ?? "Views";
   return (
-    <div className={cx("flex flex-wrap items-end gap-x-4 gap-y-2 lg:flex-nowrap", props.className)}>
-      {/* design/components/Tabs: views of one list, ink underline. */}
-      <Tabs
-        label="Radar views"
-        idPrefix="view"
-        className="min-w-0 flex-1"
-        value={tabValue}
-        onChange={(id) => {
-          const b = builtIns.find((x) => x.id === id);
-          if (b) props.onPick({ ...props.base, ...b.filters }, props.sort);
-        }}
-        items={tabs.map((b) => ({ id: b.id, label: b.label, count: props.counts[b.count] }))}
-      />
+    // One wrapping row for the chips and Views, so a phone needs two rows, not three.
+    // biome-ignore lint/a11y/useSemanticElements: an ARIA role on purpose: a fieldset would change the layout
+    <div role="group" aria-label="Quick filters" className={cx("flex flex-wrap items-center gap-2", props.className)}>
+      {chips.map((c) => {
+        const on = c.on(props.filters);
+        const key = String(keys.indexOf(c.id) + 1);
+        return (
+          <button
+            key={c.id}
+            type="button"
+            aria-pressed={on}
+            aria-keyshortcuts={key}
+            title={`${on ? "Turn off" : "Show only"} ${c.label.toLowerCase()} (${key})`}
+            onClick={() => props.onPick(toggleChip(props.filters, props.base, c.id), props.sort)}
+            className={cx("rj-chip tabular", on && "border-[var(--chip-on-bg)] bg-[var(--chip-on-bg)] text-[var(--chip-on-fg)]")}
+          >
+            {c.label}
+            <span className={cx("font-normal", on ? "opacity-80" : "text-muted")}>{props.counts[c.id].toLocaleString()}</span>
+            {on && <X className="size-3.5 shrink-0" aria-hidden />}
+          </button>
+        );
+      })}
       {naming ? (
-        <div className="flex items-center pb-1">
-          <NameInput value={naming.value} onChange={(value) => setNaming({ ...naming, value })} onSubmit={submit} onCancel={() => setNaming(null)} />
-        </div>
+        <NameInput value={naming.value} onChange={(value) => setNaming({ ...naming, value })} onSubmit={submit} onCancel={() => setNaming(null)} />
       ) : (
-        // Saved, Applied and your own views in one menu, so the tabs never run out of room.
-        <div className="flex items-center pb-1">
+        // Your own views, and saving the current one; nothing to show until there's one or the other.
+        (props.views.length > 0 || canSave || customActive) && (
           <Menu
             label="Views"
-            align="end"
+            align="start"
             trigger={(t) => (
-              <button type="button" {...t} className={cx("rj-chip max-w-48", (customActive || menuActive) && "border-[var(--chip-on-bg)] bg-[var(--chip-on-bg)] text-[var(--chip-on-fg)]")}>
+              <button type="button" {...t} className={cx("rj-chip max-w-48 border-dashed", customActive && "border-solid border-[var(--chip-on-bg)] bg-[var(--chip-on-bg)] text-[var(--chip-on-fg)]")}>
                 <span className="truncate">{menuLabel}</span>
-                {/* Filters that match no tab and no saved view: worth keeping as a view. */}
-                {!builtInActive && !customActive && <span className="size-1.5 shrink-0 rounded-dot bg-[var(--live-dot)]" role="img" aria-label="Unsaved changes" />}
                 <ChevronDown className="size-3.5 shrink-0" aria-hidden />
               </button>
             )}
             items={[
-              ...inMenu.map((b) => ({
-                id: b.id,
-                label: `${b.label} · ${props.counts[b.count].toLocaleString()}`,
-                shortcut: String(builtIns.indexOf(b) + 1),
-                onSelect: () => props.onPick({ ...props.base, ...b.filters }, props.sort),
-              })),
-              ...(props.views.length ? [{ separator: true as const, id: "sep-views" }] : []),
               ...props.views.map((v) => ({ id: v.id, label: v.name, onSelect: () => props.onPick(v.filters, v.sort) })),
-              ...(canSave || customActive ? [{ separator: true as const, id: "sep" }] : []),
+              ...(props.views.length && (canSave || customActive) ? [{ separator: true as const, id: "sep" }] : []),
               ...(canSave ? [{ id: "save", label: "Save current view…", onSelect: () => setNaming({ value: "" }) }] : []),
               ...(customActive
                 ? [
@@ -103,14 +113,11 @@ export function ViewsBar(props: {
                 : []),
             ]}
           />
-        </div>
+        )
       )}
     </div>
   );
 }
-
-/** The built-in views shown as tabs: the ones for working through the list. */
-const TAB_IDS = new Set(["all", "mine", "new", "strong"]);
 
 function NameInput({ value, onChange, onSubmit, onCancel }: { value: string; onChange: (v: string) => void; onSubmit: () => void; onCancel: () => void }) {
   return (

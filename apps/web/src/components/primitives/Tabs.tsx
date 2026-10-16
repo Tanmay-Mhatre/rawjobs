@@ -7,7 +7,7 @@ export type TabItem<T extends string> = { id: T; label: string; count?: number; 
 
 /**
  * design/components/Tabs: views of one list. Roving tabindex (only the selected tab is in the tab
- * order); arrow keys, Home and End move between tabs and select them. The 1-6 shortcuts are the app's.
+ * order); arrow keys, Home and End move between tabs and select them. Number-key shortcuts are the app's.
  */
 export function Tabs<T extends string>({
   label,

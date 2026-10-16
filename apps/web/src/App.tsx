@@ -194,7 +194,7 @@ export function App() {
     lastTab.current = tab;
   }, [tab, viewLabel]);
 
-  // Global keys: Esc closes, ? shows shortcuts, R scans now, 1-4 switch sections (the Radar uses 1-6 for
+  // Global keys: Esc closes, ? shows shortcuts, R scans now, 1-4 switch sections (the Radar uses 1-3 for
   // its views instead), and "g" then r/p/c/s goes to a section from anywhere. Dialogs close themselves on
   // Escape too.
   const canScanNow = canRunLocally && setupState === "configured" && !scanning && !background.running;
