@@ -44,19 +44,21 @@
 .rj-btn--sm { height: var(--control-sm, 28px); padding: 0 var(--space-3); }
 .rj-btn--icon { position: relative; width: var(--control-md, 36px); padding: 0; }
 .rj-btn--icon.rj-btn--sm { width: var(--control-sm, 28px); }
-/* An icon button's tooltip: its name and key, on hover (after a beat) and at once on keyboard focus. */
+/* An icon button's tooltip: its name and key, on hover (after a beat) and at once on keyboard focus. Out of
+   the layout until shown, so a hidden one never widens the page; the last button in a row opens it leftwards. */
 .rj-tip {
   position: absolute; top: calc(100% + var(--space-2)); left: 50%; z-index: var(--z-menu); transform: translateX(-50%);
-  display: inline-flex; align-items: center; gap: var(--space-2); padding: var(--space-1) var(--space-2);
+  display: none; align-items: center; gap: var(--space-2); padding: var(--space-1) var(--space-2);
   background: var(--toast-bg); color: var(--toast-fg); border-radius: var(--radius-sm); box-shadow: var(--shadow-l2);
-  font: var(--text-small, 400 13px/18px var(--font-sans)); font-weight: 400; white-space: nowrap;
-  opacity: 0; visibility: hidden; pointer-events: none; transition: opacity var(--duration-instant) var(--ease-standard);
+  font: var(--text-small, 400 13px/18px var(--font-sans)); font-weight: 400; white-space: nowrap; pointer-events: none;
 }
 .rj-tip--above { top: auto; bottom: calc(100% + var(--space-2)); }
-.rj-btn:hover > .rj-tip { opacity: 1; visibility: visible; transition-delay: 400ms; }
-.rj-btn:focus-visible > .rj-tip { opacity: 1; visibility: visible; }
+.rj-btn:last-child > .rj-tip { left: auto; right: 0; transform: none; }
+.rj-btn:hover > .rj-tip { display: inline-flex; animation: rj-tip-in var(--duration-instant) var(--ease-standard) 400ms both; }
+.rj-btn:focus-visible > .rj-tip { display: inline-flex; animation: none; }
+@keyframes rj-tip-in { from { opacity: 0; } to { opacity: 1; } }
 .rj-tip__kbd { color: inherit; border-color: currentColor; background: transparent; opacity: 0.8; }
-@media (hover: none) { .rj-tip { display: none; } }
+@media (hover: none) { .rj-tip { display: none !important; } }
 
 /* ---------- kbd ---------- */
 .rj-kbd {
