@@ -70,11 +70,28 @@ export type Salary = { min?: number; max?: number; currency?: string; period?: s
  * How a score was made. Points out of: title 30, location 20, keywordPoints 40, industry 10.
  * score = round((title + location + keywordPoints + industry) * (scale ?? 1)).
  */
+/**
+ * One of the things that decide whether you could take the job at all, checked against what the posting
+ * says: met, one step off ("near", a level away), missed, or unknown when the posting doesn't say.
+ * Unknown is never a pass.
+ */
+export type FitCheck = { id: "place" | "level" | "pay" | "visa"; status: "met" | "near" | "missed" | "unknown"; note: string };
+
 export type ScoreBreakdown = {
+  /** Title points: 15 for a match, up to 5 more by focus, plus `level`. */
   title: number;
+  /** The level part of `title`: 10 at your level, 5 one away, 0 further. Missing on older scores. */
+  level?: number;
+  /** Share of the title's words your role and level words explain, 0..1 ("Senior Product Designer" 1). Missing on older scores. */
+  focus?: number;
+  /** Place, level, pay and visa, each met / near / missed / unknown. Missing on older scores. */
+  checks?: FitCheck[];
   location: number;
   keywords: string[];
-  /** Topic points, 0..40: share of the profile's topic weight matched (min(total, 12) fills it). */
+  /**
+   * Topic points, 0..40: share of the profile's topic weight matched (min(total, 12) fills it). A topic
+   * named once in the description counts three quarters, three times or in the title counts in full.
+   */
   keywordPoints: number;
   /** Industry points: 10 your industry or your company, 5 not known, 0 another industry. Missing on jobs scored before it existed. */
   industry?: number;
@@ -94,6 +111,8 @@ export type ScoreBreakdown = {
    * When set, the score is halved and kept under min_score.
    */
   dealbreakers?: string[];
+  /** Topics you listed that the job doesn't mention, heaviest first (at most 5). Missing on older scores. */
+  missing?: string[];
 };
 
 /** The one shape every connector produces. */

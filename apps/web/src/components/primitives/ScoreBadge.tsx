@@ -4,7 +4,8 @@ import { cx } from "../../lib/cx";
 export type ScoreBand = "strong" | "fair" | "weak";
 
 export const FAIR_FROM = 40;
-export const DEFAULT_THRESHOLD = 65;
+/** The same default as the profile's min_score (schema.ts). */
+export const DEFAULT_THRESHOLD = 70;
 
 export function scoreBandOf(score: number, threshold = DEFAULT_THRESHOLD): ScoreBand {
   if (score >= threshold) return "strong";

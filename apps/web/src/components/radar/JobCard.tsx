@@ -1,6 +1,7 @@
 import { surgeTitle } from "@rawjobs/core/activity";
 import { sponsorOf, sponsorTitle } from "@rawjobs/core/catalog/visa";
-import { Bookmark, Star, X } from "lucide-react";
+import { fitLine } from "@rawjobs/core/fit";
+import { Bookmark, CircleCheck, CircleHelp, CircleX, Star, X } from "lucide-react";
 import { forwardRef, type ReactNode } from "react";
 import type { JobGroup } from "../../lib/filters";
 import { atsLabel, evergreenReason, isOlder } from "../../lib/filters";
@@ -49,6 +50,28 @@ function Meta({ parts }: { parts: ReactNode[] }) {
           {p}
         </span>
       ))}
+    </span>
+  );
+}
+
+/** The job's best reason and biggest gap under its meta line ("payments · Your title" and "Pay not listed"). */
+function FitReasons({ job }: { job: JobGroup["lead"] }) {
+  const { reason, gap } = fitLine(job.why, { estimated: job.estimated });
+  if (!reason && !gap) return null;
+  return (
+    <span className="rj-row__meta flex items-center gap-3">
+      {reason && (
+        <span className="inline-flex min-w-0 items-center gap-1" title={reason}>
+          <CircleCheck className="size-3.5 shrink-0 text-success-text" aria-label="Fits:" />
+          <span className="truncate">{reason}</span>
+        </span>
+      )}
+      {gap && (
+        <span className={cx("inline-flex max-w-[60%] shrink-0 items-center gap-1", gap.tone === "missed" && "text-warning-text")} title={gap.text}>
+          {gap.tone === "missed" ? <CircleX className="size-3.5 shrink-0" aria-label="Gap:" /> : <CircleHelp className="size-3.5 shrink-0" aria-label="Unknown:" />}
+          <span className="truncate">{gap.text}</span>
+        </span>
+      )}
     </span>
   );
 }
@@ -146,6 +169,7 @@ export const JobCard = forwardRef<HTMLLIElement, Props>(function JobCard({ group
           </button>
         </span>
         <Meta parts={meta} />
+        {!muted && <FitReasons job={job} />}
       </span>
       <span className="rj-row__side">
         {/* Kept visible once used, so a saved or hidden row shows it at a glance. */}

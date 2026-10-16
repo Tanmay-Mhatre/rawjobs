@@ -1,13 +1,15 @@
 import { INDUSTRY_BY_ID } from "./catalog/industries";
-import { seniorityCue, seniorityGap, seniorityOf, type Seniority } from "./catalog/seniority";
+import { SENIORITY_LEVELS, seniorityCue, seniorityGap, seniorityOf, type Seniority } from "./catalog/seniority";
 import { allPlaceNames, countriesIn, expandPlaces, LOCATION_SEGMENTS, placeOwner, placeOwnerName, spellOutPlaces, SUBDIVISIONS } from "./catalog/places";
-import { dealbreakers } from "./dealbreakers";
+import { dealbreakers, eligibilityChecks } from "./dealbreakers";
 import { regionOnly } from "./posting";
-import type { NormalizedJob, Profile, ScoreBreakdown } from "./schema";
-import { matchesAny, matchesTerm, matchesTitle, mayMatchTitle, termRegex, titleForms } from "./text";
+import type { FitCheck, NormalizedJob, Profile, ScoreBreakdown } from "./schema";
+import { matchesAny, matchesTerm, matchesTitle, mayMatchTitle, mentionsOf, termRegex, titleForms } from "./text";
 
 export const POINTS = {
   titleMatch: 20,
+  /** The part of titleMatch that depends on focus: how much of the title your role words explain. */
+  titleFocus: 5,
   seniority: 10,
   /** The title's level is one step from the levels your seniority words name (Senior vs a plain title). */
   seniorityNear: 5,
@@ -26,6 +28,10 @@ export const POINTS = {
   industryTopic: 2,
   /** ...and the most they add together: two topics' worth, a lift, never a full bar. */
   industryTopicCap: 4,
+  /** A topic the description names once counts this share of its weight... */
+  oneMention: 0.75,
+  /** ...and in full from this many mentions (or when it's in the title). */
+  fullMentions: 3,
 } as const;
 
 type Scorable = Pick<NormalizedJob, "title" | "location" | "workplace" | "description"> & Partial<Pick<NormalizedJob, "salary">>;
@@ -44,17 +50,23 @@ const NON_KEYWORD_MAX = POINTS.titleMatch + POINTS.seniority + POINTS.locationCi
 /**
  * Transparent keyword scoring, 0..100. No AI.
  *
- *   title      20, +10 at your level (a seniority word in the title, or the same level as one),
+ *   title      15, up to +5 by focus (the share of the title's words your role and level words explain:
+ *              "Senior Product Designer" all of them; words after a comma or dash count half, so
+ *              "Product Designer, Growth Platform" a little less),
+ *              +10 at your level (a seniority word in the title, or the same level as one),
  *              +5 one level away (a plain "Product Manager" for a senior), +0 two or more (Director, Junior)
  *   location   20 one of your places, 15 remote in your regions
  *   topics     up to 40: the share of your topic weight a job mentions, where min(total weight, 12)
- *              fills the bar (so three core topics are enough; a short list isn't penalised).
+ *              fills the bar (so three core topics are enough; a short list isn't penalised). A topic
+ *              named once counts three quarters of its weight, three times (or in the title) in full.
  *              A topic in the title counts on its own too: up to 20, your top topic filling it, so
  *              jobs with no description ("Payments PM") aren't 0 on topics. The title is part of
  *              every job, so this never puts a job without a description ahead of the same job with one.
  *              Your industries add their topics you didn't list at weight 2, at most 4 together (topicsOf).
  *   industry   10 the company is in one of your industries (or is yours), 5 not known, 0 another industry
  * With no topics at all, title + location + industry (max 60) is scaled to 0..100 (`why.scale`).
+ * Parts are kept unrounded until the end, so jobs that differ a little score a little differently.
+ * `why.checks` says, for place, level, pay and visa, whether the job meets yours or the posting doesn't say.
  *
  * Dealbreakers (dealbreakers.ts: pay under your floor, no sponsorship where you'd need it, residents of
  * another country only, work you avoid) halve the score and keep it under your min_score, with the
@@ -71,53 +83,108 @@ export function scoreJob(job: Scorable, profile: Profile, company: CompanyFit = 
   const forms = titleForms(title);
   const location = withTitleRegion(gateLocation(job), title);
   const titleOk = titlePasses(title, profile, forms);
-  const titlePts = titleOk ? POINTS.titleMatch + seniorityPoints(title, profile, forms) : 0;
+  const focus = titleOk ? titleFocus(title, profile) : 0;
+  const level = titleOk ? seniorityPoints(title, profile, forms) : 0;
+  const titlePts = titleOk ? POINTS.titleMatch - POINTS.titleFocus * (1 - focus) + level : 0;
   const fit = workplaceFit(job, profile) ?? locationFit(location, profile);
   const locationPts = fit.points;
 
   const description = job.description ?? "";
   const keywords = topicsOf(profile);
   const inTitle = new Set(Object.keys(keywords).filter((k) => matchesTitle(title, [k], forms)));
+  // How strongly each topic is there: in full in the title or from fullMentions mentions, oneMention for one.
+  const strength = new Map<string, number>();
+  for (const k of Object.keys(keywords)) {
+    const n = inTitle.has(k) ? POINTS.fullMentions : mentionsOf(description, k, POINTS.fullMentions);
+    if (n) strength.set(k, POINTS.oneMention + ((1 - POINTS.oneMention) * (n - 1)) / (POINTS.fullMentions - 1));
+  }
   const matched = Object.entries(keywords)
-    .filter(([k]) => inTitle.has(k) || matchesTerm(description, k))
+    .filter(([k]) => strength.has(k))
     .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]));
   // Your own topics set the bar; your industries' topics add at most industryTopicCap of weight to it.
   const own = (k: string) => k in profile.keywords;
   const weights = Object.values(profile.keywords);
   const totalWeight = weights.reduce((sum, w) => sum + w, 0);
-  const weigh = (list: [string, number][]) =>
-    list.reduce((sum, [k, w]) => sum + (own(k) ? w : 0), 0) +
+  const weigh = (list: [string, number][], by: (k: string) => number) =>
+    list.reduce((sum, [k, w]) => sum + (own(k) ? w * by(k) : 0), 0) +
     Math.min(
       POINTS.industryTopicCap,
-      list.reduce((sum, [k, w]) => sum + (own(k) ? 0 : w), 0),
+      list.reduce((sum, [k, w]) => sum + (own(k) ? 0 : w * by(k)), 0),
     );
-  const matchedWeight = weigh(matched);
-  const titleWeight = weigh(matched.filter(([k]) => inTitle.has(k)));
+  const matchedWeight = weigh(matched, (k) => strength.get(k) ?? 0);
+  const titleWeight = weigh(
+    matched.filter(([k]) => inTitle.has(k)),
+    () => 1,
+  );
   const keywordPoints =
     totalWeight > 0
-      ? Math.max(
-          Math.round(POINTS.keywordCap * Math.min(1, matchedWeight / Math.min(totalWeight, POINTS.keywordTarget))),
-          Math.round(POINTS.titleKeywordCap * Math.min(1, titleWeight / Math.max(...weights))),
-        )
+      ? Math.max(POINTS.keywordCap * Math.min(1, matchedWeight / Math.min(totalWeight, POINTS.keywordTarget)), POINTS.titleKeywordCap * Math.min(1, titleWeight / Math.max(...weights)))
       : 0;
+  const missing = Object.entries(profile.keywords)
+    .filter(([k]) => !strength.has(k))
+    .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
+    .slice(0, 5)
+    .map(([k]) => k);
 
   const industry = industryFit(company, profile);
 
   const why: ScoreBreakdown = {
-    title: titlePts,
+    title: tenths(titlePts),
+    level,
+    focus: Math.round(focus * 100) / 100,
     location: locationPts,
     keywords: matched.map(([k]) => k),
-    keywordPoints,
+    keywordPoints: tenths(keywordPoints),
     industry,
+    ...(missing.length ? { missing } : {}),
     ...(totalWeight > 0 ? {} : { scale: 100 / NON_KEYWORD_MAX }),
   };
   if (!titleOk) return { score: 0, why: { ...why, gate: "title" } };
   if (locationPts === 0) return { score: 0, why: { ...why, gate: "location", ...(fit.note ? { locationNote: fit.note } : {}) } };
-  const raw = titlePts + locationPts + keywordPoints + industry;
-  const score = Math.min(100, Math.round(raw * (why.scale ?? 1)));
+  why.checks = [...fitChecks(job.title, locationPts, level, profile), ...eligibilityChecks(job, profile)];
+  const exact = Math.min(100, (titlePts + locationPts + keywordPoints + industry) * (why.scale ?? 1));
   const broken = dealbreakers(job, profile);
-  if (!broken.length) return { score, why };
-  return { score: Math.max(0, Math.min(Math.round(score / 2), profile.min_score - 1)), why: { ...why, dealbreakers: broken } };
+  if (!broken.length) return { score: Math.round(exact), why };
+  return { score: Math.max(0, Math.min(Math.round(exact / 2), profile.min_score - 1)), why: { ...why, dealbreakers: broken } };
+}
+
+const tenths = (n: number) => Math.round(n * 10) / 10;
+
+/** Place (always met once the job passes the location gate) and level (when your seniority words name one). */
+function fitChecks(title: string, locationPts: number, level: number, profile: Profile): FitCheck[] {
+  const out: FitCheck[] = [{ id: "place", status: "met", note: locationPts === POINTS.locationCity ? "In one of your places" : "Remote, open where you are" }];
+  if (profile.seniority_boost.length) {
+    const label = SENIORITY_LEVELS.find((l) => l.id === seniorityOf(title))?.label ?? "Mid-level";
+    if (level === POINTS.seniority) out.push({ id: "level", status: "met", note: "At your level" });
+    else if (level === POINTS.seniorityNear) out.push({ id: "level", status: "near", note: `${label}: one level from yours` });
+    else if (targetLevels(profile).length) out.push({ id: "level", status: "missed", note: `${label}: not your level` });
+  }
+  return out;
+}
+
+/** Words in a title that say nothing about the role (how or where it's worked): they neither help nor hurt focus. */
+const FILLER = new Set(
+  "and of the for in at with to a an on or & remote hybrid onsite site office contract contractor freelance temporary temp interim permanent full part time fixed term".split(" "),
+);
+/** The role part of a title: what comes before a comma, dash, bracket or colon ("Product Designer, Payments" -> "Product Designer"). */
+const ROLE_END = /\s+[-–—/|:]\s+|[,;()[\]–—|:]/;
+const formWords = (s: string) => (titleForms(s).split(" | ")[0] ?? "").split(" ").filter(Boolean);
+const knownCache = new WeakMap<Profile, string[]>();
+
+/**
+ * Share of the title's words that your titles, levels and topics explain, 0..1, abbreviations spelt
+ * out: "Senior Product Designer" 1 for a product designer, "Senior Technical Product Designer" 3 of 4.
+ * Words after the role (", Payments", " - Growth") count half: they narrow the role rather than name it.
+ * A word counts when it shares its first five letters with one of yours.
+ */
+export function titleFocus(title: string, profile: Profile): number {
+  let known = knownCache.get(profile);
+  if (!known) knownCache.set(profile, (known = [...new Set([...profile.titles.include, ...profile.seniority_boost, ...Object.keys(profile.keywords)].flatMap(formWords))]));
+  const explained = (w: string) => !!seniorityCue(w) || known.some((k) => k === w || (Math.min(k.length, w.length) >= 4 && k.slice(0, 5) === w.slice(0, 5)));
+  const [role = title, ...after] = title.split(ROLE_END);
+  const weighed = [...formWords(role).map((w) => [w, 1] as const), ...after.flatMap(formWords).map((w) => [w, 0.5] as const)].filter(([w]) => !FILLER.has(w) && !/^\d/.test(w));
+  const total = weighed.reduce((s, [, x]) => s + x, 0);
+  return total ? weighed.reduce((s, [w, x]) => s + (explained(w) ? x : 0), 0) / total : 1;
 }
 
 const levelsCache = new WeakMap<readonly string[], Seniority[]>();

@@ -45,7 +45,7 @@ const DEFAULT: DemoState = { titles: ["head of product", "product manager"], sen
 
 describe("site scoring demo", () => {
   it("starts at the score the page shows", () => {
-    expect(demoScore(DEFAULT)).toMatchObject({ total: 87, t: 30, p: 20, k: 27, i: 10 });
+    expect(demoScore(DEFAULT)).toMatchObject({ total: 83, t: 30, p: 20, k: 23.3, i: 10 });
     expectSame(DEFAULT);
   });
 

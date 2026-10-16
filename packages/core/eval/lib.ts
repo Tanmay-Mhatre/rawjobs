@@ -171,7 +171,12 @@ const emptyConfusion = (): Confusion => ({
 });
 
 export type Pair = { profile: string; job: string; title: string; company: string; score: number; label: number; why: string };
-export type Metrics = { ndcg5: number; ndcg10: number; p5: number; spearman: number };
+/**
+ * Ranking quality, plus how finely scores tell jobs apart: `ties` is the share of pairs of matched
+ * jobs (score above 0) with the same score, and `tiesNoTopics` the same for the profile with its
+ * topics taken out, the case where scores bunched on a few values. Lower ties are better.
+ */
+export type Metrics = { ndcg5: number; ndcg10: number; p5: number; spearman: number; ties: number; tiesNoTopics: number };
 export type ProfileReport = Metrics & { id: string; confusion: Confusion };
 export type Report = { overall: Metrics & { confusion: Confusion; pairs: number }; profiles: ProfileReport[]; worst: (Pair & { gap: number })[]; pairs: Pair[] };
 /** What baseline.json holds: the report, with each pair's score in place of the pairs. */
@@ -180,6 +185,18 @@ export type Baseline = Omit<Report, "pairs"> & { scores: Record<string, number> 
 const round = (x: number) => Math.round(x * 1000) / 1000;
 
 /** Scores every pair with scoreJob (pure fit, no recency) and measures it against the labels. */
+/** Share of pairs of matched jobs (score above 0) that share a score: 0 when every score differs. */
+export function tieRate(scores: number[]): number {
+  const matched = scores.filter((s) => s > 0);
+  const n = matched.length;
+  if (n < 2) return 0;
+  const counts = new Map<number, number>();
+  for (const s of matched) counts.set(s, (counts.get(s) ?? 0) + 1);
+  let tied = 0;
+  for (const c of counts.values()) tied += (c * (c - 1)) / 2;
+  return tied / ((n * (n - 1)) / 2);
+}
+
 export function evaluate(set: EvalSet): Report {
   const all: Pair[] = [];
   const profiles: ProfileReport[] = [];
@@ -195,7 +212,18 @@ export function evaluate(set: EvalSet): Report {
       confusion[labelBand(x.label)][scoreBand(x.score, p.profile.min_score)]++;
       total[labelBand(x.label)][scoreBand(x.score, p.profile.min_score)]++;
     }
-    profiles.push({ id: p.id, ndcg5: round(ndcg(pairs, 5)), ndcg10: round(ndcg(pairs, 10)), p5: round(precisionAt(pairs, 5)), spearman: round(spearman(pairs)), confusion });
+    const noTopics = { ...p.profile, keywords: {} };
+    const plain = set.jobs.map((j) => scoreJob(j, noTopics, j.industries ? { industries: j.industries } : {}).score);
+    profiles.push({
+      id: p.id,
+      ndcg5: round(ndcg(pairs, 5)),
+      ndcg10: round(ndcg(pairs, 10)),
+      p5: round(precisionAt(pairs, 5)),
+      spearman: round(spearman(pairs)),
+      ties: round(tieRate(pairs.map((x) => x.score))),
+      tiesNoTopics: round(tieRate(plain)),
+      confusion,
+    });
     all.push(...pairs);
   }
   const mean = (key: keyof Metrics) => round(profiles.reduce((s, r) => s + r[key], 0) / (profiles.length || 1));
@@ -204,5 +232,10 @@ export function evaluate(set: EvalSet): Report {
     .map((x) => ({ ...x, gap: round(x.score / 25 - x.label) }))
     .sort((a, b) => Math.abs(b.gap) - Math.abs(a.gap) || a.profile.localeCompare(b.profile) || a.job.localeCompare(b.job))
     .slice(0, 10);
-  return { overall: { ndcg5: mean("ndcg5"), ndcg10: mean("ndcg10"), p5: mean("p5"), spearman: mean("spearman"), confusion: total, pairs: all.length }, profiles, worst, pairs: all };
+  return {
+    overall: { ndcg5: mean("ndcg5"), ndcg10: mean("ndcg10"), p5: mean("p5"), spearman: mean("spearman"), ties: mean("ties"), tiesNoTopics: mean("tiesNoTopics"), confusion: total, pairs: all.length },
+    profiles,
+    worst,
+    pairs: all,
+  };
 }

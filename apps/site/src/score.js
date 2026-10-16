@@ -36,12 +36,17 @@ export function demoScore(state, job) {
   });
   var remoteHit = job.workplace === "remote" && state.places.indexOf("remote") > -1;
   if (!placeHit && !remoteHit) return { gated: "place" };
-  var t = 20 + SENIORITY_POINTS[state.seniority];
+  var tenths = function (n) {
+    return Math.round(n * 10) / 10;
+  };
+  /* focus: "Head of Product" is your role; ", Exchange" counts half and is yours only as a keyword */
+  var focus = state.kw.indexOf("exchange") > -1 ? 1 : 2 / 2.5;
+  var t = 20 - 5 * (1 - focus) + SENIORITY_POINTS[state.seniority];
   var p = placeHit ? 20 : 15;
   var i = INDUSTRY_POINTS[state.industry];
   if (!state.kw.length) {
     /* no keywords: title + place + industry, out of 60, scaled to 0..100 */
-    return { total: Math.min(100, Math.round((t + p + i) * (100 / 60))), t: t, p: p, k: 0, i: i, matched: [], noKw: true };
+    return { total: Math.round(Math.min(100, (t + p + i) * (100 / 60))), t: tenths(t), p: p, k: 0, i: i, matched: [], noKw: true };
   }
   var W = 4;
   /* equal weights, so core lists them alphabetically */
@@ -53,10 +58,14 @@ export function demoScore(state, job) {
   var inTitle = matched.filter(function (k) {
     return word(job.title, k);
   });
+  /* a keyword in the title counts in full; the description names each of the others once: three quarters */
+  var strength = matched.reduce(function (sum, k) {
+    return sum + (word(job.title, k) ? 1 : 0.75);
+  }, 0);
   var k = Math.max(
-    Math.round(40 * Math.min(1, (matched.length * W) / Math.min(state.kw.length * W, 12))),
+    40 * Math.min(1, (strength * W) / Math.min(state.kw.length * W, 12)),
     /* a keyword in the title is worth up to 20 on its own: 20 x its weight / your largest weight */
-    Math.round(20 * Math.min(1, (inTitle.length * W) / W)),
+    20 * Math.min(1, (inTitle.length * W) / W),
   );
-  return { total: Math.min(100, t + p + k + i), t: t, p: p, k: k, i: i, matched: matched };
+  return { total: Math.round(Math.min(100, t + p + k + i)), t: tenths(t), p: p, k: tenths(k), i: i, matched: matched };
 }

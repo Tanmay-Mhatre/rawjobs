@@ -1,9 +1,11 @@
 {
   "overall": {
-    "ndcg5": 0.908,
-    "ndcg10": 0.919,
+    "ndcg5": 0.915,
+    "ndcg10": 0.926,
     "p5": 0.5,
-    "spearman": 0.691,
+    "spearman": 0.692,
+    "ties": 0.013,
+    "tiesNoTopics": 0.037,
     "confusion": {
       "strong": {
         "strong": 12,
@@ -11,14 +13,14 @@
         "weak": 3
       },
       "good": {
-        "strong": 4,
-        "good": 1,
+        "strong": 3,
+        "good": 2,
         "weak": 1
       },
       "weak": {
-        "strong": 2,
+        "strong": 1,
         "good": 4,
-        "weak": 263
+        "weak": 264
       }
     },
     "pairs": 294
@@ -26,10 +28,12 @@
   "profiles": [
     {
       "id": "b2b-ae",
-      "ndcg5": 0.819,
-      "ndcg10": 0.83,
+      "ndcg5": 0.853,
+      "ndcg10": 0.864,
       "p5": 0.4,
-      "spearman": 0.667,
+      "spearman": 0.668,
+      "ties": 0,
+      "tiesNoTopics": 0,
       "confusion": {
         "strong": {
           "strong": 1,
@@ -54,6 +58,8 @@
       "ndcg10": 0.986,
       "p5": 0.6,
       "spearman": 0.581,
+      "ties": 0.048,
+      "tiesNoTopics": 0.048,
       "confusion": {
         "strong": {
           "strong": 2,
@@ -67,17 +73,19 @@
         },
         "weak": {
           "strong": 0,
-          "good": 2,
-          "weak": 44
+          "good": 1,
+          "weak": 45
         }
       }
     },
     {
       "id": "fintech-pm",
-      "ndcg5": 0.902,
-      "ndcg10": 0.897,
+      "ndcg5": 0.91,
+      "ndcg10": 0.906,
       "p5": 0.6,
-      "spearman": 0.619,
+      "spearman": 0.62,
+      "ties": 0,
+      "tiesNoTopics": 0.048,
       "confusion": {
         "strong": {
           "strong": 2,
@@ -102,6 +110,8 @@
       "ndcg10": 0.877,
       "p5": 0.4,
       "spearman": 0.82,
+      "ties": 0,
+      "tiesNoTopics": 0,
       "confusion": {
         "strong": {
           "strong": 2,
@@ -126,6 +136,8 @@
       "ndcg10": 0.967,
       "p5": 0.6,
       "spearman": 0.841,
+      "ties": 0.028,
+      "tiesNoTopics": 0.056,
       "confusion": {
         "strong": {
           "strong": 3,
@@ -138,8 +150,8 @@
           "weak": 0
         },
         "weak": {
-          "strong": 1,
-          "good": 1,
+          "strong": 0,
+          "good": 2,
           "weak": 42
         }
       }
@@ -150,6 +162,8 @@
       "ndcg10": 0.956,
       "p5": 0.4,
       "spearman": 0.621,
+      "ties": 0,
+      "tiesNoTopics": 0.067,
       "confusion": {
         "strong": {
           "strong": 2,
@@ -157,8 +171,8 @@
           "weak": 0
         },
         "good": {
-          "strong": 1,
-          "good": 0,
+          "strong": 0,
+          "good": 1,
           "weak": 1
         },
         "weak": {
@@ -205,30 +219,20 @@
       "job": "ml-05",
       "title": "Staff Applied Scientist",
       "company": "Glyphic AI",
-      "score": 92,
+      "score": 83,
       "label": 1,
       "why": "Staff Applied Scientist leading four: PhD, 10+ years post-PhD and publications required; she has an MS and 4 years (far level).",
-      "gap": 2.68
+      "gap": 2.32
     },
     {
       "profile": "finance-analyst",
       "job": "fin-06",
       "title": "Senior Business Analyst",
       "company": "Halcyon Bank",
-      "score": 57,
+      "score": 55,
       "label": 0,
       "why": "Core-banking IT business analyst (requirements, UAT, BPMN, 5+ years BA): a different job from FP&A; only the title word matches.",
-      "gap": 2.28
-    },
-    {
-      "profile": "finance-analyst",
-      "job": "fin-04",
-      "title": "Senior Financial Analyst, Credit Risk",
-      "company": "Brindle Lending",
-      "score": 50,
-      "label": 0,
-      "why": "Credit risk and IFRS 9 provisioning: credit/lending risk is her stated dealbreaker.",
-      "gap": 2
+      "gap": 2.2
     },
     {
       "profile": "platform-eng",
@@ -251,16 +255,6 @@
       "gap": -2
     },
     {
-      "profile": "b2b-ae",
-      "job": "ae-02",
-      "title": "Account Executive, SMB",
-      "company": "Peoplegrid",
-      "score": 48,
-      "label": 0,
-      "why": "SMB AE for 1-2 year sellers; base AED 15-18k tops out 28% under the 25k floor (salary blocker), and a step down.",
-      "gap": 1.92
-    },
-    {
       "profile": "finance-analyst",
       "job": "fin-02",
       "title": "Financial Analyst",
@@ -268,6 +262,26 @@
       "score": 48,
       "label": 0,
       "why": "SGD 5-6k tops out 8% under her 6.5k floor (more than 5%: salary blocker); also a 1-2 year support role.",
+      "gap": 1.92
+    },
+    {
+      "profile": "finance-analyst",
+      "job": "fin-04",
+      "title": "Senior Financial Analyst, Credit Risk",
+      "company": "Brindle Lending",
+      "score": 48,
+      "label": 0,
+      "why": "Credit risk and IFRS 9 provisioning: credit/lending risk is her stated dealbreaker.",
+      "gap": 1.92
+    },
+    {
+      "profile": "platform-eng",
+      "job": "eng-02",
+      "title": "Platform Engineer",
+      "company": "Cloudyard",
+      "score": 48,
+      "label": 0,
+      "why": "EUR 65-78k tops out 8% under his 85k floor (more than 5%: salary blocker); also a level down (2+ years).",
       "gap": 1.92
     }
   ],
@@ -315,9 +329,9 @@
     "b2b-ae/pm-10": 0,
     "b2b-ae/pm-11": 0,
     "b2b-ae/ae-01": 100,
-    "b2b-ae/ae-02": 48,
-    "b2b-ae/ae-03": 62,
-    "b2b-ae/ae-04": 29,
+    "b2b-ae/ae-02": 43,
+    "b2b-ae/ae-03": 58,
+    "b2b-ae/ae-04": 28,
     "b2b-ae/ae-05": 60,
     "b2b-ae/ae-06": 0,
     "b2b-ae/ae-07": 0,
@@ -346,10 +360,10 @@
     "finance-analyst/eng-09": 0,
     "finance-analyst/fin-01": 100,
     "finance-analyst/fin-02": 48,
-    "finance-analyst/fin-03": 77,
-    "finance-analyst/fin-04": 50,
-    "finance-analyst/fin-05": 48,
-    "finance-analyst/fin-06": 57,
+    "finance-analyst/fin-03": 70,
+    "finance-analyst/fin-04": 48,
+    "finance-analyst/fin-05": 44,
+    "finance-analyst/fin-06": 55,
     "finance-analyst/fin-07": 60,
     "finance-analyst/fin-08": 0,
     "finance-analyst/pm-01": 0,
@@ -402,16 +416,16 @@
     "fintech-pm/fin-07": 0,
     "fintech-pm/fin-08": 0,
     "fintech-pm/pm-01": 100,
-    "fintech-pm/pm-02": 44,
+    "fintech-pm/pm-02": 42,
     "fintech-pm/pm-03": 0,
     "fintech-pm/pm-04": 0,
-    "fintech-pm/pm-05": 48,
+    "fintech-pm/pm-05": 47,
     "fintech-pm/pm-06": 0,
     "fintech-pm/pm-07": 0,
-    "fintech-pm/pm-08": 95,
+    "fintech-pm/pm-08": 94,
     "fintech-pm/pm-09": 60,
-    "fintech-pm/pm-10": 63,
-    "fintech-pm/pm-11": 44,
+    "fintech-pm/pm-10": 59,
+    "fintech-pm/pm-11": 43,
     "fintech-pm/ae-01": 0,
     "fintech-pm/ae-02": 0,
     "fintech-pm/ae-03": 0,
@@ -422,10 +436,10 @@
     "ml-ds/ml-01": 100,
     "ml-ds/ml-02": 95,
     "ml-ds/ml-03": 45,
-    "ml-ds/ml-04": 87,
-    "ml-ds/ml-05": 92,
+    "ml-ds/ml-04": 81,
+    "ml-ds/ml-05": 83,
     "ml-ds/ml-06": 0,
-    "ml-ds/ml-07": 87,
+    "ml-ds/ml-07": 76,
     "ml-ds/des-01": 0,
     "ml-ds/des-02": 0,
     "ml-ds/des-03": 0,
@@ -485,12 +499,12 @@
     "platform-eng/eng-01": 100,
     "platform-eng/eng-02": 48,
     "platform-eng/eng-03": 95,
-    "platform-eng/eng-04": 85,
+    "platform-eng/eng-04": 76,
     "platform-eng/eng-05": 50,
-    "platform-eng/eng-06": 73,
+    "platform-eng/eng-06": 67,
     "platform-eng/eng-07": 48,
     "platform-eng/eng-08": 55,
-    "platform-eng/eng-09": 100,
+    "platform-eng/eng-09": 98,
     "platform-eng/fin-01": 0,
     "platform-eng/fin-02": 0,
     "platform-eng/fin-03": 0,
@@ -525,12 +539,12 @@
     "product-designer/ml-06": 0,
     "product-designer/ml-07": 0,
     "product-designer/des-01": 95,
-    "product-designer/des-02": 37,
+    "product-designer/des-02": 35,
     "product-designer/des-03": 100,
-    "product-designer/des-04": 48,
-    "product-designer/des-05": 32,
+    "product-designer/des-04": 47,
+    "product-designer/des-05": 30,
     "product-designer/des-06": 0,
-    "product-designer/des-07": 73,
+    "product-designer/des-07": 66,
     "product-designer/eng-01": 0,
     "product-designer/eng-02": 0,
     "product-designer/eng-03": 0,

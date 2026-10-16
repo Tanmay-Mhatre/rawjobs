@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-import { EVAL_DIR, evaluate, loadSet, ndcg, precisionAt, problems, spearman, type Baseline } from "../eval/lib";
+import { EVAL_DIR, evaluate, loadSet, ndcg, precisionAt, problems, spearman, tieRate, type Baseline } from "../eval/lib";
 
 describe("matching eval set", () => {
   const set = loadSet();
@@ -24,10 +24,23 @@ describe("matching eval set", () => {
     const base = JSON.parse(readFileSync(join(EVAL_DIR, "baseline.json"), "utf8")) as Baseline;
     expect(evaluate(set).overall.ndcg10).toBeGreaterThanOrEqual(base.overall.ndcg10 - 0.02);
   });
+
+  it("doesn't bunch scores more than the baseline (tie rates within 0.02)", () => {
+    const base = JSON.parse(readFileSync(join(EVAL_DIR, "baseline.json"), "utf8")) as Baseline;
+    const now = evaluate(set).overall;
+    expect(now.ties).toBeLessThanOrEqual(base.overall.ties + 0.02);
+    expect(now.tiesNoTopics).toBeLessThanOrEqual(base.overall.tiesNoTopics + 0.02);
+  });
 });
 
 describe("eval metrics", () => {
   const pairs = (xs: [number, number][]) => xs.map(([score, label]) => ({ score, label }));
+
+  it("tie rate counts pairs of matched jobs with the same score", () => {
+    expect(tieRate([90, 80, 70, 0, 0])).toBe(0);
+    expect(tieRate([67, 67, 67])).toBe(1);
+    expect(tieRate([67, 67, 75, 58])).toBeCloseTo(1 / 6);
+  });
 
   it("NDCG is 1 for the ideal order and lower for a reversed one", () => {
     expect(
