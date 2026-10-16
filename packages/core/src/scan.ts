@@ -10,6 +10,7 @@ import { FileHttpCache } from "./http-cache";
 import { readLocationCache, writeLocationCache } from "./location-cache";
 import { FEED_MAX_AGE_DAYS, feedMatches, jobFeedStatus } from "./job-feed";
 import { checkStillOpen, jobsToRecheck } from "./liveness";
+import { loadConcepts } from "./concepts-remote";
 import { alertJobs } from "./notify";
 import { runRadar, type RunResult } from "./run";
 import type { BoardMove, CompanyHealth, CompanyRef, Config, Job, RunSummary } from "./schema";
@@ -307,6 +308,8 @@ export async function scan(config: Config, opts: ScanOptions): Promise<ScanResul
   const checks = byMatchChance(directoryPlan.fetch, hints);
   // Saved responses: a board that hasn't changed since the last scan answers with an empty 304.
   const cache = opts.http || opts.dryRun ? undefined : new FileHttpCache(join(opts.dataDir, "cache", "http"));
+  // The weekly word list that makes "PSP" count as payments (concepts-remote.ts); the built-in one when offline.
+  if (!opts.http && !opts.dryRun) await loadConcepts(opts.dataDir);
   // A host that doesn't answer gives up after 8 s; one that answers gets 15 s for the body.
   // Each hiring system's API paced as a whole, faster while it keeps up (http.ts paceOf).
   const http = opts.http ?? new HttpClient({ cache, connectTimeoutMs: 8_000, readTimeoutMs: 15_000, retries: 2, breakAfter: 3, adaptive: true });

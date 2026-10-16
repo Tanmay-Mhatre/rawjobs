@@ -5,7 +5,7 @@ import { dealbreakers, eligibilityChecks } from "./dealbreakers";
 import { aliasesOf, conceptsVersion, knownConceptTerms, namesTopic, topicMentions } from "./concepts";
 import { extractRequirements, regionOnly, type Requirements } from "./posting";
 import type { FitCheck, NormalizedJob, Profile, ScoreBreakdown } from "./schema";
-import { matchesAny, matchesTerm, matchesTitle, mayMatchTitle, mentionsOf, termRegex, titleForms } from "./text";
+import { matchesAny, matchesTerm, matchesTitle, mayMatchTitle, termRegex, titleForms } from "./text";
 
 export const POINTS = {
   titleMatch: 20,

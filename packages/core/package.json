@@ -24,6 +24,7 @@
     "./activity": "./src/activity.ts",
     "./fit": "./src/fit.ts",
     "./learn": "./src/learn.ts",
+    "./concepts": "./src/concepts.ts",
     "./score": "./src/score.ts",
     "./protocol": "./src/protocol.ts",
     "./release": "./src/release.ts",
