@@ -8,6 +8,9 @@ describe("topic matching by meaning", () => {
     expect(namesTopic("Payment flows", "payments")).toBe(true);
     expect(namesTopic("Defined our strategies", "strategy")).toBe(true);
     expect(namesTopic("A process, many processes", "process")).toBe(true);
+    // Some plurals mean something else: securities are bonds and shares.
+    expect(namesTopic("Trade securities", "security")).toBe(false);
+    expect(namesTopic("Futures desk", "future")).toBe(false);
   });
 
   it("counts the words that prove a topic, and says which one matched", () => {

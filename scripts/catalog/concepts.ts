@@ -32,10 +32,10 @@ export const NEVER: Record<string, string[]> = {
   javascript: ["java"],
   "product management": ["product marketing", "project management"],
   "product marketing": ["product management"],
-  "project management": ["product management"],
   payments: ["payroll"],
   sales: ["presales support"],
-  security: ["social security", "food security", "job security"],
+  security: ["securities", "social security", "food security", "job security"],
+  "project management": ["product management", "commissioning", "scrum"],
   "machine learning": ["learning"],
   ai: ["artificial insemination"],
 };
@@ -76,6 +76,8 @@ export function rejectAlias(topic: string, alias: string, known: ReadonlySet<str
   // A broader word never proves a narrower one: "cards" doesn't prove "card issuing".
   if (w.every((x) => words(topic).includes(x))) return "broader than the topic";
   if (known.has(a)) return "another topic";
+  // Already counted: a form of the topic, or a word that proves it already.
+  if (namesTopic(alias, topic)) return "already counts";
   if ((NEVER[norm(topic)] ?? []).some((n) => a === n || a.includes(n))) return "on the never-match list";
   if (/[()[\]{}<>@#$%^*=|\\]/.test(alias)) return "odd characters";
   return undefined;
@@ -90,7 +92,7 @@ export function offered(topic: string, concepts: readonly string[][]): string[] 
 const MAX_NEW_PER_TOPIC = 15;
 
 /** Fewest companies whose titles must use a word before it can count, and how much they must use the topic too. */
-export const BACKING = { minCompanies: 3, minShare: 0.4, minLift: 3 } as const;
+export const BACKING = { minCompanies: 3, minShare: 0.5, minLift: 4 } as const;
 
 /**
  * Do real job titles back "this word proves this topic"? `companies` is each company's titles, joined.

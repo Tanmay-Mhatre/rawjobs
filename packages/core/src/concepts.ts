@@ -46,6 +46,9 @@ export function knownConceptTerms(): string[] {
   return [...table.entries()].flatMap(([t, a]) => [t, ...a]);
 }
 
+/** Words whose other forms mean something else: "securities" are bonds and shares, "futures" contracts, "goods" products. */
+const FIXED_FORMS = new Set(["security", "securities", "future", "futures", "good", "goods", "custom", "customs", "news", "arts", "physic", "physics"]);
+
 /** Word forms of a topic's last word: "forecast" -> forecasts, forecasting, forecasted; "pricing" -> price, prices. */
 function formsPattern(term: string): string {
   const words = term
@@ -55,7 +58,7 @@ function formsPattern(term: string): string {
     .map((w) => w.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"));
   const last = words.pop() ?? "";
   let tail = last;
-  if (/^[a-z]{4,}$/i.test(last)) {
+  if (/^[a-z]{4,}$/i.test(last) && !FIXED_FORMS.has(last.toLowerCase())) {
     if (/(?:ies|[^aeiou]y)$/i.test(last)) tail = `${last.replace(/(?:ies|y)$/i, "")}(?:y|ies)`;
     else {
       // "process", "analysis", "status" keep their s; "payments", "forecasting", "pricing" lose the ending.
