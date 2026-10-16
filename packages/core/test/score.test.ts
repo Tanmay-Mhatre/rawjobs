@@ -302,8 +302,9 @@ describe("scoreJob requirements", () => {
 
   it("says how many checkable must-haves name your topics", () => {
     const s = scoreJob(job({ description: desc("SQL") }), profile({ keywords: { payments: 3 } }));
-    expect(s.why.musts).toEqual({ met: 1, of: 1 });
-    expect(s.why.checks).toContainEqual({ id: "musts", status: "met", note: "Names 1 of 1 must-haves you can check" });
+    // SQL is a word RawJobs knows (catalog/concepts.ts), so its line can be checked too: it isn't yours.
+    expect(s.why.musts).toEqual({ met: 1, of: 2 });
+    expect(s.why.checks).toContainEqual({ id: "musts", status: "near", note: "Names 1 of 2 must-haves you can check" });
     // With no topics of your own there's nothing to check them against.
     expect(scoreJob(job({ description: desc("SQL") }), profile({ keywords: {} })).why.musts).toBeUndefined();
   });
