@@ -1,5 +1,5 @@
 import { displayName } from "@rawjobs/core/display-name";
-import { learnedNudge, learnOrder } from "@rawjobs/core/learn";
+import { fitFeatures, learnedNudge, learnOrder } from "@rawjobs/core/learn";
 import { ArrowRight, ArrowUpDown, SlidersHorizontal, UserRound, X } from "lucide-react";
 import { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from "react";
 import { useOtherJobs, type DataMeta, type Job, type Profile } from "../../lib/data";
@@ -155,9 +155,12 @@ export function RadarPage(p: Props) {
   const [learnSince, setLearnSince] = useState(() => load<string>(LEARN_SINCE_KEY, ""));
   const learned = useMemo(() => {
     const byId = new Map(p.jobs.map((j) => [j.id, j]));
+    // Each choice keeps the job's parts from when you made it (snapshot.fit), so it counts after the posting closes.
     const picks = Object.entries(p.user).flatMap(([id, e]) => {
+      if (!e.status || e.updatedAt <= learnSince) return [];
       const job = byId.get(id);
-      return job && e.status && e.updatedAt > learnSince ? [{ why: job.why, liked: e.status !== "dismissed" }] : [];
+      const features = e.snapshot.fit ?? (job ? fitFeatures(job.why) : undefined);
+      return features ? [{ features, status: e.status, reason: e.reason, at: e.updatedAt, score: job?.score ?? e.snapshot.score }] : [];
     });
     return learnOrder(picks);
   }, [p.jobs, p.user, learnSince]);
@@ -629,10 +632,12 @@ export function RadarPage(p: Props) {
                   </>
                 )}
                 {p.meta.runs[0] && ` · ${p.meta.runs[0].everyCompany ? "every company checked" : "checked"} ${timeAgo(p.meta.runs[0].finishedAt)}`}
-                {sort === "best" && learned && (
+                {sort === "best" && learned?.helps && (
                   <>
                     {" · "}
-                    <span title={`Learned from ${learned.liked} jobs you saved or applied to and ${learned.disliked} you marked Not interested, on this computer only. Scores don't change.`}>
+                    <span
+                      title={`${learned.learned ? `${learned.learned}. ` : ""}Learned from ${learned.liked} jobs you saved or applied to and ${learned.disliked} you marked Not interested, on this computer only. Scores don't change.`}
+                    >
                       order tuned to your picks
                     </span>{" "}
                     <button type="button" className="underline underline-offset-2" onClick={resetLearned}>

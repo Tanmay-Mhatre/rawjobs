@@ -649,8 +649,8 @@ function WhyItMatches({ job, profile, yours }: { job: Job; profile: Profile; you
   const named = (k: string) => (w.via?.[k] ? `${k} (as ${w.via[k]})` : k);
   // Topics read from your résumé (you set none yourself) count as yours.
   const fromResume = w.topicsFrom === "resume";
-  const own = w.keywords.filter((k) => fromResume || k in profile.keywords);
-  const added = w.keywords.filter((k) => !fromResume && !(k in profile.keywords));
+  const own = fromResume ? (w.ownTopics ?? []) : w.keywords.filter((k) => k in profile.keywords);
+  const added = w.keywords.filter((k) => !own.includes(k));
   const checked = !job.estimated && job.hasDescription;
   const missing =
     checked && fromResume
@@ -799,6 +799,9 @@ function WhyItMatches({ job, profile, yours }: { job: Job; profile: Profile; you
         </p>
       )}
       {w.gate && <p className="type-small text-warning-text">Failed your {w.gate} filter, so the score is 0.</p>}
+      {w.heldBack && !w.dealbreakers?.length && (
+        <p className="type-small text-warning-text">Adds up to a strong match, but kept just under your cut-off: {w.heldBack.charAt(0).toLowerCase() + w.heldBack.slice(1)}.</p>
+      )}
       {!!w.dealbreakers?.length && (
         <div className="type-small text-warning-text" data-dealbreakers>
           <p>

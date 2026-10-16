@@ -1,3 +1,4 @@
+import { fitFeatures } from "@rawjobs/core/learn";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { Job } from "./data";
 import type { Reason } from "./notForMe";
@@ -42,13 +43,27 @@ export type Entry = {
   cv?: string;
   updatedAt: string;
   /** Copy of the job's basics, so the pipeline survives the job leaving jobs.json. */
-  snapshot: { title: string; company: string; url: string; location: string; score: number };
+  snapshot: {
+    title: string;
+    company: string;
+    url: string;
+    location: string;
+    score: number;
+    /** The score's parts when you chose (learn.ts fitFeatures): Best match learns from them after the posting closes. */
+    fit?: number[];
+  };
 };
 
 export type UserState = Record<string, Entry>;
 
 /** The job fields tracking needs; a full Job or a stored snapshot both fit. */
-export type JobLike = Pick<Job, "id" | "title" | "company" | "url" | "location" | "score">;
+export type JobLike = Pick<Job, "id" | "title" | "company" | "url" | "location" | "score"> & Partial<Pick<Job, "why">>;
+
+/** The job's parts for learning: from the job when it has them, else what the entry kept. */
+function withFit(job: JobLike, prev: Entry | undefined): { fit?: number[] } {
+  const fit = (job.why && fitFeatures(job.why)) ?? prev?.snapshot.fit;
+  return fit ? { fit } : {};
+}
 
 const KEY = "rawjobs.state.v1";
 
@@ -74,7 +89,7 @@ export function applyPatch(prev: Entry | undefined, job: JobLike, patch: EntryPa
     ...prev,
     ...patch,
     updatedAt: now,
-    snapshot: { title: job.title, company: job.company, url: job.url, location: job.location, score: job.score },
+    snapshot: { title: job.title, company: job.company, url: job.url, location: job.location, score: job.score, ...withFit(job, prev) },
   };
   const changed = "status" in patch && patch.status !== prev?.status;
   if (changed) {
@@ -179,6 +194,7 @@ function entryFrom(v: unknown): Entry | undefined {
       url: isText(snap.url) ? snap.url : "",
       location: isText(snap.location) ? snap.location : "",
       score: typeof snap.score === "number" ? snap.score : 0,
+      ...(Array.isArray(snap.fit) && snap.fit.length <= 16 && snap.fit.every((v) => typeof v === "number" && Number.isFinite(v)) ? { fit: snap.fit as number[] } : {}),
     },
   };
 }
