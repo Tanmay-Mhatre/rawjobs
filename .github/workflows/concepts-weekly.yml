@@ -1,5 +1,5 @@
 # Weekly: more words that prove each topic ("PSP" proves payments), found and checked automatically.
-# scripts/catalog/concepts.ts looks each topic up in ESCO and Wikidata, keeps only words that pass its
+# scripts/catalog/concepts.ts looks each topic up in ESCO (the EU's skills list), keeps only words that pass its
 # gates and that real job titles in the job feed back up, then scores the eval set with them. A list
 # that makes the eval worse is never published, so apps keep last week's. Nothing here needs a person
 # to approve it. Apps read concepts.json only with a valid signature (packages/core/src/concepts-remote.ts).
@@ -63,7 +63,7 @@ jobs:
           # Not --latest: the directory download uses releases/latest.
           gh release view concepts -R "$DATA_REPO" > /dev/null 2>&1 ||
             gh release create concepts -R "$DATA_REPO" --latest=false --title "Topic word list" \
-              --notes "Words that prove each topic, rebuilt weekly from ESCO (European Commission, reused under Decision 2011/833/EU) and Wikidata (CC0). Read concepts.json with its signature."
+              --notes "Words that prove each topic, rebuilt weekly from ESCO (European Commission, reused under Decision 2011/833/EU) Read concepts.json with its signature."
           gh release upload concepts concepts.json concepts.json.sig -R "$DATA_REPO" --clobber
 
       - name: Report a failed run

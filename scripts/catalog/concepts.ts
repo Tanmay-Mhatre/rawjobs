@@ -3,8 +3,8 @@
  * automatically, with no one approving them by hand. Run by .github/workflows/concepts-weekly.yml.
  *
  *   1. For each topic in packages/core/src/catalog/concepts.ts, look it up in ESCO (the EU's skills
- *      list) and Wikidata. Take a concept only when one of its labels is the topic itself or a word
- *      already known to prove it, and offer that concept's other labels.
+ *      list). Take a concept only when one of its labels is the topic itself or a word already known
+ *      to prove it, and offer that concept's other labels.
  *   2. Keep a word only when it passes every gate (rejectAlias): short, a name and not a task
  *      ("utilise machine learning" is a task), not too general, not a broader word, not another
  *      topic, not on the never-match list.
@@ -15,7 +15,8 @@
  *
  *   pnpm exec tsx scripts/catalog/concepts.ts --out scripts/catalog/out/concepts
  *
- * Sources: ESCO (European Commission, reuse with attribution, Decision 2011/833/EU) and Wikidata (CC0).
+ * Source: ESCO (European Commission, reuse with attribution, Decision 2011/833/EU). Wikidata was tried and
+ * dropped: its aliases for common words are mostly other senses (sports teams, parties), and it rate-limits.
  */
 import { mkdirSync, writeFileSync } from "node:fs";
 import { gunzipSync } from "node:zlib";
@@ -155,9 +156,9 @@ export function gate(candidates: Record<string, string[]>, companies?: readonly 
 const pause = (ms: number) => new Promise((r) => setTimeout(r, ms));
 async function json(url: string, tries = 3): Promise<unknown> {
   const res = await fetch(url, { headers: { accept: "application/json", "user-agent": "RawJobs concepts builder (github.com/Tanmay-Mhatre/rawjobs)" }, signal: AbortSignal.timeout(20_000) });
-  // Wikidata and ESCO ask callers to slow down with a 429: wait and try again.
+  // ESCO asks callers to slow down with a 429: wait (at most 10 s) and try again.
   if (res.status === 429 && tries > 1) {
-    await pause(Number(res.headers.get("retry-after")) * 1000 || 5000);
+    await pause(Math.min(10_000, Number(res.headers.get("retry-after")) * 1000 || 5000));
     return json(url, tries - 1);
   }
   if (!res.ok) throw new Error(`${res.status} ${url}`);
@@ -169,15 +170,6 @@ async function fromEsco(topic: string): Promise<string[][]> {
   const url = `https://ec.europa.eu/esco/api/search?text=${encodeURIComponent(topic)}&type=skill&language=en&full=true&limit=10`;
   const body = (await json(url)) as { _embedded?: { results?: EscoResult[] } };
   return (body._embedded?.results ?? []).map((r) => [r.preferredLabel?.en ?? "", ...(r.alternativeLabel?.en ?? [])].filter(Boolean));
-}
-
-type WikiEntity = { labels?: { en?: { value: string } }; aliases?: { en?: { value: string }[] } };
-async function fromWikidata(topic: string): Promise<string[][]> {
-  const search = (await json(`https://www.wikidata.org/w/api.php?action=wbsearchentities&search=${encodeURIComponent(topic)}&language=en&limit=5&format=json`)) as { search?: { id: string }[] };
-  const ids = (search.search ?? []).map((s) => s.id);
-  if (!ids.length) return [];
-  const got = (await json(`https://www.wikidata.org/w/api.php?action=wbgetentities&ids=${ids.join("|")}&props=labels|aliases&languages=en&format=json`)) as { entities?: Record<string, WikiEntity> };
-  return Object.values(got.entities ?? {}).map((e) => [e.labels?.en?.value ?? "", ...(e.aliases?.en ?? []).map((a) => a.value)].filter(Boolean));
 }
 
 /** The eval set's ranking and tie rate with a word list: the gate for publishing it. */
@@ -196,18 +188,16 @@ async function main() {
   for (const [i, topic] of topics.entries()) {
     if (i % 20 === 0) console.log(`Looking up topics ${i + 1}-${Math.min(i + 20, topics.length)} of ${topics.length}`);
     const concepts: string[][] = [];
-    for (const source of [fromEsco, fromWikidata]) {
-      await pause(400);
-      try {
-        concepts.push(...(await source(topic)));
-      } catch (e) {
-        failed++;
-        console.warn(`  ${source.name} ${topic}: ${(e as Error).message}`);
-      }
+    await pause(300);
+    try {
+      concepts.push(...(await fromEsco(topic)));
+    } catch (e) {
+      failed++;
+      console.warn(`  ESCO ${topic}: ${(e as Error).message}`);
     }
     candidates[topic] = offered(topic, concepts);
   }
-  if (failed > Object.keys(BASE_CONCEPTS).length) throw new Error(`${failed} lookups failed: not publishing a list built on half the sources`);
+  if (failed > topics.length / 2) throw new Error(`${failed} lookups failed: not publishing a list built on half the sources`);
 
   console.log("Reading the job feed's titles");
   const companies = await feedTitles();
