@@ -1,12 +1,12 @@
 import { ArrowRight, Keyboard, RefreshCw, TriangleAlert, X } from "lucide-react";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { CompaniesTab } from "./components/CompaniesTab";
 import { Dialog } from "./components/Dialog";
 import { SetupBanner } from "./components/EmptyState";
 import { checklistItems, ConfigProblemCard, FailingBanner, FirstScanCard, NoMatches, SetupChecklist, SetupHero } from "./components/Guidance";
 import { ApplyPrompt } from "./components/ApplyPrompt";
 import { JobDrawer } from "./components/JobDrawer";
-import { NotForMeProvider, useNotForMeApi } from "./components/NotForMe";
+import { type NotForMeApi, NotForMeProvider, useNotForMeApi } from "./components/NotForMe";
 import { Pipeline } from "./components/Pipeline";
 import { FeedSkeleton } from "./components/radar/FeedSkeleton";
 import { RadarPage } from "./components/radar/RadarPage";
@@ -30,6 +30,7 @@ import { useBackgroundScan } from "./lib/backgroundScan";
 import { announceBackgroundScan } from "./app/announceBackgroundScan";
 import { useResume } from "./lib/resume";
 import { profileFromPicks, type FilterPicks } from "./lib/profileSync";
+import { ProfileFixProvider, type ProfileFixApi } from "./lib/profileFix";
 import { draftToConfig, emptyDraft, resetSetup, saveConfig, setupProgress, STEP, useSetupStatus } from "./lib/setup";
 import { buildSuggestions } from "./lib/suggest";
 import { load, save } from "./lib/storage";
@@ -117,6 +118,22 @@ export function App() {
 
   // ----- your companies, from the Radar: add, remove, mute, check now -----
   const canSave = canRunLocally && personal && setupState === "configured";
+  /** "Why it matched" fixes: add one word to a profile list and save; the next scan re-scores (no scan now, so several fixes share one). */
+  const profileFix = useMemo<ProfileFixApi | null>(
+    () =>
+      canSave
+        ? {
+            draft: saved,
+            add: async (field, value) => {
+              const res = await saveConfig(draftToConfig({ ...saved, [field]: [...saved[field], value] }));
+              if (!res.ok) return res.errors;
+              await setup.refresh();
+              return null;
+            },
+          }
+        : null,
+    [canSave, saved, setup],
+  );
   const { yourKeys, isYours, trackJob, hideCompany, checkJob } = useCompanyActions({
     saved,
     canSave,
@@ -232,7 +249,7 @@ export function App() {
   const items = checklistItems(notSetUp ? draftToConfig(draft) : status?.config, meta, !!resume.text);
 
   return (
-    <NotForMeProvider value={notForMe}>
+    <Providers notForMe={notForMe} profileFix={profileFix}>
       <div className="min-h-dvh">
         {/* biome-ignore lint/a11y/useValidAnchor: a real link (its href works without script); onClick only adds in-page focus or routing */}
         <a
@@ -559,7 +576,7 @@ export function App() {
         <ShortcutHelp open={showKeys} onClose={() => setShowKeys(false)} canScan={canRunLocally && setupState === "configured"} />
         <Toaster />
       </div>
-    </NotForMeProvider>
+    </Providers>
   );
 }
 
@@ -617,5 +634,14 @@ function ShortcutHelp({ open, onClose, canScan }: { open: boolean; onClose: () =
         </a>
       </Card>
     </Dialog>
+  );
+}
+
+/** The app-wide contexts: "Not for me" and the "Why it matched" profile fixes. */
+function Providers({ notForMe, profileFix, children }: { notForMe: NotForMeApi; profileFix: ProfileFixApi | null; children: ReactNode }) {
+  return (
+    <NotForMeProvider value={notForMe}>
+      <ProfileFixProvider value={profileFix}>{children}</ProfileFixProvider>
+    </NotForMeProvider>
   );
 }
