@@ -38,8 +38,14 @@ Don't change `main`'s branch protection or `.mergify.yml` to get your PR in fast
 
 Answering a plan question is not a go-ahead. Until the user explicitly says to build ("go",
 "build it", "start"), do research, plans, mockups and notes only: no worktrees, edits, commits or
-PRs. Put plans and research in `docs/plans/` and commit them with the work they describe, or in
-their own PR, so they don't sit untracked in the main checkout.
+PRs.
+
+## Answer in chat, not in docs
+
+Give plans, reviews, research and recommendations straight in your chat reply, written so they read
+well there. Don't create a doc for them (a `docs/plans/` file, a Claude Doc or an artifact) unless
+the user asks for one. If the user asks for a doc in `docs/plans/`, commit it with the work it
+describes or in its own PR, so it doesn't sit untracked in the main checkout.
 
 ## Building: the best way, with the fewest tokens
 
