@@ -122,12 +122,13 @@
   --feed-section-bg: var(--bg-canvas);
   --score-strong-bg: var(--success-solid);
   --score-strong-fg: var(--on-success);
-  --score-fair-bg: var(--warning-solid);
-  --score-fair-fg: var(--on-warning);
+  --score-fair-bg: var(--bg-active);
+  --score-fair-fg: var(--text-primary);
+  --score-fair-border: var(--border-control-hover);
   --score-weak-fg: var(--text-secondary);
   --score-weak-border: var(--border-control);
   --score-strong-estimated: var(--success-text);
-  --score-fair-estimated: var(--warning-text);
+  --score-fair-estimated: var(--border-control-hover);
   --breakdown-track: var(--bg-active);
   --breakdown-track-border: var(--border-control);
   --breakdown-fill: var(--text-primary);
