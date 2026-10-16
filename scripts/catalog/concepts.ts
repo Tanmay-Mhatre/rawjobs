@@ -96,13 +96,13 @@ export const BACKING = { minCompanies: 3, minShare: 0.4, minLift: 3 } as const;
  * Of the companies using the word, at least minShare must also use the topic, and that share must be
  * minLift times the share of all companies that use it ("security" is everywhere, so "securities" fails).
  */
-export function backedByTitles(topic: string, alias: string, companies: readonly string[], topicHits = companies.map((t) => namesTopic(t, topic))): boolean {
+export function backedByTitles(topic: string, alias: string, companies: readonly string[], topicHits = companies.map((t) => namesTopic(t, topic)), lower = companies.map((t) => t.toLowerCase())): boolean {
   const needle = norm(alias).split(" ")[0]!;
   let withAlias = 0;
   let both = 0;
   const withTopic = topicHits.filter(Boolean).length;
   companies.forEach((titles, i) => {
-    if (!titles.toLowerCase().includes(needle) || !namesTopic(titles, alias)) return;
+    if (!lower[i]!.includes(needle) || !namesTopic(titles, alias)) return;
     withAlias++;
     if (topicHits[i]) both++;
   });
@@ -119,7 +119,8 @@ async function feedTitles(base = "https://github.com/Tanmay-Mhatre/rawjobs-direc
     const res = await fetch(`${base}/${file}`, { signal: AbortSignal.timeout(120_000) });
     if (!res.ok) throw new Error(`${res.status} ${file}`);
     const shard = JSON.parse(gunzipSync(Buffer.from(await res.arrayBuffer())).toString("utf8")) as { companies: Record<string, { jobs: [string, string][] }> };
-    for (const c of Object.values(shard.companies)) if (c.jobs.length) out.push(c.jobs.map((j) => j[1]).join(" | "));
+    // Each company's distinct titles, at most 300: a big employer's thousands of postings repeat themselves.
+    for (const c of Object.values(shard.companies)) if (c.jobs.length) out.push([...new Set(c.jobs.map((j) => j[1]))].slice(0, 300).join(" | "));
   }
   return out;
 }
@@ -127,6 +128,7 @@ async function feedTitles(base = "https://github.com/Tanmay-Mhatre/rawjobs-direc
 /** Every topic's new words, through the gates (and backed by real titles, when they're given). */
 export function gate(candidates: Record<string, string[]>, companies?: readonly string[]): Record<string, string[]> {
   const known = new Set(Object.keys(BASE_CONCEPTS).map(norm));
+  const lower = companies?.map((t) => t.toLowerCase());
   const out: Record<string, string[]> = {};
   for (const [topic, list] of Object.entries(candidates)) {
     const have = new Set([norm(topic), ...(BASE_CONCEPTS[topic] ?? []).map(norm)]);
@@ -135,7 +137,7 @@ export function gate(candidates: Record<string, string[]>, companies?: readonly 
     for (const alias of list) {
       if (keep.length >= MAX_NEW_PER_TOPIC) break;
       if (have.has(norm(alias)) || rejectAlias(topic, alias, known)) continue;
-      if (companies && !backedByTitles(topic, alias, companies, (hits ??= companies.map((t) => namesTopic(t, topic))))) continue;
+      if (companies && !backedByTitles(topic, alias, companies, (hits ??= companies.map((t) => namesTopic(t, topic))), lower)) continue;
       have.add(norm(alias));
       keep.push(alias.trim());
     }
@@ -184,7 +186,9 @@ async function main() {
   const { values } = parseArgs({ options: { out: { type: "string", default: "scripts/catalog/out/concepts" } } });
   const candidates: Record<string, string[]> = {};
   let failed = 0;
-  for (const topic of Object.keys(BASE_CONCEPTS)) {
+  const topics = Object.keys(BASE_CONCEPTS);
+  for (const [i, topic] of topics.entries()) {
+    if (i % 20 === 0) console.log(`Looking up topics ${i + 1}-${Math.min(i + 20, topics.length)} of ${topics.length}`);
     const concepts: string[][] = [];
     for (const source of [fromEsco, fromWikidata]) {
       await pause(400);
@@ -199,7 +203,9 @@ async function main() {
   }
   if (failed > Object.keys(BASE_CONCEPTS).length) throw new Error(`${failed} lookups failed: not publishing a list built on half the sources`);
 
+  console.log("Reading the job feed's titles");
   const companies = await feedTitles();
+  console.log(`${companies.length} companies; checking words against their titles`);
   if (companies.length < 1000) throw new Error(`Only ${companies.length} companies in the job feed: not enough titles to check words against`);
   const file: ConceptsFile = { version: new Date().toISOString().slice(0, 10), concepts: gate(candidates, companies) };
   const added = Object.values(file.concepts).reduce((n, a) => n + a.length, 0);
