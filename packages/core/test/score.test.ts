@@ -304,6 +304,8 @@ describe("scoreJob requirements", () => {
     const s = scoreJob(job({ description: desc("SQL") }), profile({ keywords: { payments: 3 } }));
     expect(s.why.musts).toEqual({ met: 1, of: 1 });
     expect(s.why.checks).toContainEqual({ id: "musts", status: "met", note: "Names 1 of 1 must-haves you can check" });
+    // With no topics of your own there's nothing to check them against.
+    expect(scoreJob(job({ description: desc("SQL") }), profile({ keywords: {} })).why.musts).toBeUndefined();
   });
 
   it("checks the years asked against yours, and takes points off past one year short", () => {

@@ -118,6 +118,8 @@ NDCG@10 or raises ties past the gate is tuned or left out. Accepted state: `pnpm
 - Years: missed also takes 3 points a year past the first year short, at most 10 (`why.yearsGap`), on top
   of the level step. The level step alone moved `ml-05` only 83 to 78; now 68. At 2.5 a year a new tie
   appeared in finance-analyst.
+- With no topics of your own there are no must-haves to count (`why.musts` is left out). Broad industry
+  topics ("strategy", "quality", "engineering") don't make a line checkable.
 - The years line isn't one of the M must-haves: it has its own `experience` check, so it isn't counted twice.
 - Lines are read a sentence at a time, and only a clause after ", ideally" / "; … is a plus" is nice
   ("5+ years in research, ideally in B2B SaaS" stays a must-have).

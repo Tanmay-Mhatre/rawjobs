@@ -34,7 +34,7 @@ export const POINTS = {
   fullMentions: 3,
   /** A topic the posting names only as a nice-to-have ("Kafka is a plus") counts this share of it. */
   niceOnly: 0.5,
-  /** No description: the topics are unknown, so they count half the bar (like an unknown industry)... */
+  /** No description: the topics are unknown, so they count part of the bar (as an unknown industry does)... */
   unknownTopics: 15,
   /** ...and topics in the title add up to this much more. */
   unknownTitleTopics: 10,
@@ -153,7 +153,8 @@ export function scoreJob(job: Scorable, profile: Profile, company: CompanyFit = 
     .map(([k]) => k);
 
   const industry = industryFit(company, profile);
-  const musts = mustsMet(req, keywords);
+  // With no topics of your own there's nothing to check the must-haves against.
+  const musts = totalWeight > 0 ? mustsMet(req, keywords) : undefined;
 
   const why: ScoreBreakdown = {
     title: tenths(titlePts),
@@ -180,8 +181,14 @@ export function scoreJob(job: Scorable, profile: Profile, company: CompanyFit = 
 
 const tenths = (n: number) => Math.round(n * 10) / 10;
 
-/** Every topic RawJobs knows: yours, and every industry's. A must line naming none of them can't be checked. */
-const KNOWN_TOPICS = [...new Set(INDUSTRIES.flatMap((i) => i.topics.map((t) => t.toLowerCase())))];
+/** Industry topics too broad to name a skill ("strategy", "quality"): they don't make a must line checkable. */
+const BROAD_TOPICS = new Set(
+  "enterprise platform content learning operations quality engineering strategy consulting advisory policy automation brand consumer media security analytics cloud infrastructure player audience conversion credit identity claims education food retail travel sports games gaming space government".split(
+    " ",
+  ),
+);
+/** Every topic RawJobs knows that names a skill or domain: yours, and every industry's. A must line naming none of them can't be checked. */
+const KNOWN_TOPICS = [...new Set(INDUSTRIES.flatMap((i) => i.topics.map((t) => t.toLowerCase())))].filter((t) => !BROAD_TOPICS.has(t));
 
 /** Must-have lines naming a known topic (`of`), and how many name one of yours (`met`). Undefined when none can be checked. */
 function mustsMet(req: Requirements, keywords: Record<string, number>): { met: number; of: number } | undefined {
