@@ -1,9 +1,9 @@
-import { Check, ChevronDown, Plus } from "lucide-react";
+import { Check, ChevronDown } from "lucide-react";
 import { useState } from "react";
 import { type Filters, sameFilters, type Sort } from "../../lib/filters";
 import type { SavedView } from "../../lib/prefs";
 import { IconButton, Menu, Tabs } from "../primitives";
-import { Button, cx } from "../ui";
+import { cx } from "../ui";
 
 const BUILT_IN: { id: string; label: string; filters: Partial<Filters>; count: keyof ViewCounts }[] = [
   { id: "all", label: "All", filters: {}, count: "all" },
@@ -46,7 +46,12 @@ export function ViewsBar(props: {
   /** Something worth saving: not a saved view already, and not just a built-in tab in Best match. */
   const canSave = !customActive && (!builtInActive || props.sort !== "best");
   const builtIns = builtInViews(props.hideNew);
-  const tabValue = builtInActive && !customActive ? builtInActive.id : "";
+  // The triage views are tabs; Saved and Applied (pipeline states) live in the Views menu with your own views.
+  const tabs = builtIns.filter((b) => TAB_IDS.has(b.id));
+  const inMenu = builtIns.filter((b) => !TAB_IDS.has(b.id));
+  const menuActive = !customActive && builtInActive && !TAB_IDS.has(builtInActive.id) ? builtInActive : undefined;
+  const tabValue = builtInActive && !customActive && TAB_IDS.has(builtInActive.id) ? builtInActive.id : "";
+  const menuLabel = customActive?.name ?? menuActive?.label ?? "Views";
   return (
     <div className={cx("flex flex-wrap items-end gap-x-4 gap-y-2 lg:flex-nowrap", props.className)}>
       {/* design/components/Tabs: views of one list, ink underline. */}
@@ -59,25 +64,34 @@ export function ViewsBar(props: {
           const b = builtIns.find((x) => x.id === id);
           if (b) props.onPick({ ...props.base, ...b.filters }, props.sort);
         }}
-        items={builtIns.map((b) => ({ id: b.id, label: b.label, count: props.counts[b.count] }))}
+        items={tabs.map((b) => ({ id: b.id, label: b.label, count: props.counts[b.count] }))}
       />
       {naming ? (
         <div className="flex items-center pb-1">
           <NameInput value={naming.value} onChange={(value) => setNaming({ ...naming, value })} onSubmit={submit} onCancel={() => setNaming(null)} />
         </div>
-      ) : props.views.length > 0 ? (
-        // Your saved views in one menu, so the row keeps room for the built-in tabs.
+      ) : (
+        // Saved, Applied and your own views in one menu, so the tabs never run out of room.
         <div className="flex items-center pb-1">
           <Menu
-            label="Saved views"
+            label="Views"
             align="end"
             trigger={(t) => (
-              <button type="button" {...t} className={cx("rj-chip max-w-48", customActive && "border-[var(--chip-on-bg)] bg-[var(--chip-on-bg)] text-[var(--chip-on-fg)]")}>
-                <span className="truncate">{customActive ? customActive.name : "Views"}</span>
+              <button type="button" {...t} className={cx("rj-chip max-w-48", (customActive || menuActive) && "border-[var(--chip-on-bg)] bg-[var(--chip-on-bg)] text-[var(--chip-on-fg)]")}>
+                <span className="truncate">{menuLabel}</span>
+                {/* Filters that match no tab and no saved view: worth keeping as a view. */}
+                {!builtInActive && !customActive && <span className="size-1.5 shrink-0 rounded-dot bg-[var(--live-dot)]" role="img" aria-label="Unsaved changes" />}
                 <ChevronDown className="size-3.5 shrink-0" aria-hidden />
               </button>
             )}
             items={[
+              ...inMenu.map((b) => ({
+                id: b.id,
+                label: `${b.label} · ${props.counts[b.count].toLocaleString()}`,
+                shortcut: String(builtIns.indexOf(b) + 1),
+                onSelect: () => props.onPick({ ...props.base, ...b.filters }, props.sort),
+              })),
+              ...(props.views.length ? [{ separator: true as const, id: "sep-views" }] : []),
               ...props.views.map((v) => ({ id: v.id, label: v.name, onSelect: () => props.onPick(v.filters, v.sort) })),
               ...(canSave || customActive ? [{ separator: true as const, id: "sep" }] : []),
               ...(canSave ? [{ id: "save", label: "Save current view…", onSelect: () => setNaming({ value: "" }) }] : []),
@@ -90,18 +104,13 @@ export function ViewsBar(props: {
             ]}
           />
         </div>
-      ) : (
-        canSave && (
-          <div className="flex items-center pb-1">
-            <Button size="sm" variant="ghost" onClick={() => setNaming({ value: "" })}>
-              <Plus className="rj-icon" aria-hidden /> Save view
-            </Button>
-          </div>
-        )
       )}
     </div>
   );
 }
+
+/** The built-in views shown as tabs: the ones for working through the list. */
+const TAB_IDS = new Set(["all", "mine", "new", "strong"]);
 
 function NameInput({ value, onChange, onSubmit, onCancel }: { value: string; onChange: (v: string) => void; onSubmit: () => void; onCancel: () => void }) {
   return (

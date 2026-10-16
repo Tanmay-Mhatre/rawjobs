@@ -62,7 +62,7 @@ describe("feed row (design/components/Feed)", () => {
     const { props } = renderRow({ entry: { status: "saved", updatedAt: "" } as never });
     const save = screen.getByRole("button", { name: "Save" });
     expect(save.getAttribute("aria-pressed")).toBe("true");
-    expect(save.title).toBe("Save (S)");
+    expect(save.querySelector(".rj-tip")?.textContent).toBe("SaveS");
     await userEvent.click(screen.getByRole("button", { name: "Not interested" }));
     expect(props.onStatus).toHaveBeenCalledWith("dismissed");
     expect(screen.getAllByRole("button")).toHaveLength(3); // the title, Save, Not interested
