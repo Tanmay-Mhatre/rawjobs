@@ -107,7 +107,9 @@ describe("JobDetail", () => {
   it("applies at the company by name, with the hiring system in the tooltip", () => {
     renderDetail(job());
     const apply = screen.getByRole("link", { name: /^Apply at / });
-    expect(apply.getAttribute("title")).toBe("Opens the posting on Greenhouse");
+    expect(apply.getAttribute("title")).toBe("Apply at Acme, opens the posting on Greenhouse");
+    // The name can be cut short with "…", so the label is one truncating span.
+    expect(apply.querySelector(".truncate")?.textContent).toBe("Apply at Acme");
     expect(apply.getAttribute("href")).toBe("https://acme.example/jobs/1");
     expect(apply.className).toContain("rj-btn--primary");
   });

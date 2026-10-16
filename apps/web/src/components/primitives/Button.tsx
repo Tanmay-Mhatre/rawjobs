@@ -33,21 +33,30 @@ export function Button({ variant, size, icon, shortcut, className, children, typ
 export type IconButtonProps = Omit<ButtonProps, "icon" | "children" | "aria-label"> & {
   /** What it does, verb first ("Copy job description"). Read out and shown as the tooltip. */
   label: string;
+  /** Where the tooltip opens: "above" for buttons at the bottom of a panel (a job's foot). */
+  tip?: "below" | "above";
   children: ReactNode;
 };
 
-/** Icon-only: the label is the accessible name, and the tooltip also names the shortcut, e.g. "Save (S)". */
-export function IconButton({ label, shortcut, variant = "quiet", size, className, children, type = "button", ...rest }: IconButtonProps) {
+/**
+ * Icon-only: the label is the accessible name. Its tooltip shows on hover and on keyboard focus, with
+ * the key ("Save S"); touch screens have no hover, so they get none.
+ */
+export function IconButton({ label, shortcut, tip = "below", variant = "quiet", size, className, children, type = "button", ...rest }: IconButtonProps) {
   return (
-    <button
-      type={type}
-      aria-label={label}
-      aria-keyshortcuts={shortcut}
-      title={shortcut ? `${label} (${shortcut})` : label}
-      className={buttonClass(variant, size, cx("rj-btn--icon", className))}
-      {...rest}
-    >
+    <button type={type} aria-label={label} aria-keyshortcuts={shortcut} className={buttonClass(variant, size, cx("rj-btn--icon", className))} {...rest}>
       {children}
+      <Tooltip label={label} shortcut={shortcut} side={tip} />
     </button>
+  );
+}
+
+/** The tooltip inside an icon button: decorative for screen readers, which already hear the button's name and key. */
+export function Tooltip({ label, shortcut, side = "below" }: { label: string; shortcut?: string; side?: "below" | "above" }) {
+  return (
+    <span className={cx("rj-tip", side === "above" && "rj-tip--above")} aria-hidden>
+      {label}
+      {shortcut && <Kbd className="rj-tip__kbd">{shortcut}</Kbd>}
+    </span>
   );
 }
