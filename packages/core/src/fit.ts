@@ -10,6 +10,7 @@ const SHORT: Record<string, string> = {
   "pay:unknown": "Pay not listed",
   "visa:missed": "No visa sponsorship",
   "visa:unknown": "Visa not stated",
+  "musts:missed": "Must-haves not yours",
 };
 
 /**

@@ -183,6 +183,10 @@ export function scoreJob(job: Scorable, profile: Profile, company: CompanyFit = 
   why.checks = [...fitChecks(job.title, locationPts, level, profile), ...eligibilityChecks(job, profile), ...(musts ? [mustsCheck(musts)] : []), ...(experience ? [experience] : [])];
   const exact = Math.max(0, Math.min(100, (titlePts + locationPts + keywordPoints + industry) * (why.scale ?? 1) - yearsGap));
   const broken = dealbreakers(job, profile);
+  // Strong means it fits on every count you can check: a job a level or more off yours, or naming none
+  // of its checkable must-haves, stays just under your cut-off, with the reason.
+  const off = why.checks.find((c) => (c.id === "level" || c.id === "musts") && c.status === "missed");
+  if (!broken.length && off && Math.round(exact) >= profile.min_score) return { score: profile.min_score - 1, why: { ...why, heldBack: off.note } };
   if (!broken.length) return { score: Math.round(exact), why };
   return { score: Math.max(0, Math.min(Math.round(exact / 2), profile.min_score - 1)), why: { ...why, dealbreakers: broken } };
 }

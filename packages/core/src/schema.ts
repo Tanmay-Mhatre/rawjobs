@@ -122,6 +122,8 @@ export type ScoreBreakdown = {
   yearsGap?: number;
   /** Topics found through a word that proves them, not their own name: { payments: "PSP" }. Missing when none. */
   via?: Record<string, string>;
+  /** Why a job that adds up to a strong match is kept just under your cut-off: a check it misses (level, must-haves). */
+  heldBack?: string;
   /** "resume" when the topics scored were read from your résumé because you set none yourself. */
   topicsFrom?: "resume";
   /** The weekly word list (concepts.ts) a score used, when it wasn't the built-in one. */
