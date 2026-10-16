@@ -96,7 +96,13 @@ export const BACKING = { minCompanies: 3, minShare: 0.4, minLift: 3 } as const;
  * Of the companies using the word, at least minShare must also use the topic, and that share must be
  * minLift times the share of all companies that use it ("security" is everywhere, so "securities" fails).
  */
-export function backedByTitles(topic: string, alias: string, companies: readonly string[], topicHits = companies.map((t) => namesTopic(t, topic)), lower = companies.map((t) => t.toLowerCase())): boolean {
+export function backedByTitles(
+  topic: string,
+  alias: string,
+  companies: readonly string[],
+  topicHits = companies.map((t) => namesTopic(t, topic)),
+  lower = companies.map((t) => t.toLowerCase()),
+): boolean {
   const needle = norm(alias).split(" ")[0]!;
   let withAlias = 0;
   let both = 0;
