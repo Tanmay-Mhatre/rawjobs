@@ -1,0 +1,77 @@
+# Weekly: more words that prove each topic ("PSP" proves payments), found and checked automatically.
+# scripts/catalog/concepts.ts looks each topic up in ESCO and Wikidata, keeps only words that pass its
+# gates and that real job titles in the job feed back up, then scores the eval set with them. A list
+# that makes the eval worse is never published, so apps keep last week's. Nothing here needs a person
+# to approve it. Apps read concepts.json only with a valid signature (packages/core/src/concepts-remote.ts).
+name: Concepts · weekly word list
+
+on:
+  schedule:
+    - cron: "41 3 * * 0"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+
+env:
+  DATA_REPO: ${{ vars.DATA_REPO || 'Tanmay-Mhatre/rawjobs-directory' }}
+
+concurrency:
+  group: concepts
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+
+      - name: Build and check the word list
+        # Exit 2: the new words made the eval worse, so there's nothing to publish this week.
+        id: build
+        run: |
+          set +e
+          pnpm exec tsx scripts/catalog/concepts.ts --out scripts/catalog/out/concepts
+          code=$?
+          if [ "$code" = 2 ]; then echo "publish=false" >> "$GITHUB_OUTPUT"; exit 0; fi
+          echo "publish=true" >> "$GITHUB_OUTPUT"
+          exit $code
+
+      - name: Sign it
+        if: steps.build.outputs.publish == 'true'
+        timeout-minutes: 2
+        env:
+          RAWJOBS_DATA_SIGNING_KEY: ${{ secrets.RAWJOBS_DATA_SIGNING_KEY }}
+        run: |
+          export RAWJOBS_DATA_PUBLIC_KEY="$(grep -o 'DATA_PUBLIC_KEY = "[^"]*"' packages/core/src/data-signing.ts | cut -d'"' -f2)"
+          node scripts/catalog/sign.mjs scripts/catalog/out/concepts/concepts.json
+
+      - name: Publish
+        if: steps.build.outputs.publish == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.DATA_REPO_TOKEN }}
+        working-directory: scripts/catalog/out/concepts
+        run: |
+          # Not --latest: the directory download uses releases/latest.
+          gh release view concepts -R "$DATA_REPO" > /dev/null 2>&1 ||
+            gh release create concepts -R "$DATA_REPO" --latest=false --title "Topic word list" \
+              --notes "Words that prove each topic, rebuilt weekly from ESCO (European Commission, reused under Decision 2011/833/EU) and Wikidata (CC0). Read concepts.json with its signature."
+          gh release upload concepts concepts.json concepts.json.sig -R "$DATA_REPO" --clobber
+
+      - name: Report a failed run
+        if: failure()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh label create concepts-failed --color B60205 --description "The weekly word list failed" --force > /dev/null
+          gh issue list --label concepts-failed --state open --json number -q '.[0].number' | grep -q . ||
+            gh issue create --label concepts-failed --title "Weekly word list failed" \
+              --body "The weekly concepts workflow failed: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}. Apps keep last week's list until it runs again."
