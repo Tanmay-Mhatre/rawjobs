@@ -1,6 +1,6 @@
 import { COUNTRIES } from "@rawjobs/core/catalog/places";
 import { allTitles } from "@rawjobs/core/catalog/roles";
-import { employersFromResume } from "@rawjobs/core/employers";
+import { employersFromResume, experienceYearsFromResume } from "@rawjobs/core/employers";
 import { detectFromResume, type AiProfile } from "@rawjobs/core/resume-parse";
 import { CV_DICTIONARY } from "../setup/presets";
 import { inferFamily, type Draft } from "./setup";
@@ -23,6 +23,8 @@ export type Suggestions = {
   template: string[] | null;
   /** Companies worked at, newest first. */
   pastEmployers: string[];
+  /** Years of experience from the resume's job dates (overlaps merged), and how many date ranges counted. Never prefilled: the user confirms it. */
+  experience: { years: number; roles: number } | null;
   /** Where they came from, for the UI label. */
   source: "ai" | "resume" | null;
 };
@@ -40,6 +42,7 @@ export const NO_SUGGESTIONS: Suggestions = {
   industryCounts: {},
   template: null,
   pastEmployers: [],
+  experience: null,
   source: null,
 };
 
@@ -71,6 +74,7 @@ export function buildSuggestions(resumeText: string, ai?: AiProfile): Suggestion
     industryCounts: ai?.industries.length ? {} : (found.industryCounts ?? {}),
     template: null,
     pastEmployers: ai?.past_employers?.length ? ai.past_employers : employersFromResume(resumeText),
+    experience: experienceYearsFromResume(resumeText) ?? null,
     source: ai ? "ai" : "resume",
   };
 }

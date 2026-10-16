@@ -114,20 +114,30 @@ export function employersFromResume(text: string, max = 10): string[] {
 /** One role on a resume: the company, and the role's own lines (its heading and bullets). */
 export type ResumeRole = { company: string; text: string };
 
-/** Roles in the Experience section, newest first, one per company (a company's later roles fold into its first). */
-export function rolesFromResume(text: string, max = 10): ResumeRole[] {
+/** The Experience section's non-empty lines, trimmed. */
+function experienceLines(text: string): string[] {
   const lines = text.replace(/\r\n/g, "\n").split("\n");
   const start = lines.findIndex((l) => SECTION_START.test(clean(l)) || SECTION_START.test(l.trim()));
   if (start < 0) return [];
-  const out: ResumeRole[] = [];
-  const byKey = new Map<string, ResumeRole>();
-  let current: ResumeRole | undefined;
+  const out: string[] = [];
   for (const raw of lines.slice(start + 1)) {
     const l = raw.trim();
     if (!l) continue;
     const plain = clean(l);
     // The next section: a Markdown heading of the same or higher level, a known name, or an ALL-CAPS line.
     if (/^#{1,2}\s/.test(l) || KNOWN_SECTIONS.test(plain) || (/^[A-Z][A-Z &/]{3,40}$/.test(plain) && !DATE.test(plain))) break;
+    out.push(l);
+  }
+  return out;
+}
+
+/** Roles in the Experience section, newest first, one per company (a company's later roles fold into its first). */
+export function rolesFromResume(text: string, max = 10): ResumeRole[] {
+  const out: ResumeRole[] = [];
+  const byKey = new Map<string, ResumeRole>();
+  let current: ResumeRole | undefined;
+  for (const l of experienceLines(text)) {
+    const plain = clean(l);
     const bullet = /^[-*•·▪◦]\s/.test(l);
     const name = bullet ? undefined : employerOfLine(l, /^#{3,4}\s/.test(l) || /^\*\*.+\*\*$/.test(l));
     const k = name && name.length >= 2 && !(looksLikeTitle(name) && companyWords(name).length > 3) ? companyWords(name).join(" ") : "";
@@ -146,6 +156,55 @@ export function rolesFromResume(text: string, max = 10): ResumeRole[] {
     out.push(current);
   }
   return out;
+}
+
+const MONTHS = ["jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", "oct", "nov", "dec"];
+const ONE_DATE = String.raw`(?:([a-z]{3,9})\.?\s+|(\d{1,2})\/)?((?:19|20)\d{2})`;
+const DATE_RANGE = new RegExp(String.raw`\b${ONE_DATE}\s*(?:[-–—]+|\bto\b|\buntil\b)\s*(?:${ONE_DATE}|(present|current|now|today))\b`, "gi");
+const INTERN = /\bintern(?:ship)?s?\b/i;
+
+/** 0–11 from a month name ("Sept", "March") or number ("03"), or undefined when there's none. */
+function monthOf(name: string | undefined, num: string | undefined): number | undefined {
+  if (num) return Number(num) >= 1 && Number(num) <= 12 ? Number(num) - 1 : undefined;
+  const i = name ? MONTHS.indexOf(name.slice(0, 3).toLowerCase()) : -1;
+  return i >= 0 ? i : undefined;
+}
+
+/**
+ * Years of work experience from the date ranges in the Experience section ("Mar 2018 – Present",
+ * "03/2018 – 06/2021", "2018 – 2021"). Overlapping roles count once, gaps don't count, and
+ * internships are left out. Rounded to whole years; undefined under a year or without dates.
+ * Only ever a suggestion: the user confirms the number.
+ */
+export function experienceYearsFromResume(text: string, now = new Date()): { years: number; roles: number } | undefined {
+  // Months as year * 12 + month; a span is [start, end).
+  const today = now.getFullYear() * 12 + now.getMonth() + 1;
+  const spans: [number, number][] = [];
+  for (const line of experienceLines(text)) {
+    if (INTERN.test(line)) continue;
+    for (const [, sName, sNum, sYear, eName, eNum, eYear, open] of line.matchAll(DATE_RANGE)) {
+      const start = Number(sYear) * 12 + (monthOf(sName, sNum) ?? 0);
+      const eMonth = monthOf(eName, eNum);
+      // An end month counts in full ("Jan – Mar" is 3 months); a bare year reads as January, and a range within one year as 6 months.
+      const end = open ? today : eMonth !== undefined ? Number(eYear) * 12 + eMonth + 1 : eYear === sYear ? start + 6 : Number(eYear) * 12;
+      const to = Math.min(end, today);
+      if (start >= today || to <= start || to - start > 50 * 12) continue;
+      spans.push([start, to]);
+    }
+  }
+  if (!spans.length) return undefined;
+  spans.sort((a, b) => a[0] - b[0]);
+  let months = 0;
+  let [from, to] = spans[0]!;
+  for (const [s, e] of spans.slice(1)) {
+    if (s <= to) to = Math.max(to, e);
+    else {
+      months += to - from;
+      [from, to] = [s, e];
+    }
+  }
+  months += to - from;
+  return months >= 12 ? { years: Math.round(months / 12), roles: spans.length } : undefined;
 }
 
 /**

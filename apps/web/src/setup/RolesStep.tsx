@@ -25,6 +25,7 @@ function familyDefaults(f: RoleFamily, suggest?: Suggestions) {
 }
 
 export function RolesStep({ draft, update, suggest }: StepProps) {
+  const resumeYears = suggest?.experience?.years;
   const fam = ROLE_FAMILIES.find((f) => f.id === draft.family);
   const [choosing, setChoosing] = useState(!fam);
   const [query, setQuery] = useState("");
@@ -214,7 +215,7 @@ export function RolesStep({ draft, update, suggest }: StepProps) {
         summary={[
           draft.exclude.length && `${draft.exclude.length} hidden`,
           draft.seniority.length && `${draft.seniority.length} seniority`,
-          draft.experienceYears !== undefined && `${draft.experienceYears} years`,
+          draft.experienceYears !== undefined ? `${draft.experienceYears} years` : resumeYears !== undefined && `${resumeYears} years from resume?`,
         ]
           .filter(Boolean)
           .join(" · ")}
@@ -247,20 +248,33 @@ export function RolesStep({ draft, update, suggest }: StepProps) {
             addPlaceholder="Add another…"
           />
         </Field>
-        <InputField
-          label="Years of experience"
-          help="Jobs whose must-haves ask for more than a year beyond this rank lower. Leave empty to skip."
-          className="max-w-[24rem]"
-          inputClassName="max-w-[6rem]"
-          inputMode="numeric"
-          placeholder="6"
-          maxLength={2}
-          value={draft.experienceYears === undefined ? "" : String(draft.experienceYears)}
-          onChange={(e) => {
-            const digits = e.target.value.replace(/\D/g, "");
-            update({ experienceYears: digits ? Number(digits) : undefined });
-          }}
-        />
+        <div className="space-y-2">
+          <InputField
+            label="Years of experience"
+            help="Jobs whose must-haves ask for more than a year beyond this rank lower. Leave empty to skip."
+            className="max-w-[24rem]"
+            inputClassName="max-w-[6rem]"
+            inputMode="numeric"
+            placeholder={resumeYears === undefined ? "6" : undefined}
+            maxLength={2}
+            value={draft.experienceYears === undefined ? "" : String(draft.experienceYears)}
+            onChange={(e) => {
+              const digits = e.target.value.replace(/\D/g, "");
+              update({ experienceYears: digits ? Number(digits) : undefined });
+            }}
+          />
+          {suggest?.experience && draft.experienceYears !== suggest.experience.years && (
+            <p className="flex flex-wrap items-center gap-2 type-small text-muted">
+              <span>
+                {RESUME_LABEL(suggest)}: about {suggest.experience.years} {suggest.experience.years === 1 ? "year" : "years"} across {suggest.experience.roles}{" "}
+                {suggest.experience.roles === 1 ? "role" : "roles"}, gaps left out.
+              </span>
+              <Button size="sm" onClick={() => update({ experienceYears: suggest.experience?.years })}>
+                Use {suggest.experience.years}
+              </Button>
+            </p>
+          )}
+        </div>
       </MoreOptions>
     </div>
   );

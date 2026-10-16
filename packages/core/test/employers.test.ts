@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { companyWords, employersFromResume, lookalikes, matchEmployers, rolesFromResume, seedFromRole, similarity, shapeOf, type CompanyShape } from "../src/employers";
+import { companyWords, employersFromResume, experienceYearsFromResume, lookalikes, matchEmployers, rolesFromResume, seedFromRole, similarity, shapeOf, type CompanyShape } from "../src/employers";
 import type { CompanySuggestion, IndexRow } from "../src/suggest";
 
 const PLAIN = `JANE DOE
@@ -129,5 +129,53 @@ describe("lookalikes", () => {
     const seed = { ...seedFromRole({ company: "Tidewave", text: "Senior Product Manager | Tidewave Remote | 2020\ncrypto exchange and crypto" }) };
     const r = lookalikes(seed, candidates, (k) => companies[k], new Map());
     expect(r[0]!.reasons[0]).not.toContain("hires");
+  });
+});
+
+describe("experienceYearsFromResume", () => {
+  const NOW = new Date(2026, 9, 16); // October 2026
+  const resume = (...lines: string[]) => `# Jane Doe\n## Experience\n${lines.join("\n")}\n## Education\n### BSc, State University (2009 – 2013)`;
+  const years = (text: string, now = NOW) => experienceYearsFromResume(text, now)?.years;
+
+  it("counts overlapping roles once", () => {
+    // Jan 2018 – Dec 2022 is 5 years; adding the two spans would make 6.
+    const text = resume("### PM, Acme (Jan 2018 – Dec 2020)", "- Built payments.", "### Advisor, Beta (Jun 2020 – Dec 2022)");
+    expect(experienceYearsFromResume(text, NOW)).toEqual({ years: 5, roles: 2 });
+  });
+
+  it("counts a role inside another once", () => {
+    expect(years(resume("### Engineer, Acme (Jan 2015 – Jan 2021)", "### Mentor, Side Project (Mar 2016 – Mar 2017)"))).toBe(6);
+  });
+
+  it("runs a current role to today", () => {
+    const text = resume("### Senior PM, Acme Exchange — Dubai (Jan 2022 – Present)", "### PM, PayCo — London (Mar 2018 – Dec 2021)");
+    // 58 + 46 months.
+    expect(years(text)).toBe(9);
+    expect(years(text, new Date(2030, 0, 1))).toBe(12);
+    expect(years(resume("Product Manager | Acme | 2021 – Current"))).toBe(6);
+  });
+
+  it("merges a current role with one that overlaps it", () => {
+    expect(years(resume("### Lead, Acme (Jun 2020 – Present)", "### PM, Beta (Jan 2019 – Dec 2021)"))).toBe(8);
+  });
+
+  it("leaves gaps out", () => {
+    expect(years(resume("### PM, Acme (2020 – 2022)", "### Analyst, Beta (2010 – 2012)"))).toBe(4);
+  });
+
+  it("reads month numbers and words", () => {
+    expect(years(resume("Analyst, Acme, 03/2018 – 06/2021"))).toBe(3);
+    expect(years(resume("Analyst at Acme, March 2018 to June 2021"))).toBe(3);
+  });
+
+  it("ignores Education dates and internships", () => {
+    expect(years(resume("### Analyst, Foo (2019 – 2021)", "### Summer Intern, Bar (2017 – 2018)"))).toBe(2);
+  });
+
+  it("finds nothing without an Experience section or dates", () => {
+    expect(experienceYearsFromResume("# Jane\nSenior PM since 2018.", NOW)).toBeUndefined();
+    expect(experienceYearsFromResume(resume("### PM, Acme", "- Built payments."), NOW)).toBeUndefined();
+    // Under a year.
+    expect(experienceYearsFromResume(resume("### PM, Acme (Jan 2026 – Present)"), NOW)).toBeUndefined();
   });
 });
