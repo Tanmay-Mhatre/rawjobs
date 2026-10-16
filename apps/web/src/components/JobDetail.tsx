@@ -647,15 +647,20 @@ function WhyItMatches({ job, profile, yours }: { job: Job; profile: Profile; you
   // Topics you listed vs the ones your industries added; and your own topics the posting doesn't mention.
   // A topic found through a word that proves it says which: "payments (as PSP)".
   const named = (k: string) => (w.via?.[k] ? `${k} (as ${w.via[k]})` : k);
-  const own = w.keywords.filter((k) => k in profile.keywords);
-  const added = w.keywords.filter((k) => !(k in profile.keywords));
+  // Topics read from your résumé (you set none yourself) count as yours.
+  const fromResume = w.topicsFrom === "resume";
+  const own = w.keywords.filter((k) => fromResume || k in profile.keywords);
+  const added = w.keywords.filter((k) => !fromResume && !(k in profile.keywords));
   const checked = !job.estimated && job.hasDescription;
-  const missing = checked
-    ? Object.entries(profile.keywords)
-        .filter(([k]) => !w.keywords.includes(k))
-        .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
-        .map(([k]) => k)
-    : [];
+  const missing =
+    checked && fromResume
+      ? (w.missing ?? [])
+      : checked
+        ? Object.entries(profile.keywords)
+            .filter(([k]) => !w.keywords.includes(k))
+            .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
+            .map(([k]) => k)
+        : [];
   // Scores from before `level` existed carried it in the title points (30 / 25).
   const lv = w.level ?? (w.title === 30 ? 10 : w.title === 25 ? 5 : 0);
   const level = lv === 10 ? ", at your level" : lv === 5 ? ", one level from yours" : profile.seniority_boost.length ? ", not near your level" : "";
@@ -705,7 +710,7 @@ function WhyItMatches({ job, profile, yours }: { job: Job; profile: Profile; you
             ok: own.length > 0 || added.length > 0,
             text: own.length ? (
               <>
-                Mentions your topics: <b>{own.map(named).join(", ")}</b>
+                {w.topicsFrom === "resume" ? "Mentions topics from your résumé" : "Mentions your topics"}: <b>{own.map(named).join(", ")}</b>
                 {added.length ? <>; also {added.map(named).join(", ")} from your industries</> : null}
               </>
             ) : added.length ? (

@@ -95,18 +95,20 @@ function count(text: string, term: string, exact: boolean, cap: number): number 
 }
 
 /**
- * How many times a text names a topic (up to `cap`): the topic and its word forms first, then the words
- * that prove it. `via` is the word that matched when the topic itself isn't there ("PSP" for payments).
+ * How many times a text names a topic (up to `cap`): the topic and its word forms, plus the words that
+ * prove it. `via` is the word that matched when the topic itself isn't there ("PSP" for payments).
  */
 export function topicMentions(text: string, topic: string, cap = Infinity): { n: number; via?: string } {
   if (!text) return { n: 0 };
-  const own = count(text, topic, false, cap);
-  if (own) return { n: own };
+  let n = count(text, topic, false, cap);
+  let via: string | undefined;
   for (const alias of aliasesOf(topic)) {
-    const n = count(text, alias, asWritten(alias), cap);
-    if (n) return { n, via: alias };
+    if (n >= cap) break;
+    const more = count(text, alias, asWritten(alias), cap - n);
+    if (more && !n && !via) via = alias;
+    n += more;
   }
-  return { n: 0 };
+  return via ? { n, via } : { n };
 }
 
 /** Does the text name the topic (or a word that proves it)? */

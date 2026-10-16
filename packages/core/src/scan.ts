@@ -11,6 +11,8 @@ import { readLocationCache, writeLocationCache } from "./location-cache";
 import { FEED_MAX_AGE_DAYS, feedMatches, jobFeedStatus } from "./job-feed";
 import { checkStillOpen, jobsToRecheck } from "./liveness";
 import { loadConcepts } from "./concepts-remote";
+import { readResume } from "./resume";
+import { resumeTopics } from "./resume-topics";
 import { alertJobs } from "./notify";
 import { runRadar, type RunResult } from "./run";
 import type { BoardMove, CompanyHealth, CompanyRef, Config, Job, RunSummary } from "./schema";
@@ -266,7 +268,10 @@ export async function scan(config: Config, opts: ScanOptions): Promise<ScanResul
   const clock = Date.now();
   const scope = opts.scope ?? "mine";
   // Your industries only rank jobs higher, and only while that's on: off, they don't count at all.
-  const scoring = config.scans?.industry_boost === false ? { ...config, profile: { ...config.profile, industries: [] } } : config;
+  const boosted = config.scans?.industry_boost === false ? { ...config, profile: { ...config.profile, industries: [] } } : config;
+  // No topics of your own: the ones your résumé names count instead (resume-topics.ts), until you set some.
+  const fromResume = Object.keys(boosted.profile.keywords).length || opts.http || opts.dryRun ? {} : resumeTopics(readResume().text);
+  const scoring = Object.keys(fromResume).length ? { ...boosted, profile: { ...boosted.profile, keywords: fromResume, keywords_from: "resume" as const } } : boosted;
   const previous = readJobs(opts.dataDir);
   const tracked = new Set(config.companies.map(companyKey));
   const muted = new Set(config.companies_muted);

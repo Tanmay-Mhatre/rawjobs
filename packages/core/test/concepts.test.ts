@@ -14,7 +14,7 @@ describe("topic matching by meaning", () => {
   });
 
   it("counts the words that prove a topic, and says which one matched", () => {
-    expect(topicMentions("Build our PSP integrations and acquiring stack", "payments")).toEqual({ n: 1, via: "PSP" });
+    expect(topicMentions("Build our PSP integrations and acquiring stack", "payments")).toEqual({ n: 2, via: "PSP" });
     expect(namesTopic("Launch card issuing in the UK", "cards")).toBe(true);
     expect(namesTopic("Experience with Kafka and dbt", "data engineering")).toBe(true);
   });

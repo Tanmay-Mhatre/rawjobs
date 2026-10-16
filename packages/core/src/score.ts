@@ -176,6 +176,7 @@ export function scoreJob(job: Scorable, profile: Profile, company: CompanyFit = 
     ...(yearsGap ? { yearsGap } : {}),
     ...(totalWeight > 0 ? {} : { scale: 100 / NON_KEYWORD_MAX }),
     ...(conceptsVersion() !== "base" ? { concepts: conceptsVersion() } : {}),
+    ...(profile.keywords_from ? { topicsFrom: profile.keywords_from } : {}),
   };
   if (!titleOk) return { score: 0, why: { ...why, gate: "title" } };
   if (locationPts === 0) return { score: 0, why: { ...why, gate: "location", ...(fit.note ? { locationNote: fit.note } : {}) } };
