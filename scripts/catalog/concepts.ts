@@ -83,10 +83,13 @@ export function rejectAlias(topic: string, alias: string, known: ReadonlySet<str
   return undefined;
 }
 
-/** The labels a source offers for a topic: only from concepts that name the topic (or a word that already proves it). */
+/**
+ * The labels a source offers for a topic: only from concepts whose main label (the first) is the topic or
+ * a word that already proves it. A concept that merely lists the topic among other names is another sense.
+ */
 export function offered(topic: string, concepts: readonly string[][]): string[] {
   const names = new Set([norm(topic), ...(BASE_CONCEPTS[topic] ?? []).map(norm)]);
-  return concepts.filter((labels) => labels.some((l) => names.has(norm(l)))).flat();
+  return concepts.filter((labels) => names.has(norm(labels[0] ?? ""))).flat();
 }
 
 const MAX_NEW_PER_TOPIC = 15;

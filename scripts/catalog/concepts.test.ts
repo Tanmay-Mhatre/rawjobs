@@ -11,16 +11,19 @@ describe("weekly word list gates", () => {
     expect(rejectAlias("payments", "acquiring", known)).toBe("another topic");
     expect(rejectAlias("java", "JavaScript", known)).toBe("on the never-match list");
     expect(rejectAlias("payments", "pp", known)).toBe("short and not an acronym");
-    expect(rejectAlias("payments", "payment service provider", known)).toBeUndefined();
+    expect(rejectAlias("payments", "PSP", known)).toBe("already counts");
+    expect(rejectAlias("payments", "PayFac", known)).toBeUndefined();
   });
 
-  it("only offers labels from concepts that name the topic", () => {
+  it("only offers labels from concepts whose main label is the topic", () => {
     expect(
       offered("fraud", [
         ["fraud", "fraud examination"],
         ["card game", "cards"],
       ]),
     ).toEqual(["fraud", "fraud examination"]);
+    // Another concept that only lists the topic among its names is another sense.
+    expect(offered("banking", [["economics", "banking", "financial economics"]])).toEqual([]);
   });
 
   it("keeps a word only when real job titles back it", () => {
