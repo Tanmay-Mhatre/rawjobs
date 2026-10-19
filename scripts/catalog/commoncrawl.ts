@@ -119,6 +119,14 @@ const QUERIES: { url: string; matchType?: "domain" }[] = [
   { url: "careers.jobscore.com/careers/*" },
   { url: "avature.net", matchType: "domain" },
   { url: "careers.pageuppeople.com/*" },
+  { url: "tal.net", matchType: "domain" },
+  { url: "varbi.com", matchType: "domain" },
+  { url: "emp.jobylon.com/companies/*" },
+  { url: "homerun.co", matchType: "domain" },
+  { url: "career.emply.com", matchType: "domain" },
+  { url: "hrmos.co/pages/*" },
+  { url: "herp.careers/v1/*" },
+  { url: "en-gage.net/*" },
 ];
 
 /**

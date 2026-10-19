@@ -6,6 +6,8 @@ import { CONFIG_CANDIDATES, LEGACY_CONFIG_CANDIDATES } from "./config";
 import { careersUrl, companyKey, detectCompany, getConnector, guessName, type DetectResult } from "./connectors";
 import { isPhenomSite } from "./connectors/phenom";
 import { isRadancySite } from "./connectors/radancy";
+import { bullhornFromPortal } from "./connectors/bullhorn";
+import { isJobtrainSite } from "./connectors/jobtrain";
 import { isTeamtailorFeed, isTeamtailorHost } from "./connectors/teamtailor";
 import { HttpClient, HttpError } from "./http";
 import { RESUME_PATH } from "./resume";
@@ -113,6 +115,18 @@ async function detectByFeed(input: string, http: HttpClient): Promise<DetectResu
     if (await isRadancySite(host, http)) return { ats: "radancy", slug: host, name: guessName(host.split(".").at(-2) ?? host), supported: true };
   } catch {
     // not Radancy
+  }
+  // A Jobtrain site answers its own job-card list; a Bullhorn career portal names its token in /app.json.
+  try {
+    if (await isJobtrainSite(host, http)) return { ats: "jobtrain", slug: host, name: guessName(host.split(".").at(-2) ?? host), supported: true };
+  } catch {
+    // not Jobtrain
+  }
+  try {
+    const bh = await bullhornFromPortal(host, http);
+    if (bh) return { ats: "bullhorn", ...bh, site: host, name: guessName(host.split(".").at(-2) ?? host), supported: true };
+  } catch {
+    // not Bullhorn
   }
   // A SuccessFactors career site (RMK) loads SAP's j2w scripts on its search page.
   try {

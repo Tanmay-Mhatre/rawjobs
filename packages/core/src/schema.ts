@@ -53,6 +53,17 @@ export const ATS_TYPES = [
   "avature",
   "pageup",
   "radancy",
+  "oleeo",
+  "jobtrain",
+  "varbi",
+  "reachmee",
+  "jobylon",
+  "homerun",
+  "emply",
+  "bullhorn",
+  "hrmos",
+  "herp",
+  "engage",
 ] as const;
 
 /**
