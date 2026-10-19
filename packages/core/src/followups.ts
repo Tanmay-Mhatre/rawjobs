@@ -96,3 +96,69 @@ export async function remindInterviews(dataDir: string, secrets: TelegramSecrets
   writeFileSync(path, JSON.stringify(due));
   return "sent";
 }
+
+/** Which week's summary was sent last ("2026-10-19", that week's Monday), so it's sent once a week. */
+export const WEEKLY_SENT = "weekly-summary-sent.json";
+
+type Step = { status?: unknown; at?: unknown };
+
+/** Last week's applications and replies (interview, offer, or a rejection), from each job's dated steps. */
+export function lastWeek(state: Record<string, unknown> | undefined, from: number, to: number): { applied: number; replies: number } {
+  let applied = 0;
+  let replies = 0;
+  for (const v of Object.values(state ?? {})) {
+    const e = v as { history?: unknown; closedAs?: unknown } | null;
+    if (!Array.isArray(e?.history)) continue;
+    for (const h of e.history as Step[]) {
+      const t = typeof h?.at === "string" ? Date.parse(h.at) : Number.NaN;
+      if (!(t >= from && t < to)) continue;
+      if (h.status === "applied") applied++;
+      else if (h.status === "interviewing" || h.status === "offer" || (h.status === "rejected" && e?.closedAs === "rejected")) replies++;
+    }
+  }
+  return { applied, replies };
+}
+
+/** "Last week: 4 applications (goal 5), 1 reply." */
+export const weeklyMessage = (w: { applied: number; replies: number }, goal?: number) =>
+  telegramMessage(
+    "📊 <b>Your week</b>",
+    `${plural(w.applied, "application", "applications")}${goal ? ` (goal ${goal})` : ""}, ${plural(w.replies, "reply", "replies")}.`,
+    "See your insights in the Pipeline in RawJobs.",
+  );
+
+/** Once a week, with the first scan from Monday: last week's applications and replies. Never throws. */
+export async function sendWeeklySummary(
+  dataDir: string,
+  secrets: TelegramSecrets,
+  opts: { home?: string; now?: Date; fetchImpl?: Fetch } = {},
+): Promise<"sent" | "not-yet" | "nothing" | `failed: ${string}`> {
+  const now = opts.now ?? new Date();
+  const monday = new Date(now);
+  monday.setHours(0, 0, 0, 0);
+  monday.setDate(monday.getDate() - ((monday.getDay() + 6) % 7));
+  const week = localDay(monday);
+  const path = resolve(dataDir, WEEKLY_SENT);
+  try {
+    if (existsSync(path) && JSON.parse(readFileSync(path, "utf8")) === week) return "not-yet";
+  } catch {
+    // A broken file: send, then write it fresh.
+  }
+  const tracking = readTracking(opts.home);
+  const prev = new Date(monday);
+  prev.setDate(prev.getDate() - 7);
+  const w = lastWeek(tracking?.state, prev.getTime(), monday.getTime());
+  // Nothing tracked last week: no message, and don't check again until next week.
+  if (!w.applied && !w.replies) {
+    writeFileSync(path, JSON.stringify(week));
+    return "nothing";
+  }
+  const goal = (tracking?.prefs as { weeklyGoal?: unknown } | undefined)?.weeklyGoal;
+  try {
+    await sendTelegram(weeklyMessage(w, typeof goal === "number" ? goal : undefined), secrets, opts.fetchImpl);
+  } catch (err) {
+    return `failed: ${(err as Error).message}`;
+  }
+  writeFileSync(path, JSON.stringify(week));
+  return "sent";
+}

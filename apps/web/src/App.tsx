@@ -443,6 +443,8 @@ export function App() {
                   min={meta?.profile.min_score ?? 70}
                   onOpen={onOpen}
                   onPatch={(id, entry, patch) => user.update({ id, ...entry.snapshot, ...pick(jobsById.get(id)) }, patch)}
+                  weeklyGoal={prefs.prefs.weeklyGoal}
+                  onWeeklyGoal={prefs.setWeeklyGoal}
                   onAdd={(j, status) => user.update({ id: `manual:${Date.now().toString(36)}`, ...j, location: "", score: 0 }, { status })}
                   onSetup={notSetUp ? toSetup : undefined}
                   goRadar={() => go({ tab: "radar" })}

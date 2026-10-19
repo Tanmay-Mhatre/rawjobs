@@ -14,6 +14,8 @@ export type Prefs = {
   hiddenCompanies: string[];
   /** Rules you confirmed after a Not interested reason ("Hide senior roles"). Older exports have none. */
   hideRules: HideRule[];
+  /** Applications a week you aim for (Pipeline insights and the weekly Telegram summary). */
+  weeklyGoal?: number;
 };
 
 const KEY = "rawjobs.prefs.v1";
@@ -26,6 +28,7 @@ export const withDefaults = (p: Partial<Prefs>): Prefs => ({
   views: Array.isArray(p.views) ? p.views.map((v) => ({ ...v, filters: { ...DEFAULT_FILTERS, ...v.filters } })) : [],
   hiddenCompanies: Array.isArray(p.hiddenCompanies) ? p.hiddenCompanies : [],
   hideRules: Array.isArray(p.hideRules) ? p.hideRules : [],
+  weeklyGoal: typeof p.weeklyGoal === "number" && p.weeklyGoal >= 1 && p.weeklyGoal <= 100 ? Math.round(p.weeklyGoal) : undefined,
 });
 
 /** Add a rule; one with the same key (a pay rule in the same currency and period) is replaced. */
@@ -56,6 +59,7 @@ export function usePrefs() {
   /** Turn a rule on or off (Undo, and the list under More). */
   const setRule = useCallback((rule: HideRule, on: boolean) => setPrefs((p) => ({ ...p, hideRules: on ? addRule(p.hideRules, rule) : removeRule(p.hideRules, rule) })), []);
   const replacePrefs = useCallback((next: Partial<Prefs>) => setPrefs(withDefaults(next)), []);
+  const setWeeklyGoal = useCallback((weeklyGoal: number | undefined) => setPrefs((p) => withDefaults({ ...p, weeklyGoal })), []);
 
-  return { prefs, saveView, renameView, deleteView, restoreView, setCompanyHidden, setRule, replacePrefs };
+  return { prefs, saveView, renameView, deleteView, restoreView, setCompanyHidden, setRule, replacePrefs, setWeeklyGoal };
 }
