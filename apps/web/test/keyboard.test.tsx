@@ -54,8 +54,8 @@ describe("Pipeline [ / ] moves (design/components/Pipeline)", () => {
         jobsById={new Map([[j.id, j]])}
         min={65}
         onOpen={() => {}}
-        onMove={(id, entry, status) => {
-          onMove?.(status);
+        onPatch={(id, entry, { status }) => {
+          onMove?.(status ?? "");
           setUser((u) => ({ ...u, [id]: { ...entry, status } }));
         }}
         goRadar={() => {}}
