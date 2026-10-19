@@ -34,7 +34,7 @@ import { atsLabel, evergreenReason, INDEX_MAX_AGE_DAYS, isOlder } from "../lib/f
 import { isRoleStale, isStale, staleReasons } from "../lib/stale";
 import { type FitFix, fitFixes, fixApplied, useProfileFix } from "../lib/profileFix";
 import { load, save } from "../lib/storage";
-import { CLOSED_AS, type ClosedAs, type Entry, type EntryPatch, followUpDue, PIPELINE, STATUS_LABEL, type Status, statusLabel } from "../lib/userState";
+import { CLOSED_AS, type ClosedAs, type Entry, type EntryPatch, followUpDue, PIPELINE, quickStatus, STATUS_LABEL, type Status, statusLabel } from "../lib/userState";
 import { Dialog } from "./Dialog";
 import { settingsHash } from "./settings/registry";
 import { HiringActivity } from "./HiringActivity";
@@ -260,6 +260,9 @@ export function JobDetail(p: JobDetailProps) {
     job.employmentType ? { label: "Type", value: EMPLOYMENT_LABEL[job.employmentType], note: `Via ${source}` } : { label: "Type", value: "Not stated", muted: true, note: `Via ${source}` },
   ];
   const saved = status === "saved";
+  // Further along than Saved (Applied, Interviewing…): Save shows where it is and doesn't move it back.
+  const further = !!status && quickStatus(status, "saved") === null;
+  const saveLabel = further && status ? STATUS_LABEL[status] : saved ? "Saved" : "Save";
   // Add or remove the company from My companies; an error comes back as a toast.
   const track = async () => {
     const error = await p.onTrack?.(!p.yours);
@@ -526,15 +529,18 @@ export function JobDetail(p: JobDetailProps) {
         </a>
         {/* Labelled on phones; on wider screens an icon with a tooltip (rj-foot__act), named by aria-label either way. */}
         <Button
-          icon={saved ? <BookmarkCheck className="rj-icon" /> : <Bookmark className="rj-icon" />}
+          icon={saved || further ? <BookmarkCheck className="rj-icon" /> : <Bookmark className="rj-icon" />}
           shortcut="S"
-          onClick={() => p.onUpdate({ status: saved ? undefined : "saved" })}
-          aria-pressed={saved}
-          aria-label={saved ? "Saved" : "Save"}
+          onClick={() => {
+            const next = quickStatus(status, "saved");
+            if (next !== null) p.onUpdate({ status: next });
+          }}
+          aria-pressed={saved || further}
+          aria-label={saveLabel}
           className="rj-foot__act aria-pressed:border-ink aria-pressed:bg-active"
         >
-          <span className="rj-foot__text">{saved ? "Saved" : "Save"}</span>
-          <Tooltip label={saved ? "Saved" : "Save"} shortcut="S" side="above" />
+          <span className="rj-foot__text">{saveLabel}</span>
+          <Tooltip label={saveLabel} shortcut="S" side="above" />
         </Button>
         <Button
           icon={<X className="rj-icon" />}

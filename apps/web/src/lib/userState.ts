@@ -15,7 +15,7 @@ export const STATUS_LABEL: Record<Status, string> = {
   applied: "Applied",
   interviewing: "Interviewing",
   offer: "Offer",
-  rejected: "Rejected",
+  rejected: "Closed",
   dismissed: "Not interested",
 };
 
@@ -106,6 +106,35 @@ export function applyPatch(prev: Entry | undefined, job: JobLike, patch: EntryPa
   return next.status || next.note || next.cv ? next : null;
 }
 
+/** How far along each status is: shortcuts never move a job back down this order. */
+const RANK: Record<Status, number> = { dismissed: 0, saved: 1, applied: 2, rejected: 2, interviewing: 3, offer: 4 };
+
+/**
+ * What a one-tap status (S, A, X, Save, "Did you apply?") does to a job: the new status, undefined
+ * to clear it, or null to leave it alone. Tapping Saved or Not interested again clears it; nothing
+ * else clears progress or moves a job back (Applied never undoes Interviewing). The Pipeline and the
+ * status menu still set any status.
+ */
+export function quickStatus(prev: Status | undefined, s: Status): Status | undefined | null {
+  if (prev === s) return s === "saved" || s === "dismissed" ? undefined : null;
+  if (!prev || prev === "dismissed" || s === "dismissed") return s;
+  if (prev === "rejected") return s === "saved" ? null : s;
+  return RANK[s] > RANK[prev] ? s : null;
+}
+
+/** When the job reached its current status: the last history step there, else its last change. */
+export function stageSince(e: Entry): string {
+  const h = e.history?.findLast((x) => x.status === e.status);
+  return h?.at ?? e.updatedAt;
+}
+
+/** Your tracking with an imported file folded in: for a job in both, the more recently changed entry wins. */
+export function mergeStates(mine: UserState, theirs: UserState): UserState {
+  const out = { ...mine };
+  for (const [id, e] of Object.entries(theirs)) if (!out[id] || e.updatedAt > out[id].updatedAt) out[id] = e;
+  return out;
+}
+
 /** "Rejected", or how a closed job ended ("I withdrew"). */
 export const statusLabel = (e: Pick<Entry, "status" | "closedAs">) => (e.status === "rejected" && e.closedAs ? CLOSED_AS[e.closedAs] : e.status ? STATUS_LABEL[e.status] : "");
 
@@ -140,9 +169,12 @@ export function useUserState() {
     setState((s) => withEntry(s, job.id, applyPatch(s[job.id], job, patch)));
   }, []);
 
-  /** Set a status, or clear it if it's already set (toggle). */
+  /** A one-tap status (see quickStatus); false when it left the job alone because it's further along. */
   const toggleStatus = useCallback((job: JobLike, status: Status) => {
-    setState((s) => withEntry(s, job.id, applyPatch(s[job.id], job, { status: s[job.id]?.status === status ? undefined : status })));
+    const next = quickStatus(latest.current[job.id]?.status, status);
+    if (next === null) return false;
+    setState((s) => withEntry(s, job.id, applyPatch(s[job.id], job, { status: next })));
+    return true;
   }, []);
 
   /** A job's status right now (for handlers that need the value before a change). */

@@ -1,9 +1,9 @@
 import { displayName } from "@rawjobs/core/display-name";
-import { ArrowRight, StickyNote } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import { ArrowRight, ExternalLink, StickyNote } from "lucide-react";
+import { type KeyboardEvent, useEffect, useRef, useState } from "react";
 import type { Job } from "../lib/data";
 import { timeAgo } from "../lib/format";
-import { type Entry, followUpDue, PIPELINE, type PipelineStatus, STATUS_LABEL, type Status, statusLabel, type UserState } from "../lib/userState";
+import { type Entry, followUpDue, PIPELINE, type PipelineStatus, STATUS_LABEL, type Status, stageSince, statusLabel, type UserState } from "../lib/userState";
 import { EmptyState } from "./EmptyState";
 import { Chip, ChipGroup, Kbd, ScoreBadge } from "./primitives";
 import { Button, cx, Select } from "./ui";
@@ -13,7 +13,8 @@ type Props = {
   jobsById: Map<string, Job>;
   min: number;
   onOpen: (job: Job) => void;
-  onMove: (id: string, entry: Entry, status: Status) => void;
+  /** undefined takes the job off the board (its note, if any, stays). */
+  onMove: (id: string, entry: Entry, status: Status | undefined) => void;
   /** Radar not set up yet: the empty state points to setup instead of the Radar. */
   onSetup?: () => void;
   goRadar: () => void;
@@ -67,7 +68,7 @@ export function Pipeline({ user, jobsById, min, onOpen, onMove, onSetup, goRadar
 
   const columns = PIPELINE.map((col) => ({
     col,
-    items: entries.filter(([, e]) => e.status === col).sort((a, b) => b[1].updatedAt.localeCompare(a[1].updatedAt)),
+    items: entries.filter(([, e]) => e.status === col).sort((a, b) => stageSince(b[1]).localeCompare(stageSince(a[1]))),
   }));
   // Default to the first column with cards in it.
   const shown = mobileCol ?? columns.find((c) => c.items.length)?.col ?? PIPELINE[0];
@@ -132,6 +133,11 @@ export function Pipeline({ user, jobsById, min, onOpen, onMove, onSetup, goRadar
                 {items.map(([id, e]) => {
                   const job = jobsById.get(id);
                   const s = e.snapshot;
+                  const onKeys = (ev: KeyboardEvent) => {
+                    if ((ev.key !== "[" && ev.key !== "]") || ev.metaKey || ev.ctrlKey || ev.altKey) return;
+                    ev.preventDefault();
+                    moveBy(id, e, ev.key === "[" ? -1 : 1);
+                  };
                   return (
                     // biome-ignore lint/a11y/useKeyWithClickEvents: mouse shortcut: the card's title button is the keyboard and screen-reader way in
                     <li
@@ -155,14 +161,25 @@ export function Pipeline({ user, jobsById, min, onOpen, onMove, onSetup, goRadar
                               ev.stopPropagation();
                               onOpen(job);
                             }}
-                            onKeyDown={(ev) => {
-                              if ((ev.key !== "[" && ev.key !== "]") || ev.metaKey || ev.ctrlKey || ev.altKey) return;
-                              ev.preventDefault();
-                              moveBy(id, e, ev.key === "[" ? -1 : 1);
-                            }}
+                            onKeyDown={onKeys}
                           >
                             {s.title}
                           </button>
+                        ) : s.url ? (
+                          // No longer listed: the saved link still opens the posting (it may be gone at the company too).
+                          <a
+                            href={s.url}
+                            target="_blank"
+                            rel="noreferrer"
+                            data-card-title
+                            aria-describedby="pipeline-move-help"
+                            aria-keyshortcuts="[ ]"
+                            className="type-small font-semibold leading-5 hover:underline"
+                            onClick={(ev) => ev.stopPropagation()}
+                            onKeyDown={onKeys}
+                          >
+                            {s.title} <ExternalLink className="inline size-3 align-baseline text-muted" aria-label="(opens the posting)" />
+                          </a>
                         ) : (
                           <p className="type-small font-semibold leading-5">{s.title}</p>
                         )}
@@ -184,14 +201,15 @@ export function Pipeline({ user, jobsById, min, onOpen, onMove, onSetup, goRadar
                       <div className="mt-2 flex items-center justify-between gap-2">
                         <span className="type-meta text-muted">
                           {job?.status === "closed" ? "Closed · " : !job ? "No longer listed · " : ""}
-                          {timeAgo(e.updatedAt)}
+                          {/* Time in this stage, not since the last note edit. */}
+                          {timeAgo(stageSince(e))}
                         </span>
                         {/* Keyboard / touch alternative to dragging */}
                         <Select
                           aria-label={`Move ${s.title} to`}
                           value={e.status}
                           onClick={(ev) => ev.stopPropagation()}
-                          onChange={(ev) => onMove(id, e, ev.target.value as Status)}
+                          onChange={(ev) => onMove(id, e, (ev.target.value || undefined) as Status | undefined)}
                           className="h-8 px-1.5 type-small"
                         >
                           {PIPELINE.map((p) => (
@@ -199,6 +217,7 @@ export function Pipeline({ user, jobsById, min, onOpen, onMove, onSetup, goRadar
                               {STATUS_LABEL[p]}
                             </option>
                           ))}
+                          <option value="">Remove</option>
                         </Select>
                       </div>
                     </li>

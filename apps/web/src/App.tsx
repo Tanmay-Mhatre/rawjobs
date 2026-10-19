@@ -39,7 +39,7 @@ import { hasNewTag } from "./lib/filters";
 import { roleOf } from "./lib/identity";
 import { ignoreShortcut, useGoToKeys } from "./lib/keys";
 import { useSavedAppearance, useTheme } from "./lib/theme";
-import { useUserState, type Status } from "./lib/userState";
+import { quickStatus, STATUS_LABEL, type Status, useUserState } from "./lib/userState";
 import wordmarkInk from "./design/logos/rawjobs-wordmark-ink.svg";
 import wordmarkPaper from "./design/logos/rawjobs-wordmark-paper.svg";
 import { Wizard } from "./setup/Wizard";
@@ -189,7 +189,11 @@ export function App() {
   const onStatus = useCallback(
     (job: Job, s: Status) => {
       const prev = statusOf(job.id);
-      toggleStatus(job, s);
+      // One tap never undoes progress: an Interviewing job stays put when you press A or S.
+      if (!toggleStatus(job, s)) {
+        if (prev) toast({ message: `Already ${STATUS_LABEL[prev]}. Change it in the job's progress menu or the Pipeline.` });
+        return;
+      }
       if (s === "dismissed" && prev !== "dismissed") askWhy(job, prev);
     },
     [statusOf, toggleStatus, askWhy],
@@ -568,7 +572,8 @@ export function App() {
         <ApplyPrompt
           job={applying}
           onAnswer={(applied) => {
-            if (applied && applying) user.update(applying, { status: "applied" });
+            // Never moves a job back: one already Interviewing stays there.
+            if (applied && applying && quickStatus(user.statusOf(applying.id), "applied") === "applied") user.update(applying, { status: "applied" });
             setApplying(null);
           }}
         />
