@@ -19,6 +19,7 @@ import {
   type UserState,
 } from "../lib/userState";
 import { EmptyState } from "./EmptyState";
+import { PipelineInsights } from "./PipelineInsights";
 import { AddJobDialog, nextInterview, TrackedJobDialog } from "./TrackedJob";
 import { Chip, ChipGroup, Kbd, ScoreBadge } from "./primitives";
 import { Button, cx, Select } from "./ui";
@@ -32,12 +33,14 @@ type Props = {
   onPatch: (id: string, entry: Entry, patch: EntryPatch) => void;
   /** Track a job RawJobs didn't find. */
   onAdd: (job: { title: string; company: string; url: string }, status: Status) => void;
+  weeklyGoal?: number;
+  onWeeklyGoal: (goal: number | undefined) => void;
   /** Radar not set up yet: the empty state points to setup instead of the Radar. */
   onSetup?: () => void;
   goRadar: () => void;
 };
 
-export function Pipeline({ user, jobsById, min, onOpen, onPatch, onAdd, onSetup, goRadar }: Props) {
+export function Pipeline({ user, jobsById, min, onOpen, onPatch, onAdd, weeklyGoal, onWeeklyGoal, onSetup, goRadar }: Props) {
   /** A card for a job not on the Radar (added by hand, or no longer listed) opens here instead of the job drawer. */
   const [editing, setEditing] = useState<string | null>(null);
   const [adding, setAdding] = useState(false);
@@ -123,6 +126,7 @@ export function Pipeline({ user, jobsById, min, onOpen, onPatch, onAdd, onSetup,
           <Plus className="size-4" /> Track a job
         </Button>
       </div>
+      <PipelineInsights user={user} goal={weeklyGoal} onGoal={onWeeklyGoal} />
       <FollowUps user={user} jobsById={jobsById} onOpen={onOpen} onPatch={onPatch} />
       <p id="pipeline-move-help" className="sr-only">
         Press [ or ] to move this job to the previous or next stage.

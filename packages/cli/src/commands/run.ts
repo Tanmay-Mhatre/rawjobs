@@ -19,6 +19,7 @@ import {
   telegramSecrets,
   remindFollowUps,
   remindInterviews,
+  sendWeeklySummary,
   recordScheduledRun,
   type MergeResult,
   type RunResult,
@@ -251,6 +252,8 @@ export async function cmdRun(args: string[]): Promise<number> {
         if (followUps !== "nothing-due") console.error(`Telegram: ${followUps === "sent" ? "sent a follow-up reminder" : followUps}`);
         const interviews = await remindInterviews(dataDir, telegramSecrets());
         if (interviews !== "nothing-due") console.error(`Telegram: ${interviews === "sent" ? "sent an interview reminder" : interviews}`);
+        const weekly = await sendWeeklySummary(dataDir, telegramSecrets());
+        if (weekly === "sent" || weekly.startsWith("failed")) console.error(`Telegram: ${weekly === "sent" ? "sent the weekly summary" : weekly}`);
       }
       let newMatches = fresh;
       if (wantsBackground(config, values, scope, { stopped, fallback })) {

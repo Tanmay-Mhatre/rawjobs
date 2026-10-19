@@ -2,7 +2,7 @@ import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-import { dueFollowUps, dueInterviews, followUpMessage, remindFollowUps } from "../src/followups";
+import { dueFollowUps, dueInterviews, followUpMessage, lastWeek, remindFollowUps } from "../src/followups";
 
 const secrets = { token: "123:abc", chatId: "42" };
 
@@ -62,5 +62,24 @@ describe("interview reminders", () => {
       c: { status: "applied", interviews: "nope" },
     };
     expect(dueInterviews(state, "2026-10-19", "2026-10-20")).toEqual(["a 2026-10-20", "b 2026-10-19"]);
+  });
+});
+
+describe("weekly summary", () => {
+  it("counts last week's applications and replies from dated steps", () => {
+    const from = Date.parse("2026-10-12T00:00:00Z");
+    const to = Date.parse("2026-10-19T00:00:00Z");
+    const state = {
+      a: {
+        history: [
+          { status: "applied", at: "2026-10-13T09:00:00Z" },
+          { status: "interviewing", at: "2026-10-16T09:00:00Z" },
+        ],
+      },
+      b: { history: [{ status: "applied", at: "2026-10-20T09:00:00Z" }] },
+      c: { closedAs: "no-response", history: [{ status: "rejected", at: "2026-10-14T09:00:00Z" }] },
+      d: { closedAs: "rejected", history: [{ status: "rejected", at: "2026-10-15T09:00:00Z" }] },
+    };
+    expect(lastWeek(state, from, to)).toEqual({ applied: 1, replies: 2 });
   });
 });
