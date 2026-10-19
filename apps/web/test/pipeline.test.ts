@@ -71,3 +71,12 @@ describe("follow-ups", () => {
     expect(dayAfter(stageSince(moved), 0)).toBe("2026-10-05");
   });
 });
+
+describe("chasing a quiet application", () => {
+  it("waits for the new follow-up date before nudging again", () => {
+    const applied = applyPatch(undefined, job, { status: "applied" }, "2026-10-01T09:00:00Z")!;
+    const chased = applyPatch(applied, job, { followUp: "2026-10-30" }, "2026-10-23T09:00:00Z")!;
+    expect(goneQuiet(chased, new Date("2026-10-24T09:00:00Z"))).toBe(false);
+    expect(goneQuiet(chased, new Date("2026-10-30T09:00:00Z"))).toBe(true);
+  });
+});

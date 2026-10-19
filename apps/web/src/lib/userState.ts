@@ -88,8 +88,9 @@ export const today = (now = new Date()) => dayAfter(now.toISOString(), 0);
 /** The follow-up date has come (applied, and the date is today or past). */
 export const followUpDue = (e: Entry | undefined, now = new Date()) => !!e?.followUp && e.status === "applied" && e.followUp <= today(now);
 
-/** Applied this many days ago and nothing since: likely ghosted. */
-export const goneQuiet = (e: Entry | undefined, now = new Date()) => !!e && e.status === "applied" && now.getTime() - Date.parse(stageSince(e)) >= QUIET_DAYS * 864e5;
+/** Applied this many days ago and nothing since: likely ghosted. A follow-up date still ahead (you just chased it) waits for that date. */
+export const goneQuiet = (e: Entry | undefined, now = new Date()) =>
+  !!e && e.status === "applied" && !(e.followUp && e.followUp > today(now)) && now.getTime() - Date.parse(stageSince(e)) >= QUIET_DAYS * 864e5;
 
 /** One job's entry after a change; null when nothing is left to keep. */
 export function applyPatch(prev: Entry | undefined, job: JobLike, patch: EntryPatch, now = new Date().toISOString()): Entry | null {
