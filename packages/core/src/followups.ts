@@ -162,3 +162,44 @@ export async function sendWeeklySummary(
   writeFileSync(path, JSON.stringify(week));
   return "sent";
 }
+
+/** Which offer-deadline reminders were already sent ("<job id> <day>"). */
+export const DEADLINES_SENT = "offer-deadlines-sent.json";
+
+/** Offers whose answer-by date is today or tomorrow, still at Offer. */
+export function dueDeadlines(state: Record<string, unknown> | undefined, today: string, tomorrow: string): string[] {
+  const keys: string[] = [];
+  for (const [id, v] of Object.entries(state ?? {})) {
+    const e = v as { status?: unknown; offer?: { deadline?: unknown } } | null;
+    const d = e?.offer?.deadline;
+    if (e?.status === "offer" && (d === today || d === tomorrow)) keys.push(`${id} ${d}`);
+  }
+  return keys;
+}
+
+export const deadlineMessage = (n: number) =>
+  telegramMessage("⏳ <b>Offer deadline</b>", `${plural(n, "offer needs", "offers need")} an answer today or tomorrow.`, "Compare them in the Pipeline in RawJobs.");
+
+/** One Telegram message for offer deadlines today or tomorrow, each sent once. Never throws. */
+export async function remindDeadlines(dataDir: string, secrets: TelegramSecrets, opts: { home?: string; now?: Date; fetchImpl?: Fetch } = {}): Promise<"sent" | "nothing-due" | `failed: ${string}`> {
+  const now = opts.now ?? new Date();
+  const tomorrow = new Date(now);
+  tomorrow.setDate(tomorrow.getDate() + 1);
+  const due = dueDeadlines(readTracking(opts.home)?.state, localDay(now), localDay(tomorrow));
+  const path = resolve(dataDir, DEADLINES_SENT);
+  let sent: string[] = [];
+  try {
+    if (existsSync(path)) sent = JSON.parse(readFileSync(path, "utf8")) as string[];
+  } catch {
+    sent = [];
+  }
+  const fresh = due.filter((k) => !sent.includes(k));
+  if (!fresh.length) return "nothing-due";
+  try {
+    await sendTelegram(deadlineMessage(fresh.length), secrets, opts.fetchImpl);
+  } catch (err) {
+    return `failed: ${(err as Error).message}`;
+  }
+  writeFileSync(path, JSON.stringify(due));
+  return "sent";
+}

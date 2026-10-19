@@ -20,7 +20,7 @@ import {
 } from "../lib/userState";
 import { EmptyState } from "./EmptyState";
 import { PipelineInsights } from "./PipelineInsights";
-import { AddJobDialog, nextInterview, TrackedJobDialog } from "./TrackedJob";
+import { AddJobDialog, CompareOffers, nextInterview, TrackedJobDialog } from "./TrackedJob";
 import { Chip, ChipGroup, Kbd, ScoreBadge } from "./primitives";
 import { Button, cx, Select } from "./ui";
 
@@ -44,6 +44,11 @@ export function Pipeline({ user, jobsById, min, onOpen, onPatch, onAdd, weeklyGo
   /** A card for a job not on the Radar (added by hand, or no longer listed) opens here instead of the job drawer. */
   const [editing, setEditing] = useState<string | null>(null);
   const [adding, setAdding] = useState(false);
+  const [comparing, setComparing] = useState(false);
+  // Every job with offer terms written down, whatever its stage now (accepted, declined…).
+  const offers = Object.entries(user)
+    .filter(([, e]) => e.offer && e.status !== "dismissed")
+    .map(([id, entry]) => ({ id, entry }));
   const addDialog = <AddJobDialog open={adding} onClose={() => setAdding(false)} onAdd={onAdd} />;
   const onMove = (id: string, entry: Entry, status: Status | undefined) => onPatch(id, entry, { status });
   const [dragOver, setDragOver] = useState<PipelineStatus | null>(null);
@@ -121,7 +126,13 @@ export function Pipeline({ user, jobsById, min, onOpen, onPatch, onAdd, weeklyGo
     <div ref={boardRef} className="pb-2 md:overflow-x-auto">
       {addDialog}
       <TrackedJobDialog entry={editing ? user[editing] : undefined} onClose={() => setEditing(null)} onUpdate={(patch) => editing && user[editing] && onPatch(editing, user[editing], patch)} />
-      <div className="mb-3 flex justify-end">
+      {comparing && <CompareOffers offers={offers} onClose={() => setComparing(false)} />}
+      <div className="mb-3 flex justify-end gap-2">
+        {offers.length >= 2 && (
+          <Button size="sm" onClick={() => setComparing(true)}>
+            Compare {offers.length} offers
+          </Button>
+        )}
         <Button size="sm" onClick={() => setAdding(true)}>
           <Plus className="size-4" /> Track a job
         </Button>
