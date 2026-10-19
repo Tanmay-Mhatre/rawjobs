@@ -41,6 +41,7 @@ import { HiringActivity } from "./HiringActivity";
 import { ReasonPicker, useNotForMe } from "./NotForMe";
 import { Button, buttonClass, IconButton, Menu, ScoreBadge, scoreBandOf, ScoreBreakdown, scoreParts, Tooltip } from "./primitives";
 import { toast } from "./Toast";
+import { TrackingExtras } from "./TrackedJob";
 import { cx, Select } from "./ui";
 
 export type JobDetailProps = {
@@ -408,6 +409,7 @@ export function JobDetail(p: JobDetailProps) {
               <CvField key={`cv:${job.id}`} id={`cv-${job.id}`} cv={entry?.cv ?? ""} onSave={(cv) => p.onUpdate({ cv: cv || undefined })} />
             </div>
             {entry && <ProgressLine entry={entry} onUpdate={p.onUpdate} id={`follow-${job.id}`} />}
+            {entry?.status && entry.status !== "dismissed" && entry.status !== "saved" && <TrackingExtras key={`extras:${job.id}`} entry={entry} onUpdate={p.onUpdate} />}
             {status === "dismissed" && <ReasonPicker key={`why:${job.id}`} job={job} label="Why not? Optional." live />}
           </section>
 

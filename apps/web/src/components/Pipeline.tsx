@@ -1,5 +1,5 @@
 import { displayName } from "@rawjobs/core/display-name";
-import { ArrowRight, BellRing, ExternalLink, StickyNote } from "lucide-react";
+import { ArrowRight, BellRing, CalendarClock, ExternalLink, Plus, StickyNote } from "lucide-react";
 import { type KeyboardEvent, useEffect, useRef, useState } from "react";
 import type { Job } from "../lib/data";
 import { timeAgo } from "../lib/format";
@@ -19,6 +19,7 @@ import {
   type UserState,
 } from "../lib/userState";
 import { EmptyState } from "./EmptyState";
+import { AddJobDialog, nextInterview, TrackedJobDialog } from "./TrackedJob";
 import { Chip, ChipGroup, Kbd, ScoreBadge } from "./primitives";
 import { Button, cx, Select } from "./ui";
 
@@ -29,12 +30,18 @@ type Props = {
   onOpen: (job: Job) => void;
   /** Change one card: a move (status undefined takes it off the board; its note, if any, stays), a follow-up date… */
   onPatch: (id: string, entry: Entry, patch: EntryPatch) => void;
+  /** Track a job RawJobs didn't find. */
+  onAdd: (job: { title: string; company: string; url: string }, status: Status) => void;
   /** Radar not set up yet: the empty state points to setup instead of the Radar. */
   onSetup?: () => void;
   goRadar: () => void;
 };
 
-export function Pipeline({ user, jobsById, min, onOpen, onPatch, onSetup, goRadar }: Props) {
+export function Pipeline({ user, jobsById, min, onOpen, onPatch, onAdd, onSetup, goRadar }: Props) {
+  /** A card for a job not on the Radar (added by hand, or no longer listed) opens here instead of the job drawer. */
+  const [editing, setEditing] = useState<string | null>(null);
+  const [adding, setAdding] = useState(false);
+  const addDialog = <AddJobDialog open={adding} onClose={() => setAdding(false)} onAdd={onAdd} />;
   const onMove = (id: string, entry: Entry, status: Status | undefined) => onPatch(id, entry, { status });
   const [dragOver, setDragOver] = useState<PipelineStatus | null>(null);
   /** Phones show one column at a time, picked from the status chips. */
@@ -56,28 +63,35 @@ export function Pipeline({ user, jobsById, min, onOpen, onPatch, onSetup, goRada
 
   if (total === 0) {
     return (
-      <EmptyState
-        title="Track your applications here"
-        actions={
-          onSetup ? (
-            <Button variant="primary" onClick={onSetup}>
-              Set up my radar <ArrowRight className="size-4" />
-            </Button>
+      <>
+        {addDialog}
+        <EmptyState
+          title="Track your applications here"
+          actions={
+            onSetup ? (
+              <Button variant="primary" onClick={onSetup}>
+                Set up my radar <ArrowRight className="size-4" />
+              </Button>
+            ) : (
+              <Button variant="primary" onClick={goRadar}>
+                Browse my matches <ArrowRight className="size-4" />
+              </Button>
+            )
+          }
+        >
+          {onSetup ? (
+            "Jobs you save or apply to show up here as cards you can move from Saved to Offer. Set up your radar to start finding them."
           ) : (
-            <Button variant="primary" onClick={goRadar}>
-              Browse my matches <ArrowRight className="size-4" />
-            </Button>
-          )
-        }
-      >
-        {onSetup ? (
-          "Jobs you save or apply to show up here as cards you can move from Saved to Offer. Set up your radar to start finding them."
-        ) : (
-          <>
-            Save a job on the Radar (press <Kbd>S</Kbd>) and it shows up here. Drag cards between columns as you progress.
-          </>
-        )}
-      </EmptyState>
+            <>
+              Save a job on the Radar (press <Kbd>S</Kbd>) and it shows up here. Drag cards between columns as you progress. Applied somewhere else?{" "}
+              <button type="button" className="font-medium text-ink underline" onClick={() => setAdding(true)}>
+                Track a job by hand
+              </button>
+              .
+            </>
+          )}
+        </EmptyState>
+      </>
     );
   }
 
@@ -102,6 +116,13 @@ export function Pipeline({ user, jobsById, min, onOpen, onPatch, onSetup, goRada
 
   return (
     <div ref={boardRef} className="pb-2 md:overflow-x-auto">
+      {addDialog}
+      <TrackedJobDialog entry={editing ? user[editing] : undefined} onClose={() => setEditing(null)} onUpdate={(patch) => editing && user[editing] && onPatch(editing, user[editing], patch)} />
+      <div className="mb-3 flex justify-end">
+        <Button size="sm" onClick={() => setAdding(true)}>
+          <Plus className="size-4" /> Track a job
+        </Button>
+      </div>
       <FollowUps user={user} jobsById={jobsById} onOpen={onOpen} onPatch={onPatch} />
       <p id="pipeline-move-help" className="sr-only">
         Press [ or ] to move this job to the previous or next stage.
@@ -162,8 +183,8 @@ export function Pipeline({ user, jobsById, min, onOpen, onPatch, onSetup, goRada
                       draggable
                       onDragStart={(ev) => ev.dataTransfer.setData("text/plain", id)}
                       // Mouse shortcut: the whole card opens the job; the title button is the keyboard / screen-reader way in.
-                      onClick={() => job && onOpen(job)}
-                      className={cx("rounded-md border border-line bg-raised p-3 shadow-l1 transition-shadow hover:shadow-l2", job ? "cursor-pointer" : "cursor-grab")}
+                      onClick={() => (job ? onOpen(job) : setEditing(id))}
+                      className="cursor-pointer rounded-md border border-line bg-raised p-3 shadow-l1 transition-shadow hover:shadow-l2"
                     >
                       <div className="flex items-start justify-between gap-2">
                         {job ? (
@@ -199,7 +220,8 @@ export function Pipeline({ user, jobsById, min, onOpen, onPatch, onSetup, goRada
                         ) : (
                           <p className="type-small font-semibold leading-5">{s.title}</p>
                         )}
-                        <ScoreBadge score={job?.score ?? s.score} threshold={min} estimated={job?.estimated} className="shrink-0" />
+                        {/* Added by hand: never scored. */}
+                        {!id.startsWith("manual:") && <ScoreBadge score={job?.score ?? s.score} threshold={min} estimated={job?.estimated} className="shrink-0" />}
                       </div>
                       <p className="mt-0.5 type-small text-muted">{displayName(s.company)}</p>
                       {e.note && (
@@ -209,6 +231,12 @@ export function Pipeline({ user, jobsById, min, onOpen, onPatch, onSetup, goRada
                         </p>
                       )}
                       {e.status === "rejected" && e.closedAs && e.closedAs !== "rejected" && <p className="mt-2 type-meta text-muted">{statusLabel(e)}</p>}
+                      {nextInterview(e) && (
+                        <p className="mt-2 flex items-center gap-1 type-meta font-medium text-ink">
+                          <CalendarClock className="size-3.5" aria-hidden />
+                          {nextInterview(e)?.what} {new Date(`${nextInterview(e)?.on}T12:00:00`).toLocaleDateString(undefined, { month: "short", day: "numeric" })}
+                        </p>
+                      )}
                       {e.followUp && (
                         <p className={cx("mt-2 type-meta", followUpDue(e) ? "font-medium text-warning-text" : "text-muted")}>
                           {followUpDue(e) ? "Follow up now" : `Follow up ${new Date(`${e.followUp}T12:00:00`).toLocaleDateString(undefined, { month: "short", day: "numeric" })}`}
@@ -216,7 +244,7 @@ export function Pipeline({ user, jobsById, min, onOpen, onPatch, onSetup, goRada
                       )}
                       <div className="mt-2 flex items-center justify-between gap-2">
                         <span className="type-meta text-muted">
-                          {job?.status === "closed" ? "Closed · " : !job ? "No longer listed · " : ""}
+                          {job?.status === "closed" ? "Closed · " : id.startsWith("manual:") ? "Added by you · " : !job ? "No longer listed · " : ""}
                           {/* Time in this stage, not since the last note edit. */}
                           {timeAgo(stageSince(e))}
                         </span>

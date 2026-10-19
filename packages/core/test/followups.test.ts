@@ -2,7 +2,7 @@ import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-import { dueFollowUps, followUpMessage, remindFollowUps } from "../src/followups";
+import { dueFollowUps, dueInterviews, followUpMessage, remindFollowUps } from "../src/followups";
 
 const secrets = { token: "123:abc", chatId: "42" };
 
@@ -45,5 +45,22 @@ describe("follow-up reminders", () => {
     expect(s.sent).toHaveLength(1);
     writeFileSync(join(s.home, "profile", "tracking.json"), JSON.stringify({ state: { a: { status: "applied", followUp: "2026-10-24" } } }));
     expect(await remindFollowUps(s.dataDir, secrets, { home: s.home, now, fetchImpl: s.fetchImpl })).toBe("sent");
+  });
+});
+
+describe("interview reminders", () => {
+  it("finds interviews today or tomorrow only", () => {
+    const state = {
+      a: {
+        status: "interviewing",
+        interviews: [
+          { on: "2026-10-20", what: "Technical" },
+          { on: "2026-10-28", what: "Final" },
+        ],
+      },
+      b: { status: "interviewing", interviews: [{ on: "2026-10-19", what: "Screen" }] },
+      c: { status: "applied", interviews: "nope" },
+    };
+    expect(dueInterviews(state, "2026-10-19", "2026-10-20")).toEqual(["a 2026-10-20", "b 2026-10-19"]);
   });
 });
