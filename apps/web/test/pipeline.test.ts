@@ -88,3 +88,11 @@ describe("interviews and people", () => {
     expect(e).not.toHaveProperty("contacts");
   });
 });
+
+describe("offers", () => {
+  it("keeps the terms you wrote and drops an empty offer", () => {
+    const e = applyPatch(undefined, job, { status: "offer", offer: { pay: "AED 45k a month", deadline: "2026-10-25" } }, "2026-10-19T09:00:00Z")!;
+    expect(e.offer).toEqual({ pay: "AED 45k a month", deadline: "2026-10-25" });
+    expect(applyPatch(e, job, { offer: { pay: undefined } }, "2026-10-19T10:00:00Z")).not.toHaveProperty("offer");
+  });
+});

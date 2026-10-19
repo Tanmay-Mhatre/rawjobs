@@ -2,7 +2,7 @@ import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-import { dueFollowUps, dueInterviews, followUpMessage, lastWeek, remindFollowUps } from "../src/followups";
+import { dueDeadlines, dueFollowUps, dueInterviews, followUpMessage, lastWeek, remindFollowUps } from "../src/followups";
 
 const secrets = { token: "123:abc", chatId: "42" };
 
@@ -81,5 +81,16 @@ describe("weekly summary", () => {
       d: { closedAs: "rejected", history: [{ status: "rejected", at: "2026-10-15T09:00:00Z" }] },
     };
     expect(lastWeek(state, from, to)).toEqual({ applied: 1, replies: 2 });
+  });
+});
+
+describe("offer deadlines", () => {
+  it("finds offers to answer today or tomorrow, only while at Offer", () => {
+    const state = {
+      a: { status: "offer", offer: { deadline: "2026-10-20" } },
+      b: { status: "rejected", offer: { deadline: "2026-10-20" } },
+      c: { status: "offer", offer: { deadline: "2026-10-30" } },
+    };
+    expect(dueDeadlines(state, "2026-10-19", "2026-10-20")).toEqual(["a 2026-10-20"]);
   });
 });

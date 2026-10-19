@@ -34,6 +34,10 @@ export type Interview = { on: string; what: string };
 /** Someone at the company for this job: a recruiter, a referrer, the hiring manager. */
 export type Contact = { name: string; role?: string; link?: string };
 
+/** What an offer says, as you'd write it ("AED 45k a month", "15%"); dates are YYYY-MM-DD. */
+export type Offer = { pay?: string; bonus?: string; equity?: string; location?: string; start?: string; deadline?: string; note?: string };
+export const OFFER_FIELDS = ["pay", "bonus", "equity", "location", "start", "deadline", "note"] as const;
+
 /** Your own tracking for one job. Saved on this computer (profile/tracking.json) and in this browser; export/import to move it. */
 export type Entry = {
   status?: Status;
@@ -50,6 +54,8 @@ export type Entry = {
   cv?: string;
   interviews?: Interview[];
   contacts?: Contact[];
+  /** The offer's terms, kept once you have one (also after you accept or decline). */
+  offer?: Offer;
   updatedAt: string;
   /** Copy of the job's basics, so the pipeline survives the job leaving jobs.json. */
   snapshot: {
@@ -77,7 +83,7 @@ function withFit(job: JobLike, prev: Entry | undefined): { fit?: number[] } {
 const KEY = "rawjobs.state.v1";
 
 /** What a change to one job's tracking can set; a key given as undefined clears it. */
-export type EntryPatch = Partial<Pick<Entry, "status" | "note" | "reason" | "closedAs" | "followUp" | "cv" | "interviews" | "contacts">> & {
+export type EntryPatch = Partial<Pick<Entry, "status" | "note" | "reason" | "closedAs" | "followUp" | "cv" | "interviews" | "contacts" | "offer">> & {
   /** Move the date you reached the current status (YYYY-MM-DD), e.g. you applied before tracking it. */
   since?: string;
 };
@@ -128,6 +134,7 @@ export function applyPatch(prev: Entry | undefined, job: JobLike, patch: EntryPa
   }
   for (const k of ["note", "cv", "followUp", "closedAs", "reason"] as const) if (!next[k]) delete next[k];
   for (const k of ["interviews", "contacts"] as const) if (!next[k]?.length) delete next[k];
+  if (next.offer && !Object.values(next.offer).some(Boolean)) delete next.offer;
   return next.status || next.note || next.cv ? next : null;
 }
 
@@ -252,6 +259,14 @@ function entryFrom(v: unknown): Entry | undefined {
     ...(e.status === "applied" && isText(e.followUp) && /^\d{4}-\d{2}-\d{2}$/.test(e.followUp) ? { followUp: e.followUp } : {}),
     ...(isText(e.cv) && e.cv ? { cv: e.cv } : {}),
     ...listOf(e.interviews, (i) => /^\d{4}-\d{2}-\d{2}$/.test(String(i.on)) && isText(i.what), "interviews"),
+    ...(e.offer && typeof e.offer === "object"
+      ? (() => {
+          const o = Object.fromEntries(
+            OFFER_FIELDS.flatMap((k) => (isText((e.offer as Record<string, unknown>)[k]) && (e.offer as Record<string, string>)[k] ? [[k, (e.offer as Record<string, string>)[k]]] : [])),
+          );
+          return Object.keys(o).length ? { offer: o as Offer } : {};
+        })()
+      : {}),
     ...listOf(e.contacts, (c) => isText(c.name) && !!c.name && (c.role === undefined || isText(c.role)) && (c.link === undefined || isText(c.link)), "contacts"),
     updatedAt: e.updatedAt,
     snapshot: {

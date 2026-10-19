@@ -1,7 +1,7 @@
 import { displayName } from "@rawjobs/core/display-name";
 import { CalendarClock, ExternalLink, Plus, UserRound, X } from "lucide-react";
 import { type FormEvent, useState } from "react";
-import { type Entry, type EntryPatch, type Interview, PIPELINE, STATUS_LABEL, type Status, today } from "../lib/userState";
+import { type Entry, type EntryPatch, type Interview, OFFER_FIELDS, type Offer, PIPELINE, STATUS_LABEL, type Status, today } from "../lib/userState";
 import { Dialog } from "./Dialog";
 import { Button, Card, IconButton, Select } from "./ui";
 
@@ -35,67 +35,161 @@ export function TrackingExtras({ entry, onUpdate }: { entry: Entry; onUpdate: (p
     ev.currentTarget.reset();
   };
   return (
-    <div className="grid gap-4 sm:grid-cols-2">
-      <div>
-        <h4 className="flex items-center gap-1.5 type-label">
-          <CalendarClock className="size-3.5" aria-hidden /> Interviews
-        </h4>
-        {interviews.length > 0 && (
-          <ul className="mt-1 grid gap-1 type-small">
-            {interviews.map((i) => (
-              <li key={`${i.on}:${i.what}`} className="flex items-center gap-2">
-                <span className="tabular text-muted">{day(i.on)}</span>
-                <span className="min-w-0 flex-1 truncate">{i.what}</span>
-                <IconButton label={`Remove ${i.what} on ${day(i.on)}`} className="size-7" onClick={() => onUpdate({ interviews: (entry.interviews ?? []).filter((x) => x !== i) })}>
-                  <X className="size-3.5" />
-                </IconButton>
-              </li>
-            ))}
-          </ul>
-        )}
-        <form onSubmit={addInterview} className="mt-1.5 flex gap-1.5">
-          <input name="on" type="date" required aria-label="Interview date" className={input} />
-          <input name="what" aria-label="Which round" placeholder="Screen, technical…" className={`${input} flex-1`} />
-          <IconButton type="submit" label="Add interview" className="size-8">
-            <Plus className="size-4" />
-          </IconButton>
-        </form>
-      </div>
-      <div>
-        <h4 className="flex items-center gap-1.5 type-label">
-          <UserRound className="size-3.5" aria-hidden /> People
-        </h4>
-        {contacts.length > 0 && (
-          <ul className="mt-1 grid gap-1 type-small">
-            {contacts.map((c) => (
-              <li key={`${c.name}:${c.link ?? ""}`} className="flex items-center gap-2">
-                <span className="min-w-0 flex-1 truncate">
-                  {c.link ? (
-                    <a href={c.link} target="_blank" rel="noreferrer" className="font-medium hover:underline">
-                      {c.name}
-                    </a>
-                  ) : (
-                    <span className="font-medium">{c.name}</span>
-                  )}
-                  {c.role && <span className="text-muted"> · {c.role}</span>}
-                </span>
-                <IconButton label={`Remove ${c.name}`} className="size-7" onClick={() => onUpdate({ contacts: contacts.filter((x) => x !== c) })}>
-                  <X className="size-3.5" />
-                </IconButton>
-              </li>
-            ))}
-          </ul>
-        )}
-        <form onSubmit={addContact} className="mt-1.5 grid grid-cols-[1fr_1fr_auto] gap-1.5">
-          <input name="name" required aria-label="Name" placeholder="Name" className={input} />
-          <input name="role" aria-label="Role" placeholder="Recruiter, referrer…" className={input} />
-          <IconButton type="submit" label="Add person" className="size-8">
-            <Plus className="size-4" />
-          </IconButton>
-          <input name="link" type="url" aria-label="Profile link (optional)" placeholder="LinkedIn link (optional)" className={`${input} col-span-2`} />
-        </form>
+    <div className="grid gap-4">
+      {entry.status === "offer" || entry.offer ? <OfferFields offer={entry.offer ?? {}} onSave={(offer) => onUpdate({ offer })} /> : null}
+      <div className="grid gap-4 sm:grid-cols-2">
+        <div>
+          <h4 className="flex items-center gap-1.5 type-label">
+            <CalendarClock className="size-3.5" aria-hidden /> Interviews
+          </h4>
+          {interviews.length > 0 && (
+            <ul className="mt-1 grid gap-1 type-small">
+              {interviews.map((i) => (
+                <li key={`${i.on}:${i.what}`} className="flex items-center gap-2">
+                  <span className="tabular text-muted">{day(i.on)}</span>
+                  <span className="min-w-0 flex-1 truncate">{i.what}</span>
+                  <IconButton label={`Remove ${i.what} on ${day(i.on)}`} className="size-7" onClick={() => onUpdate({ interviews: (entry.interviews ?? []).filter((x) => x !== i) })}>
+                    <X className="size-3.5" />
+                  </IconButton>
+                </li>
+              ))}
+            </ul>
+          )}
+          <form onSubmit={addInterview} className="mt-1.5 flex gap-1.5">
+            <input name="on" type="date" required aria-label="Interview date" className={input} />
+            <input name="what" aria-label="Which round" placeholder="Screen, technical…" className={`${input} flex-1`} />
+            <IconButton type="submit" label="Add interview" className="size-8">
+              <Plus className="size-4" />
+            </IconButton>
+          </form>
+        </div>
+        <div>
+          <h4 className="flex items-center gap-1.5 type-label">
+            <UserRound className="size-3.5" aria-hidden /> People
+          </h4>
+          {contacts.length > 0 && (
+            <ul className="mt-1 grid gap-1 type-small">
+              {contacts.map((c) => (
+                <li key={`${c.name}:${c.link ?? ""}`} className="flex items-center gap-2">
+                  <span className="min-w-0 flex-1 truncate">
+                    {c.link ? (
+                      <a href={c.link} target="_blank" rel="noreferrer" className="font-medium hover:underline">
+                        {c.name}
+                      </a>
+                    ) : (
+                      <span className="font-medium">{c.name}</span>
+                    )}
+                    {c.role && <span className="text-muted"> · {c.role}</span>}
+                  </span>
+                  <IconButton label={`Remove ${c.name}`} className="size-7" onClick={() => onUpdate({ contacts: contacts.filter((x) => x !== c) })}>
+                    <X className="size-3.5" />
+                  </IconButton>
+                </li>
+              ))}
+            </ul>
+          )}
+          <form onSubmit={addContact} className="mt-1.5 grid grid-cols-[1fr_1fr_auto] gap-1.5">
+            <input name="name" required aria-label="Name" placeholder="Name" className={input} />
+            <input name="role" aria-label="Role" placeholder="Recruiter, referrer…" className={input} />
+            <IconButton type="submit" label="Add person" className="size-8">
+              <Plus className="size-4" />
+            </IconButton>
+            <input name="link" type="url" aria-label="Profile link (optional)" placeholder="LinkedIn link (optional)" className={`${input} col-span-2`} />
+          </form>
+        </div>
       </div>
     </div>
+  );
+}
+
+const OFFER_LABEL: Record<keyof Offer, string> = {
+  pay: "Pay",
+  bonus: "Bonus",
+  equity: "Equity",
+  location: "Location / remote",
+  start: "Start date",
+  deadline: "Answer by",
+  note: "Notes",
+};
+const OFFER_HINT: Partial<Record<keyof Offer, string>> = { pay: "AED 45k a month", bonus: "15% yearly", equity: "0.1% over 4 years", location: "Dubai, hybrid" };
+const isDate = (k: keyof Offer) => k === "start" || k === "deadline";
+
+/** The offer's terms, each saved when you leave the field. */
+function OfferFields({ offer, onSave }: { offer: Offer; onSave: (offer: Offer) => void }) {
+  const save = (k: keyof Offer, v: string) => {
+    if ((offer[k] ?? "") === v) return;
+    onSave({ ...offer, [k]: v.trim() || undefined });
+  };
+  return (
+    <fieldset className="grid gap-2 rounded-md border border-line p-3">
+      <legend className="px-1 type-label">The offer</legend>
+      <div className="grid gap-2 sm:grid-cols-2">
+        {OFFER_FIELDS.map((k) => (
+          <label key={k} className={`grid gap-1 type-meta text-muted ${k === "note" ? "sm:col-span-2" : ""}`}>
+            {OFFER_LABEL[k]}
+            <input
+              type={isDate(k) ? "date" : "text"}
+              defaultValue={offer[k] ?? ""}
+              placeholder={OFFER_HINT[k]}
+              onBlur={(e) => save(k, e.target.value)}
+              onChange={(e) => isDate(k) && save(k, e.target.value)}
+              className={input}
+            />
+          </label>
+        ))}
+      </div>
+    </fieldset>
+  );
+}
+
+/** Your offers side by side, deadline first. */
+export function CompareOffers({ offers, onClose }: { offers: { id: string; entry: Entry }[]; onClose: () => void }) {
+  const sorted = [...offers].sort((a, b) => (a.entry.offer?.deadline ?? "9").localeCompare(b.entry.offer?.deadline ?? "9"));
+  return (
+    <Dialog open onClose={onClose} labelledBy="compare-title" className="max-w-4xl">
+      <Card className="p-5 shadow-l3 sm:p-6">
+        <div className="flex items-start gap-3">
+          <h2 id="compare-title" className="min-w-0 flex-1 type-subheading font-semibold">
+            Compare offers
+          </h2>
+          <IconButton label="Close" className="-mr-2 -mt-1" onClick={onClose}>
+            <X className="size-4" />
+          </IconButton>
+        </div>
+        <div className="mt-3 overflow-x-auto">
+          <table className="w-full type-small">
+            <thead>
+              <tr className="text-left">
+                <th className="w-32" />
+                {sorted.map(({ id, entry }) => (
+                  <th key={id} scope="col" className="px-2 pb-2 align-bottom font-semibold">
+                    {entry.snapshot.title}
+                    <span className="block font-normal text-muted">{displayName(entry.snapshot.company)}</span>
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-line">
+              {OFFER_FIELDS.map((k) => (
+                <tr key={k}>
+                  <th scope="row" className="py-1.5 pr-2 text-left font-normal text-muted">
+                    {OFFER_LABEL[k]}
+                  </th>
+                  {sorted.map(({ id, entry }) => {
+                    const v = entry.offer?.[k];
+                    return (
+                      <td key={id} className="px-2 py-1.5 align-top">
+                        {v ? isDate(k) ? day(v) : v : <span className="text-muted">–</span>}
+                      </td>
+                    );
+                  })}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </Card>
+    </Dialog>
   );
 }
 
