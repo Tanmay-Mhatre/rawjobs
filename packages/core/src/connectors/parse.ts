@@ -148,7 +148,8 @@ export type LdJobPosting = {
 export function jobPostingLd(html: string): LdJobPosting | undefined {
   for (const m of html.matchAll(/<script[^>]*type=["']application\/ld\+json["'][^>]*>([\s\S]*?)<\/script>/gi)) {
     try {
-      const data = JSON.parse(m[1]!.trim()) as unknown;
+      // Some sites leave raw tabs and newlines inside the strings (Radancy): read those as spaces.
+      const data = JSON.parse(m[1]!.trim().replace(/[\t\n\r\f\v]+/g, " ")) as unknown;
       const items = (Array.isArray(data) ? data : [data, ...((data as { "@graph"?: unknown[] })["@graph"] ?? [])]) as { "@type"?: string }[];
       const found = items.find((i) => i?.["@type"] === "JobPosting");
       if (found) return found as LdJobPosting;

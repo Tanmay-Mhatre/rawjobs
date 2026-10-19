@@ -116,6 +116,8 @@ const QUERIES: { url: string; matchType: "prefix" | "domain" }[] = [
   { url: "keka.com", matchType: "domain" },
   { url: "tbe.taleo.net", matchType: "domain" },
   { url: "careers.jobscore.com/careers/", matchType: "prefix" },
+  { url: "avature.net", matchType: "domain" },
+  { url: "careers.pageuppeople.com/", matchType: "prefix" },
 ];
 
 type Progress = { pages?: number; next: number };

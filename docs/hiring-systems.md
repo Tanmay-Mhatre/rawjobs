@@ -52,6 +52,9 @@ boards listed below. Paste a company's careers link into **Companies → Add by 
 | Keka | `{slug}.keka.com/careers` | careers API |
 | Taleo Business Edition | `{pod}.tbe.taleo.net/{pod}{NN}/ats/careers/v2/searchResults?org={ORG}&cws={N}` | RSS feed |
 | JobScore | `careers.jobscore.com/careers/{slug}` | JSON job feed |
+| Avature | `{tenant}.avature.net/{portal}` | careers search pages |
+| PageUp | `careers.pageuppeople.com/{client}/cw/en/listing/` | RSS feed |
+| Radancy (TalentBrew) | the company's own careers site (e.g. `jobs.boeing.com`) | sitemap, plus each job's page |
 
 iCIMS, Jobvite, JazzHR and several smaller systems (CareerPlug, Paycor, HiringThing, Factorial, HRMDirect) have no keyless feed, so their connectors read the public careers pages. If a company changes its page template, that connector may need an update.
 

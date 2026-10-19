@@ -28,6 +28,9 @@ import { cornerstone } from "./cornerstone";
 import { keka } from "./keka";
 import { taleobe, taleoBeUrl } from "./taleobe";
 import { jobscore } from "./jobscore";
+import { avature } from "./avature";
+import { pageup } from "./pageup";
+import { radancy } from "./radancy";
 import { greenhouse } from "./greenhouse";
 import { hibob } from "./hibob";
 import { icims } from "./icims";
@@ -105,6 +108,9 @@ export const connectors: Partial<Record<AtsType, Connector<any>>> = {
   keka,
   taleobe,
   jobscore,
+  avature,
+  pageup,
+  radancy,
   // Job boards (JOB_BOARDS), last so a company's own board is always recognised first.
   hackernews,
   remotive,
@@ -265,6 +271,12 @@ export function careersUrl(c: DetectedCompany): string {
       return taleoBeUrl(c);
     case "jobscore":
       return `https://careers.jobscore.com/careers/${c.slug}`;
+    case "avature":
+      return `https://${c.slug}.avature.net/${c.site || "careers"}/SearchJobs/`;
+    case "pageup":
+      return `https://careers.pageuppeople.com/${c.slug}/${c.site || "cw/en"}/listing/`;
+    case "radancy":
+      return `https://${c.slug}/`;
     default:
       return "";
   }
