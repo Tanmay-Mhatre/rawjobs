@@ -34,7 +34,7 @@ import { atsLabel, evergreenReason, INDEX_MAX_AGE_DAYS, isOlder } from "../lib/f
 import { isRoleStale, isStale, staleReasons } from "../lib/stale";
 import { type FitFix, fitFixes, fixApplied, useProfileFix } from "../lib/profileFix";
 import { load, save } from "../lib/storage";
-import { CLOSED_AS, type ClosedAs, type Entry, type EntryPatch, followUpDue, PIPELINE, quickStatus, STATUS_LABEL, type Status, statusLabel } from "../lib/userState";
+import { CLOSED_AS, type ClosedAs, type Entry, type EntryPatch, dayAfter, followUpDue, PIPELINE, quickStatus, STATUS_LABEL, type Status, stageSince, statusLabel } from "../lib/userState";
 import { Dialog } from "./Dialog";
 import { settingsHash } from "./settings/registry";
 import { HiringActivity } from "./HiringActivity";
@@ -407,7 +407,7 @@ export function JobDetail(p: JobDetailProps) {
               <NotesField key={job.id} id={`notes-${job.id}`} note={entry?.note ?? ""} onSave={(note) => p.onUpdate({ note: note || undefined })} />
               <CvField key={`cv:${job.id}`} id={`cv-${job.id}`} cv={entry?.cv ?? ""} onSave={(cv) => p.onUpdate({ cv: cv || undefined })} />
             </div>
-            {entry && <ProgressLine entry={entry} onFollowUp={(followUp) => p.onUpdate({ followUp: followUp || undefined })} id={`follow-${job.id}`} />}
+            {entry && <ProgressLine entry={entry} onUpdate={p.onUpdate} id={`follow-${job.id}`} />}
             {status === "dismissed" && <ReasonPicker key={`why:${job.id}`} job={job} label="Why not? Optional." live />}
           </section>
 
@@ -899,9 +899,10 @@ const shortDay = (iso: string) => new Date(iso.length === 10 ? `${iso}T12:00:00`
  * Where a tracked job stands, with dates: "Saved Oct 15 › Applied Oct 16", then, while applied, when to
  * follow up (changeable, amber once it's due).
  */
-function ProgressLine({ entry, id, onFollowUp }: { entry: Entry; id: string; onFollowUp: (date: string) => void }) {
+function ProgressLine({ entry, id, onUpdate }: { entry: Entry; id: string; onUpdate: (patch: EntryPatch) => void }) {
   // Only the steps still standing: a status set and later cleared drops out of the line.
-  const steps = (entry.history ?? []).filter((h): h is { status: Status; at: string } => h.status !== null).slice(-4);
+  const steps = (entry.history ?? []).filter((h): h is { status: Status; at: string } => h.status !== null).slice(-6);
+  const since = entry.status && entry.status !== "dismissed" ? stageSince(entry) : undefined;
   const due = followUpDue(entry);
   if (!steps.length && entry.status !== "applied") return null;
   return (
@@ -916,10 +917,30 @@ function ProgressLine({ entry, id, onFollowUp }: { entry: Entry; id: string; onF
           ))}
         </p>
       )}
+      {since && (
+        // Tracked late (you applied last week): set the real date so the timeline and follow-ups count from it.
+        <label htmlFor={`${id}-since`} className="flex items-center gap-2">
+          {statusLabel(entry)} on
+          <input
+            id={`${id}-since`}
+            type="date"
+            value={dayAfter(since, 0)}
+            max={dayAfter(new Date().toISOString(), 0)}
+            onChange={(e) => e.target.value && onUpdate({ since: e.target.value })}
+            className="h-8 rounded-md border border-line bg-raised px-2 type-small text-ink"
+          />
+        </label>
+      )}
       {entry.status === "applied" && (
         <label htmlFor={id} className={cx("flex items-center gap-2", due && "font-medium text-warning-text")}>
           {due ? "Follow up now" : "Follow up on"}
-          <input id={id} type="date" value={entry.followUp ?? ""} onChange={(e) => onFollowUp(e.target.value)} className="h-8 rounded-md border border-line bg-raised px-2 type-small text-ink" />
+          <input
+            id={id}
+            type="date"
+            value={entry.followUp ?? ""}
+            onChange={(e) => onUpdate({ followUp: e.target.value || undefined })}
+            className="h-8 rounded-md border border-line bg-raised px-2 type-small text-ink"
+          />
         </label>
       )}
     </div>

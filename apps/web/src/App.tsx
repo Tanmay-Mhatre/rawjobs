@@ -442,7 +442,7 @@ export function App() {
                   jobsById={jobsById}
                   min={meta?.profile.min_score ?? 70}
                   onOpen={onOpen}
-                  onMove={(id, entry, s) => user.update({ id, ...entry.snapshot, ...pick(jobsById.get(id)) }, { status: s })}
+                  onPatch={(id, entry, patch) => user.update({ id, ...entry.snapshot, ...pick(jobsById.get(id)) }, patch)}
                   onSetup={notSetUp ? toSetup : undefined}
                   goRadar={() => go({ tab: "radar" })}
                 />

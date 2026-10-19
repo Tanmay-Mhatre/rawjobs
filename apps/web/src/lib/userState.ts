@@ -25,6 +25,8 @@ export type ClosedAs = keyof typeof CLOSED_AS;
 
 /** Days after you apply that RawJobs reminds you to follow up. */
 export const FOLLOW_UP_DAYS = 7;
+/** Days applied with no reply after which RawJobs suggests closing it as No response (likely ghosted). */
+export const QUIET_DAYS = 21;
 const HISTORY_MAX = 20;
 
 /** Your own tracking for one job. Saved on this computer (profile/tracking.json) and in this browser; export/import to move it. */
@@ -68,7 +70,10 @@ function withFit(job: JobLike, prev: Entry | undefined): { fit?: number[] } {
 const KEY = "rawjobs.state.v1";
 
 /** What a change to one job's tracking can set; a key given as undefined clears it. */
-export type EntryPatch = Partial<Pick<Entry, "status" | "note" | "reason" | "closedAs" | "followUp" | "cv">>;
+export type EntryPatch = Partial<Pick<Entry, "status" | "note" | "reason" | "closedAs" | "followUp" | "cv">> & {
+  /** Move the date you reached the current status (YYYY-MM-DD), e.g. you applied before tracking it. */
+  since?: string;
+};
 
 /** "2026-10-22": a date `days` after `iso`, in local time. */
 export function dayAfter(iso: string, days: number): string {
@@ -83,11 +88,15 @@ export const today = (now = new Date()) => dayAfter(now.toISOString(), 0);
 /** The follow-up date has come (applied, and the date is today or past). */
 export const followUpDue = (e: Entry | undefined, now = new Date()) => !!e?.followUp && e.status === "applied" && e.followUp <= today(now);
 
+/** Applied this many days ago and nothing since: likely ghosted. */
+export const goneQuiet = (e: Entry | undefined, now = new Date()) => !!e && e.status === "applied" && now.getTime() - Date.parse(stageSince(e)) >= QUIET_DAYS * 864e5;
+
 /** One job's entry after a change; null when nothing is left to keep. */
 export function applyPatch(prev: Entry | undefined, job: JobLike, patch: EntryPatch, now = new Date().toISOString()): Entry | null {
+  const { since, ...fields } = patch;
   const next: Entry = {
     ...prev,
-    ...patch,
+    ...fields,
     updatedAt: now,
     snapshot: { title: job.title, company: job.company, url: job.url, location: job.location, score: job.score, ...withFit(job, prev) },
   };
@@ -102,6 +111,13 @@ export function applyPatch(prev: Entry | undefined, job: JobLike, patch: EntryPa
   if (next.status !== "rejected") delete next.closedAs;
   if (next.status !== "applied") delete next.followUp;
   else if (changed && !("followUp" in patch)) next.followUp = dayAfter(now, FOLLOW_UP_DAYS);
+  if (since && /^\d{4}-\d{2}-\d{2}$/.test(since) && next.status) {
+    // Noon local, so the day reads the same wherever it's shown in your timezone.
+    const at = new Date(`${since}T12:00:00`).toISOString();
+    const h = next.history ?? (prev?.status === next.status ? [{ status: next.status, at: prev.updatedAt }] : []);
+    const i = h.findLastIndex((x) => x.status === next.status);
+    next.history = i >= 0 ? h.map((x, j) => (j === i ? { ...x, at } : x)) : [...h, { status: next.status, at }];
+  }
   for (const k of ["note", "cv", "followUp", "closedAs", "reason"] as const) if (!next[k]) delete next[k];
   return next.status || next.note || next.cv ? next : null;
 }

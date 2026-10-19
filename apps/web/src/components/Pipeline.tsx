@@ -1,9 +1,23 @@
 import { displayName } from "@rawjobs/core/display-name";
-import { ArrowRight, ExternalLink, StickyNote } from "lucide-react";
+import { ArrowRight, BellRing, ExternalLink, StickyNote } from "lucide-react";
 import { type KeyboardEvent, useEffect, useRef, useState } from "react";
 import type { Job } from "../lib/data";
 import { timeAgo } from "../lib/format";
-import { type Entry, followUpDue, PIPELINE, type PipelineStatus, STATUS_LABEL, type Status, stageSince, statusLabel, type UserState } from "../lib/userState";
+import {
+  dayAfter,
+  type Entry,
+  type EntryPatch,
+  FOLLOW_UP_DAYS,
+  followUpDue,
+  goneQuiet,
+  PIPELINE,
+  type PipelineStatus,
+  STATUS_LABEL,
+  type Status,
+  stageSince,
+  statusLabel,
+  type UserState,
+} from "../lib/userState";
 import { EmptyState } from "./EmptyState";
 import { Chip, ChipGroup, Kbd, ScoreBadge } from "./primitives";
 import { Button, cx, Select } from "./ui";
@@ -13,14 +27,15 @@ type Props = {
   jobsById: Map<string, Job>;
   min: number;
   onOpen: (job: Job) => void;
-  /** undefined takes the job off the board (its note, if any, stays). */
-  onMove: (id: string, entry: Entry, status: Status | undefined) => void;
+  /** Change one card: a move (status undefined takes it off the board; its note, if any, stays), a follow-up date… */
+  onPatch: (id: string, entry: Entry, patch: EntryPatch) => void;
   /** Radar not set up yet: the empty state points to setup instead of the Radar. */
   onSetup?: () => void;
   goRadar: () => void;
 };
 
-export function Pipeline({ user, jobsById, min, onOpen, onMove, onSetup, goRadar }: Props) {
+export function Pipeline({ user, jobsById, min, onOpen, onPatch, onSetup, goRadar }: Props) {
+  const onMove = (id: string, entry: Entry, status: Status | undefined) => onPatch(id, entry, { status });
   const [dragOver, setDragOver] = useState<PipelineStatus | null>(null);
   /** Phones show one column at a time, picked from the status chips. */
   const [mobileCol, setMobileCol] = useState<PipelineStatus | null>(null);
@@ -87,6 +102,7 @@ export function Pipeline({ user, jobsById, min, onOpen, onMove, onSetup, goRadar
 
   return (
     <div ref={boardRef} className="pb-2 md:overflow-x-auto">
+      <FollowUps user={user} jobsById={jobsById} onOpen={onOpen} onPatch={onPatch} />
       <p id="pipeline-move-help" className="sr-only">
         Press [ or ] to move this job to the previous or next stage.
       </p>
@@ -229,5 +245,53 @@ export function Pipeline({ user, jobsById, min, onOpen, onMove, onSetup, goRadar
         })}
       </div>
     </div>
+  );
+}
+
+/**
+ * Applications waiting on you: follow-up date reached, or no reply for weeks (likely ghosted). One
+ * click each: you followed up (next nudge in a week), or close it as No response.
+ */
+function FollowUps({ user, jobsById, onOpen, onPatch }: Pick<Props, "user" | "jobsById" | "onOpen" | "onPatch">) {
+  const now = new Date();
+  const due = Object.entries(user)
+    .filter(([, e]) => followUpDue(e, now) || goneQuiet(e, now))
+    .sort((a, b) => stageSince(a[1]).localeCompare(stageSince(b[1])));
+  if (!due.length) return null;
+  return (
+    <section aria-labelledby="follow-ups-title" className="mb-3 rounded-md border border-line bg-raised p-3 shadow-l1">
+      <h2 id="follow-ups-title" className="flex items-center gap-2 type-small font-semibold">
+        <BellRing className="size-4 text-warning-text" aria-hidden /> Follow up <span className="tabular type-meta font-medium text-muted">{due.length}</span>
+      </h2>
+      <ul className="mt-1 flex flex-col divide-y divide-line">
+        {due.map(([id, e]) => {
+          const job = jobsById.get(id);
+          const quiet = goneQuiet(e, now);
+          return (
+            <li key={id} className="flex flex-wrap items-center gap-x-3 gap-y-2 py-2">
+              <div className="min-w-0 flex-1">
+                {job ? (
+                  <button type="button" className="text-left type-small font-semibold hover:underline" onClick={() => onOpen(job)}>
+                    {e.snapshot.title}
+                  </button>
+                ) : (
+                  <p className="type-small font-semibold">{e.snapshot.title}</p>
+                )}
+                <p className="type-meta text-muted">
+                  {displayName(e.snapshot.company)} · applied {timeAgo(stageSince(e))}
+                  {quiet ? ", no reply yet" : ""}
+                </p>
+              </div>
+              <Button size="sm" onClick={() => onPatch(id, e, { followUp: dayAfter(now.toISOString(), FOLLOW_UP_DAYS) })}>
+                I followed up
+              </Button>
+              <Button size="sm" variant={quiet ? "primary" : "ghost"} onClick={() => onPatch(id, e, { status: "rejected", closedAs: "no-response" })}>
+                Close: no response
+              </Button>
+            </li>
+          );
+        })}
+      </ul>
+    </section>
   );
 }

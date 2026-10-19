@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { applyPatch, type Entry, mergeStates, quickStatus, stageSince } from "../src/lib/userState";
+import { applyPatch, dayAfter, type Entry, goneQuiet, mergeStates, quickStatus, stageSince } from "../src/lib/userState";
 
 const job = { id: "greenhouse:acme:1", title: "Head of Product", company: "Acme", url: "https://acme.example/1", location: "Dubai", score: 83 };
 const entry = (status: Entry["status"], updatedAt: string): Entry => ({ status, updatedAt, snapshot: { ...job } });
@@ -52,5 +52,22 @@ describe("import merge", () => {
     expect(merged.a.status).toBe("applied");
     expect(merged.b.status).toBe("applied");
     expect(merged.c.status).toBe("offer");
+  });
+});
+
+describe("follow-ups", () => {
+  it("suggests closing an application with no reply for three weeks", () => {
+    const applied = applyPatch(undefined, job, { status: "applied" }, "2026-10-01T09:00:00Z")!;
+    expect(goneQuiet(applied, new Date("2026-10-15T09:00:00Z"))).toBe(false);
+    expect(goneQuiet(applied, new Date("2026-10-23T09:00:00Z"))).toBe(true);
+    const interviewing = applyPatch(applied, job, { status: "interviewing" }, "2026-10-10T09:00:00Z")!;
+    expect(goneQuiet(interviewing, new Date("2026-11-30T09:00:00Z"))).toBe(false);
+  });
+
+  it("backdates when you reached the current status", () => {
+    const applied = applyPatch(undefined, job, { status: "applied" }, "2026-10-16T09:00:00Z")!;
+    const moved = applyPatch(applied, job, { since: "2026-10-05" }, "2026-10-16T10:00:00Z")!;
+    expect(moved.history).toHaveLength(1);
+    expect(dayAfter(stageSince(moved), 0)).toBe("2026-10-05");
   });
 });
