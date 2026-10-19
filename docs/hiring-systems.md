@@ -55,6 +55,17 @@ boards listed below. Paste a company's careers link into **Companies → Add by 
 | Avature | `{tenant}.avature.net/{portal}` | careers search pages |
 | PageUp | `careers.pageuppeople.com/{client}/cw/en/listing/` | RSS feed |
 | Radancy (TalentBrew) | the company's own careers site (e.g. `jobs.boeing.com`) | sitemap, plus each job's page |
+| Oleeo | `{tenant}.tal.net/vx/.../candidate/jobboard/vacancy/1/adv/` | job board pages |
+| Jobtrain | the employer's own Jobtrain site (e.g. `apply.jobs.scot.nhs.uk`) | job card pages |
+| Varbi | `{tenant}.varbi.com` | RSS feed, plus each job's page |
+| ReachMee | `web103.reachmee.com/ext/{iid}/{customer}/main?site={n}` | job list page |
+| Jobylon | `emp.jobylon.com/companies/{id}-{slug}/` | embed job list |
+| Homerun | `{slug}.homerun.co` | Atom job feed |
+| Emply | `{tenant}.career.emply.com` | careers-site API |
+| Bullhorn | a Bullhorn career portal (any host serving `/app.json`) | public REST API |
+| HRMOS | `hrmos.co/pages/{company}/jobs` | job list pages |
+| HERP | `herp.careers/v1/{company}` | job list page |
+| engage | `en-gage.net/{company}/` | job list page |
 
 iCIMS, Jobvite, JazzHR and several smaller systems (CareerPlug, Paycor, HiringThing, Factorial, HRMDirect) have no keyless feed, so their connectors read the public careers pages. If a company changes its page template, that connector may need an update.
 

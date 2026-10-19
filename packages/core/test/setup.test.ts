@@ -123,12 +123,14 @@ describe("checkCompanies", () => {
     expect(res[1]!.error).toMatch(/Not found/);
     expect(res[2]!.error).toMatch(/full Workday link/); // no site in that URL
     // Never fetches an incomplete Workday link; an unknown site gets a look for a Teamtailor feed
-    // a Phenom site, a Radancy sitemap and a SuccessFactors career site.
+    // a Phenom site, a Radancy sitemap, a Jobtrain card list, a Bullhorn app.json and a SuccessFactors career site.
     expect(calls.slice(2)).toEqual([
       "https://example.com/jobs.rss",
       "https://example.com/widgets",
       "https://example.com/robots.txt",
       "https://example.com/sitemap.xml",
+      "https://example.com/Home/_JobCard?Skip=0",
+      "https://example.com/app.json",
       "https://example.com/search/?q=&startrow=0",
     ]);
   });

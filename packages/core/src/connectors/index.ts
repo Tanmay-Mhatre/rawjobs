@@ -31,6 +31,17 @@ import { jobscore } from "./jobscore";
 import { avature } from "./avature";
 import { pageup } from "./pageup";
 import { radancy } from "./radancy";
+import { oleeo } from "./oleeo";
+import { jobtrain } from "./jobtrain";
+import { varbi } from "./varbi";
+import { reachmee } from "./reachmee";
+import { jobylon } from "./jobylon";
+import { homerun } from "./homerun";
+import { emply } from "./emply";
+import { bullhorn } from "./bullhorn";
+import { hrmos } from "./hrmos";
+import { herp } from "./herp";
+import { engage } from "./engage";
 import { greenhouse } from "./greenhouse";
 import { hibob } from "./hibob";
 import { icims } from "./icims";
@@ -111,6 +122,17 @@ export const connectors: Partial<Record<AtsType, Connector<any>>> = {
   avature,
   pageup,
   radancy,
+  oleeo,
+  jobtrain,
+  varbi,
+  reachmee,
+  jobylon,
+  homerun,
+  emply,
+  bullhorn,
+  hrmos,
+  herp,
+  engage,
   // Job boards (JOB_BOARDS), last so a company's own board is always recognised first.
   hackernews,
   remotive,
@@ -277,6 +299,26 @@ export function careersUrl(c: DetectedCompany): string {
       return `https://careers.pageuppeople.com/${c.slug}/${c.site || "cw/en"}/listing/`;
     case "radancy":
       return `https://${c.slug}/`;
+    case "oleeo":
+      return `https://${c.slug}.tal.net/vx/lang-en-GB/candidate/jobboard/vacancy/${c.site || "1"}/adv/`;
+    case "jobtrain":
+      return `https://${c.slug}/`;
+    case "varbi":
+      return `https://${c.slug}.varbi.com/`;
+    case "jobylon":
+      return `https://emp.jobylon.com/companies/${c.slug}/`;
+    case "homerun":
+      return `https://${c.slug}.homerun.co/`;
+    case "emply":
+      return `https://${c.slug}.career.emply.com/`;
+    case "bullhorn":
+      return c.site ? `https://${c.site}/` : "";
+    case "hrmos":
+      return `https://hrmos.co/pages/${c.slug}/jobs`;
+    case "herp":
+      return `https://herp.careers/v1/${c.slug}`;
+    case "engage":
+      return `https://en-gage.net/${c.slug}/`;
     default:
       return "";
   }

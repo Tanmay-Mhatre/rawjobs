@@ -118,6 +118,14 @@ const QUERIES: { url: string; matchType: "prefix" | "domain" }[] = [
   { url: "careers.jobscore.com/careers/", matchType: "prefix" },
   { url: "avature.net", matchType: "domain" },
   { url: "careers.pageuppeople.com/", matchType: "prefix" },
+  { url: "tal.net", matchType: "domain" },
+  { url: "varbi.com", matchType: "domain" },
+  { url: "emp.jobylon.com/companies/", matchType: "prefix" },
+  { url: "homerun.co", matchType: "domain" },
+  { url: "career.emply.com", matchType: "domain" },
+  { url: "hrmos.co/pages/", matchType: "prefix" },
+  { url: "herp.careers/v1/", matchType: "prefix" },
+  { url: "en-gage.net/", matchType: "prefix" },
 ];
 
 type Progress = { pages?: number; next: number };
