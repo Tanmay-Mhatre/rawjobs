@@ -56,7 +56,7 @@ export const ORIGINAL_ATS = ["greenhouse", "lever", "ashby", "smartrecruiters", 
 export const GROUPS: Record<string, string[]> = {
   sr: ["smartrecruiters"],
   payroll: ["paylocity", "paycom", "hireology", "workable"],
-  enterprise: ["workday", "icims", "oracle", "successfactors", "taleo", "phenom", "eightfold"],
+  enterprise: ["workday", "icims", "oracle", "successfactors", "taleo", "phenom", "eightfold", "avature", "radancy"],
   rest: [],
 };
 export const atsOfGroup = (group: string): string[] => {

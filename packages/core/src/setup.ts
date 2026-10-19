@@ -5,6 +5,7 @@ import { z } from "zod";
 import { CONFIG_CANDIDATES, LEGACY_CONFIG_CANDIDATES } from "./config";
 import { careersUrl, companyKey, detectCompany, getConnector, guessName, type DetectResult } from "./connectors";
 import { isPhenomSite } from "./connectors/phenom";
+import { isRadancySite } from "./connectors/radancy";
 import { isTeamtailorFeed, isTeamtailorHost } from "./connectors/teamtailor";
 import { HttpClient, HttpError } from "./http";
 import { RESUME_PATH } from "./resume";
@@ -106,6 +107,12 @@ async function detectByFeed(input: string, http: HttpClient): Promise<DetectResu
     if (await isPhenomSite(host, http)) return { ats: "phenom", slug: host, name: guessName(host.split(".").at(-2) ?? host), supported: true };
   } catch {
     // not Phenom
+  }
+  // A Radancy (TalentBrew) site names its jobs in its sitemap.
+  try {
+    if (await isRadancySite(host, http)) return { ats: "radancy", slug: host, name: guessName(host.split(".").at(-2) ?? host), supported: true };
+  } catch {
+    // not Radancy
   }
   // A SuccessFactors career site (RMK) loads SAP's j2w scripts on its search page.
   try {
