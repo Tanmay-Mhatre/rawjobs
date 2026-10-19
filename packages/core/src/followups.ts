@@ -54,3 +54,45 @@ export async function remindFollowUps(dataDir: string, secrets: TelegramSecrets,
   writeFileSync(path, JSON.stringify(Object.fromEntries(due.map((d) => [d.id, d.followUp]))));
   return "sent";
 }
+
+/** Which interview reminders were already sent ("<job id> <day>"), so each is sent once. */
+export const INTERVIEWS_SENT = "interviews-sent.json";
+
+/** Interviews (from the dashboard's tracking) on `today` or `tomorrow`, read loosely like follow-ups. */
+export function dueInterviews(state: Record<string, unknown> | undefined, today: string, tomorrow: string): string[] {
+  const keys: string[] = [];
+  for (const [id, v] of Object.entries(state ?? {})) {
+    const list = (v as { interviews?: unknown } | null)?.interviews;
+    if (!Array.isArray(list)) continue;
+    for (const i of list as { on?: unknown }[]) if (i?.on === today || i?.on === tomorrow) keys.push(`${id} ${i.on}`);
+  }
+  return keys;
+}
+
+/** "1 interview today or tomorrow": no company names, as every alert keeps the details in the app. */
+export const interviewMessage = (n: number) => telegramMessage("📅 <b>Interview coming up</b>", `${plural(n, "interview", "interviews")} today or tomorrow.`, "See it in the Pipeline in RawJobs.");
+
+/** Send one Telegram message for interviews today or tomorrow not reminded yet. Never throws. */
+export async function remindInterviews(dataDir: string, secrets: TelegramSecrets, opts: { home?: string; now?: Date; fetchImpl?: Fetch } = {}): Promise<"sent" | "nothing-due" | `failed: ${string}`> {
+  const now = opts.now ?? new Date();
+  const tomorrow = new Date(now);
+  tomorrow.setDate(tomorrow.getDate() + 1);
+  const due = dueInterviews(readTracking(opts.home)?.state, localDay(now), localDay(tomorrow));
+  const path = resolve(dataDir, INTERVIEWS_SENT);
+  let sent: string[] = [];
+  try {
+    if (existsSync(path)) sent = JSON.parse(readFileSync(path, "utf8")) as string[];
+  } catch {
+    sent = [];
+  }
+  const fresh = due.filter((k) => !sent.includes(k));
+  if (!fresh.length) return "nothing-due";
+  try {
+    await sendTelegram(interviewMessage(fresh.length), secrets, opts.fetchImpl);
+  } catch (err) {
+    return `failed: ${(err as Error).message}`;
+  }
+  // Only what's still coming up is kept, so the file stays tiny.
+  writeFileSync(path, JSON.stringify(due));
+  return "sent";
+}

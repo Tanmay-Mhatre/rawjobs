@@ -29,6 +29,11 @@ export const FOLLOW_UP_DAYS = 7;
 export const QUIET_DAYS = 21;
 const HISTORY_MAX = 20;
 
+/** One interview round: its day (YYYY-MM-DD) and what it is ("Technical", "Final"). */
+export type Interview = { on: string; what: string };
+/** Someone at the company for this job: a recruiter, a referrer, the hiring manager. */
+export type Contact = { name: string; role?: string; link?: string };
+
 /** Your own tracking for one job. Saved on this computer (profile/tracking.json) and in this browser; export/import to move it. */
 export type Entry = {
   status?: Status;
@@ -43,6 +48,8 @@ export type Entry = {
   followUp?: string;
   /** Which CV you sent ("Fintech PM v3"). */
   cv?: string;
+  interviews?: Interview[];
+  contacts?: Contact[];
   updatedAt: string;
   /** Copy of the job's basics, so the pipeline survives the job leaving jobs.json. */
   snapshot: {
@@ -70,7 +77,7 @@ function withFit(job: JobLike, prev: Entry | undefined): { fit?: number[] } {
 const KEY = "rawjobs.state.v1";
 
 /** What a change to one job's tracking can set; a key given as undefined clears it. */
-export type EntryPatch = Partial<Pick<Entry, "status" | "note" | "reason" | "closedAs" | "followUp" | "cv">> & {
+export type EntryPatch = Partial<Pick<Entry, "status" | "note" | "reason" | "closedAs" | "followUp" | "cv" | "interviews" | "contacts">> & {
   /** Move the date you reached the current status (YYYY-MM-DD), e.g. you applied before tracking it. */
   since?: string;
 };
@@ -120,6 +127,7 @@ export function applyPatch(prev: Entry | undefined, job: JobLike, patch: EntryPa
     next.history = i >= 0 ? h.map((x, j) => (j === i ? { ...x, at } : x)) : [...h, { status: next.status, at }];
   }
   for (const k of ["note", "cv", "followUp", "closedAs", "reason"] as const) if (!next[k]) delete next[k];
+  for (const k of ["interviews", "contacts"] as const) if (!next[k]?.length) delete next[k];
   return next.status || next.note || next.cv ? next : null;
 }
 
@@ -216,6 +224,13 @@ export function exportState(state: UserState, prefs?: Prefs): void {
 const STATUSES = new Set<string>([...PIPELINE, "dismissed"]);
 const isText = (v: unknown): v is string => typeof v === "string";
 
+/** An imported list (interviews, contacts): only the items with the right shape, or nothing. */
+function listOf<K extends "interviews" | "contacts">(v: unknown, ok: (x: Record<string, unknown>) => boolean, key: K): Partial<Pick<Entry, K>> {
+  if (!Array.isArray(v)) return {};
+  const items = v.filter((x): x is Record<string, unknown> => !!x && typeof x === "object" && ok(x as Record<string, unknown>));
+  return items.length ? ({ [key]: items } as Partial<Pick<Entry, K>>) : {};
+}
+
 /** An imported entry, if it has the shape the pipeline relies on; anything else is left out. */
 function entryFrom(v: unknown): Entry | undefined {
   if (!v || typeof v !== "object") return undefined;
@@ -236,6 +251,8 @@ function entryFrom(v: unknown): Entry | undefined {
     ...(e.status === "rejected" && isText(e.closedAs) && e.closedAs in CLOSED_AS ? { closedAs: e.closedAs as ClosedAs } : {}),
     ...(e.status === "applied" && isText(e.followUp) && /^\d{4}-\d{2}-\d{2}$/.test(e.followUp) ? { followUp: e.followUp } : {}),
     ...(isText(e.cv) && e.cv ? { cv: e.cv } : {}),
+    ...listOf(e.interviews, (i) => /^\d{4}-\d{2}-\d{2}$/.test(String(i.on)) && isText(i.what), "interviews"),
+    ...listOf(e.contacts, (c) => isText(c.name) && !!c.name && (c.role === undefined || isText(c.role)) && (c.link === undefined || isText(c.link)), "contacts"),
     updatedAt: e.updatedAt,
     snapshot: {
       title: snap.title,

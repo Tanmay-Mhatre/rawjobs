@@ -80,3 +80,11 @@ describe("chasing a quiet application", () => {
     expect(goneQuiet(chased, new Date("2026-10-30T09:00:00Z"))).toBe(true);
   });
 });
+
+describe("interviews and people", () => {
+  it("keeps them on the entry and drops empty lists", () => {
+    const e = applyPatch(undefined, job, { status: "interviewing", interviews: [{ on: "2026-10-24", what: "Technical" }], contacts: [] }, "2026-10-19T09:00:00Z")!;
+    expect(e.interviews).toEqual([{ on: "2026-10-24", what: "Technical" }]);
+    expect(e).not.toHaveProperty("contacts");
+  });
+});
