@@ -11,7 +11,7 @@ import { ResumeStep } from "../setup/ResumeStep";
 import { offerWhat, ruleKey, ruleLabel, type HideRule } from "../lib/notForMe";
 import type { Prefs } from "../lib/prefs";
 import { MAX_AGE_CHOICES, setDensityChoice, setMaxAgeChoice, useDensity, useMaxAge, useTheme, type Density, type MaxAge, type ThemeChoice } from "../lib/theme";
-import { exportState, readStateFile, type UserState } from "../lib/userState";
+import { exportState, mergeStates, readStateFile, type UserState } from "../lib/userState";
 import { IndustriesStep, KeywordsStep, LocationsStep, RolesStep, ThresholdPicker } from "../setup/steps";
 import { Dialog } from "./Dialog";
 import { ScanPrefsPicker, scanHints, useScanPlan } from "./ScanButton";
@@ -882,12 +882,14 @@ function Section({
 function TrackingData({ user, prefs, onImport }: { user: UserState; prefs: Prefs; onImport: (s: UserState, prefs?: Partial<Prefs>) => void }) {
   const fileRef = useRef<HTMLInputElement>(null);
   const [msg, setMsg] = useState<{ tone: "ok" | "bad"; text: string; detail?: string } | null>(null);
-  /** A file read and waiting for "Replace N jobs". */
+  /** A file read and waiting for Merge or Replace. */
   const [pending, setPending] = useState<Awaited<ReturnType<typeof readStateFile>> | null>(null);
   const tracked = Object.keys(user).length;
 
-  const apply = (next: Awaited<ReturnType<typeof readStateFile>>) => {
-    onImport(next.state, next.prefs);
+  /** Merge keeps your jobs and adds the file's (the newer change wins per job); Replace also takes the file's views and rules. */
+  const apply = (next: Awaited<ReturnType<typeof readStateFile>>, merge = false) => {
+    if (merge) onImport(mergeStates(user, next.state));
+    else onImport(next.state, next.prefs);
     const skipped = next.skipped ? ` Left out ${next.skipped} that couldn't be read.` : "";
     setMsg({ tone: "ok", text: `Imported ${Object.keys(next.state).length} tracked jobs.${skipped}` });
   };
@@ -896,7 +898,7 @@ function TrackingData({ user, prefs, onImport }: { user: UserState; prefs: Prefs
     if (!f) return;
     try {
       const next = await readStateFile(f);
-      // Replacing can't be undone, so ask first when there's something to lose.
+      // Replacing can't be undone, so ask first (merge or replace) when there's something to lose.
       if (tracked) setPending(next);
       else apply(next);
     } catch (err) {
@@ -938,28 +940,37 @@ function TrackingData({ user, prefs, onImport }: { user: UserState; prefs: Prefs
         <Card className="p-5 shadow-l3 sm:p-6">
           <div className="flex items-start gap-3">
             <h2 id="import-title" className="min-w-0 flex-1 type-subheading font-semibold">
-              Replace your tracked jobs?
+              Merge or replace your tracked jobs?
             </h2>
             <IconButton label="Close" className="-mr-2 -mt-1" onClick={() => setPending(null)}>
               <X className="size-4" />
             </IconButton>
           </div>
           <p className="mt-1 type-small text-muted">
-            This replaces statuses and notes for {tracked} job{tracked === 1 ? "" : "s"} with the ones in the file
-            {pending ? ` (${Object.keys(pending.state).length})` : ""}.
+            You track {tracked} job{tracked === 1 ? "" : "s"}; the file has {pending ? Object.keys(pending.state).length : 0}. Merge keeps yours and adds the file's, taking the newer change for a job
+            in both. Replace swaps yours for the file's, views and rules included.
           </p>
           <div className="mt-5 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
-            <Button variant="ghost" onClick={() => setPending(null)} data-autofocus>
-              Keep mine
+            <Button variant="ghost" onClick={() => setPending(null)}>
+              Cancel
             </Button>
             <Button
-              variant="primary"
               onClick={() => {
                 if (pending) apply(pending);
                 setPending(null);
               }}
             >
               Replace {tracked} job{tracked === 1 ? "" : "s"}
+            </Button>
+            <Button
+              variant="primary"
+              data-autofocus
+              onClick={() => {
+                if (pending) apply(pending, true);
+                setPending(null);
+              }}
+            >
+              Merge
             </Button>
           </div>
         </Card>
