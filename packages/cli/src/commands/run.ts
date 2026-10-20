@@ -14,6 +14,7 @@ import {
   releaseScanLock,
   alertJobs,
   digest,
+  availableJobs,
   finishedMessage,
   sendTelegram,
   telegramSecrets,
@@ -406,17 +407,12 @@ export async function runNdjson(values: RunValues): Promise<number> {
       };
 
       const first = await scan(config, { ...session, syncMs, ...hooks("quick") });
-      const { matches } = doneEvent(first, "quick");
+      doneEvent(first, "quick");
       if (existsSync(notifyFile(dataDir))) {
         rmSync(notifyFile(dataDir), { force: true });
         emit({
           type: "notified",
-          result: await notifyFinished(
-            config,
-            matches.filter((j) => first.merged.newIds.has(j.id)),
-            first.stopped,
-            scope,
-          ),
+          result: await notifyFinished(availableJobs(first.merged.jobs).length, first.stopped, scope),
         });
       }
       if (wantsBackground(config, values, scope, { stopped: first.stopped, fallback })) {
@@ -456,11 +452,11 @@ export async function notifyScan(config: Config, result: RunResult, merged: Merg
 }
 
 /** "Tell me when it's done": sent whether or not there's anything new, and whatever the alerts switch says. */
-export async function notifyFinished(config: Config, newJobs: Job[], stopped: boolean, scope: ScanScope): Promise<string> {
+export async function notifyFinished(available: number, stopped: boolean, scope: ScanScope): Promise<string> {
   const secrets = telegramSecrets();
   if (!secrets.token || !secrets.chatId) return "off";
   try {
-    await sendTelegram(finishedMessage({ newJobs, minScore: config.profile.min_score, stopped, scope }), secrets);
+    await sendTelegram(finishedMessage({ available, stopped, scope }), secrets);
     return "sent";
   } catch (err) {
     return `failed: ${(err as Error).message}`;

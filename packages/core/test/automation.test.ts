@@ -2,7 +2,7 @@ import { existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-import { digest, findTelegramChat, finishedMessage, looksLikeToken, maskToken, saveTelegramSecrets, sendTelegram, telegramSecrets } from "../src/notify";
+import { availableJobs, digest, findTelegramChat, finishedMessage, looksLikeToken, maskToken, saveTelegramSecrets, sendTelegram, telegramSecrets } from "../src/notify";
 import { acquireScanLock, releaseScanLock } from "../src/scan";
 import { installSchedule, nextRunAt, readScheduledRuns, recordScheduledRun, removeSchedule, runScheduleNow, scheduleStatus, validateSchedule } from "../src/schedule";
 import type { Job } from "../src/schema";
@@ -46,20 +46,37 @@ describe("digest", () => {
 });
 
 describe("finishedMessage", () => {
-  it("says the scan finished, with the same counts as the digest", () => {
-    expect(finishedMessage({ newJobs: [job("A", 80), job("B", 50)], minScore: 70, scope: "mine" })).toBe(
-      "✅ <b>Your scan finished</b>\n\n<b>2</b> new jobs · <b>1</b> strong fit\n\n👉 <i>Open RawJobs on your computer to see them.</i>",
+  it("says the scan finished, with the jobs available to apply", () => {
+    expect(finishedMessage({ available: 17, scope: "mine" })).toBe("✅ <b>Your scan finished</b>\n\n<b>17</b> jobs available to apply\n\n👉 <i>Open RawJobs on your computer to see them.</i>");
+    expect(finishedMessage({ available: 1, scope: "mine" })).toContain("\n<b>1</b> job available to apply\n");
+    expect(finishedMessage({ available: 0, scope: "all" })).toBe(
+      "✅ <b>Every company scan finished</b>\n\nNo new jobs in the last 2 days\n\n👉 <i>Open RawJobs on your computer to see your matches.</i>",
     );
-    expect(finishedMessage({ newJobs: [], minScore: 70, scope: "all" })).toBe("✅ <b>Every company scan finished</b>\n\nNo new jobs\n\n👉 <i>Open RawJobs on your computer to see your matches.</i>");
   });
 
   it("says a scan stopped, and to finish it", () => {
-    expect(finishedMessage({ newJobs: [job("A", 50)], minScore: 70, stopped: true, scope: "mine" })).toBe(
-      "⏸ <b>Your scan stopped</b>\n\n<b>1</b> new job · no strong fits\n\n👉 <i>Open RawJobs on your computer to see it and finish the scan.</i>",
+    expect(finishedMessage({ available: 1, stopped: true, scope: "mine" })).toBe(
+      "⏸ <b>Your scan stopped</b>\n\n<b>1</b> job available to apply\n\n👉 <i>Open RawJobs on your computer to see it and finish the scan.</i>",
     );
-    expect(finishedMessage({ newJobs: [], minScore: 70, stopped: true, scope: "mine" })).toBe(
-      "⏸ <b>Your scan stopped</b>\n\nNo new jobs yet\n\n👉 <i>Open RawJobs on your computer to finish the scan.</i>",
+    expect(finishedMessage({ available: 0, stopped: true, scope: "mine" })).toBe(
+      "⏸ <b>Your scan stopped</b>\n\nNo new jobs in the last 2 days\n\n👉 <i>Open RawJobs on your computer to finish the scan.</i>",
     );
+  });
+});
+
+describe("availableJobs", () => {
+  const now = Date.parse("2026-10-20T12:00:00.000Z");
+  const hoursAgo = (h: number) => new Date(now - h * 3_600_000).toISOString();
+  it("counts open, ungated jobs first seen in the last 48 hours, whichever scan found them", () => {
+    const jobs = [
+      job("fresh", 80, { firstSeen: hoursAgo(3) }),
+      job("yesterday", 50, { firstSeen: hoursAgo(30) }),
+      job("old", 80, { firstSeen: hoursAgo(49) }),
+      job("closed", 80, { firstSeen: hoursAgo(3), status: "closed" }),
+      job("gated", 80, { firstSeen: hoursAgo(3), why: { ...job("x", 80).why, gate: "location" } }),
+      job("stale posting", 80, { firstSeen: hoursAgo(3), postedAt: hoursAgo(24 * 40) }),
+    ];
+    expect(availableJobs(jobs, now).map((j) => j.title)).toEqual(["fresh", "yesterday"]);
   });
 });
 
