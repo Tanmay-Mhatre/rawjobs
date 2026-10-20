@@ -128,6 +128,8 @@ export const laneOf = (c: Pick<CompanyRef, "ats" | "region" | "shard">) => `${c.
 /** Companies in flight per lane: more where the API's own pace (http.ts paceOf) is the limit, not the lane. */
 const LANE_WORKERS = 4;
 const LANE_WORKERS_BY_ATS: Partial<Record<CompanyRef["ats"], number>> = { greenhouse: 8, workday: 8, smartrecruiters: 6 };
+/** Companies a lane of this hiring system fetches at once (scope.ts learns and estimates speeds with it). */
+export const laneWorkers = (ats: string): number => LANE_WORKERS_BY_ATS[ats as CompanyRef["ats"]] ?? LANE_WORKERS;
 
 /**
  * One pass over every enabled company (then any extra `checks`). A failing company never stops the
@@ -344,7 +346,7 @@ export async function runRadar(config: Config, opts: RunOptions = {}): Promise<R
           await fetchOne(company, extra);
         }
       };
-      return Array.from({ length: Math.min(LANE_WORKERS_BY_ATS[lane[0]![0].ats] ?? LANE_WORKERS, lane.length) }, worker);
+      return Array.from({ length: Math.min(laneWorkers(lane[0]![0].ats), lane.length) }, worker);
     }),
   );
   health.sort((a, b) => (order.get(`${a.ats}:${a.slug}`) ?? 0) - (order.get(`${b.ats}:${b.slug}`) ?? 0));
