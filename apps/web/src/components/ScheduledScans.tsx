@@ -9,8 +9,25 @@ import { Button, cx } from "./ui";
 
 const NOTIFIED: Record<string, string> = { sent: "sent to Telegram", "nothing-new": "nothing new to send", off: "Telegram not set up" };
 
-function runLine(r: ScheduledRun): string {
-  if (!r.ok) return "Didn't finish. It runs again at the next scheduled time.";
+const SKIPPED = "Another scan was already running.";
+
+/** Why a run failed, in plain words, from its raw error. The raw error stays under "Technical details". */
+const REASONS: [RegExp, string][] = [
+  [
+    /\b(EPERM|EBUSY|EACCES)\b/,
+    "Another program, often antivirus or a backup app, was using RawJobs' files when the scan tried to save. Your earlier results are safe. It tries again at the next scheduled time, or press Scan now.",
+  ],
+  [/\bENOSPC\b/, "Your disk is full. Free up some space, then press Scan now."],
+  [/\b(ENOTFOUND|ETIMEDOUT|ECONNRESET|EAI_AGAIN|ENETUNREACH)\b|fetch failed/, "No internet connection during the scan. It tries again at the next scheduled time."],
+];
+
+/** One history row's text. Exported for tests. */
+export function runLine(r: ScheduledRun): string {
+  if (!r.ok) {
+    if (r.error === SKIPPED) return "Skipped. Another scan was already running.";
+    const reason = REASONS.find(([pattern]) => pattern.test(r.error ?? ""))?.[1];
+    return reason ? `Didn't finish. ${reason}` : "Didn't finish. It runs again at the next scheduled time.";
+  }
   const parts = [`${r.matches ?? 0} matches, ${r.newMatches ?? 0} new`];
   if (r.notified) parts.push(NOTIFIED[r.notified] ?? r.notified);
   if (r.stopped) parts.push("stopped early");
@@ -216,9 +233,9 @@ export function ScheduledScans() {
                 <span className="w-32 shrink-0 text-muted" title={formatDateTime(r.startedAt)}>
                   {timeAgo(r.startedAt)}
                 </span>
-                <span className={cx("min-w-0 flex-1", !r.ok && "text-danger-text")}>
+                <span className={cx("min-w-0 flex-1", !r.ok && r.error !== SKIPPED && "text-danger-text")}>
                   {runLine(r)}
-                  {!r.ok && r.error && (
+                  {!r.ok && r.error && r.error !== SKIPPED && (
                     <details className="type-meta text-muted">
                       <summary className="cursor-pointer">Technical details</summary>
                       <span className="mt-1 block whitespace-pre-wrap font-mono">{r.error}</span>
