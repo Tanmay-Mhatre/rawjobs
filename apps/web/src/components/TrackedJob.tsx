@@ -1,9 +1,9 @@
 import { displayName } from "@rawjobs/core/display-name";
-import { CalendarClock, ExternalLink, Plus, UserRound, X } from "lucide-react";
+import { ExternalLink, X } from "lucide-react";
 import { type FormEvent, useState } from "react";
-import { type Entry, type EntryPatch, type Interview, newId, OFFER_FIELDS, type Offer, PIPELINE, ROLE_LABEL, STATUS_LABEL, type Status, toContact, today } from "../lib/userState";
-import { contactLinks, LINK_REL } from "../lib/contactLinks";
+import { type Entry, type EntryPatch, type Interview, OFFER_FIELDS, type Offer, PIPELINE, STATUS_LABEL, type Status, today } from "../lib/userState";
 import { Dialog } from "./Dialog";
+import { JobTracking } from "./pipeline/JobTracking";
 import { Button, Card, IconButton, Select } from "./ui";
 
 const input = "h-8 min-w-0 rounded-md border border-line bg-raised px-2 type-small text-ink placeholder:text-muted";
@@ -12,102 +12,6 @@ const day = (d: string) => new Date(`${d}T12:00:00`).toLocaleDateString(undefine
 
 /** The next interview from today, if any (for the Pipeline card). */
 export const nextInterview = (e: Entry, now = new Date()): Interview | undefined => (e.interviews ?? []).filter((i) => i.on >= today(now)).sort((a, b) => a.on.localeCompare(b.on))[0];
-
-/** Interview rounds and the people for one tracked job, each added in one line and removed with ×. */
-export function TrackingExtras({ entry, onUpdate }: { entry: Entry; onUpdate: (patch: EntryPatch) => void }) {
-  const interviews = [...(entry.interviews ?? [])].sort((a, b) => a.on.localeCompare(b.on));
-  const contacts = entry.contacts ?? [];
-  const addInterview = (ev: FormEvent<HTMLFormElement>) => {
-    ev.preventDefault();
-    const f = new FormData(ev.currentTarget);
-    const on = String(f.get("on") ?? "");
-    if (!on) return;
-    onUpdate({ interviews: [...(entry.interviews ?? []), { on, what: String(f.get("what") ?? "").trim() || "Interview" }] });
-    ev.currentTarget.reset();
-  };
-  const addContact = (ev: FormEvent<HTMLFormElement>) => {
-    ev.preventDefault();
-    const f = new FormData(ev.currentTarget);
-    const name = String(f.get("name") ?? "").trim();
-    if (!name) return;
-    const role = String(f.get("role") ?? "").trim();
-    const link = String(f.get("link") ?? "").trim();
-    // The free-text role is mapped to a v2 role (text that doesn't map is kept as how you met).
-    const person = toContact({ name, role, ...(/^https?:\/\//.test(link) ? { link } : {}) }, newId());
-    if (person) onUpdate({ contacts: [...contacts, person] });
-    ev.currentTarget.reset();
-  };
-  return (
-    <div className="grid gap-4">
-      {entry.status === "offer" || entry.offer ? <OfferFields offer={entry.offer ?? {}} onSave={(offer) => onUpdate({ offer })} /> : null}
-      <div className="grid gap-4 sm:grid-cols-2">
-        <div>
-          <h4 className="flex items-center gap-1.5 type-label">
-            <CalendarClock className="size-3.5" aria-hidden /> Interviews
-          </h4>
-          {interviews.length > 0 && (
-            <ul className="mt-1 grid gap-1 type-small">
-              {interviews.map((i) => (
-                <li key={`${i.on}:${i.what}`} className="flex items-center gap-2">
-                  <span className="tabular text-muted">{day(i.on)}</span>
-                  <span className="min-w-0 flex-1 truncate">{i.what}</span>
-                  <IconButton label={`Remove ${i.what} on ${day(i.on)}`} className="size-7" onClick={() => onUpdate({ interviews: (entry.interviews ?? []).filter((x) => x !== i) })}>
-                    <X className="size-3.5" />
-                  </IconButton>
-                </li>
-              ))}
-            </ul>
-          )}
-          <form onSubmit={addInterview} className="mt-1.5 flex gap-1.5">
-            <input name="on" type="date" required aria-label="Interview date" className={input} />
-            <input name="what" aria-label="Which round" placeholder="Screen, technical…" className={`${input} flex-1`} />
-            <IconButton type="submit" label="Add interview" className="size-8">
-              <Plus className="size-4" />
-            </IconButton>
-          </form>
-        </div>
-        <div>
-          <h4 className="flex items-center gap-1.5 type-label">
-            <UserRound className="size-3.5" aria-hidden /> People
-          </h4>
-          {contacts.length > 0 && (
-            <ul className="mt-1 grid gap-1 type-small">
-              {contacts.map((c) => {
-                // Only checked links: LinkedIn through contactLinks, else a v1 http(s) link.
-                const href = contactLinks(c).linkedin ?? (c.link && /^https?:\/\//.test(c.link) ? c.link : undefined);
-                return (
-                  <li key={c.id} className="flex items-center gap-2">
-                    <span className="min-w-0 flex-1 truncate">
-                      {href ? (
-                        <a href={href} target="_blank" rel={LINK_REL} className="font-medium hover:underline">
-                          {c.name}
-                        </a>
-                      ) : (
-                        <span className="font-medium">{c.name}</span>
-                      )}
-                      {c.role && <span className="text-muted"> · {c.role === "other" && c.howMet ? c.howMet : ROLE_LABEL[c.role]}</span>}
-                    </span>
-                    <IconButton label={`Remove ${c.name}`} className="size-7" onClick={() => onUpdate({ contacts: contacts.filter((x) => x !== c) })}>
-                      <X className="size-3.5" />
-                    </IconButton>
-                  </li>
-                );
-              })}
-            </ul>
-          )}
-          <form onSubmit={addContact} className="mt-1.5 grid grid-cols-[1fr_1fr_auto] gap-1.5">
-            <input name="name" required aria-label="Name" placeholder="Name" className={input} />
-            <input name="role" aria-label="Role" placeholder="Recruiter, referrer…" className={input} />
-            <IconButton type="submit" label="Add person" className="size-8">
-              <Plus className="size-4" />
-            </IconButton>
-            <input name="link" type="url" aria-label="Profile link (optional)" placeholder="LinkedIn link (optional)" className={`${input} col-span-2`} />
-          </form>
-        </div>
-      </div>
-    </div>
-  );
-}
 
 const OFFER_LABEL: Record<keyof Offer, string> = {
   pay: "Pay",
@@ -122,7 +26,7 @@ const OFFER_HINT: Partial<Record<keyof Offer, string>> = { pay: "AED 45k a month
 const isDate = (k: keyof Offer) => k === "start" || k === "deadline";
 
 /** The offer's terms, each saved when you leave the field. */
-function OfferFields({ offer, onSave }: { offer: Offer; onSave: (offer: Offer) => void }) {
+export function OfferFields({ offer, onSave }: { offer: Offer; onSave: (offer: Offer) => void }) {
   const save = (k: keyof Offer, v: string) => {
     if ((offer[k] ?? "") === v) return;
     onSave({ ...offer, [k]: v.trim() || undefined });
@@ -200,12 +104,58 @@ export function CompareOffers({ offers, onClose }: { offers: { id: string; entry
   );
 }
 
-/** A tracked job that isn't on the Radar (added by hand, or no longer listed): its progress, note, interviews and people. */
-export function TrackedJobDialog({ entry, onClose, onUpdate }: { entry: Entry | undefined; onClose: () => void; onUpdate: (patch: EntryPatch) => void }) {
-  if (!entry) return null;
+/** A job you added by hand: its title, company and link, the CV you sent, and the offer. */
+function JobFields({ entry, onUpdate }: { entry: Entry; onUpdate: (patch: EntryPatch, job?: JobFieldsValue) => void }) {
   const s = entry.snapshot;
+  const saveJob = (k: keyof JobFieldsValue, raw: string) => {
+    const v = raw.trim();
+    if (k === "url" && v && !/^https?:\/\//.test(v)) return;
+    if ((k !== "url" && !v) || v === s[k]) return;
+    onUpdate({}, { title: s.title, company: s.company, url: s.url, [k]: v });
+  };
   return (
-    <Dialog open onClose={onClose} labelledBy="tracked-title" className="max-w-xl">
+    <div className="grid gap-3">
+      <div className="grid gap-3 sm:grid-cols-2">
+        <label className="grid gap-1 type-label">
+          Job title
+          <input defaultValue={s.title} required onBlur={(e) => saveJob("title", e.target.value)} className={`${input} h-9`} />
+        </label>
+        <label className="grid gap-1 type-label">
+          Company
+          <input defaultValue={s.company} required onBlur={(e) => saveJob("company", e.target.value)} className={`${input} h-9`} />
+        </label>
+        <label className="grid gap-1 type-label">
+          Link to the posting
+          <input type="url" defaultValue={s.url} placeholder="https://" onBlur={(e) => saveJob("url", e.target.value)} className={`${input} h-9`} />
+        </label>
+        <label className="grid gap-1 type-label">
+          CV used
+          <input
+            defaultValue={entry.cv ?? ""}
+            placeholder="Fintech PM v3"
+            onBlur={(e) => e.target.value.trim() !== (entry.cv ?? "") && onUpdate({ cv: e.target.value.trim() || undefined })}
+            className={`${input} h-9`}
+          />
+        </label>
+      </div>
+      <OfferFields offer={entry.offer ?? {}} onSave={(offer) => onUpdate({ offer })} />
+    </div>
+  );
+}
+
+type JobFieldsValue = { title: string; company: string; url: string };
+
+/**
+ * A tracked job that isn't on the Radar (added by hand, or no longer listed): its progress, with the
+ * same Activity, People and Interviews tabs as the job detail, and a Job tab for one added by hand.
+ * `onUpdate`'s `job` renames it (title, company, link).
+ */
+export function TrackedJobDialog({ id, entry, onClose, onUpdate }: { id: string | null; entry: Entry | undefined; onClose: () => void; onUpdate: (patch: EntryPatch, job?: JobFieldsValue) => void }) {
+  if (!entry || !id) return null;
+  const s = entry.snapshot;
+  const manual = id.startsWith("manual:");
+  return (
+    <Dialog open onClose={onClose} labelledBy="tracked-title" className="max-h-[calc(100dvh-2rem)] max-w-2xl overflow-y-auto">
       <Card className="grid gap-4 p-5 shadow-l3 sm:p-6">
         <div className="flex items-start gap-3">
           <div className="min-w-0 flex-1">
@@ -239,17 +189,8 @@ export function TrackedJobDialog({ entry, onClose, onUpdate }: { entry: Entry | 
             <option value="">Remove from Pipeline</option>
           </Select>
         </label>
-        <label className="grid gap-1 type-label">
-          Notes
-          <textarea
-            key={s.title}
-            defaultValue={entry.note ?? ""}
-            onBlur={(e) => e.target.value !== (entry.note ?? "") && onUpdate({ note: e.target.value || undefined })}
-            rows={2}
-            className="w-full resize-y rounded-md border border-line bg-inset p-2.5 type-small font-normal text-ink"
-          />
-        </label>
-        <TrackingExtras entry={entry} onUpdate={onUpdate} />
+        {!manual && (entry.status === "offer" || entry.offer) && <OfferFields offer={entry.offer ?? {}} onSave={(offer) => onUpdate({ offer })} />}
+        <JobTracking key={id} jobId={id} entry={entry} title={s.title} onUpdate={onUpdate} jobTab={manual ? <JobFields entry={entry} onUpdate={onUpdate} /> : undefined} />
       </Card>
     </Dialog>
   );

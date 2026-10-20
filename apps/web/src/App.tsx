@@ -7,6 +7,7 @@ import { checklistItems, ConfigProblemCard, FailingBanner, FirstScanCard, NoMatc
 import { ApplyPrompt } from "./components/ApplyPrompt";
 import { JobDrawer } from "./components/JobDrawer";
 import { type NotForMeApi, NotForMeProvider, useNotForMeApi } from "./components/NotForMe";
+import { type PeopleApi, PeopleProvider } from "./components/pipeline/PeopleContext";
 import { Pipeline } from "./components/Pipeline";
 import { FeedSkeleton } from "./components/radar/FeedSkeleton";
 import { RadarPage } from "./components/radar/RadarPage";
@@ -58,6 +59,7 @@ export function App() {
   const { state, reload } = useData();
   const setup = useSetupStatus();
   const user = useUserState();
+  const people = useMemo(() => ({ state: user.state, updateContact: user.updateContact }), [user.state, user.updateContact]);
   const prefs = usePrefs();
   /** The job whose apply page was just opened, to ask "Did you apply?" on return. */
   const [applying, setApplying] = useState<Job | null>(null);
@@ -256,7 +258,7 @@ export function App() {
   const items = checklistItems(notSetUp ? draftToConfig(draft) : status?.config, meta, !!resume.text);
 
   return (
-    <Providers notForMe={notForMe} profileFix={profileFix}>
+    <Providers notForMe={notForMe} profileFix={profileFix} people={people}>
       <div className="min-h-dvh">
         {/* biome-ignore lint/a11y/useValidAnchor: a real link (its href works without script); onClick only adds in-page focus or routing */}
         <a
@@ -646,10 +648,12 @@ function ShortcutHelp({ open, onClose, canScan }: { open: boolean; onClose: () =
 }
 
 /** The app-wide contexts: "Not for me" and the "Why it matched" profile fixes. */
-function Providers({ notForMe, profileFix, children }: { notForMe: NotForMeApi; profileFix: ProfileFixApi | null; children: ReactNode }) {
+function Providers({ notForMe, profileFix, people, children }: { notForMe: NotForMeApi; profileFix: ProfileFixApi | null; people: PeopleApi; children: ReactNode }) {
   return (
     <NotForMeProvider value={notForMe}>
-      <ProfileFixProvider value={profileFix}>{children}</ProfileFixProvider>
+      <ProfileFixProvider value={profileFix}>
+        <PeopleProvider value={people}>{children}</PeopleProvider>
+      </ProfileFixProvider>
     </NotForMeProvider>
   );
 }
