@@ -25,6 +25,8 @@ import { Button, Card, cx, IconButton } from "./components/ui";
 import { keyOf } from "./lib/companies";
 import { canRunLocally, useData, useOtherJobs, type Job } from "./lib/data";
 import { newCtx } from "./lib/newSince";
+import { toReview } from "./lib/toReview";
+import { useHourlyNow } from "./components/radar/hooks";
 import { usePrefs } from "./lib/prefs";
 import { scanPrefs, useScan, withLive } from "./lib/scan";
 import { useBackgroundScan } from "./lib/backgroundScan";
@@ -204,6 +206,15 @@ export function App() {
     [statusOf, toggleStatus, askWhy],
   );
   const onOpen = useCallback((job: Job) => setOpenId(job.id), []);
+  const hourlyNow = useHourlyNow();
+  // The Pipeline's To review column: new strong matches you haven't tracked; none while the Radar isn't set up.
+  const review = useMemo(
+    () =>
+      notSetUp
+        ? undefined
+        : toReview(jobs, { user: user.state, min: meta?.profile.min_score ?? 70, hiddenCompanies: new Set(prefs.prefs.hiddenCompanies), hideRules: prefs.prefs.hideRules, now: hourlyNow }),
+    [notSetUp, jobs, user.state, meta?.profile.min_score, prefs.prefs.hiddenCompanies, prefs.prefs.hideRules, hourlyNow],
+  );
   const onApply = useCallback((job: Job) => setApplying(job), []);
 
   const inSetup = "setup" in route;
@@ -272,7 +283,7 @@ export function App() {
           Skip to content
         </a>
         <header className="sticky top-0 z-30 border-b border-line bg-raised/85 backdrop-blur">
-          <div className="mx-auto flex h-14 max-w-6xl items-center gap-3 px-4">
+          <div className={cx("mx-auto flex h-14 items-center gap-3 px-4", tab === "pipeline" ? "max-w-[100rem]" : "max-w-6xl")}>
             {/* biome-ignore lint/a11y/useValidAnchor: a real link (its href works without script); onClick only adds in-page focus or routing */}
             <a href="#radar" onClick={() => go({ tab: "radar" })} className="flex shrink-0 items-center rounded-sm" aria-label="RawJobs, go to Radar">
               {/* The wordmark at every width, 100px (the minimum is 96px): ink on light themes, paper on dark.
@@ -347,7 +358,9 @@ export function App() {
           id="main"
           tabIndex={-1}
           className={cx(
-            "mx-auto max-w-6xl px-4 pt-5 outline-none",
+            "mx-auto px-4 pt-5 outline-none",
+            // The Pipeline's six columns get more room; every other page keeps the reading width.
+            tab === "pipeline" ? "max-w-[100rem]" : "max-w-6xl",
             inSetup ? "pb-10" : "pb-24 md:pb-10",
             // The Radar fits the window on laptops and up: the feed and the job scroll inside their panels,
             // the page itself never does, and Apply stays in view.
@@ -445,8 +458,9 @@ export function App() {
                 <Pipeline
                   user={user.state}
                   jobsById={jobsById}
-                  min={meta?.profile.min_score ?? 70}
                   onOpen={onOpen}
+                  review={review}
+                  onReview={onStatus}
                   onPatch={(id, entry, patch) => user.update({ id, ...entry.snapshot, ...pick(jobsById.get(id)) }, patch)}
                   weeklyPlan={prefs.prefs.weeklyPlan}
                   onWeeklyPlan={prefs.setWeeklyPlan}

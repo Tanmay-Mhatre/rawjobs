@@ -1,6 +1,6 @@
 import { linkedInUrl, phoneDigits } from "../../lib/contactLinks";
-import { activityText } from "../../lib/nextSteps";
-import { type Activity, CHANNEL_LABEL, type Contact, type Entry, ROLE_LABEL, STATUS_LABEL, statusLabel, type UserState } from "../../lib/userState";
+import { activityText, type Task } from "../../lib/nextSteps";
+import { type Activity, CHANNEL_LABEL, type Channel, type Contact, type Entry, ROLE_LABEL, STATUS_LABEL, statusLabel, type UserState } from "../../lib/userState";
 
 /**
  * The job detail's logic (docs/plans/pipeline-v2.md, section 6.2), kept out of the components so it
@@ -114,4 +114,15 @@ export function templateText(kind: "follow-up" | "thank-you" | "check-in", name:
   if (kind === "thank-you") return `${hi} thank you for your time on the ${title} interview. I enjoyed the conversation and I'm keen on the role.`;
   if (kind === "check-in") return `${hi} I wanted to check in on the ${title} role. Is there anything else you need from me?`;
   return `${hi} I applied for the ${title} role and wanted to follow up. I'm still very interested and happy to share anything that helps.`;
+}
+
+/**
+ * What Log follow-up and Log thank-you put in the composer: the channel and person of the last sent
+ * touch (or the task's person), the built-in text, and the follow-up mark.
+ */
+export function taskPrefill(entry: Entry, task: Task, title: string): { channel: Channel; dir: "sent"; contactId?: string; text: string; followUp: boolean } {
+  const lastSent = (entry.activities ?? []).filter((a) => a.dir === "sent" && a.channel !== "note").at(-1);
+  const contactId = task.contactId ?? lastSent?.contactId;
+  const name = entry.contacts?.find((c) => c.id === contactId)?.name;
+  return { channel: lastSent?.channel ?? "email", dir: "sent", contactId, text: templateText(task.kind === "thank-you" ? "thank-you" : "follow-up", name, title), followUp: entry.status !== "saved" };
 }
