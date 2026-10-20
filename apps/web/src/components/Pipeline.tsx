@@ -2,6 +2,7 @@ import { displayName } from "@rawjobs/core/display-name";
 import { ArrowRight, BellRing, CalendarClock, ExternalLink, Plus, StickyNote } from "lucide-react";
 import { type KeyboardEvent, useEffect, useRef, useState } from "react";
 import type { Job } from "../lib/data";
+import type { WeeklyPlan } from "../lib/prefs";
 import { timeAgo } from "../lib/format";
 import {
   dayAfter,
@@ -33,14 +34,14 @@ type Props = {
   onPatch: (id: string, entry: Entry, patch: EntryPatch) => void;
   /** Track a job RawJobs didn't find. */
   onAdd: (job: { title: string; company: string; url: string }, status: Status) => void;
-  weeklyGoal?: number;
-  onWeeklyGoal: (goal: number | undefined) => void;
+  weeklyPlan?: WeeklyPlan;
+  onWeeklyPlan: (plan: WeeklyPlan) => void;
   /** Radar not set up yet: the empty state points to setup instead of the Radar. */
   onSetup?: () => void;
   goRadar: () => void;
 };
 
-export function Pipeline({ user, jobsById, min, onOpen, onPatch, onAdd, weeklyGoal, onWeeklyGoal, onSetup, goRadar }: Props) {
+export function Pipeline({ user, jobsById, min, onOpen, onPatch, onAdd, weeklyPlan, onWeeklyPlan, onSetup, goRadar }: Props) {
   /** A card for a job not on the Radar (added by hand, or no longer listed) opens here instead of the job drawer. */
   const [editing, setEditing] = useState<string | null>(null);
   const [adding, setAdding] = useState(false);
@@ -137,7 +138,7 @@ export function Pipeline({ user, jobsById, min, onOpen, onPatch, onAdd, weeklyGo
           <Plus className="size-4" /> Track a job
         </Button>
       </div>
-      <PipelineInsights user={user} goal={weeklyGoal} onGoal={onWeeklyGoal} />
+      <PipelineInsights user={user} plan={weeklyPlan ?? {}} onPlan={onWeeklyPlan} />
       <FollowUps user={user} jobsById={jobsById} onOpen={onOpen} onPatch={onPatch} />
       <p id="pipeline-move-help" className="sr-only">
         Press [ or ] to move this job to the previous or next stage.

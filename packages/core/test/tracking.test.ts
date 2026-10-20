@@ -3,7 +3,7 @@ import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { defaultDataDir, rawjobsHome } from "../src/paths";
-import { readTracking, saveTracking, TRACKING_PATH } from "../src/tracking";
+import { BACKUPS_DIR, BACKUPS_KEPT, backUp, readTracking, saveTracking, TRACKING_PATH } from "../src/tracking";
 
 const env = { ...process.env };
 afterEach(() => {
@@ -50,7 +50,24 @@ describe("tracking", () => {
     expect(readTracking(h)).toMatchObject({ state: { a: { status: "saved" } }, prefs: { views: [] }, browser: { "rawjobs.scanAsk": false } });
     expect(t.updatedAt).toMatch(/^\d{4}-/);
     // Written whole, never half: no temporary file is left behind.
-    expect(readdirSync(join(h, "profile"))).toEqual(["tracking.json"]);
+    expect(readdirSync(join(h, "profile")).filter((f) => f !== "backups")).toEqual(["tracking.json"]);
+  });
+
+  it("copies the file to backups once a day, keeping the newest 7", () => {
+    const h = home();
+    saveTracking({ state: { a: { status: "saved" } } }, h);
+    // Nothing to back up before the first file existed.
+    expect(existsSync(join(h, BACKUPS_DIR))).toBe(false);
+    saveTracking({ state: { a: { status: "applied" } } }, h);
+    saveTracking({ state: { a: { status: "offer" } } }, h);
+    const backups = readdirSync(join(h, BACKUPS_DIR));
+    expect(backups).toHaveLength(1);
+    // The copy is the file as it was before the day's first change.
+    expect(JSON.parse(readFileSync(join(h, BACKUPS_DIR, backups[0]!), "utf8")).state).toEqual({ a: { status: "saved" } });
+    for (let d = 1; d <= 9; d++) backUp(join(h, TRACKING_PATH), h, new Date(2026, 0, d, 12));
+    const kept = readdirSync(join(h, BACKUPS_DIR));
+    expect(kept).toHaveLength(BACKUPS_KEPT);
+    expect(kept).not.toContain("tracking-2026-01-01.json");
   });
 
   it("refuses anything that isn't { state?, prefs?, appearance? } objects, and leaves the file alone", () => {

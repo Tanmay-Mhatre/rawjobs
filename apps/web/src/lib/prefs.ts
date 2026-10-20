@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { DEFAULT_FILTERS, type Filters, type Sort } from "./filters";
 import { ruleKey, type HideRule } from "./notForMe";
-import { load, save } from "./storage";
+import { load, save, saveFailed } from "./storage";
 import { useSavedOnDisk } from "./tracking";
 
 /** A named filter + sort combination the user saved on the Radar. */
@@ -14,22 +14,44 @@ export type Prefs = {
   hiddenCompanies: string[];
   /** Rules you confirmed after a Not interested reason ("Hide senior roles"). Older exports have none. */
   hideRules: HideRule[];
-  /** Applications a week you aim for (Pipeline insights and the weekly Telegram summary). */
+  /** What you aim to do each week (Pipeline insights and the weekly Telegram summary). */
+  weeklyPlan: WeeklyPlan;
+  /** The v1 applications goal: still written (= weeklyPlan.applications) so older versions read it. */
   weeklyGoal?: number;
 };
 
+/** Activity you control, per week, each 1 to PLAN_MAX: applications, follow-ups sent, outreach and referrals. */
+export type WeeklyPlan = { applications?: number; followUps?: number; outreach?: number };
+export const PLAN_MAX = 50;
+
+/** A goal from 1 to PLAN_MAX, or nothing. */
+const goal = (v: unknown) => (typeof v === "number" && v >= 1 && v <= PLAN_MAX ? Math.round(v) : undefined);
+
+/** The plan from `weeklyPlan`; applications fall back to the v1 `weeklyGoal` (1 to 100 then, so a bigger one becomes the most allowed). */
+export function planOf(p: Partial<Prefs>): WeeklyPlan {
+  const raw = (p.weeklyPlan && typeof p.weeklyPlan === "object" ? p.weeklyPlan : {}) as Record<string, unknown>;
+  const legacy = typeof p.weeklyGoal === "number" && p.weeklyGoal >= 1 ? Math.min(PLAN_MAX, Math.round(p.weeklyGoal)) : undefined;
+  const plan: WeeklyPlan = { applications: goal(raw.applications) ?? legacy, followUps: goal(raw.followUps), outreach: goal(raw.outreach) };
+  for (const k of Object.keys(plan) as (keyof WeeklyPlan)[]) if (plan[k] === undefined) delete plan[k];
+  return plan;
+}
+
 const KEY = "rawjobs.prefs.v1";
-const EMPTY: Prefs = { views: [], hiddenCompanies: [], hideRules: [] };
+const EMPTY: Prefs = { views: [], hiddenCompanies: [], hideRules: [], weeklyPlan: {} };
 /** Missing or broken lists (older exports, hand edits) become empty ones. */
-export const withDefaults = (p: Partial<Prefs>): Prefs => ({
-  ...EMPTY,
-  ...p,
-  // Views saved before a filter existed (Type) get its default, so every filter is there.
-  views: Array.isArray(p.views) ? p.views.map((v) => ({ ...v, filters: { ...DEFAULT_FILTERS, ...v.filters } })) : [],
-  hiddenCompanies: Array.isArray(p.hiddenCompanies) ? p.hiddenCompanies : [],
-  hideRules: Array.isArray(p.hideRules) ? p.hideRules : [],
-  weeklyGoal: typeof p.weeklyGoal === "number" && p.weeklyGoal >= 1 && p.weeklyGoal <= 100 ? Math.round(p.weeklyGoal) : undefined,
-});
+export const withDefaults = (p: Partial<Prefs>): Prefs => {
+  const weeklyPlan = planOf(p);
+  return {
+    ...EMPTY,
+    ...p,
+    // Views saved before a filter existed (Type) get its default, so every filter is there.
+    views: Array.isArray(p.views) ? p.views.map((v) => ({ ...v, filters: { ...DEFAULT_FILTERS, ...v.filters } })) : [],
+    hiddenCompanies: Array.isArray(p.hiddenCompanies) ? p.hiddenCompanies : [],
+    hideRules: Array.isArray(p.hideRules) ? p.hideRules : [],
+    weeklyPlan,
+    weeklyGoal: weeklyPlan.applications,
+  };
+};
 
 /** Add a rule; one with the same key (a pay rule in the same currency and period) is replaced. */
 export const addRule = (rules: HideRule[], rule: HideRule) => [...rules.filter((r) => ruleKey(r) !== ruleKey(rule)), rule];
@@ -37,7 +59,9 @@ export const removeRule = (rules: HideRule[], rule: HideRule) => rules.filter((r
 
 export function usePrefs() {
   const [prefs, setPrefs] = useState<Prefs>(() => withDefaults(load<Partial<Prefs>>(KEY, {})));
-  useEffect(() => save(KEY, prefs), [prefs]);
+  useEffect(() => {
+    if (!save(KEY, prefs)) saveFailed();
+  }, [prefs]);
   useSavedOnDisk<Prefs>("prefs", prefs, (p) => setPrefs(withDefaults(p)));
 
   const saveView = useCallback((name: string, filters: Filters, sort: Sort) => {
@@ -59,7 +83,8 @@ export function usePrefs() {
   /** Turn a rule on or off (Undo, and the list under More). */
   const setRule = useCallback((rule: HideRule, on: boolean) => setPrefs((p) => ({ ...p, hideRules: on ? addRule(p.hideRules, rule) : removeRule(p.hideRules, rule) })), []);
   const replacePrefs = useCallback((next: Partial<Prefs>) => setPrefs(withDefaults(next)), []);
-  const setWeeklyGoal = useCallback((weeklyGoal: number | undefined) => setPrefs((p) => withDefaults({ ...p, weeklyGoal })), []);
+  // The v1 goal follows the plan, so a cleared goal stays cleared.
+  const setWeeklyPlan = useCallback((weeklyPlan: WeeklyPlan) => setPrefs((p) => withDefaults({ ...p, weeklyPlan, weeklyGoal: weeklyPlan.applications })), []);
 
-  return { prefs, saveView, renameView, deleteView, restoreView, setCompanyHidden, setRule, replacePrefs, setWeeklyGoal };
+  return { prefs, saveView, renameView, deleteView, restoreView, setCompanyHidden, setRule, replacePrefs, setWeeklyPlan };
 }

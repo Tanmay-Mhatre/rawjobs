@@ -23,7 +23,7 @@ import { offerWhat } from "./lib/notForMe";
 import { Button, Card, cx, IconButton } from "./components/ui";
 import { keyOf } from "./lib/companies";
 import { canRunLocally, useData, useOtherJobs, type Job } from "./lib/data";
-import { newSinceLastVisit } from "./lib/newSince";
+import { newCtx } from "./lib/newSince";
 import { usePrefs } from "./lib/prefs";
 import { scanPrefs, useScan, withLive } from "./lib/scan";
 import { useBackgroundScan } from "./lib/backgroundScan";
@@ -33,7 +33,7 @@ import { profileFromPicks, type FilterPicks } from "./lib/profileSync";
 import { ProfileFixProvider, type ProfileFixApi } from "./lib/profileFix";
 import { draftToConfig, emptyDraft, resetSetup, saveConfig, setupProgress, STEP, useSetupStatus } from "./lib/setup";
 import { buildSuggestions } from "./lib/suggest";
-import { load, save } from "./lib/storage";
+import { load, onSaveFailed, save } from "./lib/storage";
 import { timeAgo } from "./lib/format";
 import { hasNewTag } from "./lib/filters";
 import { roleOf } from "./lib/identity";
@@ -50,6 +50,9 @@ import { useScanNotify } from "./app/useScanNotify";
 import { DRAFT_KEY, useSetupDraft, WELCOME_SEEN_KEY } from "./app/useSetupDraft";
 
 const NO_JOBS: Job[] = [];
+
+// Saving your tracking failed (the browser refused it, or the local API did): say so, at most once a minute, rather than fail silently.
+onSaveFailed(() => toast({ message: "Couldn't save your tracking" }));
 
 export function App() {
   const { state, reload } = useData();
@@ -443,8 +446,8 @@ export function App() {
                   min={meta?.profile.min_score ?? 70}
                   onOpen={onOpen}
                   onPatch={(id, entry, patch) => user.update({ id, ...entry.snapshot, ...pick(jobsById.get(id)) }, patch)}
-                  weeklyGoal={prefs.prefs.weeklyGoal}
-                  onWeeklyGoal={prefs.setWeeklyGoal}
+                  weeklyPlan={prefs.prefs.weeklyPlan}
+                  onWeeklyPlan={prefs.setWeeklyPlan}
                   onAdd={(j, status) => user.update({ id: `manual:${Date.now().toString(36)}`, ...j, location: "", score: 0 }, { status })}
                   onSetup={notSetUp ? toSetup : undefined}
                   goRadar={() => go({ tab: "radar" })}
@@ -552,11 +555,8 @@ export function App() {
         {openJob && meta && (
           <JobDrawer
             job={openJob}
-            isNew={(() => {
-              // Same rule as the feed: new since your last visit, never on the first scan.
-              const full = meta.runs.filter((r) => !r.partial);
-              return hasNewTag(openJob, { firstScan: full.length <= 1, newSince: newSinceLastVisit(full[0]?.finishedAt, full[1]?.finishedAt) });
-            })()}
+            // Same rule as the feed: new since your last visit, never on the first scan.
+            isNew={hasNewTag(openJob, newCtx(meta.runs))}
             entry={user.state[openJob.id]}
             profile={meta.profile}
             postings={jobs.filter((j) => roleOf(j) === roleOf(openJob))}

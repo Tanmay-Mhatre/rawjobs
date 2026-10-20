@@ -1,7 +1,7 @@
 import { displayName } from "@rawjobs/core/display-name";
 import { CalendarClock, ExternalLink, Plus, UserRound, X } from "lucide-react";
 import { type FormEvent, useState } from "react";
-import { type Entry, type EntryPatch, type Interview, OFFER_FIELDS, type Offer, PIPELINE, STATUS_LABEL, type Status, today } from "../lib/userState";
+import { type Entry, type EntryPatch, type Interview, newId, OFFER_FIELDS, type Offer, PIPELINE, ROLE_LABEL, STATUS_LABEL, type Status, toContact, today } from "../lib/userState";
 import { Dialog } from "./Dialog";
 import { Button, Card, IconButton, Select } from "./ui";
 
@@ -31,7 +31,9 @@ export function TrackingExtras({ entry, onUpdate }: { entry: Entry; onUpdate: (p
     if (!name) return;
     const role = String(f.get("role") ?? "").trim();
     const link = String(f.get("link") ?? "").trim();
-    onUpdate({ contacts: [...contacts, { name, ...(role ? { role } : {}), ...(/^https?:\/\//.test(link) ? { link } : {}) }] });
+    // The free-text role is mapped to a v2 role (text that doesn't map is kept as how you met).
+    const person = toContact({ name, role, ...(/^https?:\/\//.test(link) ? { link } : {}) }, newId());
+    if (person) onUpdate({ contacts: [...contacts, person] });
     ev.currentTarget.reset();
   };
   return (
@@ -70,16 +72,16 @@ export function TrackingExtras({ entry, onUpdate }: { entry: Entry; onUpdate: (p
           {contacts.length > 0 && (
             <ul className="mt-1 grid gap-1 type-small">
               {contacts.map((c) => (
-                <li key={`${c.name}:${c.link ?? ""}`} className="flex items-center gap-2">
+                <li key={c.id} className="flex items-center gap-2">
                   <span className="min-w-0 flex-1 truncate">
-                    {c.link ? (
-                      <a href={c.link} target="_blank" rel="noreferrer" className="font-medium hover:underline">
+                    {(c.linkedin ?? c.link) ? (
+                      <a href={c.linkedin ?? c.link} target="_blank" rel="noopener noreferrer" className="font-medium hover:underline">
                         {c.name}
                       </a>
                     ) : (
                       <span className="font-medium">{c.name}</span>
                     )}
-                    {c.role && <span className="text-muted"> · {c.role}</span>}
+                    {c.role && <span className="text-muted"> · {c.role === "other" && c.howMet ? c.howMet : ROLE_LABEL[c.role]}</span>}
                   </span>
                   <IconButton label={`Remove ${c.name}`} className="size-7" onClick={() => onUpdate({ contacts: contacts.filter((x) => x !== c) })}>
                     <X className="size-3.5" />

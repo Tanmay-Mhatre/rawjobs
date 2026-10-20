@@ -96,7 +96,7 @@ describe("rules filter the Radar", () => {
 
 describe("prefs", () => {
   it("older exports without rules still load", () => {
-    expect(withDefaults({ views: [], hiddenCompanies: ["Acme"] })).toEqual({ views: [], hiddenCompanies: ["Acme"], hideRules: [] });
+    expect(withDefaults({ views: [], hiddenCompanies: ["Acme"] })).toEqual({ views: [], hiddenCompanies: ["Acme"], hideRules: [], weeklyPlan: {} });
   });
   it("a new pay rule in the same currency and period replaces the old one", () => {
     const a: HideRule = { kind: "pay", max: 100, currency: "USD", period: "year" };

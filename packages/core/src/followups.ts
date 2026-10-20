@@ -10,22 +10,25 @@ const plural = (n: number, one: string, many: string) => `<b>${n.toLocaleString(
 /** Which follow-ups were already sent (job id -> its follow-up date), so each is sent once. */
 export const FOLLOW_UPS_SENT = "followups-sent.json";
 
+/** Stages where a follow-up date counts (the dashboard keeps one in each). */
+const ACTIVE = new Set(["saved", "applied", "interviewing", "offer"]);
+
 /**
- * Jobs you applied to whose follow-up date (YYYY-MM-DD) is `today` or past, from the dashboard's
+ * Jobs in an active stage whose follow-up date (YYYY-MM-DD) is `today` or past, from the dashboard's
  * tracking. Read loosely: the dashboard owns that shape, and anything unexpected is skipped.
  */
 export function dueFollowUps(state: Record<string, unknown> | undefined, today: string): { id: string; followUp: string }[] {
   const due: { id: string; followUp: string }[] = [];
   for (const [id, v] of Object.entries(state ?? {})) {
     const e = v as { status?: unknown; followUp?: unknown } | null;
-    if (e?.status === "applied" && typeof e.followUp === "string" && /^\d{4}-\d{2}-\d{2}$/.test(e.followUp) && e.followUp <= today) due.push({ id, followUp: e.followUp });
+    if (typeof e?.status === "string" && ACTIVE.has(e.status) && typeof e.followUp === "string" && /^\d{4}-\d{2}-\d{2}$/.test(e.followUp) && e.followUp <= today)
+      due.push({ id, followUp: e.followUp });
   }
   return due;
 }
 
-/** "2 jobs you applied to are due a follow-up": no titles, as every alert keeps the details in the app. */
-export const followUpMessage = (n: number) =>
-  telegramMessage("⏰ <b>Time to follow up</b>", `${plural(n, "job", "jobs")} you applied to ${n === 1 ? "is" : "are"} due a follow-up.`, "Open the Pipeline in RawJobs.");
+/** "2 jobs are due a follow-up": no titles, as every alert keeps the details in the app. */
+export const followUpMessage = (n: number) => telegramMessage("⏰ <b>Time to follow up</b>", `${plural(n, "job", "jobs")} ${n === 1 ? "is" : "are"} due a follow-up.`, "Open the Pipeline in RawJobs.");
 
 /** Today as YYYY-MM-DD in local time, the way the dashboard writes follow-up dates. */
 const localDay = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
@@ -101,33 +104,60 @@ export async function remindInterviews(dataDir: string, secrets: TelegramSecrets
 export const WEEKLY_SENT = "weekly-summary-sent.json";
 
 type Step = { status?: unknown; at?: unknown };
+type Touch = { at?: unknown; dir?: unknown; channel?: unknown; followUp?: unknown };
 
-/** Last week's applications and replies (interview, offer, or a rejection), from each job's dated steps. */
-export function lastWeek(state: Record<string, unknown> | undefined, from: number, to: number): { applied: number; replies: number } {
+export type Week = { applied: number; followUps: number; replies: number };
+
+/**
+ * Last week's applications, follow-ups sent (touches logged from a follow-up or thank-you task) and
+ * replies (jobs that answered: an interview, an offer, a rejection, or a message back), from each
+ * job's dated steps and touches.
+ */
+export function lastWeek(state: Record<string, unknown> | undefined, from: number, to: number): Week {
   let applied = 0;
+  let followUps = 0;
   let replies = 0;
+  const inWeek = (at: unknown) => {
+    const t = typeof at === "string" ? Date.parse(at) : Number.NaN;
+    return t >= from && t < to;
+  };
   for (const v of Object.values(state ?? {})) {
-    const e = v as { history?: unknown; closedAs?: unknown } | null;
-    if (!Array.isArray(e?.history)) continue;
-    for (const h of e.history as Step[]) {
-      const t = typeof h?.at === "string" ? Date.parse(h.at) : Number.NaN;
-      if (!(t >= from && t < to)) continue;
+    const e = v as { history?: unknown; closedAs?: unknown; activities?: unknown } | null;
+    let replied = false;
+    for (const h of (Array.isArray(e?.history) ? e.history : []) as Step[]) {
+      if (!inWeek(h?.at)) continue;
       if (h.status === "applied") applied++;
-      else if (h.status === "interviewing" || h.status === "offer" || (h.status === "rejected" && e?.closedAs === "rejected")) replies++;
+      else if (h.status === "interviewing" || h.status === "offer" || (h.status === "rejected" && e?.closedAs === "rejected")) replied = true;
     }
+    for (const a of (Array.isArray(e?.activities) ? e.activities : []) as Touch[]) {
+      if (!inWeek(a?.at) || a.channel === "note") continue;
+      if (a.dir === "sent" && a.followUp === true) followUps++;
+      if (a.dir === "received") replied = true;
+    }
+    if (replied) replies++;
   }
-  return { applied, replies };
+  return { applied, followUps, replies };
 }
 
-/** "Last week: 4 applications (goal 5), 1 reply." */
-export const weeklyMessage = (w: { applied: number; replies: number }, goal?: number) =>
+/**
+ * "4 applications (plan 5), 2 follow-ups, 1 reply." Counts only: never a company, a person, their
+ * details or what you wrote, as every alert keeps the details in the app.
+ */
+export const weeklyMessage = (w: Week, plan?: number) =>
   telegramMessage(
     "📊 <b>Your week</b>",
-    `${plural(w.applied, "application", "applications")}${goal ? ` (goal ${goal})` : ""}, ${plural(w.replies, "reply", "replies")}.`,
+    `${plural(w.applied, "application", "applications")}${plan ? ` (plan ${plan})` : ""}, ${plural(w.followUps, "follow-up", "follow-ups")}, ${plural(w.replies, "reply", "replies")}.`,
     "See your insights in the Pipeline in RawJobs.",
   );
 
-/** Once a week, with the first scan from Monday: last week's applications and replies. Never throws. */
+/** Applications a week you plan: `weeklyPlan.applications`, else the v1 `weeklyGoal`. */
+export function applicationsPlan(prefs: Record<string, unknown> | undefined): number | undefined {
+  const plan = (prefs?.weeklyPlan as { applications?: unknown } | undefined)?.applications;
+  const n = typeof plan === "number" ? plan : prefs?.weeklyGoal;
+  return typeof n === "number" && n >= 1 ? Math.round(n) : undefined;
+}
+
+/** Once a week, with the first scan from Monday: last week's applications, follow-ups and replies. Never throws. */
 export async function sendWeeklySummary(
   dataDir: string,
   secrets: TelegramSecrets,
@@ -149,13 +179,12 @@ export async function sendWeeklySummary(
   prev.setDate(prev.getDate() - 7);
   const w = lastWeek(tracking?.state, prev.getTime(), monday.getTime());
   // Nothing tracked last week: no message, and don't check again until next week.
-  if (!w.applied && !w.replies) {
+  if (!w.applied && !w.followUps && !w.replies) {
     writeFileSync(path, JSON.stringify(week));
     return "nothing";
   }
-  const goal = (tracking?.prefs as { weeklyGoal?: unknown } | undefined)?.weeklyGoal;
   try {
-    await sendTelegram(weeklyMessage(w, typeof goal === "number" ? goal : undefined), secrets, opts.fetchImpl);
+    await sendTelegram(weeklyMessage(w, applicationsPlan(tracking?.prefs)), secrets, opts.fetchImpl);
   } catch (err) {
     return `failed: ${(err as Error).message}`;
   }

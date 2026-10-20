@@ -27,7 +27,7 @@ import { identityOf, roleOf } from "../../lib/identity";
 import type { Prefs, SavedView } from "../../lib/prefs";
 import type { FilterPicks } from "../../lib/profileSync";
 import { postedOrSeen, timeAgo } from "../../lib/format";
-import { newSinceLastVisit } from "../../lib/newSince";
+import { newCtx } from "../../lib/newSince";
 import { useDensity, useMaxAge } from "../../lib/theme";
 import { ignoreShortcut } from "../../lib/keys";
 import { load, save } from "../../lib/storage";
@@ -123,11 +123,7 @@ export function RadarPage(p: Props) {
   }, [p.meta.companies, p.jobs]);
   const hidden = useMemo(() => new Set(p.prefs.hiddenCompanies), [p.prefs.hiddenCompanies]);
   // "New to you": first found since your last visit (lib/newSince). On the first scan everything would be, so nothing is.
-  const fullRuns = p.meta.runs.filter((r) => !r.partial);
-  const firstScan = fullRuns.length <= 1;
-  const latestScan = fullRuns[0]?.finishedAt;
-  const previousScan = fullRuns[1]?.finishedAt;
-  const newSince = useMemo(() => newSinceLastVisit(latestScan, previousScan), [latestScan, previousScan]);
+  const { firstScan, newSince } = useMemo(() => newCtx(p.meta.runs), [p.meta.runs]);
   // One clock for filters, tags and order, moved on every hour.
   const now = useHourlyNow();
   const maxAgeDays = useMaxAge();

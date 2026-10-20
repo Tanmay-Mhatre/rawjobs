@@ -26,3 +26,12 @@ export function newSinceLastVisit(latest: string | undefined, previous: string |
   if (next && next !== stored) save(KEY, next);
   return next?.since ? Date.parse(next.since) : undefined;
 }
+
+/**
+ * The "new" context for the feed, the job drawer and To review: no New tags on your first scan, and
+ * new means first found since your last visit. Partial scans (one company, Scan now's picks) don't count.
+ */
+export function newCtx(runs: readonly { partial?: boolean; finishedAt: string }[]): { firstScan: boolean; newSince?: number } {
+  const full = runs.filter((r) => !r.partial);
+  return { firstScan: full.length <= 1, newSince: newSinceLastVisit(full[0]?.finishedAt, full[1]?.finishedAt) };
+}
