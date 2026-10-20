@@ -426,7 +426,15 @@ export function startingSteps(scan: ScanState, now: number): Step[] {
     {
       label: "Choosing which companies to check",
       state: syncedAt ? "now" : "todo",
-      ...(syncedAt ? { detail: scan.scope === "yours" ? "Your companies" : scan.scope === "all" ? "Every company in the directory" : "Your companies, past matches and feed picks" } : {}),
+      ...(syncedAt
+        ? scan.scope === "yours"
+          ? { detail: "Your companies" }
+          : scan.scope === "all"
+            ? { detail: "Every company in the directory" }
+            : now - syncedAt > SLOW_STEP_MS
+              ? { detail: "Matching the job feed to your profile: can take a minute", ms: now - syncedAt }
+              : { detail: "Your companies, past matches and feed picks" }
+        : {}),
     },
   ];
 }
