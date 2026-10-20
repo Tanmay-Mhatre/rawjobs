@@ -106,8 +106,8 @@ export type RunEvent =
   | ({ type: "company"; done?: number; doneByAts?: Record<string, number>; doneBySource?: Record<ScanSource, number> } & CompanyHealth)
   /** A company's matches, fetched live just now: the Radar shows them before the scan ends. Older CLIs don't send it. */
   | { type: "jobs"; jobs: DashboardJob[] }
-  /** Directory companies done, as a count (`ats`: the hiring system of the last one). */
-  | { type: "progress"; done: number; ats?: string; doneByAts?: Record<string, number>; doneBySource?: Record<ScanSource, number> }
+  /** Directory companies done, as a count (`ats`: the hiring system of the last one, `last`: its name). */
+  | { type: "progress"; done: number; ats?: string; last?: string; doneByAts?: Record<string, number>; doneBySource?: Record<ScanSource, number> }
   /** Scan now is done and saved; the background check of every other company starts (its own start … done follow). */
   | { type: "background" }
   | {

@@ -14,6 +14,7 @@ import {
   releaseScanLock,
   alertJobs,
   digest,
+  availableJobs,
   finishedMessage,
   sendTelegram,
   telegramSecrets,
@@ -53,6 +54,8 @@ export type RunValues = {
   full: boolean;
   /** Skip the background check of every other company after a "mine" scan. */
   "no-background"?: boolean;
+  /** Only the background check, carrying on a paused one (the dashboard's Resume now). */
+  "background-only"?: boolean;
 };
 
 export const parseScope = (v: string | undefined): ScanScope => {
@@ -153,6 +156,8 @@ export async function cmdRun(args: string[]): Promise<number> {
       scheduled: { type: "boolean", default: false },
       /** After a "mine" scan, don't run the background check of every other company. */
       "no-background": { type: "boolean", default: false },
+      /** Only the background check, carrying on a paused one (with --progress ndjson). */
+      "background-only": { type: "boolean", default: false },
     },
   });
   if (values.plan) return printPlan(values);
@@ -310,6 +315,8 @@ export async function runNdjson(values: RunValues): Promise<number> {
       return 0;
     };
     const sync = async () => {
+      // Resume now carries on the background check: the directory was synced when it began.
+      if (values["background-only"]) return;
       emit({ type: "sync" });
       emit({ type: "synced", ...(await syncDirectory(dataDir)), ...(values.full ? {} : { feed: (await syncJobFeed(dataDir)).message }) });
     };
@@ -321,6 +328,8 @@ export async function runNdjson(values: RunValues): Promise<number> {
       /** One stage's progress lines: start, a line per company (or a count), its matches as they come. */
       const hooks = (stage: "quick" | "background"): Pick<ScanOptions, "onStart" | "onCompanyDone" | "onCompanyResult"> => {
         let done = 0;
+        /** When the last progress line went out. */
+        let lastLine = 0;
         /** Companies done per hiring system, including ones a resumed scan already did. */
         let doneByAts: Record<string, number> = {};
         /** Scan now's companies by where they come from (yours, past matches, feed picks), and how many are done. */
@@ -367,9 +376,12 @@ export async function runNdjson(values: RunValues): Promise<number> {
               if (src) doneBySource[src]++;
             }
             const counts = { doneByAts, ...(doneBySource ? { doneBySource } : {}) };
-            // Every one of yours, and directory companies that matched or failed; the rest only as a count.
+            // Every one of yours, and directory companies that matched or failed; the rest only as a count
+            // (every 25, or after 2 s without a line, so a slow stretch still shows it's moving).
             if (mine || h.matches > 0 || (!h.ok && !h.unsupported)) emit({ type: "company", done, ...counts, ...h });
-            else if (done % 25 === 0) emit({ type: "progress", done, ats: h.ats, ...counts });
+            else if (done % 25 === 0 || Date.now() - lastLine > 2000) emit({ type: "progress", done, ats: h.ats, last: h.company, ...counts });
+            else return;
+            lastLine = Date.now();
           },
           // Matches as each company finishes, so the Radar shows them before the scan ends.
           onCompanyResult: (_h, jobs) => {
@@ -405,27 +417,32 @@ export async function runNdjson(values: RunValues): Promise<number> {
         return { matches, newMatches };
       };
 
+      /** The background check: its progress lines, but not its matches (it's quiet: they show when it ends). */
+      const background = async (since: number) => {
+        emit({ type: "background" });
+        const { onCompanyResult: _, ...bgHooks } = hooks("background");
+        const bg = await backgroundCheck(config, { ...session, ...bgHooks }, since);
+        const { newMatches } = doneEvent(bg, "background");
+        // Quiet: a Telegram message only when it found something new (and never a job already sent).
+        if (newMatches && alertsOn(config)) await notifyScan(newOnly(config), bg.result, bg.merged, "background");
+      };
+      if (values["background-only"]) {
+        // Resume now: skip what the paused check (or the Scan now before it) fetched in the hour before it began.
+        const paused = resumable(dataDir, "all");
+        await background((paused ? Date.parse(paused.startedAt) : Date.now()) - 3_600_000);
+        return 0;
+      }
+
       const first = await scan(config, { ...session, syncMs, ...hooks("quick") });
-      const { matches } = doneEvent(first, "quick");
+      doneEvent(first, "quick");
       if (existsSync(notifyFile(dataDir))) {
         rmSync(notifyFile(dataDir), { force: true });
         emit({
           type: "notified",
-          result: await notifyFinished(
-            config,
-            matches.filter((j) => first.merged.newIds.has(j.id)),
-            first.stopped,
-            scope,
-          ),
+          result: await notifyFinished(availableJobs(first.merged.jobs).length, first.stopped, scope),
         });
       }
-      if (wantsBackground(config, values, scope, { stopped: first.stopped, fallback })) {
-        emit({ type: "background" });
-        const bg = await backgroundCheck(config, session, stage1Started);
-        const { newMatches } = doneEvent(bg, "background");
-        // Quiet: a Telegram message only when it found something new (and never a job already sent).
-        if (newMatches && alertsOn(config)) await notifyScan(newOnly(config), bg.result, bg.merged, "background");
-      }
+      if (wantsBackground(config, values, scope, { stopped: first.stopped, fallback })) await background(stage1Started);
       return 0;
     });
   } catch (err) {
@@ -456,11 +473,11 @@ export async function notifyScan(config: Config, result: RunResult, merged: Merg
 }
 
 /** "Tell me when it's done": sent whether or not there's anything new, and whatever the alerts switch says. */
-export async function notifyFinished(config: Config, newJobs: Job[], stopped: boolean, scope: ScanScope): Promise<string> {
+export async function notifyFinished(available: number, stopped: boolean, scope: ScanScope): Promise<string> {
   const secrets = telegramSecrets();
   if (!secrets.token || !secrets.chatId) return "off";
   try {
-    await sendTelegram(finishedMessage({ newJobs, minScore: config.profile.min_score, stopped, scope }), secrets);
+    await sendTelegram(finishedMessage({ available, stopped, scope }), secrets);
     return "sent";
   } catch (err) {
     return `failed: ${(err as Error).message}`;

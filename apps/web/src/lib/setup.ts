@@ -93,8 +93,8 @@ export async function checkNow(keys: string[]): Promise<Extract<RunEvent, { type
 }
 
 /** Run a scan on this machine, reporting progress as it streams in. */
-export async function runScan(onEvent: (e: RunEvent) => void, opts: { scope?: ScanScope; fresh?: boolean } = {}): Promise<void> {
-  const res = await fetch("/api/run", { method: "POST", body: JSON.stringify({ scope: opts.scope ?? "mine", fresh: opts.fresh }) });
+export async function runScan(onEvent: (e: RunEvent) => void, opts: { scope?: ScanScope; fresh?: boolean; background?: boolean } = {}): Promise<void> {
+  const res = await fetch("/api/run", { method: "POST", body: JSON.stringify({ scope: opts.scope ?? "mine", fresh: opts.fresh, background: opts.background }) });
   if (!res.ok || !res.body) {
     onEvent({ type: "error", message: `Couldn't start the scan (HTTP ${res.status}).` });
     return;

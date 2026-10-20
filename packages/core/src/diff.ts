@@ -14,7 +14,10 @@ const repostKey = (j: Pick<Job, "id" | "title" | "location">) => `${companyOfJob
 
 export type MergeResult = {
   jobs: Job[];
-  /** Ids listed for the first time ever in this run. */
+  /**
+   * Ids new to you in this run: listed for the first time ever, or first seen after the last recorded
+   * run (a scan whose save stopped part-way kept its jobs in history but never counted or sent them).
+   */
   newIds: Set<string>;
   /** Ids that closed in this run. */
   closedIds: Set<string>;
@@ -25,7 +28,13 @@ export type MergeResult = {
  * Jobs of companies that failed, weren't run this time or were read only in part (a capped
  * list) are left untouched, so a broken or cut-short feed never closes anything. Jobs of companies removed from the config are dropped.
  */
-export function mergeHistory(previous: readonly Job[], run: RunResult, companies: readonly Pick<CompanyRef, "ats" | "slug" | "site">[], now = new Date(run.startedAt)): MergeResult {
+export function mergeHistory(
+  previous: readonly Job[],
+  run: RunResult,
+  companies: readonly Pick<CompanyRef, "ats" | "slug" | "site">[],
+  now = new Date(run.startedAt),
+  opts: { lastRunAt?: string } = {},
+): MergeResult {
   // Job ids carry their company's jobCompanyKey(); Workday and Taleo ones include the site.
   const configured = new Set(companies.map(jobCompanyKey));
   // A list cut short at a cap (partial) is no proof its other jobs closed: treat it like a failed fetch.
@@ -40,6 +49,9 @@ export function mergeHistory(previous: readonly Job[], run: RunResult, companies
   const cutoff = now.getTime() - KEEP_CLOSED_DAYS * 86_400_000;
 
   const newIds = new Set<string>();
+  // Jobs in history first seen after the last recorded run were saved by a scan that never finished its save.
+  const lastRun = opts.lastRunAt ? Date.parse(opts.lastRunAt) : Number.NaN;
+  const unsent = (j: Job) => Number.isFinite(lastRun) && Date.parse(j.firstSeen) > lastRun;
   const closedIds = new Set<string>();
   const jobs: Job[] = [];
 
@@ -60,7 +72,7 @@ export function mergeHistory(previous: readonly Job[], run: RunResult, companies
         const repostCount = (old.repostCount ?? (old.repostedAt ? 1 : 0)) + 1;
         j = { ...j, firstSeen: old.firstSeen, postedAt: posted, repostedAt: run.startedAt, repostCount };
       } else newIds.add(j.id);
-    }
+    } else if (unsent(j)) newIds.add(j.id);
     jobs.push(j);
   }
 

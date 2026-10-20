@@ -136,17 +136,28 @@ export function digest(jobs: readonly Job[], opts: { minScore: number; onlyNew?:
   return message(`💼 <b>New jobs · ${scope}</b>`, newJobsLine(jobs, opts.minScore)!, seeThem(jobs.length));
 }
 
-/** The message for "tell me when this scan is done": always sent, finished or stopped, new jobs or not. */
-export function finishedMessage(o: { newJobs: readonly Job[]; minScore: number; stopped?: boolean; scope: AlertScope }): string {
-  const facts = newJobsLine(o.newJobs, o.minScore);
-  const n = o.newJobs.length;
+/** How far back "available to apply" looks: the Radar's New tag uses the same 48 hours when it has no last visit. */
+export const AVAILABLE_HOURS = 48;
+/** Postings older than this don't count, even when RawJobs first saw them just now (the Radar's New rule too). */
+const AVAILABLE_MAX_POSTED_DAYS = 30;
+
+/** Jobs you could apply to now: still open, passed your gates, and first seen in the last 48 hours. */
+export function availableJobs(jobs: readonly Job[], now = Date.now()): Job[] {
+  const since = now - AVAILABLE_HOURS * 3_600_000;
+  const oldest = now - AVAILABLE_MAX_POSTED_DAYS * 86_400_000;
+  return jobs.filter((j) => j.status === "open" && !j.why.gate && Date.parse(j.firstSeen) > since && Date.parse(j.postedAt ?? j.firstSeen) >= oldest);
+}
+
+/**
+ * The message for "tell me when this scan is done": always sent, finished or stopped. It counts the jobs
+ * available to apply (availableJobs), not only this scan's finds, so it isn't "no jobs" after every quiet scan.
+ */
+export function finishedMessage(o: { available: number; stopped?: boolean; scope: AlertScope }): string {
+  const n = o.available;
+  const facts = n ? plural(n, "job available to apply", "jobs available to apply") : "No new jobs in the last 2 days";
   const name = SCOPE_NAME[o.scope];
   const scan = /(?:scan|check)$/.test(name) ? name : `${name} scan`;
   if (o.stopped)
-    return message(
-      `⏸ <b>${scan} stopped</b>`,
-      facts ?? "No new jobs yet",
-      n ? `Open RawJobs on your computer to see ${n === 1 ? "it" : "them"} and finish the scan.` : "Open RawJobs on your computer to finish the scan.",
-    );
-  return message(`✅ <b>${scan} finished</b>`, facts ?? "No new jobs", n ? seeThem(n) : "Open RawJobs on your computer to see your matches.");
+    return message(`⏸ <b>${scan} stopped</b>`, facts, n ? `Open RawJobs on your computer to see ${n === 1 ? "it" : "them"} and finish the scan.` : "Open RawJobs on your computer to finish the scan.");
+  return message(`✅ <b>${scan} finished</b>`, facts, n ? seeThem(n) : "Open RawJobs on your computer to see your matches.");
 }
