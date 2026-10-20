@@ -116,11 +116,11 @@ describe("sorting, grouping, chips, suggestions, URL", () => {
     expect(sortJobs(list, "salary").map((j) => j.id)).toEqual(["usd-hour", "usd-year", "usd-month", "eur", "eur2", "inr", "none-currency", "unpaid"]);
     // Your currency (the salary floor's) goes first, whatever most jobs use.
     expect(
-      sortJobs(list, "salary", undefined, NOW, "eur")
+      sortJobs(list, "salary", { now: NOW, currency: "eur" })
         .map((j) => j.id)
         .slice(0, 2),
     ).toEqual(["eur", "eur2"]);
-    expect(sortJobs(list, "salary", undefined, NOW, "INR")[0]!.id).toBe("inr");
+    expect(sortJobs(list, "salary", { now: NOW, currency: "INR" })[0]!.id).toBe("inr");
   });
 
   it("breaks a tie on best match by topics mentioned", () => {
@@ -128,7 +128,7 @@ describe("sorting, grouping, chips, suggestions, URL", () => {
       job({ id: "few", score: 100, postedAt: daysAgo(1), why: { title: 30, location: 20, keywords: ["api"], keywordPoints: 40, industry: 10 } }),
       job({ id: "many", score: 100, postedAt: daysAgo(1), why: { title: 30, location: 20, keywords: ["api", "payments", "b2b"], keywordPoints: 40, industry: 10 } }),
     ];
-    expect(sortJobs(tied, "best", undefined, NOW).map((j) => j.id)).toEqual(["many", "few"]);
+    expect(sortJobs(tied, "best", { now: NOW }).map((j) => j.id)).toEqual(["many", "few"]);
   });
 
   it("best match counts freshness: an equal fit posted today beats last week's, a weak fresh one never leaps a strong one", () => {
@@ -138,7 +138,7 @@ describe("sorting, grouping, chips, suggestions, URL", () => {
       job({ id: "strong-old", score: 85, postedAt: daysAgo(20) }),
       job({ id: "weak-today", score: 45, postedAt: daysAgo(0) }),
     ];
-    expect(sortJobs(list, "best", undefined, NOW).map((j) => j.id)).toEqual(["strong-old", "today", "old", "weak-today"]);
+    expect(sortJobs(list, "best", { now: NOW }).map((j) => j.id)).toEqual(["strong-old", "today", "old", "weak-today"]);
   });
 
   it("groups one role posted in several places, best posting first", () => {
@@ -212,11 +212,11 @@ describe("your companies and directory jobs", () => {
   it("never pins your companies: every sort means what it says, Best match gives them +10", () => {
     const list = applyFilters(jobs, f(), mine);
     // b (Rain, yours) is 60 and 20 days old: +10 isn't enough to pass a (90) or c (80).
-    expect(sortJobs(list, "best", mine.isYours, NOW).map((j) => j.id)).toEqual(["a", "c", "b"]);
-    expect(sortJobs(list, "newest", mine.isYours, NOW).map((j) => j.id)).toEqual(["a", "c", "b"]);
+    expect(sortJobs(list, "best", { isYours: mine.isYours, now: NOW }).map((j) => j.id)).toEqual(["a", "c", "b"]);
+    expect(sortJobs(list, "newest", { isYours: mine.isYours, now: NOW }).map((j) => j.id)).toEqual(["a", "c", "b"]);
     // ...but it decides between two equal jobs.
     const tie = [job({ id: "other", company: "Acme", score: 70, postedAt: daysAgo(2) }), job({ id: "yours", company: "Rain", score: 70, postedAt: daysAgo(2) })];
-    expect(sortJobs(tie, "best", mine.isYours, NOW).map((j) => j.id)).toEqual(["yours", "other"]);
+    expect(sortJobs(tie, "best", { isYours: mine.isYours, now: NOW }).map((j) => j.id)).toEqual(["yours", "other"]);
   });
 
   it("groups one role posted per city, whichever side of the title the city is on", () => {
@@ -315,7 +315,7 @@ describe("your companies and directory jobs", () => {
     expect(evergreenReason({ title: "Senior Product Manager, Payments" })).toBeUndefined();
     const pool = job({ id: "pool", title: "Product Talent Pool", score: 80 });
     const real = job({ id: "real", title: "Product Manager", score: 70 });
-    expect(sortJobs([pool, real], "best", undefined, NOW).map((j) => j.id)).toEqual(["real", "pool"]);
+    expect(sortJobs([pool, real], "best", { now: NOW }).map((j) => j.id)).toEqual(["real", "pool"]);
     expect(applyFilters([pool, real], f({ hideEvergreen: true }), ctx).map((j) => j.id)).toEqual(["real"]);
   });
 
@@ -342,7 +342,7 @@ describe("your companies and directory jobs", () => {
   it("ranks jobs that may be stale lower, and No talent pools or stale jobs hides them", () => {
     const stale = job({ id: "stale", score: 85, repostedAt: daysAgo(3), repostCount: 2 });
     const real = job({ id: "real", score: 80 });
-    expect(sortJobs([stale, real], "best", undefined, NOW).map((j) => j.id)).toEqual(["real", "stale"]);
+    expect(sortJobs([stale, real], "best", { now: NOW }).map((j) => j.id)).toEqual(["real", "stale"]);
     expect(applyFilters([stale, real], f({ hideEvergreen: true }), ctx).map((j) => j.id)).toEqual(["real"]);
     expect(activeChips(f({ hideEvergreen: true }), ctx).map((c) => c.label)).toContain("No talent pools or stale jobs");
   });
@@ -352,7 +352,7 @@ describe("your companies and directory jobs", () => {
     const fresh = job({ id: "fresh", company: "K", title: "PM", location: "London", score: 70 });
     const other = job({ id: "other", company: "R", title: "PM", score: 80 });
     // Best match still puts the stale one first (99 less its cost beats 80 and 70): the row is the role's place in the list.
-    const sorted = sortJobs([fresh, other, stale], "best", undefined, NOW);
+    const sorted = sortJobs([fresh, other, stale], "best", { now: NOW });
     expect(sorted.map((j) => j.id)).toEqual(["stale", "other", "fresh"]);
     const g = groupJobs(sorted, NOW);
     expect(g.map((x) => [x.lead.id, x.jobs.map((j) => j.id)])).toEqual([

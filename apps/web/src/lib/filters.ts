@@ -15,7 +15,7 @@ import { isStale } from "./stale";
 import type { Status, UserState } from "./userState";
 
 export type Workplace = Job["workplace"];
-export type Sort = "best" | "newest" | "salary" | "company";
+export type Sort = "best" | "newest" | "salary" | "company" | "people";
 /** Which tracked jobs to show: everything, or one tracking state. */
 export type StatusView = "" | "new" | "saved" | "applied";
 
@@ -43,6 +43,8 @@ export type Filters = {
   visaOnly: boolean;
   /** Only jobs whose company is opening far more roles than usual (job.surge, from data/activity.json). Never changes the score. */
   surgeOnly: boolean;
+  /** Only jobs at companies where you know someone (ctx.knownAt, from your LinkedIn connections). Never changes the score. */
+  knownOnly: boolean;
   status: StatusView;
   showFailed: boolean;
   showClosed: boolean;
@@ -106,6 +108,7 @@ export const DEFAULT_FILTERS: Filters = {
   hideEvergreen: false,
   visaOnly: false,
   surgeOnly: false,
+  knownOnly: false,
   status: "",
   showFailed: false,
   showClosed: false,
@@ -138,6 +141,8 @@ export type Ctx = {
   /** When the previous scan finished (ms): jobs first found after it are "new to you". */
   newSince?: number;
   now?: number;
+  /** How many of your LinkedIn connections work at the job's company (knownCounter): the Know someone there filter. */
+  knownAt?: (j: Job) => number;
 };
 
 export const REMOTE = "Remote";
@@ -183,6 +188,7 @@ function passes(j: Job, f: Filters, ctx: Ctx, terms: string[], skip?: FacetKey):
   if (f.hideEvergreen && (evergreenReason(j) || isStale(j, { now: ctx.now }))) return false;
   if (f.visaOnly && !sponsorOf([j])) return false;
   if (f.surgeOnly && !j.surge) return false;
+  if (f.knownOnly && !ctx.knownAt?.(j)) return false;
   if (skip !== "match" && f.match !== "all" && j.score < (f.match === "strong" ? ctx.min : Math.max(0, ctx.min - 20))) return false;
   if (skip !== "posted" && f.posted && ageDays(postedOrSeen(j), ctx.now) > f.posted) return false;
   if (skip !== "countries" && f.countries.length && !countriesOf(j).some((c) => f.countries.includes(c))) return false;
@@ -348,13 +354,23 @@ function salaryOrder(jobs: readonly Job[], currency?: string): (a: Job, b: Job) 
   };
 }
 
+export type SortOpts = {
+  isYours?: (j: Job) => boolean;
+  now?: number;
+  currency?: string;
+  nudge?: (j: Job) => number;
+  known?: (j: Job) => number;
+};
+
 /**
  * Sort the list. Every sort means what it says: your companies are never pinned on top. In "best",
  * `isYours` gives them a nudge (rankScore), and freshness counts, worked out at `now`. In "salary",
  * `currency` (your salary floor's) is the one compared first. `nudge` moves a job in "best" by what
- * your own picks taught (learnedNudge), a few points either way.
+ * your own picks taught (learnedNudge), a few points either way. In "people", `known` (how many people
+ * you know at the company) comes first, then the score: it orders the list and never changes the score.
  */
-export function sortJobs(jobs: Job[], sort: Sort, isYours?: (j: Job) => boolean, now = Date.now(), currency?: string, nudge?: (j: Job) => number): Job[] {
+export function sortJobs(jobs: Job[], sort: Sort, opts: SortOpts = {}): Job[] {
+  const { isYours, now = Date.now(), currency, nudge, known } = opts;
   const rank = sort === "best" ? new Map(jobs.map((j) => [j, rankScore(j.score, postedOrSeen(j), now, !!isYours?.(j)) - evergreenCost(j, now) + (nudge?.(j) ?? 0)])) : undefined;
   const by: Record<Sort, (a: Job, b: Job) => number> = {
     // Equal ranks go to the one mentioning more of your topics, then the newer.
@@ -362,6 +378,7 @@ export function sortJobs(jobs: Job[], sort: Sort, isYours?: (j: Job) => boolean,
     newest: (a, b) => postedOrSeen(b).localeCompare(postedOrSeen(a)) || b.score - a.score,
     salary: sort === "salary" ? salaryOrder(jobs, currency) : () => 0,
     company: (a, b) => a.company.localeCompare(b.company) || b.score - a.score,
+    people: (a, b) => (known?.(b) ?? 0) - (known?.(a) ?? 0) || b.score - a.score || postedOrSeen(b).localeCompare(postedOrSeen(a)),
   };
   return [...jobs].sort(by[sort]);
 }
@@ -474,6 +491,7 @@ function chipsOf(f: Filters, ctx: Pick<Ctx, "min">): { key: string; label: strin
   if (f.hideEvergreen) chips.push({ key: "evergreen", label: "No talent pools or stale jobs", remove: { hideEvergreen: false } });
   if (f.visaOnly) chips.push({ key: "visa", label: "Sponsors visas", remove: { visaOnly: false } });
   if (f.surgeOnly) chips.push({ key: "surge", label: "Hiring surge", remove: { surgeOnly: false } });
+  if (f.knownOnly) chips.push({ key: "known", label: "Know someone there", remove: { knownOnly: false } });
   if (f.showFailed) chips.push({ key: "failed", label: "Including jobs that failed your filters", remove: { showFailed: false } });
   if (f.showClosed) chips.push({ key: "closed", label: "Including closed", remove: { showClosed: false } });
   if (f.showHidden) chips.push({ key: "hidden", label: "Including hidden", remove: { showHidden: false } });
@@ -557,5 +575,5 @@ export function fromQuery(query: string, base: Filters = DEFAULT_FILTERS): { fil
     rec[k] = Array.isArray(d) ? raw.split("|").filter(Boolean) : typeof d === "number" ? Number(raw) || 0 : typeof d === "boolean" ? raw === "true" : raw;
   }
   const sort = (p.get("sort") ?? "best") as Sort;
-  return { filters: f, sort: ["best", "newest", "salary", "company"].includes(sort) ? sort : "best" };
+  return { filters: f, sort: ["best", "newest", "salary", "company", "people"].includes(sort) ? sort : "best" };
 }

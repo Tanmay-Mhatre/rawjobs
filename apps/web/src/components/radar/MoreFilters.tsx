@@ -11,6 +11,8 @@ export function MoreToggles({
   olderCount,
   maxAgeDays,
   hiringReady,
+  networkReady,
+  knownCount = 0,
 }: {
   filters: Filters;
   setFilters: (p: Partial<Filters>) => void;
@@ -18,6 +20,10 @@ export function MoreToggles({
   maxAgeDays: number;
   /** Some company has enough hiring records to compare with (DataMeta.hiringReady): before that the surge filter could only be empty. */
   hiringReady?: boolean;
+  /** Your LinkedIn connections are imported: before that the Know someone there filter could only be empty. */
+  networkReady?: boolean;
+  /** How many roles the Know someone there filter would leave. */
+  knownCount?: number;
 }) {
   const rows: [keyof Filters, string][] = [
     ["salaryOnly", "Salary listed"],
@@ -25,6 +31,7 @@ export function MoreToggles({
     // Shown while on, too, so a link or saved filter that has it can be turned off here.
     ...(hiringReady || filters.surgeOnly ? [["surgeOnly", "Only companies with a hiring surge"] as [keyof Filters, string]] : []),
     ["visaOnly", "Only companies that sponsor visas"],
+    ...(networkReady || filters.knownOnly ? [["knownOnly", `Know someone there${networkReady ? ` (${knownCount})` : ""}`] as [keyof Filters, string]] : []),
     ...(maxAgeDays ? [["showOld", `Show older jobs${olderCount ? ` (${olderCount})` : ""}: posted over ${ageLimit(maxAgeDays)} ago`] as [keyof Filters, string]] : []),
     ["showFailed", "Include jobs that failed your filters"],
     ["showClosed", "Include closed jobs"],
@@ -52,6 +59,8 @@ export function MoreMenu({
   hiddenCompanies,
   hideRules,
   hiringReady,
+  networkReady,
+  knownCount,
 }: {
   filters: Filters;
   setFilters: (p: Partial<Filters>) => void;
@@ -59,13 +68,25 @@ export function MoreMenu({
   olderCount: number;
   maxAgeDays: number;
   hiringReady?: boolean;
+  networkReady?: boolean;
+  knownCount?: number;
   /** How many companies and Not interested rules hide jobs; each links to where they're managed. */
   hiddenCompanies: number;
   hideRules: number;
 }) {
   const extra =
-    [filters.salaryOnly, filters.hideEvergreen, filters.surgeOnly, filters.visaOnly, filters.showOld, filters.showFailed, filters.showClosed, filters.showHidden, filters.olderIndex].filter(Boolean)
-      .length + filters.ats.length;
+    [
+      filters.salaryOnly,
+      filters.hideEvergreen,
+      filters.surgeOnly,
+      filters.knownOnly,
+      filters.visaOnly,
+      filters.showOld,
+      filters.showFailed,
+      filters.showClosed,
+      filters.showHidden,
+      filters.olderIndex,
+    ].filter(Boolean).length + filters.ats.length;
   return (
     <FacetMenu
       label={extra ? `More · ${extra}` : "More"}
@@ -75,7 +96,7 @@ export function MoreMenu({
       onChange={(v) => setFilters({ ats: v })}
       footer={
         <div className="mt-1 border-t border-line pt-1">
-          <MoreToggles filters={filters} setFilters={setFilters} olderCount={olderCount} maxAgeDays={maxAgeDays} hiringReady={hiringReady} />
+          <MoreToggles filters={filters} setFilters={setFilters} olderCount={olderCount} maxAgeDays={maxAgeDays} hiringReady={hiringReady} networkReady={networkReady} knownCount={knownCount} />
           {(hiddenCompanies > 0 || hideRules > 0) && (
             <div className="mt-1 space-y-1 border-t border-line px-2 py-2 type-small">
               {hiddenCompanies > 0 && (

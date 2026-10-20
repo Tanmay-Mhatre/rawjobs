@@ -31,13 +31,14 @@ import { newCtx } from "../../lib/newSince";
 import { useDensity, useMaxAge } from "../../lib/theme";
 import { ignoreShortcut } from "../../lib/keys";
 import { load, save } from "../../lib/storage";
+import { knownCounter, useNetworkSummary } from "../../lib/network";
 import type { EntryPatch, Status, UserState } from "../../lib/userState";
 import { JobDetail } from "../JobDetail";
 import { toast } from "../Toast";
 import { Chip, SearchField } from "../primitives";
 import { Button, Card } from "../ui";
 import { FacetMenu, OptionList } from "./FacetMenu";
-import { FilterSheet, SheetSection, SORTS, SortOptions } from "./FilterSheet";
+import { FilterSheet, SheetSection, SortOptions, sortsFor } from "./FilterSheet";
 import { JobCard } from "./JobCard";
 import { ageLimit, MoreMenu, MoreToggles } from "./MoreFilters";
 import { ProfileBar } from "./ProfileBar";
@@ -127,6 +128,10 @@ export function RadarPage(p: Props) {
   // One clock for filters, tags and order, moved on every hour.
   const now = useHourlyNow();
   const maxAgeDays = useMaxAge();
+  // Who you know at each company (your LinkedIn connections): one lookup per company name, never part of the score.
+  const network = useNetworkSummary();
+  const networkReady = !!network;
+  const knownAt = useMemo(() => (network ? knownCounter(network.counts) : undefined), [network]);
   // biome-ignore lint/correctness/useExhaustiveDependencies: profileKey stands for the parts of the profile the context uses
   const ctx: Ctx = useMemo(() => {
     const places = profilePlaces(profile);
@@ -141,9 +146,10 @@ export function RadarPage(p: Props) {
       hiddenCompanies: hidden,
       hideRules: p.prefs.hideRules,
       isYours: p.isYours,
+      knownAt,
       mine: { countries: new Set([...places.countries, ...(places.remote ? ["Remote"] : [])]), locations: new Set(places.locations), industries: new Set(profile.industries) },
     };
-  }, [p.user, min, industriesByCompany, hidden, p.prefs.hideRules, profileKey, p.isYours, firstScan, newSince, now, maxAgeDays]);
+  }, [p.user, min, industriesByCompany, hidden, p.prefs.hideRules, profileKey, p.isYours, firstScan, newSince, now, maxAgeDays, knownAt]);
 
   // One list, in the order you picked: your companies are starred and nudged up in Best match, never pinned.
   // Typing in search updates the box at once; the list catches up when React has a moment (useDeferredValue).
@@ -174,8 +180,8 @@ export function RadarPage(p: Props) {
   const q = useDeferredValue(filters.q);
   const listFilters = useMemo(() => (q === filters.q ? filters : { ...filters, q }), [filters, q]);
   const visible = useMemo(
-    () => sortJobs(applyFilters(pool, listFilters, ctx), sort, p.isYours, now, profile.salary_floor?.currency, nudge),
-    [pool, listFilters, ctx, sort, p.isYours, now, profile.salary_floor?.currency, nudge],
+    () => sortJobs(applyFilters(pool, listFilters, ctx), sort, { isYours: p.isYours, now, currency: profile.salary_floor?.currency, nudge, known: knownAt }),
+    [pool, listFilters, ctx, sort, p.isYours, now, profile.salary_floor?.currency, nudge, knownAt],
   );
   const groups = useMemo(() => groupJobs(visible, now), [visible, now]);
   // One company can't fill the page ("+N more at …"), except in Newest (a plain date order) and when you've
@@ -205,6 +211,11 @@ export function RadarPage(p: Props) {
   const chips = useMemo(() => activeChips(filters, ctx, base), [filters, ctx, base]);
   // Postings past your age limit that the other filters would show: "Show older jobs (N)".
   const olderCount = useMemo(() => (listFilters.showOld ? 0 : roleCount(applyFilters(pool, { ...listFilters, showOld: true }, ctx)) - groups.length), [pool, listFilters, ctx, groups.length]);
+  // How many roles "Know someone there" would leave, with everything else as it is.
+  const knownCount = useMemo(
+    () => (!networkReady ? 0 : listFilters.knownOnly ? groups.length : roleCount(applyFilters(pool, { ...listFilters, knownOnly: true }, ctx))),
+    [networkReady, pool, listFilters, ctx, groups.length],
+  );
 
   // Summary numbers over all matches (not the current filters).
   // View counts are within your profile, like the views themselves.
@@ -372,6 +383,7 @@ export function RadarPage(p: Props) {
       onSelect={() => select(g.lead)}
       onStatus={(st) => p.onStatus(g.lead, st)}
       yours={p.isYours(g.lead)}
+      known={knownAt?.(g.lead)}
     />
   );
 
@@ -469,7 +481,7 @@ export function RadarPage(p: Props) {
           <label className="relative hidden shrink-0 items-center lg:inline-flex">
             <ArrowUpDown className="pointer-events-none absolute left-2.5 size-3.5 text-muted" />
             <select value={sort} onChange={(e) => setSort(e.target.value as Sort)} aria-label="Sort" className="h-9 appearance-none rounded-md border border-control bg-raised pl-8 pr-3 type-small">
-              {SORTS.map((s) => (
+              {sortsFor(networkReady, sort).map((s) => (
                 <option key={s.value} value={s.value}>
                   {s.label}
                 </option>
@@ -531,6 +543,8 @@ export function RadarPage(p: Props) {
                 hiddenCompanies={p.prefs.hiddenCompanies.length}
                 hideRules={p.prefs.hideRules.length}
                 hiringReady={p.meta.hiringReady}
+                networkReady={networkReady}
+                knownCount={knownCount}
               />
               <Button variant="ghost" size="sm" aria-expanded={moreFacets} onClick={() => setMoreFacets((o) => !o)}>
                 {moreFacets ? "Fewer filters" : "More filters"}
@@ -661,10 +675,10 @@ export function RadarPage(p: Props) {
                   type="button"
                   className="inline-flex items-center gap-1 underline-offset-2 hover:underline"
                   onClick={() => setSheet(true)}
-                  aria-label={`Sorted by ${SORTS.find((x) => x.value === sort)?.label}. Change sort`}
+                  aria-label={`Sorted by ${sortsFor(networkReady, sort).find((x) => x.value === sort)?.label}. Change sort`}
                 >
                   <ArrowUpDown className="size-3" aria-hidden />
-                  {SORTS.find((x) => x.value === sort)?.label}
+                  {sortsFor(networkReady, sort).find((x) => x.value === sort)?.label}
                 </button>
               )}
             </div>
@@ -721,7 +735,7 @@ export function RadarPage(p: Props) {
       {sheet && !wide && (
         <FilterSheet onClose={() => setSheet(false)} count={groups.length} onClear={() => replace(base, sort)}>
           <SheetSection label="Sort by">
-            <SortOptions sort={sort} onChange={setSort} />
+            <SortOptions sort={sort} onChange={setSort} networkReady={networkReady} />
           </SheetSection>
           <SheetSection label="Date posted">
             <OptionList
@@ -770,7 +784,15 @@ export function RadarPage(p: Props) {
             </SheetSection>
           )}
           <SheetSection label="More">
-            <MoreToggles filters={filters} setFilters={setFilters} olderCount={olderCount} maxAgeDays={maxAgeDays} hiringReady={p.meta.hiringReady} />
+            <MoreToggles
+              filters={filters}
+              setFilters={setFilters}
+              olderCount={olderCount}
+              maxAgeDays={maxAgeDays}
+              hiringReady={p.meta.hiringReady}
+              networkReady={networkReady}
+              knownCount={knownCount}
+            />
           </SheetSection>
           {facet("ats").length > 1 && (
             <SheetSection label="Hiring system">

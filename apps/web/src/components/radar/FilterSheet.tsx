@@ -11,7 +11,11 @@ export const SORTS: { value: Sort; label: string }[] = [
   { value: "newest", label: "Newest" },
   { value: "salary", label: "Highest salary" },
   { value: "company", label: "Company A–Z" },
+  { value: "people", label: "People you know" },
 ];
+
+/** The sorts to offer: "People you know" only once your LinkedIn connections are imported (or while it's picked). */
+export const sortsFor = (networkReady: boolean, sort?: Sort) => (networkReady || sort === "people" ? SORTS : SORTS.filter((s) => s.value !== "people"));
 
 // ---------- phone filter sheet ----------
 
@@ -44,10 +48,10 @@ export function FilterSheet({ children, count, onClose, onClear }: { children: R
 }
 
 /** The sort choices in the phone filter sheet: one always picked, styled like the single-choice filters. */
-export function SortOptions({ sort, onChange }: { sort: Sort; onChange: (s: Sort) => void }) {
+export function SortOptions({ sort, onChange, networkReady = false }: { sort: Sort; onChange: (s: Sort) => void; networkReady?: boolean }) {
   return (
     <ul>
-      {SORTS.map((s) => {
+      {sortsFor(networkReady, sort).map((s) => {
         const on = s.value === sort;
         return (
           <li key={s.value}>
