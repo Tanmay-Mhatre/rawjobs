@@ -2,7 +2,7 @@ import { closeSync, existsSync, openSync, readFileSync, readSync, writeFileSync 
 import { join } from "node:path";
 import { companyKey, connectors } from "./connectors";
 import { companyWords } from "./employers";
-import { laneOf } from "./run";
+import { laneOf, laneWorkers } from "./run";
 import { readJsonOnce } from "./json-once";
 import { isPlaceholderBoard } from "./text";
 import type { ScanScope } from "./protocol";
@@ -134,7 +134,7 @@ export function byMatchChance<T extends CompanyRef>(companies: readonly T[], hin
  * Before a scan has measured a hiring system, its time comes from requests.
  Systems that serve every
  * company from one API host queue for that host: a request every 0.25 s (Greenhouse, Ashby) or 1 s.
- * The rest give each company its own host (Workday tenants, BambooHR…), so LANE_WORKERS run side by side.
+ * The rest give each company its own host (Workday tenants, BambooHR…), so a lane's workers run side by side.
  */
 const SHARED_HOST_SECONDS: Record<string, number> = {
   greenhouse: 0.25,
@@ -152,12 +152,15 @@ const SHARED_HOST_SECONDS: Record<string, number> = {
 const REQUESTS: Record<string, number> = { workday: 3, smartrecruiters: 2, paycom: 2, oracle: 2, successfactors: 2, icims: 2, taleo: 3, cornerstone: 2, dayforce: 2 };
 /** One request on a company's own host: the 1 s spacing between requests to a host, plus some answer time. */
 const OWN_HOST_SECONDS = 1.2;
-/** Companies in flight per lane (run.ts LANE_WORKERS). */
-const LANE_WORKERS = 4;
 /** The shared job feed's part of a scan before one is measured: syncing it, then matching it against you. */
 const FEED_SECONDS = 25;
-/** scan-speed.json's model: files from before it measured with a mean that slow, failing boards blew up. */
-const SPEED_MODEL = 2;
+/**
+ * scan-speed.json's model: 2 dropped means that slow, failing boards blew up; 3 drops speeds that
+ * counted 4 companies in flight on lanes that run 6 or 8, or that were learned from stopped scans.
+ */
+const SPEED_MODEL = 3;
+/** Fewer companies than this from a hiring system in one scan say too little about its speed. */
+const MIN_SAMPLES = 5;
 
 /** Measured seconds per company per lane, by hiring system (data/scan-speed.json, updated after each scan). */
 export type ScanSpeeds = Record<string, number>;
@@ -181,17 +184,17 @@ const median = (xs: readonly number[]) => {
 };
 
 /**
- * Learn from a scan: with LANE_WORKERS companies in flight, a lane spends a company's duration over
- * the companies in flight on it. The median duration, so a few boards that time out don't make every
- * scan look hours long. Averaged with what was known, so one slow day doesn't swing it.
+ * Learn from a finished scan (not a stopped one: its last fetches were cut short or left waiting):
+ * with laneWorkers companies in flight, a lane spends a company's duration over the companies in flight
+ * on it. The median duration, so a few boards that time out don't make every scan look hours long. Averaged with what was known, so one slow day doesn't swing it.
  */
 export function recordSpeeds(dataDir: string, health: readonly CompanyHealth[]): ScanSpeeds {
   const speeds = readSpeeds(dataDir);
   const byAts = new Map<string, number[]>();
   for (const h of health) if (!h.unsupported) byAts.set(h.ats, [...(byAts.get(h.ats) ?? []), h.durationMs]);
   for (const [ats, ms] of byAts) {
-    if (ms.length < 3) continue;
-    const measured = median(ms) / 1000 / Math.min(LANE_WORKERS, ms.length);
+    if (ms.length < MIN_SAMPLES) continue;
+    const measured = median(ms) / 1000 / Math.min(laneWorkers(ats), ms.length);
     speeds[ats] = Math.round((speeds[ats] === undefined ? measured : (speeds[ats] + measured) / 2) * 1000) / 1000;
   }
   writeFileSync(join(dataDir, "scan-speed.json"), JSON.stringify({ _model: SPEED_MODEL, ...speeds }, null, 1));
@@ -204,7 +207,7 @@ export function companySeconds(ats: string, speeds: ScanSpeeds = {}): number {
   if (measured !== undefined) return measured;
   const requests = REQUESTS[ats] ?? 1;
   const shared = SHARED_HOST_SECONDS[ats];
-  return shared !== undefined ? requests * shared : (requests * OWN_HOST_SECONDS) / LANE_WORKERS;
+  return shared !== undefined ? requests * shared : (requests * OWN_HOST_SECONDS) / laneWorkers(ats);
 }
 
 /**

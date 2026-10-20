@@ -108,12 +108,14 @@ describe("estimateSeconds", () => {
     expect(estimateSeconds([c("lever"), c("lever"), c("ashby")])).toBe(2);
   });
 
-  it("runs Workday shards as lanes of their own, and boards on their own hosts 4 at a time", () => {
+  it("runs Workday shards as lanes of their own, and boards on their own hosts as many at a time as run.ts does", () => {
     const wd = (shard: string) => ({ ats: "workday" as const, shard });
     const one = estimateSeconds(Array.from({ length: 40 }, () => wd("wd1")));
     expect(estimateSeconds([...Array.from({ length: 20 }, () => wd("wd1")), ...Array.from({ length: 20 }, () => wd("wd5"))])).toBe(Math.ceil(one / 2));
-    // 40 boards × 3 requests × 1.2 s, 4 at a time.
-    expect(one).toBe(36);
+    // 40 boards × 3 requests × 1.2 s, 8 at a time.
+    expect(one).toBe(18);
+    // BambooHR lanes run 4 at a time: 9 × 1.2 s / 4 = 2.7 s.
+    expect(estimateSeconds(Array.from({ length: 9 }, () => c("bamboohr")))).toBe(3);
   });
 
   it("gives the job feed and the live fetches their own estimate", () => {
@@ -145,6 +147,35 @@ describe("estimateSeconds", () => {
     expect(readSpeeds(dir)).toEqual({});
     const h = (ms: number) => ({ company: "x", ats: "lever" as const, slug: "x", ok: true, jobsFound: 0, matches: 0, durationMs: ms });
     expect(recordSpeeds(dir, [h(2000), h(2000), h(2000), h(2000), h(51_000)])).toEqual({ lever: 0.5 });
+    rmSync(dir, { recursive: true, force: true });
+  });
+
+  it("counts the companies a lane really runs at once, and skips systems with too few companies", () => {
+    const dir = mkdtempSync(join(tmpdir(), "speed-"));
+    const h = (ats: "greenhouse" | "workday" | "smartrecruiters" | "lever", ms: number) => ({ company: "x", ats, slug: "x", ok: true, jobsFound: 0, matches: 0, durationMs: ms });
+    const many = (ats: Parameters<typeof h>[0], n: number) => Array.from({ length: n }, () => h(ats, 4000));
+    // Greenhouse and Workday run 8 at a time, SmartRecruiters 6; 4 Lever companies are too few to learn from.
+    expect(recordSpeeds(dir, [...many("greenhouse", 20), ...many("workday", 20), ...many("smartrecruiters", 12), ...many("lever", 4)])).toEqual({
+      greenhouse: 0.5,
+      workday: 0.5,
+      smartrecruiters: 0.667,
+    });
+    rmSync(dir, { recursive: true, force: true });
+  });
+
+  it("estimates a learned scan as long as the scan it learned from took", () => {
+    const dir = mkdtempSync(join(tmpdir(), "speed-"));
+    // A Greenhouse lane of 200 companies, 8 in flight, each waiting 2 s: the lane took 200 × 2 / 8 = 50 s.
+    const health = Array.from({ length: 200 }, () => ({ company: "x", ats: "greenhouse" as const, slug: "x", ok: true, jobsFound: 0, matches: 0, durationMs: 2000 }));
+    const speeds = recordSpeeds(dir, health);
+    expect(estimateSeconds(health, speeds)).toBe(50);
+    rmSync(dir, { recursive: true, force: true });
+  });
+
+  it("forgets speeds learned before lanes counted their real workers", () => {
+    const dir = mkdtempSync(join(tmpdir(), "speed-"));
+    writeFileSync(join(dir, "scan-speed.json"), JSON.stringify({ _model: 2, greenhouse: 1 }));
+    expect(readSpeeds(dir)).toEqual({});
     rmSync(dir, { recursive: true, force: true });
   });
 });

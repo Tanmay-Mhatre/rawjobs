@@ -471,7 +471,7 @@ export async function scan(config: Config, opts: ScanOptions): Promise<ScanResul
   const summary = saveRun(opts.dataDir, config, { ...result, health, checked: checks.length, ...(moves.length ? { moves } : {}) }, merged, { record: !checkOnly, boards });
   writeLedger(opts.dataDir, ledger);
   writeBoardHealth(opts.dataDir, boards);
-  if (!checkOnly) recordSpeeds(opts.dataDir, run.health);
+  if (!checkOnly && !stopped) recordSpeeds(opts.dataDir, run.health);
   // The Radar shows only jobs fetched live; the shared index is for suggestions on the Companies page.
   if (fullScan) writeFileSync(join(opts.dataDir, "discover.json"), JSON.stringify({ version: 1, generatedAt: result.finishedAt, indexGeneratedAt: result.finishedAt, jobs: [] }));
   if (stopped) saveProgress(true);
