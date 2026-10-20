@@ -428,11 +428,12 @@ export function BackgroundPill({ scan, bg, onPause, onResume }: { scan: ScanStat
                 {(
                   [
                     [bg.found === 1 ? "Match" : "Matches", bg.found],
-                    ["Checked fine", Math.max(0, done - bg.failed)],
+                    // This run's, like the matches and failures (a resumed check did the rest before).
+                    ["Checked fine", Math.max(0, done - bg.resumed - bg.failed)],
                     ["Couldn't reach", bg.failed],
                   ] as const
                 ).map(([k, n]) => (
-                  <div key={k} className="flex flex-col-reverse rounded-md bg-inset px-2.5 py-2">
+                  <div key={k} className="flex flex-col-reverse justify-end rounded-md bg-inset px-2.5 py-2">
                     <dt className="type-meta text-muted">{k}</dt>
                     <dd className="type-body font-semibold tabular">{n.toLocaleString()}</dd>
                   </div>

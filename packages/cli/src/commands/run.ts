@@ -327,6 +327,8 @@ export async function runNdjson(values: RunValues): Promise<number> {
       /** One stage's progress lines: start, a line per company (or a count), its matches as they come. */
       const hooks = (stage: "quick" | "background"): Pick<ScanOptions, "onStart" | "onCompanyDone" | "onCompanyResult"> => {
         let done = 0;
+        /** When the last progress line went out. */
+        let lastLine = 0;
         /** Companies done per hiring system, including ones a resumed scan already did. */
         let doneByAts: Record<string, number> = {};
         /** Scan now's companies by where they come from (yours, past matches, feed picks), and how many are done. */
@@ -373,9 +375,12 @@ export async function runNdjson(values: RunValues): Promise<number> {
               if (src) doneBySource[src]++;
             }
             const counts = { doneByAts, ...(doneBySource ? { doneBySource } : {}) };
-            // Every one of yours, and directory companies that matched or failed; the rest only as a count.
+            // Every one of yours, and directory companies that matched or failed; the rest only as a count
+            // (every 25, or after 2 s without a line, so a slow stretch still shows it's moving).
             if (mine || h.matches > 0 || (!h.ok && !h.unsupported)) emit({ type: "company", done, ...counts, ...h });
-            else if (done % 25 === 0) emit({ type: "progress", done, ats: h.ats, last: h.company, ...counts });
+            else if (done % 25 === 0 || Date.now() - lastLine > 2000) emit({ type: "progress", done, ats: h.ats, last: h.company, ...counts });
+            else return;
+            lastLine = Date.now();
           },
           // Matches as each company finishes, so the Radar shows them before the scan ends.
           onCompanyResult: (_h, jobs) => {
