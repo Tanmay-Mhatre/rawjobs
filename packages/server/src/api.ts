@@ -77,6 +77,9 @@ type Line = string;
  *   POST /api/alerts/telegram/{token|connect|test|on|off|forget}   set up and manage Telegram alerts
  *   GET/POST/DELETE /api/schedule   scheduled scans on this computer: status, install ({ times, scope }), remove
  *   POST /api/schedule/run    run the scheduled scan now
+ *   GET/POST/DELETE /api/daily-summary   "Today in your Pipeline" on Telegram each morning: status (with the last
+ *                             day it ran), install ({ time }), remove
+ *   POST /api/daily-summary/test   send the daily summary now as a test
  *   POST /api/check           check directory companies now ({ keys: ["ats:slug"] }); answers with the done event
  * A scan belongs to the server, not to the tab that started it: closing or reloading the tab
  * never stops it, and GET /api/run picks it up again.
@@ -440,6 +443,10 @@ Stopped after ${Math.round(timeoutMs / 1000)} s without finishing.`.trim(),
     if (url === "/api/schedule" && req.method === "POST") return await respondJson(res, ["schedule", "install", "--stdin", "--data", dataDir], await readBody(req));
     if (url === "/api/schedule" && req.method === "DELETE") return await respondJson(res, ["schedule", "remove", "--data", dataDir]);
     if (url === "/api/schedule/run" && req.method === "POST") return await respondJson(res, ["schedule", "run", "--data", dataDir]);
+    if (url === "/api/daily-summary" && req.method === "GET") return await respondJson(res, ["today", "status", "--data", dataDir]);
+    if (url === "/api/daily-summary" && req.method === "POST") return await respondJson(res, ["today", "install", "--stdin", "--data", dataDir], await readBody(req));
+    if (url === "/api/daily-summary" && req.method === "DELETE") return await respondJson(res, ["today", "remove", "--data", dataDir]);
+    if (url === "/api/daily-summary/test" && req.method === "POST") return await respondJson(res, ["today", "--test", "--json", "--data", dataDir]);
     if (url === "/api/run/notify" && req.method === "POST") {
       // The running scan sends a Telegram message when it finishes (it checks for this file at the end).
       if (scan) writeFileSync(resolve(dataDir, "scan-notify"), "");

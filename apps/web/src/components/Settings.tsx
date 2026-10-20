@@ -15,6 +15,7 @@ import { exportState, mergeStates, readStateFile, type UserState } from "../lib/
 import { IndustriesStep, KeywordsStep, LocationsStep, RolesStep, ThresholdPicker } from "../setup/steps";
 import { Dialog } from "./Dialog";
 import { ScanPrefsPicker, scanHints, useScanPlan } from "./ScanButton";
+import { DailySummary } from "./DailySummary";
 import { ScheduledScans } from "./ScheduledScans";
 import { TelegramAlerts } from "./TelegramAlerts";
 import { Button, Card, cx, IconButton, Segmented, Toggle } from "./ui";
@@ -115,6 +116,8 @@ export function Settings({
   /** Until setup is saved, the Save bar shows on every page: the directory switches wait for it too. */
   const saveHere = (page: SettingsPageId) => !instant || page === "profile" || page === "matching";
   const [switchSave, setSwitchSave] = useState<Partial<Record<InstantSwitch, FieldSave>>>({});
+  /** Bumped when Telegram is connected or disconnected, so the daily summary card checks again. */
+  const [telegramChanged, setTelegramChanged] = useState(0);
   /** Save one switch now: written on top of the saved setup, leaving Profile and Matching edits unsaved. */
   const saveSwitch = async (key: InstantSwitch, on: boolean) => {
     // Both directory switches may be saving at once, so each save carries the other's latest value.
@@ -139,6 +142,7 @@ export function Settings({
   const shown: Record<string, boolean> = {
     schedule: canRunLocally,
     alerts: canRunLocally,
+    daily: canRunLocally,
     reset: !!onStartOver,
     version: canRunLocally,
     shortcut: canRunLocally && !!updates.status?.installed && !!updates.status.about?.shortcuts,
@@ -435,7 +439,15 @@ export function Settings({
           shown.alerts && (
             <>
               <Section id="alerts" title="Telegram alerts" hint="Get new jobs from scheduled scans on your phone. Saved right away.">
-                <TelegramAlerts onChanged={onSaved} />
+                <TelegramAlerts
+                  onChanged={async () => {
+                    setTelegramChanged((n) => n + 1);
+                    await onSaved();
+                  }}
+                />
+              </Section>
+              <Section id="daily" title="Daily summary" hint="A morning message on Telegram with what's due in your Pipeline today. Off until you turn it on. Saved right away.">
+                <DailySummary refresh={telegramChanged} />
               </Section>
               <Section id="send" title="What to send" hint="Which Telegram messages you get once it's connected. Saved right away.">
                 <div className="space-y-4">

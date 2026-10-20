@@ -94,17 +94,47 @@ const defaultExec = (cmd: string, args: string[]) => {
 
 const workDir = (ctx: ScheduleContext) => resolve(ctx.workDir ?? ctx.repoRoot);
 
-/** The scan command, with absolute paths (the scheduler starts with no PATH or working folder of ours). */
-export function scanCommand(ctx: ScheduleContext, scope: ScanScope): string[] {
+/** How the scheduler starts the CLI, with absolute paths (it starts with no PATH or working folder of ours). */
+function launchCommand(ctx: ScheduleContext): string[] {
   const launch = ctx.launch ?? {
     command: process.execPath,
     args: [resolve(ctx.repoRoot, "node_modules/tsx/dist/cli.mjs"), resolve(ctx.repoRoot, "packages/cli/src/index.ts")],
   };
-  return [launch.command, ...launch.args, "scan", "--scope", scope, "--notify", "--scheduled", "--data", resolve(ctx.dataDir)];
+  return [launch.command, ...launch.args];
+}
+
+/** The scan command the scheduler runs. */
+export function scanCommand(ctx: ScheduleContext, scope: ScanScope): string[] {
+  return [...launchCommand(ctx), "scan", "--scope", scope, "--notify", "--scheduled", "--data", resolve(ctx.dataDir)];
 }
 
 /** Hours a scan may run before the scheduler stops it: "all", and "mine" with its background check, take an hour or more. */
 const timeLimitHours = (scope: ScanScope) => (scope === "all" ? 4 : scope === "mine" ? 3 : 1);
+
+/** One entry in the operating system's scheduler: what it runs, when, and what it's called. */
+type SchedulerJob = {
+  names: SchedulerNames;
+  command: string[];
+  times: string[];
+  /** Hours it may run before the scheduler stops it. */
+  hours: number;
+  /** Windows' description of the task. */
+  description: string;
+  /** The systemd units' description. */
+  title: string;
+  /** macOS: the log file in the data folder. */
+  log: string;
+};
+
+const scanJob = (ctx: ScheduleContext, s: ScheduleSettings, names: SchedulerNames): SchedulerJob => ({
+  names,
+  command: scanCommand(ctx, s.scope),
+  times: s.times,
+  hours: timeLimitHours(s.scope),
+  description: "RawJobs: sync the company directory, scan, and send new jobs to Telegram.",
+  title: "RawJobs scan",
+  log: "schedule.log",
+});
 
 // ---------- Windows: Task Scheduler ----------
 
@@ -116,17 +146,18 @@ function powershell(ctx: ScheduleContext, script: string) {
   return (ctx.exec ?? defaultExec)("powershell.exe", ["-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-Command", script]);
 }
 
-function installWindows(ctx: ScheduleContext, s: ScheduleSettings, n: SchedulerNames): void {
-  const [exe, ...args] = scanCommand(ctx, s.scope);
+function installWindows(ctx: ScheduleContext, job: SchedulerJob): void {
+  const n = job.names;
+  const [exe, ...args] = job.command;
   // conhost --headless: run without flashing a console window on the desktop.
   const argument = ["--headless", exe!, ...args].map(winArg).join(" ");
-  const triggers = s.times.map((t) => `(New-ScheduledTaskTrigger -Daily -At ${psq(t)})`).join(",");
+  const triggers = job.times.map((t) => `(New-ScheduledTaskTrigger -Daily -At ${psq(t)})`).join(",");
   const script = [
     `$a = New-ScheduledTaskAction -Execute 'conhost.exe' -Argument ${psq(argument)} -WorkingDirectory ${psq(workDir(ctx))}`,
     `$t = @(${triggers})`,
     // StartWhenAvailable: a scan missed while the PC was off runs once it's back on. WakeToRun: wake from sleep.
-    `$s = New-ScheduledTaskSettingsSet -StartWhenAvailable -WakeToRun -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -MultipleInstances IgnoreNew -ExecutionTimeLimit (New-TimeSpan -Hours ${timeLimitHours(s.scope)})`,
-    `Register-ScheduledTask -TaskName ${psq(n.task)} -Action $a -Trigger $t -Settings $s -Description 'RawJobs: sync the company directory, scan, and send new jobs to Telegram.' -Force | Out-Null`,
+    `$s = New-ScheduledTaskSettingsSet -StartWhenAvailable -WakeToRun -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -MultipleInstances IgnoreNew -ExecutionTimeLimit (New-TimeSpan -Hours ${job.hours})`,
+    `Register-ScheduledTask -TaskName ${psq(n.task)} -Action $a -Trigger $t -Settings $s -Description ${psq(job.description)} -Force | Out-Null`,
   ].join("; ");
   const r = powershell(ctx, script);
   if (r.status !== 0) throw new Error(`Windows Task Scheduler refused the schedule: ${(r.stderr || r.stdout).trim().slice(0, 500)}`);
@@ -156,17 +187,16 @@ function statusWindows(ctx: ScheduleContext, n: SchedulerNames): { installed: bo
 const plistPath = (ctx: ScheduleContext, n: SchedulerNames) => join(ctx.home ?? homedir(), "Library/LaunchAgents", `${n.label}.plist`);
 const xml = (s: string) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 
-function installMac(ctx: ScheduleContext, s: ScheduleSettings, n: SchedulerNames): void {
-  const args = scanCommand(ctx, s.scope)
-    .map((a) => `    <string>${xml(a)}</string>`)
-    .join("\n");
-  const times = s.times
+function installMac(ctx: ScheduleContext, job: SchedulerJob): void {
+  const n = job.names;
+  const args = job.command.map((a) => `    <string>${xml(a)}</string>`).join("\n");
+  const times = job.times
     .map((t) => {
       const [h, m] = t.split(":").map(Number);
       return `    <dict><key>Hour</key><integer>${h}</integer><key>Minute</key><integer>${m}</integer></dict>`;
     })
     .join("\n");
-  const log = xml(join(resolve(ctx.dataDir), "schedule.log"));
+  const log = xml(join(resolve(ctx.dataDir), job.log));
   const plist = `<?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
@@ -206,22 +236,18 @@ function removeMac(ctx: ScheduleContext, n: SchedulerNames): void {
 
 const unitDir = (ctx: ScheduleContext) => join(ctx.home ?? homedir(), ".config/systemd/user");
 
-function installLinux(ctx: ScheduleContext, s: ScheduleSettings, n: SchedulerNames): void {
+function installLinux(ctx: ScheduleContext, job: SchedulerJob): void {
+  const n = job.names;
   const exec = ctx.exec ?? defaultExec;
   if (exec("systemctl", ["--user", "--version"]).status !== 0) throw new Error("This system has no systemd user session. Add a cron line instead: see the README.");
   const dir = unitDir(ctx);
   mkdirSync(dir, { recursive: true });
-  const cmd = scanCommand(ctx, s.scope)
-    .map((a) => (/\s/.test(a) ? `"${a}"` : a))
-    .join(" ");
-  writeFileSync(
-    join(dir, `${n.unit}.service`),
-    `[Unit]\nDescription=RawJobs scan\n\n[Service]\nType=oneshot\nWorkingDirectory=${workDir(ctx)}\nExecStart=${cmd}\nTimeoutStartSec=${timeLimitHours(s.scope)}h\n`,
-  );
+  const cmd = job.command.map((a) => (/\s/.test(a) ? `"${a}"` : a)).join(" ");
+  writeFileSync(join(dir, `${n.unit}.service`), `[Unit]\nDescription=${job.title}\n\n[Service]\nType=oneshot\nWorkingDirectory=${workDir(ctx)}\nExecStart=${cmd}\nTimeoutStartSec=${job.hours}h\n`);
   // Persistent: a run missed while the computer was off happens at the next boot.
   writeFileSync(
     join(dir, `${n.unit}.timer`),
-    `[Unit]\nDescription=RawJobs scan\n\n[Timer]\n${s.times.map((t) => `OnCalendar=*-*-* ${t}:00`).join("\n")}\nPersistent=true\n\n[Install]\nWantedBy=timers.target\n`,
+    `[Unit]\nDescription=${job.title}\n\n[Timer]\n${job.times.map((t) => `OnCalendar=*-*-* ${t}:00`).join("\n")}\nPersistent=true\n\n[Install]\nWantedBy=timers.target\n`,
   );
   exec("systemctl", ["--user", "daemon-reload"]);
   const r = exec("systemctl", ["--user", "enable", "--now", `${n.unit}.timer`]);
@@ -249,6 +275,13 @@ export function nextRunAt(times: readonly string[], now = new Date()): string | 
   return candidates.sort((a, b) => a.getTime() - b.getTime())[0]?.toISOString();
 }
 
+function installJob(ctx: ScheduleContext, platform: NodeJS.Platform, job: SchedulerJob, what: string): void {
+  if (platform === "win32") installWindows(ctx, job);
+  else if (platform === "darwin") installMac(ctx, job);
+  else if (platform === "linux") installLinux(ctx, job);
+  else throw new Error(`${what} aren't supported on ${platform} yet.`);
+}
+
 function removeFrom(ctx: ScheduleContext, platform: NodeJS.Platform, n: SchedulerNames): void {
   if (platform === "win32") removeWindows(ctx, n);
   else if (platform === "darwin") removeMac(ctx, n);
@@ -274,10 +307,7 @@ function activeNames(ctx: ScheduleContext, platform: NodeJS.Platform): { names: 
 export function installSchedule(ctx: ScheduleContext, input: Partial<ScheduleSettings>): ScheduleSettings {
   const s = validateSchedule(input);
   const platform = ctx.platform ?? process.platform;
-  if (platform === "win32") installWindows(ctx, s, SCHEDULER_NAMES);
-  else if (platform === "darwin") installMac(ctx, s, SCHEDULER_NAMES);
-  else if (platform === "linux") installLinux(ctx, s, SCHEDULER_NAMES);
-  else throw new Error(`Scheduled scans aren't supported on ${platform} yet.`);
+  installJob(ctx, platform, scanJob(ctx, s, SCHEDULER_NAMES), "Scheduled scans");
   // A schedule saved before the rename would otherwise scan twice.
   removeFrom(ctx, platform, LEGACY_SCHEDULER_NAMES);
   mkdirSync(ctx.dataDir, { recursive: true });
@@ -326,4 +356,78 @@ export function scheduleStatus(ctx: ScheduleContext, now = new Date()): Schedule
     if (platform === "win32" && !a.installed) problem = "The scheduled task is missing from Windows Task Scheduler. Save the schedule again to recreate it.";
   }
   return { installed, supported, platform, settings, nextRun: installed ? nextRun : undefined, lastRun: runs[0], runs, ...(problem ? { problem } : {}) };
+}
+
+// ---------- the daily summary ("Today in your Pipeline" on Telegram) ----------
+
+/** Its own entry in the scheduler, installed and removed apart from the scans. */
+export const DAILY_SCHEDULER_NAMES: SchedulerNames = { task: "RawJobs daily summary", label: "com.rawjobs.daily-summary", unit: "rawjobs-daily-summary" };
+const DAILY_SETTINGS_FILE = "daily-summary.json";
+export const DAILY_DEFAULT_TIME = "09:00";
+
+export type DailySettings = { time: string };
+export type DailyScheduleStatus = { installed: boolean; supported: boolean; platform: NodeJS.Platform; settings?: DailySettings; nextRun?: string; problem?: string };
+
+/** A morning time: a scheduled run after noon sends nothing (today.ts TODAY_CUTOFF), so later times are refused. */
+export function validateDailySummary(s: Partial<DailySettings>): DailySettings {
+  const time = s.time ?? DAILY_DEFAULT_TIME;
+  if (!TIME.test(time)) throw new Error(`"${time}" isn't a time like 09:00.`);
+  if (time >= "12:00") throw new Error("Pick a morning time, before 12:00.");
+  return { time };
+}
+
+/** The command the scheduler runs each morning, with absolute paths like the scan's. */
+export function dailySummaryCommand(ctx: ScheduleContext): string[] {
+  return [...launchCommand(ctx), "today", "--notify", "--scheduled", "--data", resolve(ctx.dataDir)];
+}
+
+export function readDailySettings(dataDir: string): DailySettings | undefined {
+  try {
+    return JSON.parse(readFileSync(join(dataDir, DAILY_SETTINGS_FILE), "utf8")) as DailySettings;
+  } catch {
+    return undefined;
+  }
+}
+
+export function installDailySummary(ctx: ScheduleContext, input: Partial<DailySettings>): DailySettings {
+  const s = validateDailySummary(input);
+  const platform = ctx.platform ?? process.platform;
+  installJob(
+    ctx,
+    platform,
+    {
+      names: DAILY_SCHEDULER_NAMES,
+      command: dailySummaryCommand(ctx),
+      times: [s.time],
+      hours: 1,
+      description: "RawJobs: send what's due in your Pipeline today to Telegram.",
+      title: "RawJobs daily summary",
+      log: "daily-summary.log",
+    },
+    "Daily summaries",
+  );
+  mkdirSync(ctx.dataDir, { recursive: true });
+  writeFileAtomic(join(ctx.dataDir, DAILY_SETTINGS_FILE), JSON.stringify(s, null, 1));
+  return s;
+}
+
+export function removeDailySummary(ctx: ScheduleContext): void {
+  removeFrom(ctx, ctx.platform ?? process.platform, DAILY_SCHEDULER_NAMES);
+  rmSync(join(ctx.dataDir, DAILY_SETTINGS_FILE), { force: true });
+}
+
+export function dailySummaryStatus(ctx: ScheduleContext, now = new Date()): DailyScheduleStatus {
+  const platform = ctx.platform ?? process.platform;
+  const supported = platform === "win32" || platform === "darwin" || platform === "linux";
+  const settings = readDailySettings(ctx.dataDir);
+  let installed = !!settings;
+  let nextRun = settings ? nextRunAt([settings.time], now) : undefined;
+  let problem: string | undefined;
+  if (supported && settings) {
+    const a = installedAs(ctx, platform, DAILY_SCHEDULER_NAMES);
+    installed = a.installed;
+    nextRun = a.nextRun ?? nextRun;
+    if (platform === "win32" && !a.installed) problem = "The daily summary is missing from Windows Task Scheduler. Turn it off and on again to recreate it.";
+  }
+  return { installed, supported, platform, ...(settings ? { settings } : {}), ...(installed && nextRun ? { nextRun } : {}), ...(problem ? { problem } : {}) };
 }
