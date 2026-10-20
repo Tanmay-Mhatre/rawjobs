@@ -27,6 +27,24 @@ contacts are part of your tracking data, so they're in its browser copy, its bac
 exports. Deleting your connections in Settings, or starting setup over, removes `network.json`
 and the files next to it.
 
+### Picking up the file from Downloads (only if you leave it ticked)
+In the Connect LinkedIn dialog, "Pick up the file from my Downloads folder by itself" is ticked by
+default. With it ticked, opening LinkedIn's data page starts a watch:
+
+- Every 10 seconds, RawJobs on your computer lists the **names** of the files in your Downloads
+  folder (not its subfolders). On Windows it asks the registry where that folder is; on Linux it
+  reads `~/.config/user-dirs.dirs`. It isn't offered on macOS.
+- It opens only a file named like LinkedIn's export (`Basic_LinkedInDataExport_….zip`) that was
+  saved after the watch started, and reads only Connections.csv, Positions.csv and Education.csv
+  from it. It never opens any other file, and never moves or deletes your file.
+- It stops once it has imported the file, or after 24 hours, whichever comes first.
+- Stop it any time with "Stop" next to "Watching Downloads until …" on a job or in Settings →
+  Data & privacy → LinkedIn connections. Choosing the file yourself stops it too.
+
+While it runs, the watch is kept in `profile/network-watch.json`, so it carries on if RawJobs
+restarts. The server log notes when it starts, finds a file and stops, with the file's name and
+size only.
+
 ### Find friends at a company (the paste box)
 "Find friends at {Company}" opens LinkedIn's own people search in your browser. If you copy that
 results page and paste it into RawJobs, it is read on this computer and kept only until you reload

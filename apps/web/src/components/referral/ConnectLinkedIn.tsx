@@ -1,8 +1,8 @@
 import { canInflateRaw } from "@rawjobs/core/network/zip-browser";
 import { ExternalLink, Upload, X } from "lucide-react";
-import { type DragEvent, type KeyboardEvent, useRef, useState } from "react";
+import { type DragEvent, type KeyboardEvent, useEffect, useRef, useState } from "react";
 import { LINK_REL } from "../../lib/contactLinks";
-import { IMPORT_ERROR, importNetworkFile, type NetworkStatus, UNZIP_FIRST } from "../../lib/network";
+import { IMPORT_ERROR, type ImportErrorCode, importNetworkFile, type NetworkStatus, startWatch, stopWatch, UNZIP_FIRST, useNetwork, type WatchState } from "../../lib/network";
 import { Dialog } from "../Dialog";
 import { Button, Card, cx, IconButton } from "../ui";
 
@@ -12,6 +12,25 @@ export const LINKEDIN_DATA_URL = "https://www.linkedin.com/mypreferences/d/downl
 type Step = { kind: "idle" } | { kind: "reading"; name: string } | { kind: "done"; status: Extract<NetworkStatus, { connected: true }> } | { kind: "error"; text: string };
 
 const plural = (n: number, one: string, many = `${one}s`) => `${n.toLocaleString()} ${n === 1 ? one : many}`;
+
+/** "14:30" today, "Wed 14:30" on another day. */
+export function watchUntil(iso: string, now = new Date()): string {
+  const d = new Date(iso);
+  const time = d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+  return d.toDateString() === now.toDateString() ? time : `${d.toLocaleDateString([], { weekday: "short" })} ${time}`;
+}
+
+/** "Watching Downloads until 14:30. Stop", for the panel and Settings while a watch runs. */
+export function WatchLine({ watch, className }: { watch: WatchState; className?: string }) {
+  return (
+    <p className={cx("type-small text-muted", className)}>
+      Watching Downloads until {watchUntil(watch.until)}.{" "}
+      <button type="button" className="font-medium underline underline-offset-2 hover:text-ink" onClick={() => void stopWatch()}>
+        Stop
+      </button>
+    </p>
+  );
+}
 
 /**
  * The guided import: get LinkedIn's export, then pick or drop it here. The browser reads the ZIP and
@@ -24,11 +43,37 @@ export function ConnectLinkedIn({ open, onClose }: { open: boolean; onClose: () 
   // Checked once: browsers without "deflate-raw" can still import Connections.csv on its own.
   const [zipOk] = useState(canInflateRaw);
   const busy = step.kind === "reading";
+  const network = useNetwork();
+  const status = network?.state === "ready" ? network.value.status : null;
+  const watchable = network?.state === "ready" && !!network.value.watchable;
+  const watch = status?.watch ?? null;
+  const [pickUp, setPickUp] = useState(true);
+  const [watchError, setWatchError] = useState<string | null>(null);
+  // While the dialog waits on a watch: the import it started from, so a new one shows as done here.
+  const [waitFrom, setWaitFrom] = useState<string | null | undefined>(undefined);
+  const importedAt = status?.connected ? status.importedAt : null;
+  const waiting = open && !!watch;
+  useEffect(() => {
+    if (waiting) setWaitFrom((w) => (w === undefined ? importedAt : w));
+  }, [waiting, importedAt]);
+  useEffect(() => {
+    if (waitFrom === undefined || !status?.connected || status.importedAt === waitFrom) return;
+    setWaitFrom(undefined);
+    setStep({ kind: "done", status });
+  }, [waitFrom, status]);
 
   const close = () => {
     if (busy) return;
     setStep({ kind: "idle" });
+    setWatchError(null);
+    setWaitFrom(undefined);
     onClose();
+  };
+  /** Step 1 with the box ticked: start watching Downloads as LinkedIn's page opens. */
+  const onOpenLinkedIn = async () => {
+    if (!watchable || !pickUp || watch) return;
+    setWatchError(null);
+    setWatchError(await startWatch());
   };
   const onFile = async (file: File | undefined) => {
     if (!file || busy) return;
@@ -73,9 +118,25 @@ export function ConnectLinkedIn({ open, onClose }: { open: boolean; onClose: () 
           ) : (
             <ol className="mt-4 list-decimal space-y-3 pl-5 type-small">
               <li>
-                <a href={LINKEDIN_DATA_URL} target="_blank" rel={LINK_REL} className="inline-flex items-center gap-1 font-medium text-ink underline underline-offset-2 hover:text-muted" data-autofocus>
+                <a
+                  href={LINKEDIN_DATA_URL}
+                  target="_blank"
+                  rel={LINK_REL}
+                  className="inline-flex items-center gap-1 font-medium text-ink underline underline-offset-2 hover:text-muted"
+                  data-autofocus
+                  onClick={() => void onOpenLinkedIn()}
+                >
                   Open LinkedIn's data page <ExternalLink className="size-3.5" aria-hidden />
                 </a>
+                {watchable && !watch && (
+                  <label className="mt-2 flex cursor-pointer items-start gap-2.5">
+                    <input type="checkbox" checked={pickUp} onChange={(e) => setPickUp(e.target.checked)} className="mt-0.5 size-4 shrink-0 accent-ink" />
+                    <span>
+                      Pick up the file from my Downloads folder by itself
+                      <span className="block text-muted">RawJobs looks only for LinkedIn's file name, for the next 24 hours.</span>
+                    </span>
+                  </label>
+                )}
               </li>
               <li>
                 Choose <b>Want something in particular?</b> and tick Connections, Positions and Education. Then Request archive.
@@ -92,6 +153,11 @@ export function ConnectLinkedIn({ open, onClose }: { open: boolean; onClose: () 
                   onDrop={onDrop}
                   className={cx("mt-1 flex flex-col items-start gap-2 rounded-md border border-dashed p-4", over ? "border-ink bg-sunken" : "border-line")}
                 >
+                  {watch && (
+                    <p role="status" className="font-medium text-ink">
+                      Watching Downloads for Basic_LinkedInDataExport_….zip
+                    </p>
+                  )}
                   <p className="text-muted">{zipOk ? "Drop the ZIP here, or choose the file." : `${UNZIP_FIRST}.`}</p>
                   <Button onClick={() => fileRef.current?.click()} disabled={busy}>
                     <Upload className="size-4" /> {zipOk ? "Choose the ZIP file" : "Choose Connections.csv"}
@@ -112,6 +178,11 @@ export function ConnectLinkedIn({ open, onClose }: { open: boolean; onClose: () 
           {step.kind === "reading" && (
             <p role="status" className="mt-3 type-small text-muted">
               Reading {step.name}…
+            </p>
+          )}
+          {step.kind !== "done" && (watchError || (watch?.lastError && watch.lastError in IMPORT_ERROR)) && (
+            <p role="alert" className="mt-3 type-small text-danger-text">
+              {watchError ?? IMPORT_ERROR[watch?.lastError as ImportErrorCode]}
             </p>
           )}
           {step.kind === "error" && (

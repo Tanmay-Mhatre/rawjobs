@@ -4,6 +4,8 @@ import type { AddressInfo } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
+import type { WatchDeps } from "@rawjobs/core";
+import { makeZip } from "../../core/test/fixtures/linkedin/make-zip";
 import { createApi } from "../src/api";
 
 const CONNECTIONS = `Notes:
@@ -25,18 +27,33 @@ describe("the network API", () => {
   let server: Server | undefined;
   afterEach(() => server?.close());
 
-  async function start() {
+  /** Timers the watcher set; a test runs them by hand. */
+  let pending: (() => void)[] = [];
+  let logs: string[] = [];
+
+  async function start(watchDeps: Partial<WatchDeps> = {}) {
     const dir = mkdtempSync(join(tmpdir(), "rawjobs-network-"));
     const home = join(dir, "home");
+    const downloads = join(dir, "Downloads");
     mkdirSync(home);
+    mkdirSync(downloads);
     mkdirSync(join(dir, "data"));
+    pending = [];
+    logs = [];
     // The CLI stand-in answers any command with "{}".
     const fake = join(dir, "fake-cli.mjs");
     writeFileSync(fake, `console.log("{}");`);
-    const api = createApi({ home, dataDir: join(dir, "data"), cli: { command: process.execPath, args: [fake] }, version: "9.9.9" });
+    const api = createApi({
+      home,
+      dataDir: join(dir, "data"),
+      cli: { command: process.execPath, args: [fake] },
+      version: "9.9.9",
+      // Never the real Downloads folder: a temp one, and timers this test runs.
+      watchDeps: { env: { RAWJOBS_DOWNLOADS: downloads }, schedule: (fn) => pending.push(fn), cancel: () => {}, log: (l) => logs.push(l), ...watchDeps },
+    });
     server = createServer((rq, rs) => void api.handle(rq, rs));
     await new Promise<void>((r) => server!.listen(0, "127.0.0.1", r));
-    return { port: (server!.address() as AddressInfo).port, home };
+    return { port: (server!.address() as AddressInfo).port, home, downloads };
   }
 
   function call(port: number, method: string, path: string, body?: string, headers: Record<string, string> = {}) {
@@ -57,7 +74,7 @@ describe("the network API", () => {
 
   it("imports the three CSVs, answers status, people and summary, and keeps no email", async () => {
     const { port, home } = await start();
-    expect((await call(port, "GET", "/api/network")).json()).toEqual({ status: { connected: false, watch: null }, me: null });
+    expect((await call(port, "GET", "/api/network")).json()).toEqual({ status: { connected: false, watch: null }, me: null, watchable: true });
 
     const r = await call(port, "POST", "/api/network/import", importBody({ connections: CONNECTIONS, positions: POSITIONS, education: EDUCATION }));
     expect(r.status).toBe(200);
@@ -176,5 +193,62 @@ describe("the network API", () => {
   it("turns away writes from other sites (the existing guard)", async () => {
     const { port } = await start();
     expect((await call(port, "DELETE", "/api/network", undefined, { origin: "https://evil.example" })).status).toBe(403);
+  });
+  async function runTimers() {
+    const fns = pending;
+    pending = [];
+    for (const fn of fns) fn();
+    // The poll reads the folder and the ZIP asynchronously.
+    await new Promise((r) => setTimeout(r, 200));
+  }
+
+  it("watches Downloads: start, state in GET, import from the folder, and stop", async () => {
+    const { port, home, downloads } = await start();
+    const r = await call(port, "POST", "/api/network/watch", "{}");
+    expect(r.status).toBe(200);
+    expect(r.headers["cache-control"]).toBe("no-store");
+    expect(r.headers["cross-origin-resource-policy"]).toBe("same-origin");
+    const watch = r.json().watch;
+    expect(watch).toMatchObject({ folder: "Downloads" });
+    expect(Date.parse(watch.until) - Date.parse(watch.since)).toBe(24 * 3_600_000);
+    expect((await call(port, "GET", "/api/network")).json().status.watch).toEqual(watch);
+    expect(existsSync(join(home, "profile/network-watch.json"))).toBe(true);
+
+    writeFileSync(join(downloads, "Basic_LinkedInDataExport_10-20-2026.zip"), makeZip([{ name: "Connections.csv", data: CONNECTIONS }]));
+    await runTimers();
+    const after = (await call(port, "GET", "/api/network")).json().status;
+    expect(after).toMatchObject({ connected: true, source: "downloads", fileName: "Basic_LinkedInDataExport_10-20-2026.zip", watch: null });
+    expect(logs.some((l) => l.startsWith("Found Basic_LinkedInDataExport_10-20-2026.zip ("))).toBe(true);
+    expect(logs.join(" ")).not.toContain(downloads);
+  });
+
+  it("DELETE /api/network/watch stops it, and so does choosing the file yourself", async () => {
+    const { port, home } = await start();
+    await call(port, "POST", "/api/network/watch");
+    expect((await call(port, "DELETE", "/api/network/watch")).json()).toEqual({ ok: true });
+    expect(existsSync(join(home, "profile/network-watch.json"))).toBe(false);
+    expect((await call(port, "GET", "/api/network")).json().status.watch).toBeNull();
+
+    await call(port, "POST", "/api/network/watch");
+    const imp = await call(port, "POST", "/api/network/import", importBody({ connections: CONNECTIONS }));
+    expect(imp.json().status.watch).toBeNull();
+    expect(existsSync(join(home, "profile/network-watch.json"))).toBe(false);
+  });
+
+  it("answers NO_ACCESS when Downloads can't be read, and isn't offered on macOS", async () => {
+    const denied = await start({ readdir: () => Promise.reject(Object.assign(new Error("EPERM"), { code: "EPERM" })) });
+    const r = await call(denied.port, "POST", "/api/network/watch");
+    expect(r.status).toBe(400);
+    expect(r.json()).toEqual({ watch: null, error: "NO_ACCESS" });
+    server?.close();
+
+    const mac = await start({ platform: "darwin", env: {} });
+    expect((await call(mac.port, "GET", "/api/network")).json().watchable).toBe(false);
+    expect((await call(mac.port, "POST", "/api/network/watch")).json()).toEqual({ watch: null, error: "UNSUPPORTED" });
+  });
+
+  it("refuses a watch started from another site", async () => {
+    const { port } = await start();
+    expect((await call(port, "POST", "/api/network/watch", "{}", { origin: "https://evil.example" })).status).toBe(403);
   });
 });

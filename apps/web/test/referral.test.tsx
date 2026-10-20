@@ -6,6 +6,7 @@ import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { TalkToSomeone } from "../src/components/referral/TalkToSomeone";
 import { NetworkSection } from "../src/components/settings/NetworkSection";
+import { Toaster } from "../src/components/Toast";
 import { isAgencyPosting } from "../src/lib/agency";
 import { type NetworkPersonRow, networkChanged, resetNetworkStore, usePeopleAt } from "../src/lib/network";
 import { coldLinks, friendsSearch, profileHref, recruiterLinks, warmLinks } from "../src/lib/referralLinks";
@@ -210,6 +211,86 @@ describe("Settings > LinkedIn connections", () => {
     await userEvent.click(screen.getByRole("button", { name: "Delete" }));
     await userEvent.click(screen.getByRole("button", { name: "Delete connections" }));
     expect(fetch.mock.calls.filter(([u, init]) => u === "/api/network" && init?.method === "DELETE")).toHaveLength(1);
+  });
+});
+
+describe("Downloads watch", () => {
+  const WATCH = { since: "2026-10-20T10:00:00.000Z", until: "2026-10-21T10:00:00.000Z", folder: "Downloads" };
+  const openDialog = async () => {
+    render(<NetworkSection />);
+    await userEvent.click(await screen.findByRole("button", { name: "Connect LinkedIn" }));
+    return screen.getByRole("dialog", { name: "Connect LinkedIn" });
+  };
+
+  it("offers to pick up the file (on by default) and starts watching as LinkedIn's page opens", async () => {
+    const fetch = stubApi({ network: { ...notConnected, watchable: true }, other: (url, init) => (url === "/api/network/watch" && init?.method === "POST" ? { watch: WATCH } : undefined) });
+    const dialog = await openDialog();
+    const box = within(dialog).getByRole("checkbox", { name: /Pick up the file from my Downloads folder by itself/ }) as HTMLInputElement;
+    expect(box.checked).toBe(true);
+    expect(dialog.textContent).toContain("RawJobs looks only for LinkedIn's file name");
+    await userEvent.click(within(dialog).getByRole("link", { name: /Open LinkedIn's data page/ }));
+    expect(fetch.mock.calls.filter(([u, init]) => u === "/api/network/watch" && init?.method === "POST")).toHaveLength(1);
+    expect((await within(dialog).findByRole("status")).textContent).toBe("Watching Downloads for Basic_LinkedInDataExport_….zip");
+    // The drop zone is still there, and the box is gone once watching.
+    expect(within(dialog).getByRole("button", { name: /Choose the ZIP file|Choose Connections\.csv/ })).toBeTruthy();
+    expect(within(dialog).queryByRole("checkbox")).toBeNull();
+  });
+
+  it("doesn't watch when the box is unticked, and hides it where it isn't offered", async () => {
+    const fetch = stubApi({ network: { ...notConnected, watchable: true } });
+    const dialog = await openDialog();
+    await userEvent.click(within(dialog).getByRole("checkbox"));
+    await userEvent.click(within(dialog).getByRole("link", { name: /Open LinkedIn's data page/ }));
+    expect(fetch.mock.calls.some(([u]) => u === "/api/network/watch")).toBe(false);
+    cleanup();
+    resetNetworkStore();
+    stubApi({ network: { ...notConnected, watchable: false } });
+    const mac = await openDialog();
+    expect(within(mac).queryByRole("checkbox")).toBeNull();
+  });
+
+  it("says so when RawJobs can't look in Downloads", async () => {
+    stubApi({
+      network: { ...notConnected, watchable: true },
+      other: (url) => (url === "/api/network/watch" ? new Response(JSON.stringify({ watch: null, error: "NO_ACCESS" }), { status: 400 }) : undefined),
+    });
+    const dialog = await openDialog();
+    await userEvent.click(within(dialog).getByRole("link", { name: /Open LinkedIn's data page/ }));
+    expect((await within(dialog).findByRole("alert")).textContent).toBe("RawJobs can't look in Downloads. Choose the file instead.");
+  });
+
+  it("shows the watch in the panel with Stop, and Stop ends it", async () => {
+    const fetch = stubApi({ network: { status: { connected: false, watch: WATCH }, me: null, watchable: true } });
+    render(<TalkToSomeone job={makeJob({ company: "Acme" })} />);
+    const line = await screen.findByText(/Watching Downloads until/);
+    await userEvent.click(within(line).getByRole("button", { name: "Stop" }));
+    expect(fetch.mock.calls.filter(([u, init]) => u === "/api/network/watch" && init?.method === "DELETE")).toHaveLength(1);
+    await waitFor(() => expect(screen.queryByText(/Watching Downloads until/)).toBeNull());
+  });
+
+  it("asks every 10 s while watching, then refreshes and says what came in", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    try {
+      const routes: { network: unknown } = { network: { status: { connected: false, watch: WATCH }, me: null, watchable: true } };
+      const fetch = stubApi(routes);
+      render(<Toaster />);
+      render(<TalkToSomeone job={makeJob({ company: "Acme" })} />);
+      await screen.findByText(/Watching Downloads until/);
+      const reads = () => fetch.mock.calls.filter(([u, init]) => u === "/api/network" && !init?.method).length;
+      expect(reads()).toBe(1);
+      await act(() => vi.advanceTimersByTimeAsync(10_000));
+      expect(reads()).toBe(2);
+      routes.network = { ...connected(), status: { ...connected().status, source: "downloads" } };
+      await act(() => vi.advanceTimersByTimeAsync(10_000));
+      expect(await screen.findByText("Imported 812 connections from Downloads")).toBeTruthy();
+      await waitFor(() => expect(screen.queryByText(/Watching Downloads until/)).toBeNull());
+      // Once the watch is over, it stops asking.
+      const after = reads();
+      await act(() => vi.advanceTimersByTimeAsync(30_000));
+      expect(reads()).toBe(after);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });
 
