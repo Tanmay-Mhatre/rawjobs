@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { HttpClient } from "../src/http";
+import { HttpClient, StoppedError } from "../src/http";
 import { json } from "./helpers";
 
 afterEach(() => vi.restoreAllMocks());
@@ -190,5 +190,39 @@ describe("HttpClient", () => {
     // First call to each host goes straight away; the second a.example call waits ~1s.
     expect(sleeps).toHaveLength(1);
     expect(sleeps[0]).toBeGreaterThan(900);
+  });
+
+  describe("stopped", () => {
+    /** A host that never answers until the request is aborted. */
+    const hang = (async (_url: string, init?: RequestInit) => new Promise((_, reject) => init?.signal?.addEventListener("abort", () => reject(init.signal!.reason)))) as typeof fetch;
+
+    it("cuts a request in flight short within a moment, without counting it against the host", async () => {
+      let stop = false;
+      const http = new HttpClient({ hostDelayMs: 0, timeoutMs: 60_000, breakAfter: 1, fetchImpl: hang, stopped: () => stop });
+      setTimeout(() => (stop = true), 50);
+      const started = Date.now();
+      await expect(http.getJson("https://a.example/x")).rejects.toBeInstanceOf(StoppedError);
+      expect(Date.now() - started).toBeLessThan(2_000);
+      expect(http.stats.failures).toBe(0);
+      expect(http.stats.brokenHosts).toEqual([]);
+    });
+
+    it("doesn't retry, or send anything, once stopped", async () => {
+      let stop = false;
+      let sent = 0;
+      const http = new HttpClient({
+        hostDelayMs: 0,
+        backoffMs: 10_000,
+        sleep: async () => void (stop = true), // stopped during the backoff
+        fetchImpl: (async () => {
+          sent++;
+          return json({}, 503);
+        }) as typeof fetch,
+        stopped: () => stop,
+      });
+      await expect(http.getJson("https://a.example/x")).rejects.toBeInstanceOf(StoppedError);
+      await expect(http.getJson("https://a.example/y")).rejects.toBeInstanceOf(StoppedError);
+      expect(sent).toBe(1);
+    });
   });
 });
