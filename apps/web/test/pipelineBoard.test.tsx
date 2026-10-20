@@ -63,49 +63,17 @@ describe("sortCards", () => {
   });
 });
 
-function renderBoard(o: { user?: UserState; review?: { jobs: Job[]; total: number }; onPatch?: ReturnType<typeof vi.fn>; onReview?: ReturnType<typeof vi.fn>; goRadar?: () => void } = {}) {
+function renderBoard(o: { user?: UserState; onPatch?: ReturnType<typeof vi.fn>; goRadar?: () => void } = {}) {
   return render(
-    <Pipeline
-      user={o.user ?? {}}
-      jobsById={new Map()}
-      onOpen={() => {}}
-      onPatch={o.onPatch ?? vi.fn()}
-      onAdd={() => {}}
-      onWeeklyPlan={() => {}}
-      goRadar={o.goRadar ?? (() => {})}
-      review={o.review}
-      onReview={o.onReview}
-      now={now}
-    />,
+    <Pipeline user={o.user ?? {}} jobsById={new Map()} onOpen={() => {}} onPatch={o.onPatch ?? vi.fn()} onAdd={() => {}} onWeeklyPlan={() => {}} goRadar={o.goRadar ?? (() => {})} now={now} />,
   );
 }
 
-describe("To review column (9.2.17)", () => {
-  it("lists strong matches with Save, Not interested and a link to the rest on the Radar", () => {
-    const j = makeJob({ title: "Head of Product", firstSeen: new Date(now.getTime() - 2 * 864e5).toISOString() });
-    const onReview = vi.fn();
-    const goRadar = vi.fn();
-    renderBoard({ review: { jobs: [j], total: 15 }, onReview, goRadar });
-    const col = screen.getByRole("heading", { name: /^To review/ }).closest("section")!;
-    expect(within(col).getByText("Head of Product")).toBeTruthy();
-    expect(within(col).getByText(/^Strong match · found/)).toBeTruthy();
-    fireEvent.click(within(col).getByRole("button", { name: "Save" }));
-    fireEvent.click(within(col).getByRole("button", { name: "Not interested" }));
-    expect(onReview.mock.calls).toEqual([
-      [j, "saved"],
-      [j, "dismissed"],
-    ]);
-    fireEvent.click(within(col).getByRole("button", { name: "See all 15 on the Radar" }));
-    expect(goRadar).toHaveBeenCalled();
-  });
-
-  it("says so when there's nothing new, and is hidden while the Radar isn't set up", () => {
-    const user = { a: entry("saved", "2026-10-10") };
-    renderBoard({ user, review: { jobs: [], total: 0 } });
-    expect(screen.getByText("No new strong matches.")).toBeTruthy();
-    cleanup();
-    renderBoard({ user });
+describe("To review column", () => {
+  it("stays hidden until the apply kit has answers to review", () => {
+    renderBoard({ user: { a: entry("saved", "2026-10-10") } });
     expect(screen.queryByRole("heading", { name: /^To review/ })).toBeNull();
+    expect(screen.getAllByRole("heading", { level: 2 }).some((h) => /^Saved/.test(h.textContent ?? ""))).toBe(true);
   });
 });
 

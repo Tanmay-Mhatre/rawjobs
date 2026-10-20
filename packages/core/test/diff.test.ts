@@ -120,6 +120,19 @@ describe("mergeHistory", () => {
     expect(m.newIds.size).toBe(0);
   });
 
+  it("counts a job a half-finished save kept as new: first seen after the last recorded run", () => {
+    // A scan at T1 saved history, then failed before recording its run; the next scan resumes it.
+    const kept = job("2", { firstSeen: T1, lastSeen: T1 });
+    const m = mergeHistory([job("1"), kept], run(T1, [job("1", { lastSeen: T1 }), kept]), companies, undefined, { lastRunAt: T0 });
+    expect([...m.newIds]).toEqual(["greenhouse:acme:2"]);
+  });
+
+  it("doesn't count a job again once its run is recorded (a stopped scan, resumed)", () => {
+    const kept = job("2", { firstSeen: T1, lastSeen: T1 });
+    const m = mergeHistory([kept], run(T2, [{ ...kept, lastSeen: T2 }]), companies, undefined, { lastRunAt: T1 });
+    expect(m.newIds.size).toBe(0);
+  });
+
   it("never closes jobs when the company's fetch failed", () => {
     const m = mergeHistory([job("1", { missedRuns: 1 })], run(T2, [], false), companies);
     expect(m.jobs[0]).toMatchObject({ status: "open", missedRuns: 1 });
