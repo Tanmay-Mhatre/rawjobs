@@ -1,5 +1,6 @@
-import { copyFileSync, existsSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
+import { copyFileSync, existsSync, mkdirSync, readdirSync, readFileSync, rmSync } from "node:fs";
 import { dirname, resolve } from "node:path";
+import { writeFileAtomic } from "./atomic";
 import { rawjobsHome } from "./paths";
 
 /**
@@ -64,9 +65,7 @@ export function saveTracking(input: unknown, home = rawjobsHome()): { ok: true; 
   const path = resolve(home, TRACKING_PATH);
   mkdirSync(dirname(path), { recursive: true });
   backUp(path, home);
-  const tmp = `${path}.${process.pid}.tmp`;
-  writeFileSync(tmp, text);
-  renameSync(tmp, path);
+  writeFileAtomic(path, text);
   return { ok: true, tracking: next };
 }
 

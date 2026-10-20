@@ -2,7 +2,7 @@ import { existsSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSy
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { readJsonOrSetAside, writeFileAtomic } from "../src/atomic";
+import { readJsonOrSetAside, renameWithRetry, writeFileAtomic } from "../src/atomic";
 import { readJobs, readMeta } from "../src/store";
 
 let dir: string;
@@ -51,5 +51,39 @@ describe("readJsonOrSetAside", () => {
     expect(warn).toHaveBeenCalledTimes(2);
     warn.mockRestore();
     expect(existsSync(join(dir, "history.json.bad"))).toBe(true);
+  });
+});
+
+describe("renameWithRetry", () => {
+  const busy = (code: string) => Object.assign(new Error(code), { code });
+
+  it("tries again while the file is briefly held open", () => {
+    const rename = vi
+      .fn()
+      .mockImplementationOnce(() => {
+        throw busy("EPERM");
+      })
+      .mockImplementationOnce(() => {
+        throw busy("EBUSY");
+      })
+      .mockImplementation(() => undefined);
+    renameWithRetry("a.tmp", "a", rename);
+    expect(rename).toHaveBeenCalledTimes(3);
+  });
+
+  it("gives up after a while and throws the last error", () => {
+    const rename = vi.fn(() => {
+      throw busy("EPERM");
+    });
+    expect(() => renameWithRetry("a.tmp", "a", rename)).toThrow("EPERM");
+    expect(rename).toHaveBeenCalledTimes(8);
+  });
+
+  it("doesn't retry other errors", () => {
+    const rename = vi.fn(() => {
+      throw busy("ENOENT");
+    });
+    expect(() => renameWithRetry("a.tmp", "a", rename)).toThrow("ENOENT");
+    expect(rename).toHaveBeenCalledTimes(1);
   });
 });
