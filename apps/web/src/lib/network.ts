@@ -6,14 +6,16 @@
  */
 import { networkKey } from "@rawjobs/core/network/company";
 import { type ExportFiles, exportFilesFromEntries, isAllowedEntry } from "@rawjobs/core/network/linkedin-export";
-import type { NetworkMe, NetworkPeople, NetworkPersonRow, NetworkStatus } from "@rawjobs/core/network/types";
+import type { NetworkMe, NetworkPeople, NetworkPersonRow, NetworkStatus, WatchState } from "@rawjobs/core/network/types";
 import { readZipEntries, ZipError } from "@rawjobs/core/network/zip";
 import { blobZipSource, canInflateRaw, inflateRawStream } from "@rawjobs/core/network/zip-browser";
 import { useEffect, useSyncExternalStore } from "react";
+import { toast } from "../components/Toast";
 import { canRunLocally } from "./data";
 
-export type { NetworkMe, NetworkPeople, NetworkPersonRow, NetworkStatus };
-export type NetworkInfo = { status: NetworkStatus; me: NetworkMe | null };
+export type { NetworkMe, NetworkPeople, NetworkPersonRow, NetworkStatus, WatchState };
+/** watchable: this computer offers the Downloads watch (not macOS in this release). */
+export type NetworkInfo = { status: NetworkStatus; me: NetworkMe | null; watchable?: boolean };
 export type Loadable<T> = { state: "loading" } | { state: "ready"; value: T } | { state: "error" };
 
 /** From this many days after an import, Settings and the job panel suggest a fresh copy. */
@@ -72,6 +74,7 @@ function loadInfo() {
       if (g !== gen) return;
       info = { state: "ready", value };
       emit();
+      syncWatchPoll();
     },
     () => {
       if (g !== gen) return;
@@ -79,6 +82,82 @@ function loadInfo() {
       emit();
     },
   );
+}
+
+/** How often an open page asks whether the Downloads watch found the file. */
+export const WATCH_POLL_MS = 10_000;
+let pollTimer: ReturnType<typeof setTimeout> | undefined;
+const importedAtOf = (s: NetworkStatus) => (s.connected ? s.importedAt : null);
+
+/** While a Downloads watch runs, ask every 10 s; stop asking once it's over. */
+function syncWatchPoll() {
+  // A malformed answer (no status) counts as not watching.
+  const watching = info?.state === "ready" && !!info.value.status?.watch;
+  if (!watching) {
+    clearTimeout(pollTimer);
+    pollTimer = undefined;
+  } else if (!pollTimer) pollTimer = setTimeout(() => void pollWatch(), WATCH_POLL_MS);
+}
+
+async function pollWatch() {
+  pollTimer = undefined;
+  if (info?.state !== "ready") return;
+  const before = importedAtOf(info.value.status);
+  const g = gen;
+  try {
+    const value = await getJson<NetworkInfo>("/api/network");
+    if (g !== gen) return;
+    if (value.status.connected && value.status.importedAt !== before) {
+      // The watch found and imported LinkedIn's file: refresh everything that shows your connections.
+      networkChanged();
+      if (value.status.source === "downloads") toast({ message: `Imported ${value.status.counts.connections.toLocaleString()} connections from Downloads` });
+      return;
+    }
+    info = { state: "ready", value };
+    emit();
+  } catch {
+    // RawJobs may be restarting: ask again next time.
+  }
+  syncWatchPoll();
+}
+
+/** Why a watch couldn't start, in the dialog. */
+export const WATCH_ERROR = {
+  NO_ACCESS: "RawJobs can't look in Downloads. Choose the file instead.",
+  NO_FOLDER: "RawJobs couldn't find your Downloads folder. Choose the file instead.",
+  FAILED: "Couldn't watch Downloads. Choose the file instead.",
+} as const;
+
+/** Ask RawJobs to pick up LinkedIn's file from Downloads by itself. Returns an error to show, or null. */
+export async function startWatch(): Promise<string | null> {
+  if (!canRunLocally) return null;
+  try {
+    const r = await fetch("/api/network/watch", { method: "POST", headers: { "content-type": "application/json" }, body: "{}" });
+    const res = (await r.json()) as { watch: WatchState | null; error?: string };
+    if (!res.watch) return res.error === "NO_ACCESS" || res.error === "NO_FOLDER" ? WATCH_ERROR[res.error] : WATCH_ERROR.FAILED;
+    setWatch(res.watch);
+    return null;
+  } catch {
+    return WATCH_ERROR.FAILED;
+  }
+}
+
+/** Stop watching Downloads. */
+export async function stopWatch(): Promise<void> {
+  if (!canRunLocally) return;
+  try {
+    await fetch("/api/network/watch", { method: "DELETE" });
+  } catch {
+    // The next status read shows whether it stopped.
+  }
+  setWatch(null);
+}
+
+function setWatch(watch: WatchState | null) {
+  if (info?.state !== "ready") return;
+  info = { state: "ready", value: { ...info.value, status: { ...info.value.status, watch } } };
+  emit();
+  syncWatchPoll();
 }
 
 function loadPeople(company: string, key: string) {
@@ -241,6 +320,8 @@ export async function setCloseContact(id: string, on: boolean): Promise<boolean>
 /** For tests: start from an empty store. */
 export function resetNetworkStore(): void {
   gen++;
+  clearTimeout(pollTimer);
+  pollTimer = undefined;
   info = undefined;
   summary = undefined;
   summaryAsked = false;

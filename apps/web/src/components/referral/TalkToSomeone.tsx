@@ -14,7 +14,7 @@ import { usePeople } from "../pipeline/PeopleContext";
 import { KnownPicker } from "../pipeline/PeopleTab";
 import { toast } from "../Toast";
 import { Button, cx } from "../ui";
-import { ConnectLinkedIn } from "./ConnectLinkedIn";
+import { ConnectLinkedIn, WatchLine } from "./ConnectLinkedIn";
 import { FindFriends } from "./FindFriends";
 import { MessageDrafts } from "./MessageDrafts";
 
@@ -151,6 +151,7 @@ function Section({ job, entry, profile, onUpdate, onOpenPeople }: Props) {
         <Button size="sm" onClick={() => setConnecting(true)}>
           <Users className="size-4" aria-hidden /> Connect LinkedIn
         </Button>
+        {status.watch && <WatchLine watch={status.watch} className="w-full" />}
       </div>
     );
   } else if (status?.connected) {

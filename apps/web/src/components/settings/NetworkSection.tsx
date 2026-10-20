@@ -2,7 +2,7 @@ import { RefreshCw, Trash2, Users } from "lucide-react";
 import { useState } from "react";
 import { formatDate } from "../../lib/format";
 import { deleteNetwork, REFRESH_AFTER_DAYS, useNetwork } from "../../lib/network";
-import { ConnectLinkedIn } from "../referral/ConnectLinkedIn";
+import { ConnectLinkedIn, WatchLine } from "../referral/ConnectLinkedIn";
 import { Button, Card } from "../ui";
 import { ConfirmDialog } from "./ConfirmDialog";
 
@@ -35,6 +35,7 @@ export function NetworkSection() {
             {status.ageDays >= REFRESH_AFTER_DAYS && <p className="mt-1 text-muted">It's been {status.ageDays} days. Get a fresh copy so new jobs and people show up.</p>}
           </div>
         )}
+        {status?.watch && <WatchLine watch={status.watch} />}
         {status && (
           <div className="flex flex-wrap gap-2">
             {status.connected ? (

@@ -23,7 +23,7 @@ import {
   writeCacheFile,
 } from "@rawjobs/core";
 import { readTracking, saveTracking, suggestPoolSize, type ScanScope } from "@rawjobs/core";
-import { CONNECTION_ID, createNetworkStore } from "@rawjobs/core";
+import { CONNECTION_ID, createNetworkStore, createWatcher, nodeWatchDeps, type WatchDeps } from "@rawjobs/core";
 import { refuse } from "./guard";
 import type { Updater } from "./updater";
 
@@ -40,6 +40,8 @@ export type ApiOptions = {
   updater?: Pick<Updater, "route" | "updating" | "updateHint">;
   /** Whether rawjobs://open starts RawJobs on this computer (/api/health's startLink). Default: no. */
   startLink?: () => boolean;
+  /** The Downloads watcher's view of the computer (tests point it at a temp folder). Default: the real one. */
+  watchDeps?: Partial<WatchDeps>;
 };
 
 /** A page served from this computer (any port): may read /api/health from another port. */
@@ -55,7 +57,11 @@ type Line = string;
  *                             start it again. background: a scan this server didn't start (a scheduled one) is running.
  *                             dataVersion: meta.json's generatedAt, so an open page sees when a scan wrote new results
  *   GET/PUT /api/tracking     your statuses, notes and Radar preferences (profile/tracking.json)
- *   GET  /api/network         your LinkedIn connections: { status, me } (me: your own positions and schools, or null)
+ *   GET  /api/network         your LinkedIn connections: { status, me, watchable } (me: your own positions and schools, or
+ *                             null; status.watch: a Downloads watch any server here is running; watchable: offered here)
+ *   POST /api/network/watch   { hours? }: watch Downloads for LinkedIn's export. { watch: { since, until, folder } }, or
+ *                             400 { watch: null, error: "NO_ACCESS" | "NO_FOLDER" | "UNSUPPORTED" }
+ *   DELETE /api/network/watch stop watching Downloads
  *   POST /api/network/import  { fileName?, files: { connections?, positions?, education? } }: the three CSV texts the
  *                             page read from LinkedIn's export ZIP. { ok: true, status }, or { ok: false, errors: [{ code }] }
  *                             (400; 413 with TOO_BIG for a body over 12 MB)
@@ -99,6 +105,7 @@ export function createApi(opts: ApiOptions) {
   const cliCmd = opts.cli ?? cliCommand();
   const version = opts.version ?? APP_VERSION;
   const network = createNetworkStore(home);
+  const watcher = createWatcher(home, network, { ...nodeWatchDeps(), ...opts.watchDeps });
 
   /** Run `rawjobs <args>` from the repo root (no shell, so no quoting issues). */
   function cli(args: string[], stdin?: string): ChildProcess {
@@ -391,6 +398,7 @@ Stopped after ${Math.round(timeoutMs / 1000)} s without finishing.`.trim(),
     if (url === "/api/setup/reset" && req.method === "POST") {
       if (busy()) return json(res, { ok: false, errors: "A scan is running; try again when it's done." });
       // Starting over also deletes your LinkedIn connections.
+      watcher.stop();
       await network.remove();
       return await respondJson(res, ["setup", "reset"]);
     }
@@ -514,6 +522,8 @@ Stopped after ${Math.round(timeoutMs / 1000)} s without finishing.`.trim(),
    * the Companies page's first visit reads the ranking from disk instead of waiting for it.
    */
   function startBackground() {
+    // A Downloads watch from before a restart carries on.
+    watcher.resume();
     const update = cli(["directory", "update", "--auto", "--if-older", "7", "--data", dataDir]);
     update.on("error", () => {});
     update.on("close", () => void oneSuggestRun(() => collect(["companies", "suggest", "--json", "--data", dataDir])));
@@ -522,8 +532,26 @@ Stopped after ${Math.round(timeoutMs / 1000)} s without finishing.`.trim(),
   /** /api/network*: your LinkedIn connections. Error answers never repeat the company asked about. */
   async function networkRoute(url: string, req: IncomingMessage, res: ServerResponse): Promise<void> {
     const bad = (code: string, status = 400) => json(res, { ok: false, errors: [{ code }] }, status);
-    if (url === "/api/network" && req.method === "GET") return json(res, { status: network.status(), me: network.me() });
+    if (url === "/api/network" && req.method === "GET") {
+      const watchable = watcher.supported();
+      return json(res, { status: { ...network.status(), watch: watcher.state() }, me: network.me(), watchable });
+    }
+    if (url === "/api/network/watch" && req.method === "POST") {
+      let body: { hours?: unknown };
+      try {
+        body = (JSON.parse((await readBody(req, 1_000)) || "{}") ?? {}) as typeof body;
+      } catch {
+        return bad("BAD_REQUEST");
+      }
+      const r = await watcher.start(typeof body.hours === "number" ? body.hours : undefined);
+      return r.ok ? json(res, { watch: r.watch }) : json(res, { watch: null, error: r.code }, 400);
+    }
+    if (url === "/api/network/watch" && req.method === "DELETE") {
+      watcher.stop();
+      return json(res, { ok: true });
+    }
     if (url === "/api/network" && req.method === "DELETE") {
+      watcher.stop();
       await network.remove();
       return json(res, { ok: true });
     }
@@ -559,7 +587,10 @@ Stopped after ${Math.round(timeoutMs / 1000)} s without finishing.`.trim(),
         { connections: text("connections"), positions: text("positions"), education: text("education") },
         { source: "file", fileName: typeof b.fileName === "string" ? b.fileName : undefined },
       );
-      return r.ok ? json(res, r) : bad(r.code);
+      if (!r.ok) return bad(r.code);
+      // You chose the file yourself: no need to keep watching for it.
+      watcher.stop();
+      return json(res, { ...r, status: { ...r.status, watch: null } });
     }
     if (url === "/api/network/friends" && req.method === "PUT") {
       let body: { id?: unknown; friend?: unknown };
@@ -579,6 +610,8 @@ Stopped after ${Math.round(timeoutMs / 1000)} s without finishing.`.trim(),
    * and the next scan resumes), and end it if it hasn't after `graceMs`. Tabs following it are closed.
    */
   async function stop(graceMs = 10_000): Promise<void> {
+    // The watch itself stays in network-watch.json, so the next start carries on with it.
+    watcher.close();
     const current = scan;
     if (!current) return;
     const closed = new Promise<void>((done) => {
