@@ -120,13 +120,16 @@ type TaskActionsProps = {
   onOpen?: (t: Task) => void;
   /** The deadline's button ("Compare offers" with two or more offers); Open otherwise. */
   deadlineLabel?: string;
+  /** In a list of tasks: no accent buttons, so the one accent isn't on every row. */
+  quiet?: boolean;
 };
 
 /**
  * A task's buttons, shared by the job's pinned next step and the Pipeline's Next steps list: Log
  * follow-up and Snooze, Log thank-you and Mark done, Close as no response and Follow up once more, or Open.
  */
-export function TaskActions({ task, skipped, onLog, onMarkDone, onUpdate, now, onOpen, deadlineLabel = "Open" }: TaskActionsProps) {
+export function TaskActions({ task, skipped, onLog, onMarkDone, onUpdate, now, onOpen, deadlineLabel = "Open", quiet }: TaskActionsProps) {
+  const main = quiet ? undefined : ("primary" as const);
   const day = today(now);
   const [picking, setPicking] = useState(false);
   const [picked, setPicked] = useState("");
@@ -144,7 +147,7 @@ export function TaskActions({ task, skipped, onLog, onMarkDone, onUpdate, now, o
     <div className="flex flex-wrap items-center gap-2">
       {task.kind === "follow-up" && (
         <>
-          <Button size="sm" variant="primary" onClick={() => onLog(task)}>
+          <Button size="sm" variant={main} onClick={() => onLog(task)}>
             Log follow-up
           </Button>
           <Menu
@@ -187,7 +190,7 @@ export function TaskActions({ task, skipped, onLog, onMarkDone, onUpdate, now, o
       )}
       {task.kind === "thank-you" && (
         <>
-          <Button size="sm" variant="primary" onClick={() => onLog(task)}>
+          <Button size="sm" variant={main} onClick={() => onLog(task)}>
             Log thank-you
           </Button>
           <Button size="sm" onClick={() => onMarkDone(task)}>
@@ -197,7 +200,7 @@ export function TaskActions({ task, skipped, onLog, onMarkDone, onUpdate, now, o
       )}
       {task.kind === "close" && (
         <>
-          <Button size="sm" variant="primary" onClick={() => onUpdate({ status: "rejected", closedAs: "no-response" })}>
+          <Button size="sm" variant={main} onClick={() => onUpdate({ status: "rejected", closedAs: "no-response" })}>
             Close as no response
           </Button>
           <Button size="sm" onClick={() => onUpdate({ followUp: plus(7), skipped: [...skipped, task.key] })}>

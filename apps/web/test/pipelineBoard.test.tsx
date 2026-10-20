@@ -151,7 +151,8 @@ describe("moving to Closed", () => {
     const onPatch = vi.fn();
     const e = entry("applied", "2026-10-15", { snapshot: { title: "Ops Lead", company: "Acme", url: "", location: "", score: 80 } });
     renderBoard({ user: { a: e }, onPatch });
-    fireEvent.change(screen.getByLabelText("Move Ops Lead to"), { target: { value: "rejected" } });
+    fireEvent.click(screen.getByRole("button", { name: "Move Ops Lead to" }));
+    fireEvent.click(screen.getByRole("menuitem", { name: "Closed" }));
     expect(onPatch).not.toHaveBeenCalled();
     fireEvent.click(within(screen.getByRole("dialog", { name: "How did it end?" })).getByRole("button", { name: "I withdrew" }));
     expect(onPatch).toHaveBeenCalledWith("a", e, { status: "rejected", closedAs: "withdrew" });

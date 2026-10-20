@@ -1,5 +1,5 @@
 import { displayName } from "@rawjobs/core/display-name";
-import { ArrowRight, CalendarClock, History, Plus, Radar, X } from "lucide-react";
+import { ArrowRight, CalendarClock, ChevronDown, History, Plus, Radar, X } from "lucide-react";
 import { type DragEvent, type KeyboardEvent, useEffect, useMemo, useRef, useState } from "react";
 import type { Job } from "../lib/data";
 import { cleanLocation, timeAgo } from "../lib/format";
@@ -27,10 +27,10 @@ import { TaskActions } from "./pipeline/ActivityTab";
 import { CHANNEL_ICON, Composer } from "./pipeline/Composer";
 import { taskPrefill } from "./pipeline/detail";
 import { PipelineInsights } from "./PipelineInsights";
-import { Chip, ChipGroup, Kbd } from "./primitives";
+import { buttonClass, Chip, ChipGroup, Kbd, Menu } from "./primitives";
 import { useHourlyNow } from "./radar/hooks";
 import { AddJobDialog, CompareOffers, nextInterview, TrackedJobDialog } from "./TrackedJob";
-import { Button, Card, cx, IconButton, Select } from "./ui";
+import { Button, Card, cx, IconButton } from "./ui";
 
 type Props = {
   user: UserState;
@@ -467,7 +467,7 @@ function BoardCard({
       className="cursor-pointer rounded-md border border-line bg-raised p-3 shadow-l1 transition-shadow hover:shadow-l2"
     >
       <div className="flex items-start gap-2">
-        <span aria-hidden className={cx("mt-1.5 size-2 shrink-0 rounded-full", DOT_CLASS[state.tone])} />
+        <span aria-hidden className={cx("mt-1.5 size-2 shrink-0 rounded-dot", DOT_CLASS[state.tone])} />
         <div className="min-w-0 flex-1">
           <button
             type="button"
@@ -483,7 +483,10 @@ function BoardCard({
           >
             {s.title}
           </button>
-          <p className="truncate type-small text-muted">{displayName(s.company)}</p>
+          <p className="truncate type-small text-muted">
+            {displayName(s.company)}
+            {job?.status === "closed" ? " · Closed" : id.startsWith("manual:") ? " · Added by you" : !job ? " · No longer listed" : ""}
+          </p>
         </div>
       </div>
       {last && (
@@ -508,26 +511,26 @@ function BoardCard({
         </div>
       )}
       <div className="mt-2 flex items-center justify-between gap-2">
-        {/* Keyboard / touch alternative to dragging */}
-        <Select
-          aria-label={`Move ${s.title} to`}
-          value={e.status}
-          onClick={(ev) => ev.stopPropagation()}
-          onChange={(ev) => onMove((ev.target.value || undefined) as Status | undefined)}
-          className="h-8 px-1.5 type-small"
-        >
-          {PIPELINE.map((p) => (
-            <option key={p} value={p}>
-              {STATUS_LABEL[p]}
-            </option>
-          ))}
-          <option value="">Remove</option>
-        </Select>
-        <span className="truncate type-meta text-muted">
-          {job?.status === "closed" ? "Closed · " : id.startsWith("manual:") ? "Added by you · " : !job ? "No longer listed · " : ""}
-          {/* Time in this stage, not since the last note edit. */}
-          {timeAgo(stageSince(e), now.getTime())}
+        {/* Keyboard / touch alternative to dragging. Clicks stay here, not on the card (which opens the job). */}
+        {/* biome-ignore lint/a11y/noStaticElementInteractions lint/a11y/useKeyWithClickEvents: only stops the click reaching the card; the menu is the control */}
+        <span onClick={(ev) => ev.stopPropagation()}>
+          <Menu
+            label={`Move ${s.title} to`}
+            align="start"
+            trigger={(t) => (
+              <button type="button" aria-label={`Move ${s.title} to`} className={buttonClass("quiet", "sm", "-ml-1.5 px-1.5")} {...t}>
+                Move <ChevronDown className="rj-icon" aria-hidden />
+              </button>
+            )}
+            items={[
+              ...PIPELINE.filter((p) => p !== e.status).map((p) => ({ id: p, label: STATUS_LABEL[p], onSelect: () => onMove(p) })),
+              { separator: true as const, id: "sep" },
+              { id: "remove", label: "Remove from the board", danger: true, onSelect: () => onMove(undefined) },
+            ]}
+          />
         </span>
+        {/* Time in this stage, not since the last note edit. */}
+        <span className="shrink-0 type-meta text-muted">{timeAgo(stageSince(e), now.getTime())}</span>
       </div>
     </li>
   );
@@ -660,6 +663,7 @@ function NextSteps({
           now={now}
           onOpen={(task) => (task.kind === "deadline" && onCompare ? onCompare() : onOpen(task.id))}
           deadlineLabel={onCompare ? "Compare offers" : "Open"}
+          quiet
         />
       </li>
     );
@@ -695,10 +699,11 @@ function NextSteps({
   );
   if (!wide) {
     return (
-      <details aria-label="Next steps" className="mb-3 rounded-md border border-line bg-raised px-3 py-2 shadow-l1">
+      <details aria-label="Next steps" className="group/steps mb-3 rounded-md border border-line bg-raised px-3 py-2 shadow-l1">
         <summary className="flex cursor-pointer list-none items-center gap-2 type-small">
           <span className="font-semibold">Next steps</span>
           <span className="truncate text-muted">{counts || "Nothing due."}</span>
+          <ChevronDown className="ml-auto size-4 shrink-0 text-muted transition-transform group-open/steps:rotate-180" aria-hidden />
         </summary>
         {body}
       </details>
