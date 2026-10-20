@@ -28,10 +28,12 @@ const clock = (iso: string) => {
 
 /** The status line: what happened today. Exported for tests. */
 export function dailyLine(s: Pick<DailySummaryStatus, "installed" | "last">, now = new Date()): string | undefined {
+  // Only while it's on: a send from before you turned it off would read as if it were still running.
+  if (!s.installed) return undefined;
   const last = s.last?.day === today(now) ? s.last : null;
   if (last?.result === "sent") return `Last sent today at ${clock(last.at)}.`;
   if (last?.result === "nothing-due") return "Nothing was due today.";
-  return s.installed ? "Not sent yet today." : undefined;
+  return "Not sent yet today.";
 }
 
 /**
@@ -100,7 +102,7 @@ export function DailySummary({ refresh = 0 }: { refresh?: number }) {
         </p>
       )}
       <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
-        <Toggle checked={status.installed} disabled={!ready || !!busy} onChange={(on) => void run(on ? "on" : "off")}>
+        <Toggle checked={status.installed} disabled={(!ready && !status.installed) || !!busy} onChange={(on) => void run(on ? "on" : "off")}>
           Daily summary of today's tasks
         </Toggle>
         <span className="inline-flex items-center gap-2 type-small text-muted">

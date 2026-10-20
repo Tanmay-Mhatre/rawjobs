@@ -81,7 +81,8 @@ export const cutTitle = (s: string) => {
 export function todayLine(l: TodayLine, html = true): string {
   const plain = l.company ? `${cutTitle(l.title)} · ${l.company}` : cutTitle(l.title);
   const job = html ? escapeHtml(plain) : plain;
-  if (l.kind === "interview") return `📅 Interview: ${job}${l.time ? ` (${l.time})` : ""}`;
+  // Only a time as the dashboard writes it (HH:MM); anything else in the file is left out.
+  if (l.kind === "interview") return `📅 Interview: ${job}${l.time && /^\d{2}:\d{2}$/.test(l.time) ? ` (${l.time})` : ""}`;
   if (l.kind === "offer") return `⏳ Answer the offer: ${job} (by ${l.by})`;
   if (l.kind === "thank-you") return `✉️ Thank-you: ${job}`;
   if (l.kind === "overdue") return `⏰ Follow up: ${job} (${l.days} ${l.days === 1 ? "day" : "days"} overdue)`;

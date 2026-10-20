@@ -381,9 +381,11 @@ export function dailySummaryCommand(ctx: ScheduleContext): string[] {
   return [...launchCommand(ctx), "today", "--notify", "--scheduled", "--data", resolve(ctx.dataDir)];
 }
 
+/** The saved time, or undefined when there is none or the file can't be read (a broken file never crashes the CLI). */
 export function readDailySettings(dataDir: string): DailySettings | undefined {
   try {
-    return JSON.parse(readFileSync(join(dataDir, DAILY_SETTINGS_FILE), "utf8")) as DailySettings;
+    const time = (JSON.parse(readFileSync(join(dataDir, DAILY_SETTINGS_FILE), "utf8")) as { time?: unknown } | null)?.time;
+    return typeof time === "string" && TIME.test(time) ? { time } : undefined;
   } catch {
     return undefined;
   }

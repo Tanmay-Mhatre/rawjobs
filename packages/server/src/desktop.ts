@@ -6,7 +6,7 @@ import { createInterface } from "node:readline/promises";
 import { parseArgs } from "node:util";
 import { defaultDataDir, rawjobsHome } from "@rawjobs/core";
 import { APP_VERSION, BUNDLED, CODE_ROOT, cliCommand } from "@rawjobs/core";
-import { removeSchedule } from "@rawjobs/core";
+import { removeDailySummary, removeSchedule } from "@rawjobs/core";
 import { scanLockHeld } from "@rawjobs/core";
 import { compareVersions } from "@rawjobs/core/release";
 import { AUTOSTART, fetchManifest, finishPendingUpdate, installedVersions, judge, readLastUpdate, readUpdateFile, releaseBase, releaseBaseFor, startUpdate } from "@rawjobs/core/update";
@@ -166,6 +166,11 @@ export async function uninstall(args: string[]): Promise<number> {
     removeSchedule({ repoRoot: CODE_ROOT, workDir: home, dataDir: defaultDataDir(home) });
   } catch {
     // no scheduled scans
+  }
+  try {
+    removeDailySummary({ repoRoot: CODE_ROOT, workDir: home, dataDir: defaultDataDir(home) });
+  } catch {
+    // no daily summary
   }
 
   const state = readServerState(home);

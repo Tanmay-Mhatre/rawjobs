@@ -2,7 +2,8 @@ import { existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
-import { dailySummaryStatus, installDailySummary, installSchedule, removeDailySummary, validateDailySummary } from "../src/schedule";
+import { displayName } from "../src/display-name";
+import { dailySummaryStatus, installDailySummary, installSchedule, readDailySettings, removeDailySummary, validateDailySummary } from "../src/schedule";
 import { cutTitle, readDailySent, sendDailySummary, sendDailyTest, todayMessage, todaySummary, todayTestMessage } from "../src/today";
 
 const secrets = { token: "123:abc", chatId: "42" };
@@ -102,6 +103,22 @@ describe("today's summary", () => {
       NOW,
     );
     expect(todayMessage(s)).toContain("📅 Interview: PM · Acme\n⏳ Answer the offer: Lead · Beta (by today)\n\n👉");
+  });
+
+  it("leaves out an interview time that isn't HH:MM", () => {
+    for (const time of ["2pm", "14:00<b>", "1400"]) {
+      const s = todaySummary({ a: job("PM", "Acme", { status: "interviewing", interviews: [{ on: "2026-10-20", what: "Final", time }] }) }, NOW);
+      expect(todayMessage(s)).toContain("📅 Interview: PM · Acme\n\n👉");
+    }
+  });
+
+  it("names the company the way the Pipeline card does", () => {
+    // The card shows displayName(snapshot.company); the message uses the same.
+    for (const company of ["Careem", "trmlabs", "Getrecharge.Com", "Acme Inc."]) {
+      const s = todaySummary({ a: job("PM", company, { followUp: "2026-10-20" }) }, NOW);
+      expect(s.lines[0]!.company).toBe(displayName(company));
+      expect(todayMessage(s)).toContain(`⏰ Follow up: PM · ${displayName(company)}`);
+    }
   });
 
   it("names five, then counts the rest: more follow-ups, and more of any other kind", () => {
@@ -228,6 +245,18 @@ describe("the daily summary's scheduled task", () => {
     expect(validateDailySummary({ time: "11:30" })).toEqual({ time: "11:30" });
     expect(() => validateDailySummary({ time: "12:00" })).toThrow(/before 12:00/);
     expect(() => validateDailySummary({ time: "9am" })).toThrow(/isn't a time/);
+  });
+
+  it("ignores a broken settings file instead of failing", () => {
+    const dataDir = mkdtempSync(join(tmpdir(), "rj-daily-"));
+    const file = join(dataDir, "daily-summary.json");
+    for (const bad of ["not json", "null", '{"time":9}', '{"time":"9am"}', "[]"]) {
+      writeFileSync(file, bad);
+      expect(readDailySettings(dataDir)).toBeUndefined();
+      expect(() => dailySummaryStatus({ repoRoot: "/repo", dataDir, platform: "darwin", home: dataDir })).not.toThrow();
+    }
+    writeFileSync(file, '{"time":"08:30"}');
+    expect(readDailySettings(dataDir)).toEqual({ time: "08:30" });
   });
 
   it("Windows: its own task, apart from the scans, running today --notify --scheduled", () => {
