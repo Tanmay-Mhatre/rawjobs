@@ -2,7 +2,7 @@
 import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { ScanBars } from "../src/components/ScanBars";
-import { ScanStatus } from "../src/components/ScanButton";
+import { BackgroundPill, ScanStatus } from "../src/components/ScanButton";
 import { ScanProgress } from "../src/components/ScanProgress";
 import { shortCount } from "../src/lib/format";
 import { applyScanEvent, progressRows, splitProgress, withLive, type ScanState } from "../src/lib/scan";
@@ -163,5 +163,69 @@ describe("ScanStatus", () => {
     const row = screen.getByRole("list", { name: "By hiring system" }).querySelector(".rj-progress__row") as HTMLElement;
     expect(row.querySelector(".rj-progress__count")?.textContent).toMatch(/^142 \/ 12\.2\s?K$/i);
     expect(within(row).getByText(`142 of ${(12215).toLocaleString()} companies`)).toBeTruthy();
+  });
+});
+
+describe("Starting and the background check", () => {
+  it("lists the starting steps with a moving bar and the time so far, then each step's result", () => {
+    screenWidth(1280);
+    const t0 = Date.now() - 11_000;
+    const s = play([{ type: "sync" }, { type: "synced", message: "Already up to date.", feed: "Job feed is up to date (today)." }], { ...IDLE, scope: "mine", startedAt: t0 });
+    render(<ScanStatus scan={{ ...s, syncAt: t0 + 2000, syncedAt: t0 + 9000 }} onStop={() => {}} />);
+    fireEvent.click(screen.getByRole("button", { name: /show details/ }));
+    expect(screen.getByText("Starting scan")).toBeTruthy();
+    expect(screen.getByText("0:11")).toBeTruthy();
+    expect(screen.getByRole("progressbar", { name: "Starting" }).getAttribute("aria-valuetext")).toBe("Step 3 of 3");
+    expect(screen.getByText("Already up to date · Job feed is up to date (today)")).toBeTruthy();
+    expect(screen.getByText("7s")).toBeTruthy();
+    expect(screen.getByText(/Choosing which companies to check/).closest("li")?.dataset.state).toBe("now");
+  });
+
+  it("says which company it checked last, and that a slow site holds it up after a quiet spell", () => {
+    screenWidth(1280);
+    const s = play([
+      { type: "start", companies: [], total: 300 },
+      { type: "progress", done: 126, last: "Stripe" },
+    ]);
+    render(<ScanStatus scan={{ ...s, lastAt: Date.now() - 52_000 }} onStop={() => {}} />);
+    fireEvent.click(screen.getByRole("button", { name: /show details/ }));
+    expect(screen.getByText("Stripe")).toBeTruthy();
+    expect(screen.getByText(/52s ago/)).toBeTruthy();
+    expect(screen.getByText(/Some career sites are slow to answer/)).toBeTruthy();
+  });
+
+  it("counts the background check's matches and failures, and offers Resume now once paused", () => {
+    const s = play([
+      { type: "start", companies: ["Acme"], total: 1 },
+      { type: "done", stage: "quick", jobsFound: 3, matches: 2, strong: 1, newMatches: 2, failed: 0 },
+      { type: "background" },
+      { type: "start", companies: [], total: 100, stage: "background", seconds: 600 },
+      { type: "company", done: 30, ...health("Beta", "lever", 2) },
+      { type: "company", done: 31, ...health("Gamma", "lever"), ok: false, jobsFound: 0 },
+    ]);
+    expect(s.bg).toMatchObject({ done: 31, found: 2, failed: 1, last: "Gamma" });
+    const pill = (scan: ScanState, onResume = () => {}) => render(<BackgroundPill scan={scan} bg={scan.bg!} onPause={() => {}} onResume={onResume} />);
+    pill(s);
+    fireEvent.click(screen.getByRole("button", { name: /31% done: show details/ }));
+    expect(screen.getByText("Couldn't reach").nextElementSibling?.textContent).toBe("1");
+    expect(screen.getByText("Checked fine").nextElementSibling?.textContent).toBe("30");
+    expect(screen.getByText("Gamma")).toBeTruthy();
+    cleanup();
+
+    const onResume = vi.fn();
+    const paused = play([{ type: "done", stage: "background", jobsFound: 9, matches: 3, strong: 0, newMatches: 3, failed: 1, stopped: true }], s);
+    pill({ ...paused, phase: "done" }, onResume);
+    fireEvent.click(screen.getByRole("button", { name: /paused: show details/ }));
+    fireEvent.click(screen.getByRole("button", { name: "Resume now" }));
+    expect(onResume).toHaveBeenCalled();
+  });
+
+  it("shows the background check's steps before it knows how many are left", () => {
+    const s = play([{ type: "start", companies: ["Acme"], total: 1 }, { type: "done", stage: "quick", jobsFound: 3, matches: 2, strong: 1, newMatches: 12, failed: 0 }, { type: "background" }]);
+    render(<BackgroundPill scan={s} bg={s.bg!} onPause={() => {}} onResume={() => {}} />);
+    fireEvent.click(screen.getByRole("button", { name: /starting: show details/ }));
+    expect(screen.getByText("12 new matches on your Radar")).toBeTruthy();
+    expect(screen.getByText(/Listing the companies Scan now skipped/)).toBeTruthy();
+    expect(screen.getByRole("button", { name: /Pause/ })).toBeTruthy();
   });
 });
