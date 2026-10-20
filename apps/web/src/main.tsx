@@ -1,6 +1,8 @@
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import { App } from "./App";
+import { parseHash } from "./app/route";
+import { CardPage } from "./components/referral/OutreachCard";
 import "./index.css";
 import { canRunLocally } from "./lib/data";
 import { migrateLegacyStorage } from "./lib/storage";
@@ -14,11 +16,21 @@ if (import.meta.env.PROD && canRunLocally && "serviceWorker" in navigator) {
   void navigator.serviceWorker.register("/sw.js").catch(() => {});
 }
 
-// What your RawJobs folder remembers comes first (lib/tracking.ts), so every screen starts from it.
-void restoreFromDisk().finally(() =>
-  createRoot(document.getElementById("root")!).render(
+const root = createRoot(document.getElementById("root")!);
+if ("card" in parseHash()) {
+  // The See people card's popup (no Picture-in-Picture): only the card, no job list or tracking.
+  root.render(
     <StrictMode>
-      <App />
+      <CardPage />
     </StrictMode>,
-  ),
-);
+  );
+} else {
+  // What your RawJobs folder remembers comes first (lib/tracking.ts), so every screen starts from it.
+  void restoreFromDisk().finally(() =>
+    root.render(
+      <StrictMode>
+        <App />
+      </StrictMode>,
+    ),
+  );
+}

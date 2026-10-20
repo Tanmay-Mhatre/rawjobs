@@ -257,6 +257,15 @@ export function toContact(v: unknown, fallbackId: string): Contact | undefined {
   return out;
 }
 
+/**
+ * Adds someone to a job's contacts, To contact on LinkedIn. The first person on a job you haven't
+ * saved saves it too. `extra` adds where they came from (a network id, a pasted degree).
+ */
+export function addContactPatch(entry: Entry | undefined, c: Contact, extra?: Omit<Partial<Outreach>, "stage" | "at">): EntryPatch {
+  const ask: Outreach = { stage: "to-contact", via: "linkedin", at: new Date().toISOString(), ...extra };
+  return { ...(!entry?.status ? { status: "saved" as const } : {}), contacts: [...(entry?.contacts ?? []), c], outreach: { ...entry?.outreach, [c.id]: ask } };
+}
+
 const isV2 = (c: Contact) => !!c?.id && (c.role === undefined || CONTACT_ROLES.includes(c.role));
 
 /**
