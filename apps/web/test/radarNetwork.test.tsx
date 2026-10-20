@@ -107,10 +107,11 @@ describe("Radar row", () => {
       </ul>,
     );
 
-  it("says how many people you know after your status, before the job's fact", () => {
+  it("says how many people you know right after the company, so a narrow row never cuts it off", () => {
     const { container } = row(3);
     const meta = container.querySelector(".rj-row__meta")!;
-    expect(meta.textContent).toMatch(/Saved·3 you know·Hiring surge$/);
+    expect(meta.textContent).toMatch(/^Acme·3 you know·/);
+    expect(meta.textContent).toMatch(/Saved·Hiring surge$/);
     expect(screen.getByText("3 you know").closest("[title]")!.getAttribute("title")).toBe("3 people you know work at Acme");
     expect(meta.querySelector("svg.rj-icon")).toBeTruthy();
   });

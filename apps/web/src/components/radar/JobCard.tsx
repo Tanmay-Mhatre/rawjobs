@@ -149,7 +149,16 @@ export const JobCard = forwardRef<HTMLLIElement, Props>(function JobCard({ group
   const muted = job.status === "closed" || status === "dismissed" || !!job.why.gate;
 
   const place = placeLine(group);
-  const meta: ReactNode[] = [companyName(job.company), place];
+  const meta: ReactNode[] = [companyName(job.company)];
+  // Right after the company it's about, so a narrow row never cuts it off.
+  if (known)
+    meta.push(
+      <span className="inline-flex items-center gap-1" title={`${known} ${known === 1 ? "person" : "people"} you know work${known === 1 ? "s" : ""} at ${companyName(job.company)}`}>
+        <Users className="rj-icon" aria-hidden />
+        {known} you know
+      </span>,
+    );
+  meta.push(place);
   const workplace = workplaceBeside(place, WORKPLACE[job.workplace]);
   if (workplace) meta.push(workplace);
   // Your own progress always shows; then the one fact that matters most.
@@ -158,13 +167,6 @@ export const JobCard = forwardRef<HTMLLIElement, Props>(function JobCard({ group
   // How far a referral got (Messaged, Replied, Referred), from the job's contact log.
   const referral = status !== "dismissed" && referralWord(entry);
   if (referral) meta.push(<span className="text-ink">{referral}</span>);
-  if (known)
-    meta.push(
-      <span className="inline-flex items-center gap-1" title={`${known} ${known === 1 ? "person" : "people"} you know work${known === 1 ? "s" : ""} at ${companyName(job.company)}`}>
-        <Users className="rj-icon" aria-hidden />
-        {known} you know
-      </span>,
-    );
   const flag = rowFlag(group);
   if (flag) meta.push(flag);
 
