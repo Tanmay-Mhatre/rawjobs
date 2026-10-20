@@ -18,7 +18,7 @@ import { runRadar, type RunResult } from "./run";
 import type { BoardMove, CompanyHealth, CompanyRef, Config, Job, RunSummary } from "./schema";
 import { byMatchChance, estimateScan, findMoves, readDirectory, readDirectoryMoves, readSpeeds, recordSpeeds, refOfEntry, scopeCompanies, type ScanEstimate, type ScanScope } from "./scope";
 import { fetchedSince, quickPicks } from "./stages";
-import { readJobs, saveRun } from "./store";
+import { readJobs, readMeta, saveRun } from "./store";
 import type { ScanSource } from "./protocol";
 
 export type ScanStart = {
@@ -420,7 +420,12 @@ export async function scan(config: Config, opts: ScanOptions): Promise<ScanResul
   const recorded = checks.filter((c) => (matchesBy.get(`${c.ats}:${c.slug}`) ?? 0) > 0 || !!ledger.companies[companyKey(c)]);
   ledger = recordChecks(ledger, recorded, result.health, now);
   const kept = keptChecked(ledger, now).filter((c) => !tracked.has(companyKey(c)) && !muted.has(companyKey(c)));
-  const merged = mergeHistory(previous, result, [...config.companies, ...kept]);
+  // The newest recorded run: jobs first seen after it are new even if a half-finished save already kept them.
+  const lastRunAt = readMeta(opts.dataDir)
+    ?.runs.map((r) => r.startedAt)
+    .sort()
+    .at(-1);
+  const merged = mergeHistory(previous, result, [...config.companies, ...kept], undefined, { lastRunAt });
   cache?.save({ prune: !stopped });
   if (!opts.dryRun) writeLocationCache(opts.dataDir, locations, knownLocations);
 
