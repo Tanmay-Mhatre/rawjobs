@@ -50,10 +50,10 @@ export function Segmented<T extends string | number>({ value, options, onChange,
   );
 }
 
-export function Toggle({ checked, onChange, children }: { checked: boolean; onChange: (v: boolean) => void; children: ReactNode }) {
+export function Toggle({ checked, onChange, disabled, children }: { checked: boolean; onChange: (v: boolean) => void; disabled?: boolean; children: ReactNode }) {
   return (
-    <label className="inline-flex cursor-pointer select-none items-center gap-2 type-small text-muted hover:text-ink">
-      <input type="checkbox" checked={checked} onChange={(e) => onChange(e.target.checked)} className="size-4 accent-ink" />
+    <label className={cx("inline-flex select-none items-center gap-2 type-small text-muted", disabled ? "cursor-not-allowed opacity-50" : "cursor-pointer hover:text-ink")}>
+      <input type="checkbox" checked={checked} disabled={disabled} onChange={(e) => onChange(e.target.checked)} className="size-4 accent-ink" />
       {children}
     </label>
   );
