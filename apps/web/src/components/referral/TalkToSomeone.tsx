@@ -8,13 +8,14 @@ import { canRunLocally, type Job, type Profile } from "../../lib/data";
 import { companyName } from "../../lib/format";
 import { type NetworkMe, type NetworkPersonRow, REFRESH_AFTER_DAYS, setCloseContact, useNetwork, usePeopleAt } from "../../lib/network";
 import { coldLinks, profileHref, recruiterLinks, type SearchLink, warmLinks } from "../../lib/referralLinks";
-import { CAPS, type Contact, type Entry, type EntryPatch, newId, OUTREACH_LABEL, type Outreach, toContact } from "../../lib/userState";
+import { addActivity, CAPS, type Contact, type Entry, type EntryPatch, newId, OUTREACH_LABEL, type Outreach, toContact } from "../../lib/userState";
 import { knownPeople } from "../pipeline/detail";
 import { usePeople } from "../pipeline/PeopleContext";
 import { KnownPicker } from "../pipeline/PeopleTab";
 import { toast } from "../Toast";
 import { Button, cx } from "../ui";
 import { ConnectLinkedIn } from "./ConnectLinkedIn";
+import { MessageDrafts } from "./MessageDrafts";
 
 /** Rows shown before "Show all". */
 export const TOP_PEOPLE = 5;
@@ -50,6 +51,8 @@ type Contacts = {
   /** Who on this job came from this connection (by network id or profile link), and their referral stage. */
   onJob: (person: NetworkPersonRow) => { contact: Contact; outreach?: Outreach } | undefined;
   add?: (c: Contact, networkId?: string) => void;
+  /** Mark someone as messaged on this job, adding them first if they aren't on it yet. */
+  messaged?: (c: Contact, networkId: string, text: string) => void;
   onOpenPeople?: () => void;
 };
 
@@ -94,20 +97,41 @@ function Section({ job, entry, profile, onUpdate, onOpenPeople }: Props) {
         onAction: () => onUpdate({ ...(saving ? { status: entry?.status } : {}), contacts: entry?.contacts, outreach: entry?.outreach }),
       });
     });
+  /**
+   * Mark someone as messaged: their stage moves to Messaged and the message goes in the job's
+   * activity. Someone not on the job yet is added, and an unsaved job is saved. Undo puts it all back.
+   */
+  const messaged =
+    onUpdate &&
+    ((c: Contact, networkId: string, text: string) => {
+      const saving = !entry?.status;
+      const isNew = !contacts.some((x) => x.id === c.id);
+      const at = new Date().toISOString();
+      const before = entry?.outreach?.[c.id];
+      const o: Outreach = { ...before, stage: "messaged", via: before?.via ?? "linkedin", at, networkId: before?.networkId ?? networkId };
+      const said = text.trim().slice(0, CAPS.text);
+      onUpdate({
+        ...(saving ? { status: "saved" as const } : {}),
+        ...(isNew ? { contacts: [...contacts, c] } : {}),
+        outreach: { ...entry?.outreach, [c.id]: o },
+        ...addActivity(entry, { id: newId(), at, channel: "linkedin", dir: "sent", contactId: c.id, ...(said ? { text: said } : {}) }),
+      });
+      toast({
+        message: saving ? `Saved this job and marked ${c.name} as messaged` : `Marked ${c.name} as messaged`,
+        actionLabel: "Undo",
+        onAction: () => onUpdate({ ...(saving ? { status: entry?.status } : {}), contacts: entry?.contacts, outreach: entry?.outreach, activities: entry?.activities }),
+      });
+    });
+  /** Someone already on another job (same profile) is the same person here. */
+  const samePerson = (c: Contact) => (c.linkedin ? known.find((k) => k.linkedin === c.linkedin) : undefined) ?? c;
   const rowContacts: Contacts = {
     onJob: (person) => {
       const href = profileHref(person.url);
       const contact = contacts.find((c) => entry?.outreach?.[c.id]?.networkId === person.id || (!!href && c.linkedin === href));
       return contact && { contact, outreach: entry?.outreach?.[contact.id] };
     },
-    add:
-      add && !full
-        ? (c, networkId) => {
-            // Someone already on another job (same profile) is the same person here.
-            const same = c.linkedin ? known.find((k) => k.linkedin === c.linkedin) : undefined;
-            add(same ?? c, networkId);
-          }
-        : undefined,
+    add: add && !full ? (c, networkId) => add(samePerson(c), networkId) : undefined,
+    messaged: messaged && ((c, networkId, text) => messaged(contacts.some((x) => x.id === c.id) ? c : samePerson(c), networkId, text)),
     onOpenPeople,
   };
 
@@ -237,7 +261,7 @@ function PeopleList({ people, loose, job, me, contacts }: { people: NetworkPerso
             tabIndex={-1}
             className="py-2 first:pt-0 focus:outline-none focus-visible:ring-2 focus-visible:ring-ink"
           >
-            <PersonRow {...r} loose={loose} contacts={contacts} />
+            <PersonRow {...r} loose={loose} job={job} contacts={contacts} />
           </li>
         ))}
       </ul>
@@ -259,13 +283,20 @@ function PeopleList({ people, loose, job, me, contacts }: { people: NetworkPerso
   );
 }
 
-function PersonRow({ person, score, loose, contacts }: Ranked & { loose: boolean; contacts: Contacts }) {
+function PersonRow({ person, score, loose, job, contacts }: Ranked & { loose: boolean; job: Job; contacts: Contacts }) {
   const name = `${person.first} ${person.last}`.trim();
   const href = profileHref(person.url);
   const here = contacts.onJob(person);
+  const [drafting, setDrafting] = useState(false);
+  const newContact = () => toContact({ name, role: "referrer", company: person.company, linkedin: href }, newId());
   const addThem = () => {
-    const c = toContact({ name, role: "referrer", company: person.company, linkedin: href }, newId());
+    const c = newContact();
     if (c) contacts.add?.(c, person.id);
+  };
+  const markMessaged = (text: string) => {
+    const c = here?.contact ?? newContact();
+    setDrafting(false);
+    if (c) contacts.messaged?.(c, person.id, text);
   };
   const toggle = async () => {
     const ok = await setCloseContact(person.id, !person.friend);
@@ -325,9 +356,21 @@ function PersonRow({ person, score, loose, contacts }: Ranked & { loose: boolean
             <Button size="sm" aria-pressed={person.friend} aria-label={`Mark ${name} as a close contact`} onClick={() => void toggle()}>
               Close contact
             </Button>
+            <Button size="sm" onClick={() => setDrafting(true)}>
+              Draft a message
+            </Button>
           </div>
         </div>
       </details>
+      {drafting && (
+        <MessageDrafts
+          name={name}
+          inputs={{ job, company: companyName(job.company), first: person.first || undefined, position: person.position }}
+          onClose={() => setDrafting(false)}
+          // Someone new needs room on the job (contacts.add is off when it's full).
+          onMessaged={contacts.messaged && (here || contacts.add) ? markMessaged : undefined}
+        />
+      )}
     </div>
   );
 }
