@@ -34,7 +34,14 @@ export type ScanState = {
   /** How old the shared job feed is, in days (null: none). */
   feedAgeDays?: number | null;
   /** The background check after Scan now: its progress, and what it found when it ended. */
-  bg?: { total: number; done: number; resumed: number; seconds?: number; found: number; pausing?: boolean; summary?: Extract<RunEvent, { type: "done" }> };
+  bg?: Background;
+  /** When this page started (or picked up) the scan, the directory sync began and ended (ms): the starting steps. */
+  startedAt?: number;
+  syncAt?: number;
+  syncedAt?: number;
+  /** The company checked last and when (ms): shows the scan is alive, or stuck on a slow site. */
+  last?: string;
+  lastAt?: number;
   /** About how long the scan takes, from the start. */
   seconds?: number;
   /** Health of your companies, and directory ones that matched or failed, by company name. */
@@ -49,7 +56,31 @@ export type ScanState = {
   error?: string;
 };
 
+export type Background = {
+  total: number;
+  done: number;
+  resumed: number;
+  seconds?: number;
+  found: number;
+  /** Companies it couldn't fetch so far. */
+  failed: number;
+  /** When it began (ms), and the company it checked last and when. */
+  startedAt?: number;
+  last?: string;
+  lastAt?: number;
+  pausing?: boolean;
+  /** How it ended: `stopped` when it was paused (Resume now carries it on). */
+  summary?: Extract<RunEvent, { type: "done" }>;
+};
+
 const IDLE: ScanState = { phase: "idle", companies: [], total: 0, done: 0, resumed: 0, results: {}, live: [] };
+const newBackground = (): Background => ({ total: 0, done: 0, resumed: 0, found: 0, failed: 0, startedAt: Date.now() });
+const running = (scope?: ScanScope): ScanState => ({ ...IDLE, phase: "running", scope, startedAt: Date.now() });
+
+/** No company finished for this long: say a slow site is holding it up. */
+export const STALL_MS = 45_000;
+/** A starting step taking this long says why. */
+export const SLOW_STEP_MS = 30_000;
 const SCOPE_KEY = "rawjobs.scanScope";
 
 /** What Scan now runs. */
@@ -72,14 +103,18 @@ export function setScanPrefs(p: Partial<ScanPrefs>): void {
 export function applyScanEvent(s: ScanState, e: RunEvent): ScanState {
   switch (e.type) {
     case "sync":
-      return { ...s, syncing: true };
+      return { ...s, syncing: true, syncAt: Date.now() };
     case "synced":
-      return { ...s, syncing: false, sync: e.message, feed: e.feed };
+      return { ...s, syncing: false, sync: e.message, feed: e.feed, syncedAt: Date.now() };
     case "start":
       if (e.stage === "background")
-        return { ...s, bg: { total: e.total ?? 0, done: e.resumed ?? 0, resumed: e.resumed ?? 0, seconds: e.seconds, found: 0, ...(s.bg?.pausing ? { pausing: true } : {}) } };
+        return {
+          ...s,
+          bg: { ...(s.bg ?? newBackground()), total: e.total ?? 0, done: e.resumed ?? 0, resumed: e.resumed ?? 0, seconds: e.seconds, found: 0, failed: 0, lastAt: Date.now() },
+        };
       return {
         ...s,
+        lastAt: Date.now(),
         bySource: e.bySource,
         doneBySource: e.bySource ? { ...(e.doneBySource ?? { yours: 0, past: 0, feed: 0 }) } : undefined,
         fallback: e.fallback,
@@ -96,9 +131,11 @@ export function applyScanEvent(s: ScanState, e: RunEvent): ScanState {
       };
     case "company": {
       const { type: _, done, doneByAts, doneBySource, ...h } = e;
-      if (s.bg) return { ...s, bg: { ...s.bg, done: done ?? s.bg.done + 1, found: s.bg.found + (h.ok ? h.matches : 0) } };
+      const seen = { last: h.company, lastAt: Date.now() };
+      if (s.bg) return { ...s, bg: { ...s.bg, ...seen, done: done ?? s.bg.done + 1, found: s.bg.found + (h.ok ? h.matches : 0), failed: s.bg.failed + (!h.ok && !h.unsupported ? 1 : 0) } };
       return {
         ...s,
+        ...seen,
         done: done ?? s.done + 1,
         results: { ...s.results, [h.company]: h },
         ...(doneByAts ? { doneByAts: { ...doneByAts } } : {}),
@@ -109,14 +146,16 @@ export function applyScanEvent(s: ScanState, e: RunEvent): ScanState {
       const ids = new Set(e.jobs.map((j) => j.id));
       return { ...s, live: [...s.live.filter((j) => !ids.has(j.id)), ...e.jobs] };
     }
-    case "progress":
-      if (s.bg) return { ...s, bg: { ...s.bg, done: Math.max(s.bg.done, e.done) } };
-      return { ...s, done: Math.max(s.done, e.done), ...(e.doneByAts ? { doneByAts: { ...e.doneByAts } } : {}), ...(e.doneBySource ? { doneBySource: { ...e.doneBySource } } : {}) };
+    case "progress": {
+      const seen = { last: e.last ?? (s.bg ?? s).last, lastAt: Date.now() };
+      if (s.bg) return { ...s, bg: { ...s.bg, ...seen, done: Math.max(s.bg.done, e.done) } };
+      return { ...s, ...seen, done: Math.max(s.done, e.done), ...(e.doneByAts ? { doneByAts: { ...e.doneByAts } } : {}), ...(e.doneBySource ? { doneBySource: { ...e.doneBySource } } : {}) };
+    }
     case "done":
-      if (e.stage === "background") return { ...s, bg: { ...(s.bg ?? { total: 0, done: 0, resumed: 0, found: 0 }), summary: e } };
+      if (e.stage === "background") return { ...s, bg: { ...(s.bg ?? newBackground()), pausing: false, summary: e } };
       return { ...s, summary: e };
     case "background":
-      return { ...s, phase: "background", stopping: false, bg: { total: 0, done: 0, resumed: 0, found: 0 } };
+      return { ...s, phase: "background", stopping: false, bg: newBackground() };
     case "notified":
       return { ...s, notify: { asked: true, result: e.result } };
     default:
@@ -248,7 +287,7 @@ export function useScan(onFinished: () => void | Promise<void>) {
       if (busy.current && phase.current !== "background") return;
       busy.current = true;
       save(SCOPE_KEY, scope);
-      setScan({ ...IDLE, phase: "running", scope });
+      setScan(running(scope));
       await watch((onEvent) => runScan(onEvent, { scope, fresh: opts.fresh }));
     },
     [watch],
@@ -258,7 +297,7 @@ export function useScan(onFinished: () => void | Promise<void>) {
   useEffect(() => {
     if (busy.current) return;
     busy.current = true;
-    void watch((onEvent) => followScan((scope) => setScan({ ...IDLE, phase: "running", scope }), onEvent), true);
+    void watch((onEvent) => followScan((scope) => setScan(running(scope)), onEvent), true);
   }, [watch]);
 
   startRef.current = start;
@@ -268,6 +307,15 @@ export function useScan(onFinished: () => void | Promise<void>) {
     setScan((s) => (s.phase === "background" && s.bg ? { ...s, bg: { ...s.bg, pausing: true } } : { ...s, stopping: true }));
     await stopScan();
   }, []);
+
+  /** Resume now: carry on a paused background check, from where it stopped. */
+  const resume = useCallback(async () => {
+    if (busy.current) return;
+    busy.current = true;
+    setScan((s) => ({ ...s, phase: "background", bg: newBackground(), summary: undefined }));
+    // `following`: no "Scan done" toast, as no Scan now ran.
+    await watch((onEvent) => runScan(onEvent, { background: true }), true);
+  }, [watch]);
 
   /** "Tell me on Telegram when it's done" for the running scan. */
   const notify = useCallback(async () => {
@@ -288,7 +336,7 @@ export function useScan(onFinished: () => void | Promise<void>) {
   );
 
   const reset = useCallback(() => setScan(IDLE), []);
-  return { scan, start, stop, restart, notify, reset };
+  return { scan, start, stop, restart, notify, reset, resume };
 }
 
 /** "about 2 min", "about 1.9 h". */
@@ -327,10 +375,71 @@ export function scanLine(scan: ScanState): string {
 }
 
 /** The background check's details: "1,170 done · about 50 min left". */
-export function backgroundLine(bg: NonNullable<ScanState["bg"]>): string {
+export function backgroundLine(bg: Background): string {
   if (!bg.total) return "Starting…";
+  return [`${Math.min(bg.done, bg.total).toLocaleString()} done`, backgroundLeft(bg)].filter(Boolean).join(" · ");
+}
+
+/** "about 50 min left", or "" when it's nearly done or not known. */
+export function backgroundLeft(bg: Background): string {
   const left = timeLeft(bg.seconds, bg.total, bg.done, bg.resumed);
-  return [`${Math.min(bg.done, bg.total).toLocaleString()} done`, left > 60 ? `${aboutTime(left)} left` : null].filter(Boolean).join(" · ");
+  return left > 60 ? `${aboutTime(left)} left` : "";
+}
+
+/** A running time: "0:07", "12:30", "1:02:05". */
+export function clock(ms: number): string {
+  const t = Math.max(0, Math.floor(ms / 1000));
+  const [h, m, s] = [Math.floor(t / 3600), Math.floor((t % 3600) / 60), t % 60];
+  const two = (n: number) => String(n).padStart(2, "0");
+  return h ? `${h}:${two(m)}:${two(s)}` : `${m}:${two(s)}`;
+}
+
+/** How long a step took: "2s", "3 min". */
+export const took = (ms: number): string => (ms < 60_000 ? `${Math.max(1, Math.round(ms / 1000))}s` : `${Math.round(ms / 60_000)} min`);
+
+/** "just now", "12s ago", "3 min ago". */
+export function ago(ms: number): string {
+  if (ms < 5_000) return "just now";
+  if (ms < 60_000) return `${Math.round(ms / 1000)}s ago`;
+  return `${Math.round(ms / 60_000)} min ago`;
+}
+
+export type Step = { label: string; detail?: string; state: "done" | "now" | "todo"; ms?: number };
+
+/** Scan now's steps before it knows how many companies it covers: opening, the directory, choosing. */
+export function startingSteps(scan: ScanState, now: number): Step[] {
+  const { startedAt = now, syncAt, syncedAt } = scan;
+  const synced = [scan.sync, scan.feed]
+    .filter(Boolean)
+    .map((m) => m!.replace(/\.$/, ""))
+    .join(" · ");
+  const slow = syncAt && !syncedAt && now - syncAt > SLOW_STEP_MS;
+  return [
+    syncAt ? { label: "Opened the scanner", state: "done", ms: syncAt - startedAt } : { label: "Opening the scanner", state: "now" },
+    syncedAt
+      ? { label: "Updated the company directory", detail: synced || undefined, state: "done", ms: syncedAt - (syncAt ?? startedAt) }
+      : {
+          label: "Updating the company directory",
+          state: syncAt ? "now" : "todo",
+          ...(slow ? { detail: "Downloading the latest list: can take a minute on slow connections", ms: now - syncAt } : {}),
+        },
+    {
+      label: "Choosing which companies to check",
+      state: syncedAt ? "now" : "todo",
+      ...(syncedAt ? { detail: scan.scope === "yours" ? "Your companies" : scan.scope === "all" ? "Every company in the directory" : "Your companies, past matches and feed picks" } : {}),
+    },
+  ];
+}
+
+/** The background check's steps before it knows how many companies are left. */
+export function backgroundSteps(scan: ScanState): Step[] {
+  const quick = scan.summary && scan.summary.stage !== "background" ? scan.summary : undefined;
+  return [
+    quick
+      ? { label: "Saved Scan now's results", detail: quick.newMatches ? `${newMatchesLine(quick.newMatches)} on your Radar` : "No new matches", state: "done" }
+      : { label: "Picked up where it stopped", state: "done" },
+    { label: "Listing the companies Scan now skipped", state: "now" },
+  ];
 }
 
 /** "about 60 to 70 min": a long estimate as an honest range (the speed of thousands of sites varies). */

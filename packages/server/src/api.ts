@@ -68,7 +68,8 @@ type Line = string;
  *   POST /api/companies/suggest  companies that fit a profile ({ profile?, watched?, hidden? }), with lookalikes of past employers
  *   GET  /api/companies/suggest/size  { companies }: how many companies a suggestion request checks (null when unknown)
  *   POST /api/run             scan ({ scope: "mine" | "yours" | "all", fresh? }); streams NDJSON progress. A background
- *                             check (after Scan now) is stopped first: it carries on after the new scan
+ *                             check (after Scan now) is stopped first: it carries on after the new scan.
+ *                             { background: true }: only the background check, carrying on a paused one (Resume now)
  *   GET  /api/run             follow the running scan from the start (204 when none is running)
  *   POST /api/run/stop        stop the running scan after the companies in progress (it can be resumed)
  *   POST /api/run/notify      send a Telegram message when the running scan finishes
@@ -276,10 +277,12 @@ Stopped after ${Math.round(timeoutMs / 1000)} s without finishing.`.trim(),
     for (const res of scan.followers) if (!res.writableEnded) res.write(`${line}\n`);
   }
 
-  function startScan(scope: ScanScope, fresh: boolean) {
+  function startScan(scope: ScanScope, fresh: boolean, backgroundOnly = false) {
     // "Check every company now" fetches every company live: the job feed doesn't pick for it.
-    const child = cli(["scan", "--progress", "ndjson", "--scope", scope, ...(fresh ? ["--fresh"] : []), ...(scope === "all" ? ["--full"] : []), "--data", dataDir]);
-    scan = { scope, lines: [], partial: "", followers: new Set(), child };
+    const child = backgroundOnly
+      ? cli(["scan", "--progress", "ndjson", "--background-only", "--data", dataDir])
+      : cli(["scan", "--progress", "ndjson", "--scope", scope, ...(fresh ? ["--fresh"] : []), ...(scope === "all" ? ["--full"] : []), "--data", dataDir]);
+    scan = { scope, lines: [], partial: "", followers: new Set(), child, ...(backgroundOnly ? { background: true } : {}) };
     const current = scan;
     let stderr = "";
     // Always read the scan's output, whether or not a tab is listening: an unread pipe fills up
@@ -470,8 +473,8 @@ Stopped after ${Math.round(timeoutMs / 1000)} s without finishing.`.trim(),
         res.end(`${JSON.stringify({ type: "error", message: "A scan is already running." })}\n`);
         return;
       }
-      const body = (JSON.parse((await readBody(req)) || "{}") ?? {}) as { scope?: unknown; fresh?: unknown };
-      startScan(body.scope === "all" || body.scope === "yours" ? body.scope : "mine", body.fresh === true);
+      const body = (JSON.parse((await readBody(req)) || "{}") ?? {}) as { scope?: unknown; fresh?: unknown; background?: unknown };
+      startScan(body.scope === "all" || body.scope === "yours" ? body.scope : "mine", body.fresh === true, body.background === true);
       follow(res);
       return;
     }
