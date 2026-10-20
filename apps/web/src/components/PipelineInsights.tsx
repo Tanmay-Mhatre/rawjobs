@@ -137,7 +137,7 @@ function FunnelView({ f }: { f: Funnel }) {
   );
 }
 
-/** One weekly goal: 1 to PLAN_MAX, or empty for none. Saved when you leave the field. */
+/** One weekly goal: 1 to PLAN_MAX, or empty for none. Saved when you leave the field; keyed by its value so a plan that arrives later (disk sync) refills it. */
 function PlanField({ label, value, onSave, inputRef }: { label: string; value?: number; onSave: (n?: number) => void; inputRef?: Ref<HTMLInputElement> }) {
   const id = useId();
   const [error, setError] = useState(false);
@@ -158,6 +158,8 @@ function PlanField({ label, value, onSave, inputRef }: { label: string; value?: 
         aria-describedby={error ? `${id}-err` : undefined}
         onChange={() => setError(false)}
         onBlur={(e) => {
+          // Text the number field can't read ("1e", "-") reads as empty: refuse it instead of clearing the goal.
+          if (e.target.validity.badInput) return setError(true);
           const raw = e.target.value.trim();
           if (!raw) return onSave(undefined);
           const n = Number(raw);
@@ -234,9 +236,9 @@ export function PipelineInsights({ user, plan, onPlan }: { user: UserState; plan
           </h3>
           <p className="type-meta text-muted">A goal for each week, from 1 to {PLAN_MAX}. Leave one empty to go without.</p>
           <div className="mt-2 flex flex-wrap gap-4">
-            <PlanField label="Applications" value={plan.applications} onSave={set("applications")} inputRef={firstGoal} />
-            <PlanField label="Follow-ups" value={plan.followUps} onSave={set("followUps")} />
-            <PlanField label="Outreach and referrals" value={plan.outreach} onSave={set("outreach")} />
+            <PlanField key={`applications-${plan.applications ?? ""}`} label="Applications" value={plan.applications} onSave={set("applications")} inputRef={firstGoal} />
+            <PlanField key={`followUps-${plan.followUps ?? ""}`} label="Follow-ups" value={plan.followUps} onSave={set("followUps")} />
+            <PlanField key={`outreach-${plan.outreach ?? ""}`} label="Outreach and referrals" value={plan.outreach} onSave={set("outreach")} />
           </div>
         </section>
       </div>

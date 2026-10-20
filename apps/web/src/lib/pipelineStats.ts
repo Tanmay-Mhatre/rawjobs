@@ -19,7 +19,12 @@ function appliedAt(e: Entry): string | undefined {
 /** The job is, or once was, at one of these stages. */
 const reached = (e: Entry, ...s: Status[]) => s.includes(e.status as Status) || (e.history ?? []).some((x) => s.includes(x.status as Status));
 /** The company answered: a step that means a reply, or a message back. */
-const heardBack = (e: Entry) => replied(e, e.status ?? null) || (e.history ?? []).some((x) => replied(e, x.status)) || (e.activities ?? []).some((a) => a.dir === "received" && a.channel !== "note");
+const heardBack = (e: Entry) =>
+  replied(e, e.status ?? null) ||
+  (e.history ?? []).some((x) => replied(e, x.status)) ||
+  (e.activities ?? []).some((a) => a.dir === "received" && a.channel !== "note") ||
+  (e.interviews ?? []).length > 0 ||
+  Boolean(e.offer);
 
 /** Sent touches that count as outreach when they aren't follow-ups (not notes or in-person meetings). */
 const OUTREACH: Activity["channel"][] = ["email", "linkedin", "whatsapp", "call", "referral"];
@@ -110,10 +115,11 @@ export function pipelineStats(state: UserState, plan: WeeklyPlan = {}, now = new
       if (w >= 0) perWeek[w] = (perWeek[w] ?? 0) + 1;
       if (now.getTime() - t <= 30 * DAY) {
         funnel.applied++;
-        if (heardBack(e)) funnel.heardBack++;
+        const heard = heardBack(e);
+        if (heard) funnel.heardBack++;
         if (reached(e, "interviewing", "offer") || (e.interviews ?? []).length > 0) funnel.interviewed++;
         if (reached(e, "offer") || e.offer) funnel.offer++;
-        if (e.status === "rejected" && e.closedAs === "no-response") funnel.noResponse++;
+        if (!heard && e.status === "rejected" && e.closedAs === "no-response") funnel.noResponse++;
       }
     }
     for (const a of e.activities ?? []) {

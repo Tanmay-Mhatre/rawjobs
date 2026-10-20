@@ -46,4 +46,25 @@ describe("PipelineInsights", () => {
     fireEvent.blur(field);
     expect(onPlan).toHaveBeenCalledWith({ applications: 5, followUps: 3 });
   });
+
+  it("refills a goal that arrives after the first render and keeps it on blur", () => {
+    const onPlan = vi.fn();
+    const { rerender } = render(<PipelineInsights user={many(1)} plan={{}} onPlan={onPlan} />);
+    rerender(<PipelineInsights user={many(1)} plan={{ followUps: 4 }} onPlan={onPlan} />);
+    const field = screen.getByLabelText("Follow-ups") as HTMLInputElement;
+    expect(field.value).toBe("4");
+    fireEvent.blur(field);
+    expect(onPlan).not.toHaveBeenCalled();
+  });
+
+  it("refuses text a number field can't read instead of clearing the goal", () => {
+    const onPlan = vi.fn();
+    render(<PipelineInsights user={many(1)} plan={{ followUps: 4 }} onPlan={onPlan} />);
+    const field = screen.getByLabelText("Follow-ups") as HTMLInputElement;
+    Object.defineProperty(field, "validity", { value: { badInput: true } });
+    fireEvent.change(field, { target: { value: "" } });
+    fireEvent.blur(field);
+    expect(onPlan).not.toHaveBeenCalled();
+    expect(screen.getByText("Enter 1 to 50, or leave it empty.")).toBeTruthy();
+  });
 });

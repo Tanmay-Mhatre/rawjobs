@@ -122,4 +122,23 @@ describe("pipeline dashboard stats", () => {
     expect(pct(1, 4)).toBe("25%");
     expect(pct(0, 0)).toBe("–");
   });
+
+  it("counts interviews and offers as heard back, and a reply rules out No response", () => {
+    const f = pipelineStats(
+      {
+        iv: e([{ status: "applied", at: oct(14) }], { interviews: [{ on: "2026-10-20", what: "Screen" }] }),
+        of: e([{ status: "applied", at: oct(14) }], { offer: {} as Entry["offer"] }),
+        nr: e(
+          [
+            { status: "applied", at: oct(12) },
+            { status: "rejected", at: oct(18) },
+          ],
+          { closedAs: "no-response", activities: [touch(oct(15), "email", "received")] },
+        ),
+      },
+      {},
+      thursday,
+    ).funnel;
+    expect(f).toEqual({ applied: 3, heardBack: 3, interviewed: 1, offer: 1, noResponse: 0 });
+  });
 });
