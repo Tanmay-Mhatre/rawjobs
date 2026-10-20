@@ -48,7 +48,7 @@ export type ScanState = {
   results: Record<string, CompanyHealth>;
   /** Matches fetched live by this scan so far, shown on the Radar before it ends (newer CLIs only). */
   live: Job[];
-  /** Stop was asked for; the scan finishes the companies in progress. */
+  /** Stop was asked for; the scan ends within seconds. */
   stopping?: boolean;
   /** A Telegram message when this scan finishes: asked for, then what happened ("sent", "off", or why it failed). */
   notify?: { asked: true; result?: string };

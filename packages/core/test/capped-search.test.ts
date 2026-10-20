@@ -127,10 +127,10 @@ companies:
     expect(full.searchFound).toBeUndefined();
     expect(searched).toEqual([]);
 
-    // Stopped after the first search: the rest are skipped, the company still finishes.
+    // Stopped after the first search: the rest are skipped, and the company cut short isn't recorded.
     const big = fakeHttp(workdayBoard(2500, record));
-    const h = (await runRadar(config, { http: big.http, now, stopped: () => searched.length > 0 })).health[0]!;
-    expect(h).toMatchObject({ ok: true, partial: true, searchFound: 0 });
+    const run = await runRadar(config, { http: big.http, now, stopped: () => searched.length > 0 });
+    expect(run.health).toEqual([]);
     expect(searched).toEqual(["product manager"]);
   });
 

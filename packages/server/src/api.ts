@@ -71,7 +71,7 @@ type Line = string;
  *                             check (after Scan now) is stopped first: it carries on after the new scan.
  *                             { background: true }: only the background check, carrying on a paused one (Resume now)
  *   GET  /api/run             follow the running scan from the start (204 when none is running)
- *   POST /api/run/stop        stop the running scan after the companies in progress (it can be resumed)
+ *   POST /api/run/stop        stop the running scan within seconds (it can be resumed)
  *   POST /api/run/notify      send a Telegram message when the running scan finishes
  *   GET  /api/scan/plan       what each scan type covers: companies, about how long, a stopped scan to resume
  *   GET  /api/alerts/telegram Telegram alerts: set up? on? (the token is never sent back, only masked)

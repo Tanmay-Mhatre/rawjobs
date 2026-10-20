@@ -103,7 +103,10 @@ export type RunOptions = {
   onCompanyResult?: (h: CompanyHealth, jobs: Job[]) => void;
   /** jobCompanyKey()s of companies already fetched (a resumed scan): skipped. */
   skip?: ReadonlySet<string>;
-  /** Stop starting new companies once this returns true (companies in flight finish). */
+  /**
+   * Stop starting new companies once this returns true. Companies in flight are left unrecorded (a
+   * resumed scan fetches them again); pass the same check as the HttpClient's `stopped` to cut them short.
+   */
   stopped?: () => boolean;
   /** A company's industry ids, when the directory knows them (for the industry part of the score). */
   industriesOf?: (c: CompanyRef) => readonly string[] | undefined;
@@ -313,6 +316,10 @@ export async function runRadar(config: Config, opts: RunOptions = {}): Promise<R
       h.error = err instanceof HttpError && err.status === 404 ? `board not found (404): check the slug "${company.slug}" against the careers URL` : (err as Error).message;
       if (!h.unsupported) h.failure = failureOf(err);
     }
+    // Stopped while in flight: the company may have been cut short anywhere (StoppedError, or a
+    // connector that caught it and kept what it had), so it's neither done nor failed. Left out of
+    // the results and progress, a resumed scan fetches it again.
+    if (opts.stopped?.()) return;
     h.durationMs = Date.now() - started;
     jobs.push(...kept);
     health.push(h);

@@ -317,7 +317,7 @@ export async function scan(config: Config, opts: ScanOptions): Promise<ScanResul
   if (!opts.http && !opts.dryRun) await loadConcepts(opts.dataDir);
   // A host that doesn't answer gives up after 8 s; one that answers gets 15 s for the body.
   // Each hiring system's API paced as a whole, faster while it keeps up (http.ts paceOf).
-  const http = opts.http ?? new HttpClient({ cache, connectTimeoutMs: 8_000, readTimeoutMs: 15_000, retries: 2, breakAfter: 3, adaptive: true });
+  const http = opts.http ?? new HttpClient({ cache, connectTimeoutMs: 8_000, readTimeoutMs: 15_000, retries: 2, breakAfter: 3, adaptive: true, stopped: opts.stopped });
   // Where "3 Locations" jobs really are, from earlier scans: their pages aren't fetched again for that.
   const locations = readLocationCache(opts.dataDir);
   const knownLocations = locations.size;

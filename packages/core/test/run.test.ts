@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { parseConfig } from "../src/config";
 import { mergeHistory } from "../src/diff";
+import { HttpClient } from "../src/http";
 import { earliestPosted, runRadar } from "../src/run";
 import { fakeHttp, fixture, json } from "./helpers";
 
@@ -53,6 +54,28 @@ describe("runRadar", () => {
     // Sorted by score, gated jobs last with score 0.
     expect(result.jobs.map((j) => j.score)).toEqual([...result.jobs.map((j) => j.score)].sort((a, b) => b - a));
     expect(result.jobs.at(-1)!.score).toBe(0);
+  });
+
+  it("a stop cuts companies in flight short and leaves them unrecorded, so a resume fetches them again", async () => {
+    let stop = false;
+    const http = new HttpClient({
+      hostDelayMs: 0,
+      timeoutMs: 60_000,
+      stopped: () => stop,
+      fetchImpl: (async (input: string, init?: RequestInit) =>
+        // Greenhouse never answers; the rest answer at once.
+        input.includes("greenhouse") ? new Promise((_, reject) => init?.signal?.addEventListener("abort", () => reject(init.signal!.reason))) : routes(input)) as typeof fetch,
+    });
+    const recorded: string[] = [];
+    setTimeout(() => (stop = true), 100);
+    const started = Date.now();
+    const result = await runRadar(config, { http, now, stopped: () => stop, onCompanyResult: (h) => recorded.push(h.company) });
+    expect(Date.now() - started).toBeLessThan(2_000);
+    expect(result.partial).toBe(true);
+    // GH Co was in flight: neither done nor failed.
+    expect(result.health.map((h) => h.company)).toEqual(["Lever Co", "Broken Co", "Bank Co"]);
+    expect(recorded).not.toContain("GH Co");
+    expect(result.jobs.every((j) => !j.id.startsWith("greenhouse"))).toBe(true);
   });
 
   it("skips a posting it can't read and keeps the company's other jobs", async () => {
