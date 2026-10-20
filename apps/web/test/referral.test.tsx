@@ -9,7 +9,7 @@ import { NetworkSection } from "../src/components/settings/NetworkSection";
 import { Toaster } from "../src/components/Toast";
 import { isAgencyPosting } from "../src/lib/agency";
 import { type NetworkPersonRow, networkChanged, resetNetworkStore, usePeopleAt } from "../src/lib/network";
-import { coldLinks, friendsSearch, profileHref, recruiterLinks, warmLinks } from "../src/lib/referralLinks";
+import { callLinks, coldLinks, companySlug, friendsSearch, profileHref, recruiterLinks, warmLinks } from "../src/lib/referralLinks";
 import { makeJob } from "./helpers";
 
 const connected = (ageDays = 2) => ({
@@ -55,6 +55,21 @@ describe("Talk to someone who works here", () => {
     expect(screen.getByText("More ways in")).toBeTruthy();
     // Never asks for people before there's an import.
     expect(fetch.mock.calls.some(([u]) => String(u).includes("/people"))).toBe(false);
+    expect(screen.getByText("Book a call")).toBeTruthy();
+    expect(screen.getByText("For advice, not referrals")).toBeTruthy();
+    const adplist = screen.getByRole("link", { name: "Free mentors at Acme (opens ADPList)" });
+    expect(adplist.getAttribute("href")).toBe("https://adplist.org/mentors/company/acme");
+    expect(adplist.getAttribute("target")).toBe("_blank");
+    expect(screen.getByRole("link", { name: "Paid calls on Topmate (opens Topmate)" }).getAttribute("href")).toBe("https://topmate.io/s/acme");
+    expect(screen.getByText("Pay for advice, never for a referral. Most companies don't allow paid referrals.")).toBeTruthy();
+  });
+
+  it("offers Book a call when connected too", async () => {
+    stubApi({ network: connected(), people: { how: "none", people: [] } });
+    render(<TalkToSomeone job={makeJob({ company: "Procter & Gamble" })} />);
+    await screen.findByText(/You don't know anyone at Procter & Gamble/);
+    expect(screen.getByRole("link", { name: "Free mentors at Procter & Gamble (opens ADPList)" }).getAttribute("href")).toBe("https://adplist.org/mentors/company/procter-gamble");
+    expect(screen.getByText("Topmate searches service titles, not employers. Check each profile.")).toBeTruthy();
   });
 
   it("ranks the people you know, top 5 first, with the band and why", async () => {
@@ -319,6 +334,19 @@ describe("search links", () => {
       expect(u.hash).toBe("");
       expect([...u.searchParams.keys()].every((k) => ["keywords", "network", "datePosted"].includes(k))).toBe(true);
     }
+  });
+
+  it("slugs company names for the call links", () => {
+    expect(companySlug("AT&T")).toBe("at-t");
+    expect(companySlug("Procter & Gamble")).toBe("procter-gamble");
+    expect(companySlug("  J.P. Morgan Chase & Co. ")).toBe("j-p-morgan-chase-co");
+    expect(companySlug("Nestlé")).toBe("nestle");
+    expect(companySlug("日立製作所")).toBe("日立製作所");
+    expect(companySlug("삼성전자")).toBe("삼성전자");
+    expect(companySlug("&&")).toBe("");
+    expect(callLinks("AT&T").map((l) => l.href)).toEqual(["https://adplist.org/mentors/company/at-t", "https://topmate.io/s/at-t"]);
+    expect(callLinks("日立").map((l) => l.href)).toEqual(["https://adplist.org/mentors/company/%E6%97%A5%E7%AB%8B", "https://topmate.io/s/%E6%97%A5%E7%AB%8B"]);
+    expect(callLinks("?#/")).toEqual([]);
   });
 
   it("links only real LinkedIn profiles", () => {

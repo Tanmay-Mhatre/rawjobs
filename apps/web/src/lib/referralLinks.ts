@@ -120,3 +120,25 @@ export function nameFromProfile(url: string): string | undefined {
     .slice(0, 3);
   return words.length ? words.map((w) => w.charAt(0).toUpperCase() + w.slice(1)).join(" ") : undefined;
 }
+
+/**
+ * A company's name as a URL slug: lower case, accents dropped, every run of spaces or punctuation
+ * one hyphen ("Procter & Gamble" is "procter-gamble", "AT&T" is "at-t"). Letters in other scripts stay.
+ */
+export function companySlug(company: string): string {
+  return company
+    .normalize("NFKD")
+    .replace(/\p{M}+/gu, "")
+    .normalize("NFC")
+    .toLowerCase()
+    .replace(/[^\p{L}\p{N}]+/gu, "-")
+    .replace(/^-+|-+$/g, "");
+}
+
+/** Where to book a call for advice: ADPList's free mentors at the company and Topmate's search. Plain new-tab links. */
+export function callLinks(company: string): SearchLink[] {
+  const slug = companySlug(company);
+  if (!slug) return [];
+  const name = company.trim();
+  return [...link("adplist", `Free mentors at ${name}`, `https://adplist.org/mentors/company/${enc(slug)}`), ...link("topmate", "Paid calls on Topmate", `https://topmate.io/s/${enc(slug)}`)];
+}

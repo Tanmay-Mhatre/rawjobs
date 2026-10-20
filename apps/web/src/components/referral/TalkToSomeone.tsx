@@ -7,7 +7,7 @@ import { LINK_REL } from "../../lib/contactLinks";
 import { canRunLocally, type Job, type Profile } from "../../lib/data";
 import { companyName } from "../../lib/format";
 import { type NetworkMe, type NetworkPersonRow, REFRESH_AFTER_DAYS, setCloseContact, useNetwork, usePeopleAt } from "../../lib/network";
-import { coldLinks, profileHref, recruiterLinks, type SearchLink, seePeopleHref, warmLinks } from "../../lib/referralLinks";
+import { callLinks, coldLinks, profileHref, recruiterLinks, type SearchLink, seePeopleHref, warmLinks } from "../../lib/referralLinks";
 import { openBeside } from "../../lib/seePeople";
 import { addActivity, addContactPatch, CAPS, type Contact, type Entry, type EntryPatch, newId, OUTREACH_LABEL, type Outreach, toContact } from "../../lib/userState";
 import { knownPeople } from "../pipeline/detail";
@@ -206,7 +206,7 @@ function Section({ job, entry, profile, onUpdate, onOpenPeople }: Props) {
       )}
       {body}
       {!agency && add && !full && alsoHere.length > 0 && <KnownPicker known={alsoHere} onPick={(c) => add(c)} />}
-      {links.length > 0 && <MoreWaysIn links={links} />}
+      {links.length > 0 && <MoreWaysIn links={links} calls={agency ? [] : callLinks(company)} />}
       {canRunLocally && <ConnectLinkedIn open={connecting} onClose={() => setConnecting(false)} />}
     </section>
   );
@@ -252,7 +252,9 @@ function searchLinks({ company, title, me, pastEmployers, agency }: { company: s
   return [...warmLinks(inputs), ...coldLinks(inputs)];
 }
 
-function MoreWaysIn({ links }: { links: SearchLink[] }) {
+const CALL_SITE: Record<string, string> = { adplist: "ADPList", topmate: "Topmate" };
+
+function MoreWaysIn({ links, calls }: { links: SearchLink[]; calls: SearchLink[] }) {
   return (
     <details className="group/fold">
       <summary className="inline-flex min-h-8 cursor-pointer list-none items-center gap-1.5 type-label [&::-webkit-details-marker]:hidden">
@@ -269,6 +271,25 @@ function MoreWaysIn({ links }: { links: SearchLink[] }) {
         ))}
       </ul>
       <p className="mt-2 type-meta text-muted">These open LinkedIn or Blind in your browser. RawJobs sends nothing to them.</p>
+      {calls.length > 0 && (
+        <div className="mt-3">
+          <p className="type-label">
+            Book a call <span className="type-meta font-normal text-muted">For advice, not referrals</span>
+          </p>
+          <ul className="mt-1 space-y-1 type-small">
+            {calls.map((l) => (
+              <li key={l.id}>
+                <a href={l.href} target="_blank" rel={LINK_REL} className="inline-flex items-center gap-1 text-ink underline underline-offset-2 hover:text-muted">
+                  {l.label}
+                  <span className="sr-only"> (opens {CALL_SITE[l.id]})</span> <ExternalLink className="size-3.5" aria-hidden />
+                </a>
+                {l.id === "topmate" && <p className="type-meta text-muted">Topmate searches service titles, not employers. Check each profile.</p>}
+              </li>
+            ))}
+          </ul>
+          <p className="mt-2 type-meta text-muted">Pay for advice, never for a referral. Most companies don't allow paid referrals.</p>
+        </div>
+      )}
     </details>
   );
 }
