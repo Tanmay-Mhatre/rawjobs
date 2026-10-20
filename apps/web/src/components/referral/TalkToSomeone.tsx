@@ -15,6 +15,7 @@ import { KnownPicker } from "../pipeline/PeopleTab";
 import { toast } from "../Toast";
 import { Button, cx } from "../ui";
 import { ConnectLinkedIn } from "./ConnectLinkedIn";
+import { FindFriends } from "./FindFriends";
 import { MessageDrafts } from "./MessageDrafts";
 
 /** Rows shown before "Show all". */
@@ -87,12 +88,12 @@ function Section({ job, entry, profile, onUpdate, onOpenPeople }: Props) {
    */
   const add =
     onUpdate &&
-    ((c: Contact, networkId?: string) => {
+    ((c: Contact, networkId?: string, pasted?: Pick<Outreach, "degree" | "mutual">, before?: string) => {
       const saving = !entry?.status;
-      const ask: Outreach = { stage: "to-contact", via: "linkedin", at: new Date().toISOString(), ...(networkId ? { networkId } : {}) };
+      const ask: Outreach = { stage: "to-contact", via: "linkedin", at: new Date().toISOString(), ...(networkId ? { networkId } : {}), ...pasted };
       onUpdate({ ...(saving ? { status: "saved" as const } : {}), contacts: [...contacts, c], outreach: { ...entry?.outreach, [c.id]: ask } });
       toast({
-        message: saving ? `Saved this job and added ${c.name}` : `Added ${c.name} to this job`,
+        message: `${before ?? ""}${saving ? `Saved this job and added ${c.name}` : `Added ${c.name} to this job`}`,
         actionLabel: "Undo",
         onAction: () => onUpdate({ ...(saving ? { status: entry?.status } : {}), contacts: entry?.contacts, outreach: entry?.outreach }),
       });
@@ -177,9 +178,21 @@ function Section({ job, entry, profile, onUpdate, onOpenPeople }: Props) {
 
   return (
     <section className="rj-drawer__section" aria-labelledby={headingId}>
-      <h3 id={headingId} className="rj-h">
-        Talk to someone who works here
-      </h3>
+      <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2">
+        <h3 id={headingId} className="rj-h">
+          Talk to someone who works here
+        </h3>
+        {!agency && (
+          <FindFriends
+            key={key ?? company}
+            company={company}
+            memoryKey={key ?? company.trim().toLowerCase()}
+            title={job.title}
+            onJob={(name) => contacts.some((c) => c.name.toLowerCase() === name.toLowerCase())}
+            add={add && !full ? (c, pasted, before) => add(samePerson(c), undefined, pasted, before) : undefined}
+          />
+        )}
+      </div>
       {loading && (
         <p role="status" className="type-small text-muted">
           Looking for people you know…

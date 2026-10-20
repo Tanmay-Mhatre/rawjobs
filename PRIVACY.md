@@ -27,6 +27,12 @@ contacts are part of your tracking data, so they're in its browser copy, its bac
 exports. Deleting your connections in Settings, or starting setup over, removes `network.json`
 and the files next to it.
 
+### Find friends at a company (the paste box)
+"Find friends at {Company}" opens LinkedIn's own people search in your browser. If you copy that
+results page and paste it into RawJobs, it is read on this computer and kept only until you reload
+the page: it isn't saved, backed up or sent anywhere. Only the people you choose to add to a job
+are saved, as that job's contacts.
+
 ## What the app sends, and to whom
 
 ### Company job boards

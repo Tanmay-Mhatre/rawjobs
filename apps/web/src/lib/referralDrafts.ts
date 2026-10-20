@@ -80,3 +80,9 @@ export function aiPrompt(kind: DraftKind, { job, company, first, position }: Dra
     "Plain tone. No flattery, no buzzwords. Never offer payment or anything in return.",
   ].join(" ");
 }
+
+/** Asks a shared connection to introduce you to someone at the company (a 2nd connection from a pasted search). */
+export function introTemplate({ mutual, first, company, title }: { mutual: string; first: string; company: string; title: string }): string {
+  const hi = mutual.trim().split(/\s+/)[0] || mutual;
+  return `Hi ${hi}, I see you know ${first} at ${company}. I'm applying for their ${title} role. Would you be comfortable introducing us? Happy to send a short blurb you can forward.`;
+}
