@@ -53,7 +53,7 @@ export function ActivityTab({
 
   return (
     <div className="grid gap-4">
-      {task && <NextStep task={task} skipped={entry.skipped ?? []} onLog={logTask} onMarkDone={markDone} onUpdate={onUpdate} now={now} />}
+      {task && <NextStep task={task} skipped={entry.skipped ?? []} onLog={logTask} onMarkDone={markDone} onUpdate={onUpdate} now={now} saved={entry.status === "saved"} />}
       <div id={`${composerId}-composer`}>
         <Composer
           key={prefill.n}
@@ -91,7 +91,7 @@ export function ActivityTab({
 }
 
 /** The next step on this job, with its actions: Log and Snooze, Log and Mark done, or close it. */
-function NextStep({ task, skipped, onLog, onMarkDone, onUpdate, now }: TaskActionsProps) {
+function NextStep({ task, skipped, onLog, onMarkDone, onUpdate, now, saved }: TaskActionsProps) {
   const day = today(now);
   const overdue = task.due < day;
   const due = overdue ? `Overdue since ${shortDay(task.due)}` : task.due === day ? "Today" : shortDay(task.due);
@@ -104,7 +104,7 @@ function NextStep({ task, skipped, onLog, onMarkDone, onUpdate, now }: TaskActio
         <span className={cx("type-small", overdue ? "font-medium text-danger-text" : "text-muted")}>{due}</span>
       </div>
       <p className="type-small text-muted">{task.why}</p>
-      <TaskActions task={task} skipped={skipped} onLog={onLog} onMarkDone={onMarkDone} onUpdate={onUpdate} now={now} />
+      <TaskActions task={task} skipped={skipped} onLog={onLog} onMarkDone={onMarkDone} onUpdate={onUpdate} now={now} saved={saved} />
     </section>
   );
 }
@@ -122,13 +122,15 @@ type TaskActionsProps = {
   deadlineLabel?: string;
   /** In a list of tasks: no accent buttons, so the one accent isn't on every row. */
   quiet?: boolean;
+  /** A Saved job: its date is "Apply by", so there's nothing to log; Open, Snooze and Mark done instead. */
+  saved?: boolean;
 };
 
 /**
  * A task's buttons, shared by the job's pinned next step and the Pipeline's Next steps list: Log
  * follow-up and Snooze, Log thank-you and Mark done, Close as no response and Follow up once more, or Open.
  */
-export function TaskActions({ task, skipped, onLog, onMarkDone, onUpdate, now, onOpen, deadlineLabel = "Open", quiet }: TaskActionsProps) {
+export function TaskActions({ task, skipped, onLog, onMarkDone, onUpdate, now, onOpen, deadlineLabel = "Open", quiet, saved }: TaskActionsProps) {
   const main = quiet ? undefined : ("primary" as const);
   const day = today(now);
   const [picking, setPicking] = useState(false);
@@ -147,9 +149,17 @@ export function TaskActions({ task, skipped, onLog, onMarkDone, onUpdate, now, o
     <div className="flex flex-wrap items-center gap-2">
       {task.kind === "follow-up" && (
         <>
-          <Button size="sm" variant={main} onClick={() => onLog(task)}>
-            Log follow-up
-          </Button>
+          {saved ? (
+            onOpen && (
+              <Button size="sm" variant={main} onClick={() => onOpen(task)}>
+                Open
+              </Button>
+            )
+          ) : (
+            <Button size="sm" variant={main} onClick={() => onLog(task)}>
+              Log follow-up
+            </Button>
+          )}
           <Menu
             label="Snooze until"
             align="start"
@@ -185,6 +195,11 @@ export function TaskActions({ task, skipped, onLog, onMarkDone, onUpdate, now, o
                 className="h-8 rounded-md border border-line bg-raised px-2 type-small text-ink"
               />
             </label>
+          )}
+          {saved && (
+            <Button size="sm" onClick={() => onMarkDone(task)}>
+              <Check className="rj-icon" aria-hidden /> Mark done
+            </Button>
           )}
         </>
       )}

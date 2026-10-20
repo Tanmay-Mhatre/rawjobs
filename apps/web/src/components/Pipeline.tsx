@@ -234,10 +234,12 @@ export function Pipeline({ user, jobsById, onOpen, onPatch, onAdd, weeklyPlan, o
     const at = PIPELINE.indexOf(entry.status as PipelineStatus);
     const to = PIPELINE[at + d];
     if (at < 0 || !to) return;
+    // Closed waits for "How did it end?": focus and the phone column follow in onPick.
+    if (to === "rejected") return onMove(id, entry, to);
     refocus.current = id;
     // Phones show one column: follow the card into its new one.
     setMobileCol(to);
-    if (to !== "rejected") setAnnounce(`Moved ${entry.snapshot.title} to ${STATUS_LABEL[to]}`);
+    setAnnounce(`Moved ${entry.snapshot.title} to ${STATUS_LABEL[to]}`);
     onMove(id, entry, to);
   };
   const open = (id: string) => {
@@ -286,6 +288,8 @@ export function Pipeline({ user, jobsById, onOpen, onPatch, onAdd, weeklyPlan, o
         onPick={(how) => {
           if (!closing) return;
           onPatch(closing.id, closing.entry, { status: "rejected", closedAs: how });
+          refocus.current = closing.id;
+          setMobileCol("rejected");
           setAnnounce(`Closed ${closing.entry.snapshot.title}: ${CLOSED_AS[how].toLowerCase()}`);
           setClosing(null);
         }}
@@ -311,14 +315,18 @@ export function Pipeline({ user, jobsById, onOpen, onPatch, onAdd, weeklyPlan, o
               initial={taskPrefill(loggingEntry, logging, loggingEntry.snapshot.title)}
               hasFollowUp={!!loggingEntry.followUp}
               followUps={loggingEntry.status !== "saved"}
-              onLog={(a, opts) => {
-                onPatch(logging.id, loggingEntry, addActivity(loggingEntry, a, opts, now));
+              onLog={({ followUp, ...a }, opts) => {
+                // A Saved job's date is "Apply by": nothing logged there counts as a follow-up.
+                const activity = followUp && loggingEntry.status !== "saved" ? { ...a, followUp } : a;
+                onPatch(logging.id, loggingEntry, addActivity(loggingEntry, activity, opts, now));
                 setLogging(null);
               }}
               onAnnounce={setAnnounce}
               onAddPerson={() => {
+                const id = logging.id;
                 setLogging(null);
-                open(logging.id);
+                // After the pop-over has closed, so the drawer isn't opened under it.
+                requestAnimationFrame(() => open(id));
               }}
               now={now}
             />
@@ -353,7 +361,7 @@ export function Pipeline({ user, jobsById, onOpen, onPatch, onAdd, weeklyPlan, o
         </ChipGroup>
       </div>
       <div className="md:overflow-x-auto">
-        <div className={cx("grid gap-3", showReview ? "md:min-w-[1080px] md:grid-cols-6" : "md:min-w-[900px] md:grid-cols-5")}>
+        <div className={cx("grid gap-3", showReview ? "md:grid-cols-[repeat(6,minmax(220px,1fr))]" : "md:grid-cols-[repeat(5,minmax(220px,1fr))]")}>
           {showReview && (
             <section aria-labelledby="col-review" className={cx("min-h-64 flex-col rounded-md border border-dashed border-line p-2 md:flex", shown === "review" ? "flex" : "hidden")}>
               <h2 id="col-review" className="flex items-center justify-between px-1.5 py-1 type-small font-semibold">
@@ -576,7 +584,7 @@ function ReviewCard({
         <Button size="sm" onClick={() => onReview?.(job, "saved")}>
           Save
         </Button>
-        <Button size="sm" variant="ghost" onClick={() => onReview?.(job, "dismissed")}>
+        <Button size="sm" onClick={() => onReview?.(job, "dismissed")}>
           Not interested
         </Button>
       </div>
@@ -637,11 +645,37 @@ function NextSteps({
 }) {
   const wide = useMedia("(min-width: 768px)");
   const groups = groupTasks(tasks, now);
+  const rootRef = useRef<HTMLElement>(null);
+  const headRef = useRef<HTMLElement>(null);
+  /**
+   * A row about to go (logged, done, snoozed, closed): once it's gone, focus moves to the row after
+   * it (or before it), else to the Next steps heading, instead of dropping to the page.
+   */
+  const pending = useRef<{ from: string; to?: string } | null>(null);
+  const leaving = (t: Task) => {
+    const list = [...groups.overdue, ...groups.today, ...groups.week];
+    const i = list.findIndex((x) => x.key === t.key);
+    pending.current = { from: t.key, to: (list[i + 1] ?? list[i - 1])?.key };
+  };
+  useEffect(() => {
+    const p = pending.current;
+    const root = rootRef.current;
+    if (!p || !root) return;
+    const rowOf = (key: string) => [...root.querySelectorAll<HTMLElement>("[data-task-key]")].find((el) => el.dataset.taskKey === key);
+    if (rowOf(p.from)) return;
+    pending.current = null;
+    // Next frame: after a closing pop-over has put focus back where it could.
+    requestAnimationFrame(() => {
+      const next = p.to ? rowOf(p.to)?.querySelector<HTMLElement>("button") : undefined;
+      if (next?.getClientRects().length) next.focus();
+      else headRef.current?.focus();
+    });
+  });
   const row = (t: Task) => {
     const e = user[t.id];
     if (!e) return null;
     return (
-      <li key={t.key} className="flex flex-wrap items-center gap-x-3 gap-y-2 py-2">
+      <li key={t.key} data-task-key={t.key} className="flex flex-wrap items-center gap-x-3 gap-y-2 py-2">
         <div className="min-w-0 flex-1 basis-56">
           <p className="type-small">
             <span className="font-semibold">{t.label}</span>
@@ -657,9 +691,19 @@ function NextSteps({
         <TaskActions
           task={t}
           skipped={e.skipped ?? []}
-          onLog={onLog}
-          onMarkDone={(task) => onPatch(t.id, e, { skipped: [...(e.skipped ?? []), task.key] })}
-          onUpdate={(patch) => onPatch(t.id, e, patch)}
+          onLog={(task) => {
+            leaving(task);
+            onLog(task);
+          }}
+          onMarkDone={(task) => {
+            leaving(task);
+            onPatch(t.id, e, { skipped: [...(e.skipped ?? []), task.key] });
+          }}
+          onUpdate={(patch) => {
+            leaving(t);
+            onPatch(t.id, e, patch);
+          }}
+          saved={e.status === "saved"}
           now={now}
           onOpen={(task) => (task.kind === "deadline" && onCompare ? onCompare() : onOpen(task.id))}
           deadlineLabel={onCompare ? "Compare offers" : "Open"}
@@ -699,8 +743,8 @@ function NextSteps({
   );
   if (!wide) {
     return (
-      <details aria-label="Next steps" className="group/steps mb-3 rounded-md border border-line bg-raised px-3 py-2 shadow-l1">
-        <summary className="flex cursor-pointer list-none items-center gap-2 type-small">
+      <details ref={rootRef as React.RefObject<HTMLDetailsElement>} aria-label="Next steps" className="group/steps mb-3 rounded-md border border-line bg-raised px-3 py-2 shadow-l1">
+        <summary ref={headRef} className="flex cursor-pointer list-none items-center gap-2 type-small">
           <span className="font-semibold">Next steps</span>
           <span className="truncate text-muted">{counts || "Nothing due."}</span>
           <ChevronDown className="ml-auto size-4 shrink-0 text-muted transition-transform group-open/steps:rotate-180" aria-hidden />
@@ -710,8 +754,8 @@ function NextSteps({
     );
   }
   return (
-    <section aria-labelledby="next-steps-title" className="mb-3 rounded-md border border-line bg-raised px-3 py-2 shadow-l1">
-      <h2 id="next-steps-title" className="type-small font-semibold">
+    <section ref={rootRef} aria-labelledby="next-steps-title" className="mb-3 rounded-md border border-line bg-raised px-3 py-2 shadow-l1">
+      <h2 ref={headRef as React.RefObject<HTMLHeadingElement>} id="next-steps-title" tabIndex={-1} className="type-small font-semibold outline-none">
         Next steps
       </h2>
       {body}

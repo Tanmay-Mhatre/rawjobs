@@ -1,5 +1,6 @@
 // @vitest-environment happy-dom
 import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
+import { useState } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { cardChip, closedHint, Pipeline, sortCards } from "../src/components/Pipeline";
 import type { Job } from "../src/lib/data";
@@ -138,6 +139,38 @@ describe("Next steps (9.2.18)", () => {
     expect(onPatch).toHaveBeenLastCalledWith("q", expect.anything(), { followUp: "2026-10-27", skipped: ["close:0"] });
     fireEvent.click(screen.getByRole("button", { name: "Close as no response" }));
     expect(onPatch).toHaveBeenLastCalledWith("q", expect.anything(), { status: "rejected", closedAs: "no-response" });
+  });
+
+  it("gives a Saved job's Apply by date Open, Snooze and Mark done, not Log follow-up", () => {
+    renderBoard({ user: { s: entry("saved", "2026-10-10", { followUp: "2026-10-19" }) } });
+    const steps = screen.getByRole("region", { name: "Next steps" });
+    expect(within(steps).queryByRole("button", { name: "Log follow-up" })).toBeNull();
+    for (const name of ["Open", "Snooze", "Mark done"]) expect(within(steps).getByRole("button", { name: new RegExp(name) })).toBeTruthy();
+  });
+
+  it("moves focus to the next row when a row is marked done", async () => {
+    function Harness() {
+      const [user, setUser] = useState<UserState>({
+        t: entry("interviewing", "2026-10-01", { interviews: [{ on: "2026-10-18", what: "Panel" }] }),
+        f: entry("applied", "2026-10-10", { followUp: "2026-10-19", snapshot: { title: "Next one", company: "Acme", url: "", location: "", score: 80 } }),
+      });
+      return (
+        <Pipeline
+          user={user}
+          jobsById={new Map()}
+          onOpen={() => {}}
+          onPatch={(id, e, patch) => setUser((u) => ({ ...u, [id]: { ...e, ...patch } }))}
+          onAdd={() => {}}
+          onWeeklyPlan={() => {}}
+          goRadar={() => {}}
+          now={now}
+        />
+      );
+    }
+    render(<Harness />);
+    fireEvent.click(screen.getByRole("button", { name: "Mark done" }));
+    await new Promise((r) => requestAnimationFrame(r));
+    expect(document.activeElement?.textContent).toBe("Next one");
   });
 
   it("says Nothing due. when nothing is", () => {

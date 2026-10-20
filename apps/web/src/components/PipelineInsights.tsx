@@ -201,7 +201,8 @@ export function PipelineInsights({ user, plan, onPlan }: { user: UserState; plan
         <ChartNoAxesColumn className="size-4 text-muted" aria-hidden />
         <span className="font-semibold">This week</span>
         <span className="tabular text-muted">
-          · {goal ? `${s.applied} of ${goal} applications` : plural(s.applied, "application", "applications")} · {plural(s.followUps, "follow-up", "follow-ups")} ·{" "}
+          <span className="max-sm:hidden">· </span>
+          {goal ? `${s.applied} of ${goal} applications` : plural(s.applied, "application", "applications")} · {plural(s.followUps, "follow-up", "follow-ups")} ·{" "}
           {plural(s.upcoming, "interview", "interviews")} coming up
         </span>
         {goal ? <Progress value={s.applied} max={goal} label="Applications this week" className="ml-1 w-24" /> : null}
