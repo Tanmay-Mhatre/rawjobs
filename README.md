@@ -54,7 +54,7 @@ The dashboard walks you through setup the first time (about 3 minutes; you can s
 
 Saving runs your first scan: your companies plus every company in the directory tagged with your industries, each fetched live. Then, optionally, pick the companies you'd love to work at in the **Companies** tab (search the directory, or paste a careers link): they're checked every scan, starred, and nudged up the list. Topics (keywords that rank a job higher) are prefilled from your resume and live in **Settings → Profile → Topics**.
 
-Setup writes `rawjobs.config.local.yaml` (gitignored, commented, safe to edit by hand). After that, the Radar shows a checklist of anything still missing, explains a scan with no matches (and what to change), and flags companies whose links broke. Change anything later in **Settings**, or start over with **Settings → Your data → Start setup over**.
+Setup writes `rawjobs.config.local.yaml` (gitignored, commented, safe to edit by hand). After that, the Radar shows a checklist of anything still missing, explains a scan with no matches (and what to change), and flags companies whose links broke. Change anything later in **Settings**, or start over with **Settings → Data & privacy → Start setup over**.
 
 Prefer the terminal? Copy `rawjobs.config.example.yaml` to `rawjobs.config.local.yaml`, edit it, then `pnpm rawjobs validate` and `pnpm rawjobs scan`.
 
@@ -67,7 +67,7 @@ Prefer the terminal? Copy `rawjobs.config.example.yaml` to `rawjobs.config.local
 - **Settings**:
   - **Profile**: master resume, roles, locations, industries, topics.
   - **Scans & alerts**: strong-match threshold, scheduled scans, Telegram alerts, what a scan covers by default.
-  - **Your data**: export / import your tracking data, sharing, start setup over.
+  - **Data & privacy**: export / import your tracking data, LinkedIn connections, sharing, start setup over.
   - **Updates** (installed copies): install new versions automatically, ask first, or never; test versions early; check now.
   - **Appearance**: light, dark or system theme, an increased-contrast option, and job list density.
 
@@ -211,7 +211,7 @@ Terms match whole words, case-insensitively: `ai` matches "AI-native" but not "m
 
 Your profile, resume, config, Telegram token and run history stay on your computer. The app has no telemetry. It talks to the companies' job boards (to scan), GitHub (to download the shared directory and job feed, and, for installed copies, to check for updates once a day; turn that off in Settings → About) and, if you set up alerts, Telegram. Installing also downloads Node from nodejs.org.
 
-**Sharing is on by default:** when you add a company by link that the directory doesn't have, its careers board (hiring system, board name, company name) is sent to the project's contribution inbox so everyone can find it. Nothing about you is sent. Turn it off in **Settings → Your data → Sharing** or with `directory.share_additions: false`. Full details: [PRIVACY.md](PRIVACY.md).
+**Sharing is on by default:** when you add a company by link that the directory doesn't have, its careers board (hiring system, board name, company name) is sent to the project's contribution inbox so everyone can find it. Nothing about you is sent. Turn it off in **Settings → Data & privacy → Sharing** or with `directory.share_additions: false`. Full details: [PRIVACY.md](PRIVACY.md).
 
 Your config lists the companies you're targeting. If you run RawJobs from GitHub, **create your copy as a private repository** (use "Use this template" → Private, not Fork; forks of public repos must stay public).
 

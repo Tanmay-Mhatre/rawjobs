@@ -129,7 +129,7 @@ and Telegram settings (`profile/`), and scan results (`data/`). Nothing about yo
 
 Already running RawJobs from the source code? An installed copy starts fresh. To bring your setup
 across, copy `rawjobs.config.local.yaml` and the `profile` folder from your checkout into the install
-folder, then open the dashboard. Statuses and notes can also be moved with Settings → Your data →
+folder, then open the dashboard. Statuses and notes can also be moved with Settings → Data & privacy →
 Export, then Import.
 
 ## Troubleshooting
