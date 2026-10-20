@@ -8,6 +8,9 @@ request. These rules keep them from stepping on each other.
 - The PR you own is the one this session opened, or the one the user asked you to continue. Never
   merge, update, rebase, label, comment on or queue any other PR: not other sessions', not
   Dependabot's, not people's. If the user asks you to, remind them of this rule and leave it to them.
+- One exception: when the user asks, you may queue a Dependabot PR by adding the `queue` label
+  (`gh pr edit <N> --add-label queue`), once its CI passes. Only add the label: don't push to,
+  rebase, comment on or otherwise change the PR, and still never merge it outside the queue.
 - Keep your work on your own branch. Don't fold another PR's changes into yours.
 - Work in your own worktree. Other sessions switch branches in the main checkout.
 
