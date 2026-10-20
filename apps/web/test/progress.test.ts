@@ -28,11 +28,12 @@ describe("progress tracking", () => {
     expect(applyPatch(moved, job, { status: "interviewing" }, "2026-10-20T09:00:00Z")!.followUp).toBeUndefined();
   });
 
-  it("is due on its date, only while applied", () => {
+  it("is due on its date, only in an active stage", () => {
     const e: Entry = { status: "applied", followUp: "2026-10-23", updatedAt: "", snapshot: { ...job } };
     expect(followUpDue(e, new Date("2026-10-22T12:00:00"))).toBe(false);
     expect(followUpDue(e, new Date("2026-10-23T12:00:00"))).toBe(true);
-    expect(followUpDue({ ...e, status: "interviewing" }, new Date("2026-10-30T12:00:00"))).toBe(false);
+    expect(followUpDue({ ...e, status: "interviewing" }, new Date("2026-10-30T12:00:00"))).toBe(true);
+    expect(followUpDue({ ...e, status: "rejected" }, new Date("2026-10-30T12:00:00"))).toBe(false);
   });
 
   it("keeps how a closed job ended, only while it's closed", () => {

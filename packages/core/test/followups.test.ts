@@ -2,7 +2,7 @@ import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-import { dueDeadlines, dueFollowUps, dueInterviews, followUpMessage, lastWeek, remindFollowUps } from "../src/followups";
+import { applicationsPlan, dueDeadlines, dueFollowUps, dueInterviews, followUpMessage, interviewMessage, lastWeek, remindFollowUps, weeklyMessage } from "../src/followups";
 
 const secrets = { token: "123:abc", chatId: "42" };
 
@@ -21,20 +21,25 @@ function setup(state: Record<string, unknown>) {
 }
 
 describe("follow-up reminders", () => {
-  it("finds jobs you applied to whose date has come", () => {
+  it("finds jobs you applied to whose date has come, not Saved ones (that date is Apply by)", () => {
     const state = {
       a: { status: "applied", followUp: "2026-10-23" },
       b: { status: "applied", followUp: "2026-10-30" },
       c: { status: "interviewing", followUp: "2026-10-01" },
       d: { status: "applied", followUp: "next week" },
+      e: { status: "rejected", followUp: "2026-10-01" },
+      f: { status: "saved", followUp: "2026-10-22" },
     };
-    expect(dueFollowUps(state, "2026-10-23")).toEqual([{ id: "a", followUp: "2026-10-23" }]);
+    expect(dueFollowUps(state, "2026-10-23")).toEqual([
+      { id: "a", followUp: "2026-10-23" },
+      { id: "c", followUp: "2026-10-01" },
+    ]);
     expect(dueFollowUps(undefined, "2026-10-23")).toEqual([]);
   });
 
   it("says how many, never which", () => {
-    expect(followUpMessage(2)).toContain("<b>2</b> jobs you applied to are due a follow-up.");
-    expect(followUpMessage(1)).toContain("<b>1</b> job you applied to is due a follow-up.");
+    expect(followUpMessage(2)).toContain("<b>2</b> jobs are due a follow-up.");
+    expect(followUpMessage(1)).toContain("<b>1</b> job is due a follow-up.");
   });
 
   it("sends each follow-up once, and again only when you move its date", async () => {
@@ -80,7 +85,60 @@ describe("weekly summary", () => {
       c: { closedAs: "no-response", history: [{ status: "rejected", at: "2026-10-14T09:00:00Z" }] },
       d: { closedAs: "rejected", history: [{ status: "rejected", at: "2026-10-15T09:00:00Z" }] },
     };
-    expect(lastWeek(state, from, to)).toEqual({ applied: 1, replies: 2 });
+    expect(lastWeek(state, from, to)).toEqual({ applied: 1, followUps: 0, replies: 2 });
+  });
+
+  it("counts follow-ups sent and replies from touches, each job's replies once", () => {
+    const from = Date.parse("2026-10-12T00:00:00Z");
+    const to = Date.parse("2026-10-19T00:00:00Z");
+    const state = {
+      a: {
+        history: [{ status: "interviewing", at: "2026-10-16T09:00:00Z" }],
+        activities: [
+          { at: "2026-10-13T09:00:00Z", channel: "email", dir: "sent", followUp: true },
+          { at: "2026-10-14T09:00:00Z", channel: "email", dir: "received" },
+        ],
+      },
+      b: {
+        activities: [
+          { at: "2026-10-13T09:00:00Z", channel: "linkedin", dir: "sent" },
+          { at: "2026-10-15T09:00:00Z", channel: "whatsapp", dir: "sent", followUp: true },
+          { at: "2026-10-20T09:00:00Z", channel: "email", dir: "received" },
+          { at: "2026-10-15T09:00:00Z", channel: "note", dir: "received" },
+        ],
+      },
+    };
+    expect(lastWeek(state, from, to)).toEqual({ applied: 0, followUps: 2, replies: 1 });
+  });
+
+  it("reads the plan before the v1 goal", () => {
+    expect(applicationsPlan({ weeklyPlan: { applications: 6 }, weeklyGoal: 4 })).toBe(6);
+    expect(applicationsPlan({ weeklyGoal: 4 })).toBe(4);
+    expect(applicationsPlan({ weeklyPlan: {} })).toBeUndefined();
+    expect(applicationsPlan(undefined)).toBeUndefined();
+  });
+
+  it("says counts only: no names, details or notes from your tracking", () => {
+    const state = {
+      "greenhouse:acme:1": {
+        status: "applied",
+        note: "Secret salary note",
+        snapshot: { title: "Head of Product", company: "Acme Bank", url: "https://acme.example/1", location: "Dubai", score: 90 },
+        history: [{ status: "applied", at: "2026-10-13T09:00:00Z" }],
+        contacts: [{ id: "p1", name: "Priya Raman", email: "priya@acme.example", phone: "+971501234567", linkedin: "https://www.linkedin.com/in/priya", howMet: "Fintech meetup" }],
+        activities: [{ id: "x", at: "2026-10-14T09:00:00Z", channel: "email", dir: "sent", contactId: "p1", text: "Following up on my application", followUp: true }],
+      },
+    };
+    const w = lastWeek(state, Date.parse("2026-10-12T00:00:00Z"), Date.parse("2026-10-19T00:00:00Z"));
+    const messages = [weeklyMessage(w, 5), followUpMessage(1), interviewMessage(1)];
+    expect(messages[0]).toContain("<b>1</b> application (plan 5), <b>1</b> follow-up, <b>0</b> replies.");
+    const values: string[] = [];
+    const walk = (v: unknown): void => {
+      if (typeof v === "string") values.push(v);
+      else if (v && typeof v === "object") for (const x of Object.values(v)) walk(x);
+    };
+    walk(state);
+    for (const m of messages) for (const v of values.filter((x) => x.length > 3)) expect(m).not.toContain(v);
   });
 });
 

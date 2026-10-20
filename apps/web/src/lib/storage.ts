@@ -8,13 +8,17 @@ export function load<T>(key: string, fallback: T): T {
   }
 }
 
-export function save(key: string, value: unknown): void {
+/** False when the browser refused it (storage full or blocked). */
+export function save(key: string, value: unknown): boolean {
+  let ok = true;
   try {
     localStorage.setItem(key, JSON.stringify(value));
   } catch {
     // storage full or blocked: the session still works, it just won't persist
+    ok = false;
   }
   onSaved?.(key);
+  return ok;
 }
 
 let onSaved: ((key: string) => void) | undefined;
@@ -22,6 +26,25 @@ let onSaved: ((key: string) => void) | undefined;
 /** Hear about every save (tracking.ts copies some keys to your RawJobs folder). */
 export function onSave(listener: (key: string) => void): void {
   onSaved = listener;
+}
+
+let onFailed: (() => void) | undefined;
+let lastFailed = 0;
+/** At most one "couldn't save" a minute, however many saves fail. */
+const FAILED_GAP_MS = 60_000;
+
+/** Your tracking couldn't be saved, in this browser or on disk: tell whoever listens (App shows a toast). */
+export function saveFailed(): void {
+  const now = Date.now();
+  if (now - lastFailed < FAILED_GAP_MS) return;
+  lastFailed = now;
+  onFailed?.();
+}
+
+/** Hear when saving your tracking fails. */
+export function onSaveFailed(listener: (() => void) | undefined): void {
+  onFailed = listener;
+  lastFailed = 0;
 }
 
 const MIGRATED_KEY = "rawjobs.migrated.v1";

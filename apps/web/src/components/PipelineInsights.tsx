@@ -1,4 +1,5 @@
 import { ChartNoAxesColumn } from "lucide-react";
+import { PLAN_MAX, type WeeklyPlan } from "../lib/prefs";
 import { pct, pipelineStats } from "../lib/pipelineStats";
 import type { UserState } from "../lib/userState";
 
@@ -9,7 +10,8 @@ const input = "h-8 w-16 rounded-md border border-line bg-raised px-2 type-small 
  * against your goal, reply rate, time to reply, ghosting, and reply rate by fit score. Folded to one
  * line until opened.
  */
-export function PipelineInsights({ user, goal, onGoal }: { user: UserState; goal?: number; onGoal: (goal: number | undefined) => void }) {
+export function PipelineInsights({ user, plan, onPlan }: { user: UserState; plan: WeeklyPlan; onPlan: (plan: WeeklyPlan) => void }) {
+  const goal = plan.applications;
   const s = pipelineStats(user);
   if (!s.applied && !goal) return null;
   const stats = [
@@ -67,12 +69,12 @@ export function PipelineInsights({ user, goal, onGoal }: { user: UserState; goal
           <input
             type="number"
             min={1}
-            max={100}
+            max={PLAN_MAX}
             defaultValue={goal ?? ""}
             placeholder="–"
             onBlur={(e) => {
               const n = Math.round(Number(e.target.value));
-              onGoal(n >= 1 && n <= 100 ? n : undefined);
+              onPlan({ ...plan, applications: n >= 1 && n <= PLAN_MAX ? n : undefined });
             }}
             className={input}
           />

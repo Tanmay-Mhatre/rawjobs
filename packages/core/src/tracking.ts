@@ -1,4 +1,4 @@
-import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
+import { copyFileSync, existsSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { rawjobsHome } from "./paths";
 
@@ -12,6 +12,9 @@ import { rawjobsHome } from "./paths";
  */
 export const TRACKING_PATH = "profile/tracking.json";
 const MAX_BYTES = 20_000_000;
+/** One copy a day of the file as it was before that day's first save, the newest BACKUPS_KEPT kept. */
+export const BACKUPS_DIR = "profile/backups";
+export const BACKUPS_KEPT = 7;
 
 export type TrackingParts = {
   state?: Record<string, unknown>;
@@ -60,8 +63,34 @@ export function saveTracking(input: unknown, home = rawjobsHome()): { ok: true; 
   if (Buffer.byteLength(text) > MAX_BYTES) return { ok: false, error: "Tracking is too large to save (over 20 MB)." };
   const path = resolve(home, TRACKING_PATH);
   mkdirSync(dirname(path), { recursive: true });
+  backUp(path, home);
   const tmp = `${path}.${process.pid}.tmp`;
   writeFileSync(tmp, text);
   renameSync(tmp, path);
   return { ok: true, tracking: next };
+}
+
+const localDay = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+
+/**
+ * Before the day's first save, copy the file to profile/backups/tracking-YYYY-MM-DD.json and keep
+ * the newest BACKUPS_KEPT copies: two tabs or versions overwriting each other can't lose more than
+ * a day. A backup that fails never stops the save.
+ */
+export function backUp(path: string, home = rawjobsHome(), now = new Date()): void {
+  try {
+    if (!existsSync(path)) return;
+    const dir = resolve(home, BACKUPS_DIR);
+    const copy = resolve(dir, `tracking-${localDay(now)}.json`);
+    if (existsSync(copy)) return;
+    mkdirSync(dir, { recursive: true });
+    copyFileSync(path, copy);
+    const old = readdirSync(dir)
+      .filter((f) => /^tracking-\d{4}-\d{2}-\d{2}\.json$/.test(f))
+      .sort()
+      .slice(0, -BACKUPS_KEPT);
+    for (const f of old) rmSync(resolve(dir, f), { force: true });
+  } catch {
+    // A full disk or a locked folder: the save itself still goes ahead.
+  }
 }

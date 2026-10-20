@@ -1,6 +1,6 @@
 import { useEffect, useRef } from "react";
 import { canRunLocally } from "./data";
-import { load, onSave } from "./storage";
+import { load, onSave, saveFailed } from "./storage";
 
 /**
  * Your tracking (statuses, notes), Radar preferences, appearance (theme, contrast, density, age limit)
@@ -39,9 +39,13 @@ function flush(keepalive = false) {
   if (!Object.keys(pending).length) return;
   const body = JSON.stringify(pending);
   for (const k of Object.keys(pending) as TrackingPart[]) delete pending[k];
-  void fetch("/api/tracking", { method: "PUT", body, keepalive }).catch(() => {
-    // Offline or the server is restarting: the browser copy still has it, and the next change saves it all.
-  });
+  // Offline, the server restarting or refusing it: the browser copy still has it and the next change
+  // saves it all, but say so rather than fail silently.
+  void fetch("/api/tracking", { method: "PUT", body, keepalive })
+    .then((res) => {
+      if (!res.ok) saveFailed();
+    })
+    .catch(() => saveFailed());
 }
 
 function queue(part: TrackingPart, value: unknown) {
@@ -50,7 +54,16 @@ function queue(part: TrackingPart, value: unknown) {
   timer = setTimeout(flush, SAVE_DELAY);
 }
 
-if (typeof window !== "undefined") window.addEventListener("pagehide", () => flush(true));
+/** Browsers refuse a keepalive request over about 64 KB: a bigger save goes out as a normal one. */
+const KEEPALIVE_MAX = 60_000;
+const big = () => JSON.stringify(pending).length > KEEPALIVE_MAX;
+
+if (typeof window !== "undefined") window.addEventListener("pagehide", () => flush(!big()));
+// Hidden comes before closing: a big save is sent then, while a normal request still gets through.
+if (typeof document !== "undefined")
+  document.addEventListener("visibilitychange", () => {
+    if (document.visibilityState === "hidden" && big()) flush();
+  });
 
 /**
  * Keep one part in step with the file: load it when the page opens (or upload this browser's copy
