@@ -29,7 +29,8 @@
     "./protocol": "./src/protocol.ts",
     "./release": "./src/release.ts",
     "./release-notes": "./src/release-notes.ts",
-    "./update": "./src/update.ts"
+    "./update": "./src/update.ts",
+    "./next-steps": "./src/next-steps.ts"
   },
   "dependencies": {
     "yaml": "^2.8.0",

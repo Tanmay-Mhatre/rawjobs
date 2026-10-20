@@ -4,6 +4,7 @@ import { cmdCompanies } from "./commands/companies";
 import { cmdRun } from "./commands/run";
 import { cmdAlerts } from "./commands/alerts";
 import { cmdSchedule } from "./commands/schedule";
+import { cmdToday } from "./commands/today";
 import { cmdDirectory } from "./commands/directory";
 import { cmdSetup } from "./commands/setup";
 import { cmdDetect, cmdValidate } from "./commands/check";
@@ -19,6 +20,8 @@ Usage:
   rawjobs scan [options]      Sync the directory, fetch your companies (and more, by scope) live, score them
   rawjobs schedule <status|install|remove>   Scan on a schedule on this computer (--time 08:00 [--time 20:00] [--scope mine|yours|all], default mine)
   rawjobs alerts telegram <status|token|connect|test|on|off|forget>   Telegram alerts
+  rawjobs today [--notify] [--test]   What's due in your Pipeline today (--notify: send it to Telegram, once a day)
+  rawjobs today <status|install|remove> [--time 09:00]   Send it every morning at a time you pick
   rawjobs detect <url>...     Turn careers URLs into config lines
   rawjobs validate            Check your config file
   rawjobs setup <status|save|check>   Used by the dashboard's setup wizard (JSON in/out)
@@ -73,6 +76,8 @@ async function main(argv: string[]): Promise<number> {
       return cmdAlerts(rest);
     case "schedule":
       return cmdSchedule(rest);
+    case "today":
+      return cmdToday(rest);
     case "serve":
       // Loaded only when asked for, so other commands start as fast as before.
       return (await import("@rawjobs/server/serve")).serve(rest);

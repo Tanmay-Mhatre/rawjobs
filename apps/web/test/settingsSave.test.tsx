@@ -10,6 +10,7 @@ vi.mock("../src/lib/setup", async (orig) => ({ ...(await orig<typeof import("../
 // The cards that talk to the local server on their own aren't what this is about.
 vi.mock("../src/components/ScheduledScans", () => ({ ScheduledScans: () => null }));
 vi.mock("../src/components/TelegramAlerts", () => ({ TelegramAlerts: () => null }));
+vi.mock("../src/components/DailySummary", () => ({ DailySummary: () => null }));
 vi.mock("../src/components/Updates", () => ({ AboutRawJobs: () => null, UpdatesSettings: () => null, UpdateTelegramSetting: () => null }));
 vi.mock("../src/components/WhatsNew", () => ({ ReleaseNotes: () => null }));
 vi.mock("../src/lib/update", () => ({ useUpdateStatus: () => ({ status: null, setStatus: () => {} }) }));
