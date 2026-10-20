@@ -57,7 +57,7 @@ const andList = (xs) => (xs.length < 2 ? xs.join("") : `${xs.slice(0, -1).join("
 
 // ---------- numbers from the directory's releases ----------
 // Last known values, used only when GitHub can't be reached (and the build log says so).
-const FALLBACK = { companies: 47737, liveBoards: 37004, indexed: 16997, builtAt: "2026-10-11T12:22:00Z", feedJobs: 1338418, feedAt: "2026-10-10T10:42:06Z" };
+const FALLBACK = { companies: 210606, liveBoards: 153939, indexed: 27713, builtAt: "2026-10-19T19:25:29Z", feedJobs: 1673409, feedAt: "2026-10-20T05:35:08Z" };
 
 async function getJson(url) {
   const res = await fetch(url, { redirect: "follow", signal: AbortSignal.timeout(15_000) });
