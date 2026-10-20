@@ -29,6 +29,8 @@ import { save } from "../lib/storage";
 import { ReleaseNotes } from "./WhatsNew";
 import { parseSettingsHash, SETTINGS_GROUPS, SETTINGS_PAGES, SETTINGS_SECTIONS, settingsHash, type SettingsPageId } from "./settings/registry";
 import { searchSettings, type SettingsHit } from "./settings/search";
+import { ConfirmDialog } from "./settings/ConfirmDialog";
+import { NetworkSection } from "./settings/NetworkSection";
 import { SettingsSearchBox, SettingsSearchResults, useSearchShortcut } from "./settings/SettingsSearch";
 
 type Props = {
@@ -143,6 +145,7 @@ export function Settings({
     schedule: canRunLocally,
     alerts: canRunLocally,
     daily: canRunLocally,
+    network: canRunLocally,
     reset: !!onStartOver,
     version: canRunLocally,
     shortcut: canRunLocally && !!updates.status?.installed && !!updates.status.about?.shortcuts,
@@ -480,6 +483,7 @@ export function Settings({
           "data",
           <>
             <TrackingData user={user} prefs={prefs} onImport={onImport} />
+            {shown.network && <NetworkSection />}
             <Section id="sharing" title="Sharing" hint="Help everyone find more companies. On by default; turn it off here. Saved right away.">
               <div className="space-y-2">
                 <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
@@ -511,7 +515,7 @@ export function Settings({
                 <Section
                   id="reset"
                   title="Start setup over"
-                  hint="Clears your setup answers: profile, roles, places, keywords and companies. Your tracked jobs, notes, saved views, resume and Telegram alerts stay."
+                  hint="Clears your setup answers: profile, roles, places, keywords and companies, and deletes your imported LinkedIn connections. Your tracked jobs, notes, saved views, resume and Telegram alerts stay."
                 >
                   <StartOver onStartOver={onStartOver} />
                 </Section>
@@ -993,52 +997,17 @@ function TrackingData({ user, prefs, onImport }: { user: UserState; prefs: Prefs
 
 export function StartOver({ onStartOver }: { onStartOver: () => Promise<string | null> }) {
   const [asking, setAsking] = useState(false);
-  const [working, setWorking] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-
-  const confirm = async () => {
-    setWorking(true);
-    setError(null);
-    const err = await onStartOver();
-    setWorking(false);
-    if (err) setError(err);
-    else setAsking(false);
-  };
-
   return (
     <>
       <Button variant="danger" onClick={() => setAsking(true)}>
         <RotateCcw className="size-4" /> Start setup over
       </Button>
-      <Dialog open={asking} onClose={() => !working && setAsking(false)} labelledBy="start-over-title" initialFocus="[data-autofocus]">
-        <Card className="p-5 shadow-l3 sm:p-6">
-          <div className="flex items-start gap-3">
-            <h2 id="start-over-title" className="min-w-0 flex-1 type-subheading font-semibold">
-              Start setup over?
-            </h2>
-            <IconButton label="Close" className="-mr-2 -mt-1" onClick={() => setAsking(false)} disabled={working}>
-              <X className="size-4" />
-            </IconButton>
-          </div>
-          <p className="mt-1 type-small text-muted">
-            Your profile, roles, places, keywords and companies are cleared and setup opens from the start. Tracked jobs, notes, your resume and Telegram alerts stay. A copy of your old setup is kept
-            in <span className="font-mono">rawjobs.config.local.backup.yaml</span>.
-          </p>
-          {error && (
-            <p role="alert" className="mt-2 type-small text-danger-text">
-              {error}
-            </p>
-          )}
-          <div className="mt-5 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
-            <Button variant="ghost" onClick={() => setAsking(false)} disabled={working} data-autofocus>
-              Cancel
-            </Button>
-            <Button variant="danger" onClick={() => void confirm()} disabled={working}>
-              {working ? "Clearing…" : "Clear setup"}
-            </Button>
-          </div>
-        </Card>
-      </Dialog>
+      <ConfirmDialog id="start-over" open={asking} onClose={() => setAsking(false)} title="Start setup over?" confirmLabel="Clear setup" workingLabel="Clearing…" onConfirm={onStartOver}>
+        <p>
+          Your profile, roles, places, keywords and companies are cleared and setup opens from the start. Your imported LinkedIn connections are deleted too. Tracked jobs, notes, your resume and
+          Telegram alerts stay. A copy of your old setup is kept in <span className="font-mono">rawjobs.config.local.backup.yaml</span>.
+        </p>
+      </ConfirmDialog>
     </>
   );
 }

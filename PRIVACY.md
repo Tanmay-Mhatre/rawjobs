@@ -12,8 +12,20 @@ everything the app sends over the network, and to whom.
 | Telegram bot token and chat id | `profile/secrets.json` (gitignored), or the `TELEGRAM_BOT_TOKEN` / `TELEGRAM_CHAT_ID` environment variables |
 | Run history, jobs found, scan results | `data/`, gitignored |
 | Statuses, notes, saved and applied jobs, Radar views and hidden companies | `profile/tracking.json` (gitignored), with a copy in your browser's storage (export them in Settings for a backup) |
+| Your LinkedIn connections (names, profile links, company, position, date connected), your own positions and schools, and who you marked as a close contact, from the export you download | `profile/network.json` (gitignored). Delete it in Settings → Data & privacy → LinkedIn connections. |
 
 Scoring and filtering happen on your computer. Nothing above is uploaded by the app.
+
+### Your LinkedIn connections (only if you import them)
+You download your own data export from LinkedIn and choose the file in RawJobs. Your browser opens
+the ZIP and reads only Connections.csv, Positions.csv and Education.csv. It never opens your
+messages, invitations or anything else in it, and RawJobs never keeps email addresses. Nothing is
+sent to LinkedIn or anyone else.
+
+Your connections file (`network.json`) isn't backed up or synced. People you add to a job's
+contacts are part of your tracking data, so they're in its browser copy, its backups and its
+exports. Deleting your connections in Settings, or starting setup over, removes `network.json`
+and the files next to it.
 
 ## What the app sends, and to whom
 
@@ -106,6 +118,12 @@ the "update ready" message goes from your computer to your own bot, like scan al
 checks off in Settings → About → Updates. A copy run from the source code (`pnpm start`) never
 checks.
 
+### Links you open
+On each job, the search links under "Talk to someone who works here" open LinkedIn or Blind in
+your browser. Those sites see what you searched for (the company's name, a role, a school or a
+past employer) like any visit, and your IP address. RawJobs itself never contacts these sites, and
+the dashboard sends no referrer, so they don't see which RawJobs page you came from.
+
 ### No telemetry
 The app has no analytics, no crash reporting and no usage tracking. The web dashboard loads no
 outside scripts or fonts.
@@ -118,7 +136,7 @@ no personal data, counts of visits only. The app itself has none (see "No teleme
 ## Turning sharing off
 
 Either:
-- **Settings → Your data → Sharing**: switch off "Share companies I add or update by link"; or
+- **Settings → Data & privacy → Sharing**: switch off "Share companies I add or update by link"; or
 - in your config file:
 
   ```yaml

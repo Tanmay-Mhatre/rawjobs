@@ -42,6 +42,7 @@ import { ReasonPicker, useNotForMe } from "./NotForMe";
 import { Button, buttonClass, IconButton, Menu, ScoreBadge, scoreBandOf, ScoreBreakdown, scoreParts, Tooltip } from "./primitives";
 import { toast } from "./Toast";
 import { JobTracking } from "./pipeline/JobTracking";
+import { TalkToSomeone } from "./referral/TalkToSomeone";
 import { OfferFields } from "./TrackedJob";
 import { cx, Select } from "./ui";
 
@@ -383,6 +384,8 @@ export function JobDetail(p: JobDetailProps) {
           {!job.estimated && <KeyFacts facts={facts} />}
 
           <WhyItMatches job={job} profile={profile} yours={!!p.yours} />
+
+          <TalkToSomeone job={job} entry={entry} profile={profile} />
 
           {job.estimated && <NotCheckedYet indexGeneratedAt={p.indexGeneratedAt} onCheck={p.onCheck} />}
 
