@@ -1,4 +1,5 @@
-import { type Entry, type Status, stageSince, type UserState } from "./userState";
+import type { WeeklyPlan } from "./prefs";
+import { type Activity, type Entry, type Status, dayAfter, stageSince, today, type UserState } from "./userState";
 
 const DAY = 864e5;
 /** Steps that mean the company answered: an interview, an offer, or a rejection (closed as Rejected). */
@@ -15,27 +16,18 @@ function appliedAt(e: Entry): string | undefined {
   return first?.at ?? (e.status === "interviewing" || e.status === "offer" ? e.updatedAt : undefined);
 }
 
-/** When the company first answered, if it did. */
-const repliedAt = (e: Entry): string | undefined => (e.history ?? []).find((x) => replied(e, x.status))?.at ?? (replied(e, e.status ?? null) ? stageSince(e) : undefined);
+/** The job is, or once was, at one of these stages. */
+const reached = (e: Entry, ...s: Status[]) => s.includes(e.status as Status) || (e.history ?? []).some((x) => s.includes(x.status as Status));
+/** The company answered: a step that means a reply, or a message back. */
+const heardBack = (e: Entry) =>
+  replied(e, e.status ?? null) ||
+  (e.history ?? []).some((x) => replied(e, x.status)) ||
+  (e.activities ?? []).some((a) => a.dir === "received" && a.channel !== "note") ||
+  (e.interviews ?? []).length > 0 ||
+  Boolean(e.offer);
 
-export type Band = { label: string; applied: number; replied: number };
-
-export type PipelineStats = {
-  /** Applied to in the last 30 days. */
-  applied30: number;
-  /** Applied to in the current week (from Monday). */
-  appliedThisWeek: number;
-  /** Ever applied to. */
-  applied: number;
-  /** Of those, how many got an answer (interview, offer or rejection). */
-  replied: number;
-  /** Closed as No response: ghosted. */
-  ghosted: number;
-  /** Median days from applying to the first answer, when there's at least one. */
-  medianDaysToReply?: number;
-  /** Reply rate by fit score, for jobs RawJobs scored (not ones added by hand). */
-  bands: Band[];
-};
+/** Sent touches that count as outreach when they aren't follow-ups (not notes or in-person meetings). */
+const OUTREACH: Activity["channel"][] = ["email", "linkedin", "whatsapp", "call", "referral"];
 
 /** Monday 00:00 local time of `now`'s week. */
 export function weekStart(now = new Date()): Date {
@@ -45,49 +37,122 @@ export function weekStart(now = new Date()): Date {
   return d;
 }
 
-export function pipelineStats(state: UserState, now = new Date()): PipelineStats {
-  const monday = weekStart(now).getTime();
-  const bands: Band[] = [
-    { label: "Score 80+", applied: 0, replied: 0 },
-    { label: "Score 65–79", applied: 0, replied: 0 },
-    { label: "Below 65", applied: 0, replied: 0 },
-  ];
-  let applied = 0;
-  let applied30 = 0;
-  let appliedThisWeek = 0;
-  let answered = 0;
-  let ghosted = 0;
-  const waits: number[] = [];
-  for (const [id, e] of Object.entries(state)) {
+/** `d` moved by `days` days, local time (safe across clock changes). */
+const plusDays = (d: Date, days: number) => {
+  const x = new Date(d);
+  x.setDate(x.getDate() + days);
+  return x;
+};
+
+export type WeekBar = { start: Date; applied: number };
+
+export type Funnel = { applied: number; heardBack: number; interviewed: number; offer: number; noResponse: number };
+
+export type PipelineStats = {
+  /** Monday and Sunday of this week, local time. */
+  week: { start: Date; end: Date };
+  /** Applications this week. */
+  applied: number;
+  /** Touches sent this week from a follow-up or thank-you task. */
+  followUps: number;
+  /** Other touches sent this week: email, LinkedIn, WhatsApp, call or referral. */
+  outreach: number;
+  /** Interviews dated this week. */
+  interviewsThisWeek: number;
+  /** Interviews from today on, on jobs that are still open, and the first of them. */
+  upcoming: number;
+  next?: { on: string; time?: string };
+  /** Applications per week, oldest first; the last is this week. */
+  weeks: WeekBar[];
+  /** Weeks in a row the applications plan was met. This week adds once met and never breaks the run. */
+  streak: number;
+  /** Applications in the last 30 days and what became of them. */
+  funnel: Funnel;
+  /** Ever applied to. */
+  everApplied: number;
+};
+
+/** The funnel shows from this many applications in 30 days. */
+export const FUNNEL_MIN = 5;
+/** The streak shows from this many weeks. */
+export const STREAK_MIN = 2;
+/** How far back a streak is counted. */
+const STREAK_WEEKS = 104;
+
+/** This week's activity against your plan, the last `weeksBack` weeks, and where the last 30 days of applications went. */
+export function pipelineStats(state: UserState, plan: WeeklyPlan = {}, now = new Date(), weeksBack = 8): PipelineStats {
+  const monday = weekStart(now);
+  const nextMonday = plusDays(monday, 7).getTime();
+  const span = Math.max(weeksBack, STREAK_WEEKS);
+  const starts = Array.from({ length: span }, (_, i) => plusDays(monday, (i - span + 1) * 7).getTime());
+  const perWeek = new Array<number>(span).fill(0);
+  const weekOf = (t: number) => {
+    if (!(t < nextMonday) || t < (starts[0] as number)) return -1;
+    let i = span - 1;
+    while (i > 0 && t < (starts[i] as number)) i--;
+    return i;
+  };
+  const inWeek = (iso: string) => {
+    const t = Date.parse(iso);
+    return t >= monday.getTime() && t < nextMonday;
+  };
+  const day = today(now);
+  const firstDay = dayAfter(monday.toISOString(), 0);
+  const lastDay = dayAfter(`${firstDay}T12:00:00`, 6);
+  const funnel: Funnel = { applied: 0, heardBack: 0, interviewed: 0, offer: 0, noResponse: 0 };
+  let followUps = 0;
+  let outreach = 0;
+  let interviewsThisWeek = 0;
+  let upcoming = 0;
+  let everApplied = 0;
+  let next: PipelineStats["next"];
+  for (const e of Object.values(state)) {
     const at = appliedAt(e);
-    if (!at) continue;
-    applied++;
-    const t = Date.parse(at);
-    if (now.getTime() - t <= 30 * DAY) applied30++;
-    if (t >= monday) appliedThisWeek++;
-    const reply = repliedAt(e);
-    if (reply) {
-      answered++;
-      waits.push(Math.max(0, (Date.parse(reply) - t) / DAY));
+    if (at) {
+      everApplied++;
+      const t = Date.parse(at);
+      const w = weekOf(t);
+      if (w >= 0) perWeek[w] = (perWeek[w] ?? 0) + 1;
+      if (now.getTime() - t <= 30 * DAY) {
+        funnel.applied++;
+        const heard = heardBack(e);
+        if (heard) funnel.heardBack++;
+        if (reached(e, "interviewing", "offer") || (e.interviews ?? []).length > 0) funnel.interviewed++;
+        if (reached(e, "offer") || e.offer) funnel.offer++;
+        if (!heard && e.status === "rejected" && e.closedAs === "no-response") funnel.noResponse++;
+      }
     }
-    if (e.status === "rejected" && e.closedAs === "no-response") ghosted++;
-    if (!id.startsWith("manual:")) {
-      const band = bands[e.snapshot.score >= 80 ? 0 : e.snapshot.score >= 65 ? 1 : 2] as Band;
-      band.applied++;
-      if (reply) band.replied++;
+    for (const a of e.activities ?? []) {
+      if (a.dir !== "sent" || a.channel === "note" || !inWeek(a.at)) continue;
+      if (a.followUp) followUps++;
+      else if (OUTREACH.includes(a.channel)) outreach++;
+    }
+    const open = e.status !== "rejected" && e.status !== "dismissed";
+    for (const iv of e.interviews ?? []) {
+      if (iv.on >= firstDay && iv.on <= lastDay) interviewsThisWeek++;
+      if (!open || iv.on < day) continue;
+      upcoming++;
+      if (!next || iv.on < next.on || (iv.on === next.on && (iv.time ?? "99") < (next.time ?? "99"))) next = { on: iv.on, ...(iv.time ? { time: iv.time } : {}) };
     }
   }
-  waits.sort((a, b) => a - b);
-  const w = (i: number) => waits[i] ?? 0;
-  const mid = waits.length ? (waits.length % 2 ? w((waits.length - 1) / 2) : (w(waits.length / 2 - 1) + w(waits.length / 2)) / 2) : undefined;
+  const goal = plan.applications;
+  let streak = 0;
+  if (goal) {
+    if ((perWeek[span - 1] as number) >= goal) streak++;
+    for (let i = span - 2; i >= 0 && (perWeek[i] as number) >= goal; i--) streak++;
+  }
   return {
-    applied30,
-    appliedThisWeek,
-    applied,
-    replied: answered,
-    ghosted,
-    ...(mid !== undefined ? { medianDaysToReply: Math.round(mid) } : {}),
-    bands: bands.filter((b) => b.applied > 0),
+    week: { start: monday, end: plusDays(monday, 6) },
+    applied: perWeek[span - 1] as number,
+    followUps,
+    outreach,
+    interviewsThisWeek,
+    upcoming,
+    ...(next ? { next } : {}),
+    weeks: starts.slice(span - weeksBack).map((s, i) => ({ start: new Date(s), applied: perWeek[span - weeksBack + i] as number })),
+    streak,
+    funnel,
+    everApplied,
   };
 }
 
