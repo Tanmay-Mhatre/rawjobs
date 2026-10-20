@@ -282,6 +282,10 @@ console.log(JSON.stringify({ type: "done", scope: args[args.indexOf("--scope") +
       ["POST", "/api/schedule", ["schedule", "install", "--stdin", "--data", dataDir], '{"times":["08:00"]}'],
       ["DELETE", "/api/schedule", ["schedule", "remove", "--data", dataDir]],
       ["POST", "/api/schedule/run", ["schedule", "run", "--data", dataDir]],
+      ["GET", "/api/daily-summary", ["today", "status", "--data", dataDir]],
+      ["POST", "/api/daily-summary", ["today", "install", "--stdin", "--data", dataDir], '{"time":"09:00"}'],
+      ["DELETE", "/api/daily-summary", ["today", "remove", "--data", dataDir]],
+      ["POST", "/api/daily-summary/test", ["today", "--test", "--json", "--data", dataDir]],
       ["POST", "/api/check", ["run", "--progress", "ndjson", "--data", dataDir, "--check", "lever:acme", "--check", "ashby:beta"], '{"keys":["lever:acme","ashby:beta","no spaces allowed",7]}'],
     ];
     for (const [method, path, args, body] of routes) {

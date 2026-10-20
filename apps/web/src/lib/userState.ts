@@ -1,4 +1,5 @@
 import { fitFeatures } from "@rawjobs/core/learn";
+import { dayAfter, isActive, isDay, PIPELINE, QUIET_DAYS, STATUS_LABEL, type Status, stageSince, today } from "@rawjobs/core/next-steps";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { Job } from "./data";
 import type { Reason } from "./notForMe";
@@ -7,18 +8,8 @@ import { linkedInUrl } from "./contactLinks";
 import { load, save, saveFailed } from "./storage";
 import { useSavedOnDisk } from "./tracking";
 
-export const PIPELINE = ["saved", "applied", "interviewing", "offer", "rejected"] as const;
-export type PipelineStatus = (typeof PIPELINE)[number];
-export type Status = PipelineStatus | "dismissed";
-
-export const STATUS_LABEL: Record<Status, string> = {
-  saved: "Saved",
-  applied: "Applied",
-  interviewing: "Interviewing",
-  offer: "Offer",
-  rejected: "Closed",
-  dismissed: "Not interested",
-};
+// The stages and day helpers are shared with the CLI's daily summary (@rawjobs/core/next-steps).
+export { ACTIVE, dayAfter, isActive, isDay, PIPELINE, type PipelineStatus, QUIET_DAYS, STATUS_LABEL, type Status, stageSince, today } from "@rawjobs/core/next-steps";
 
 /** How a job you're out of the running for ended (status "rejected", shown as Closed). */
 export const CLOSED_AS = { rejected: "Rejected", withdrew: "I withdrew", "no-response": "No response" } as const;
@@ -26,13 +17,7 @@ export type ClosedAs = keyof typeof CLOSED_AS;
 
 /** Days after you apply that RawJobs reminds you to follow up. */
 export const FOLLOW_UP_DAYS = 7;
-/** Days applied with no reply after which RawJobs suggests closing it as No response (likely ghosted). */
-export const QUIET_DAYS = 21;
 const HISTORY_MAX = 20;
-
-/** Stages with a next step: a follow-up date is kept in each. */
-export const ACTIVE: readonly Status[] = ["saved", "applied", "interviewing", "offer"];
-export const isActive = (s: Status | undefined) => !!s && ACTIVE.includes(s);
 
 /** One interview round: its day (YYYY-MM-DD), what it is ("Technical", "Final"), its time (HH:MM) and who with. */
 export type Interview = { on: string; what: string; time?: string; contactId?: string };
@@ -169,18 +154,6 @@ export type EntryPatch = Partial<Pick<Entry, "status" | "note" | "reason" | "clo
   /** Move the date you reached the current status (YYYY-MM-DD), e.g. you applied before tracking it. */
   since?: string;
 };
-
-/** "2026-10-22": a date `days` after `iso`, in local time. For a YYYY-MM-DD day, pass `${day}T12:00:00`. */
-export function dayAfter(iso: string, days: number): string {
-  const d = new Date(iso);
-  d.setDate(d.getDate() + days);
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
-}
-
-/** Today as YYYY-MM-DD, in local time. */
-export const today = (now = new Date()) => dayAfter(now.toISOString(), 0);
-
-export const isDay = (v: unknown): v is string => typeof v === "string" && /^\d{4}-\d{2}-\d{2}$/.test(v);
 
 /** The follow-up date has come (an active stage, and the date is today or past). */
 export const followUpDue = (e: Entry | undefined, now = new Date()) => !!e?.followUp && isActive(e.status) && e.followUp <= today(now);
@@ -361,12 +334,6 @@ export function quickStatus(prev: Status | undefined, s: Status): Status | undef
   if (!prev || prev === "dismissed" || s === "dismissed") return s;
   if (prev === "rejected") return s === "saved" ? null : s;
   return RANK[s] > RANK[prev] ? s : null;
-}
-
-/** When the job reached its current status: the last history step there, else its last change. */
-export function stageSince(e: Entry): string {
-  const h = e.history?.findLast((x) => x.status === e.status);
-  return h?.at ?? e.updatedAt;
 }
 
 /** Both lists, one item per id; for an id in both, the newer list's item wins (in the older one's place). */

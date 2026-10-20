@@ -77,7 +77,7 @@ export async function notifyWhenDone(): Promise<boolean> {
   }
 }
 
-/** Ask the running scan to stop after the companies in progress; it can be resumed later. */
+/** Ask the running scan to stop (within seconds); it can be resumed later. */
 export async function stopScan(): Promise<void> {
   await fetch("/api/run/stop", { method: "POST" }).catch(() => {});
 }

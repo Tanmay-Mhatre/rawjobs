@@ -44,3 +44,22 @@ export const scheduleStatus = () => call<ScheduleStatus>("/api/schedule");
 export const saveSchedule = (times: string[], scope: ScanScope) => call<ScheduleStatus>("/api/schedule", { method: "POST", body: JSON.stringify({ times, scope }) });
 export const removeSchedule = () => call<ScheduleStatus>("/api/schedule", { method: "DELETE" });
 export const runScheduleNow = () => call<ScheduleStatus>("/api/schedule/run", { method: "POST" });
+
+/** "Today in your Pipeline" each morning on Telegram: its scheduled task, and the last day it ran. */
+export type DailySummaryStatus = {
+  ok: boolean;
+  error?: string;
+  installed: boolean;
+  supported: boolean;
+  platform: string;
+  settings?: { time: string };
+  nextRun?: string;
+  problem?: string;
+  last: { day: string; at: string; result: "sent" | "nothing-due" } | null;
+  /** Telegram is connected (a bot token and a chat). */
+  telegram: boolean;
+};
+export const dailySummaryStatus = () => call<DailySummaryStatus>("/api/daily-summary");
+export const saveDailySummary = (time: string) => call<DailySummaryStatus>("/api/daily-summary", { method: "POST", body: JSON.stringify({ time }) });
+export const removeDailySummary = () => call<DailySummaryStatus>("/api/daily-summary", { method: "DELETE" });
+export const testDailySummary = () => call<{ ok: boolean; error?: string }>("/api/daily-summary/test", { method: "POST" });
