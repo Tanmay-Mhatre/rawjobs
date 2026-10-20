@@ -1,8 +1,8 @@
 import { displayName } from "@rawjobs/core/display-name";
-import { ArrowRight, CalendarClock, ChevronDown, History, Plus, Radar, X } from "lucide-react";
+import { ArrowRight, CalendarClock, ChevronDown, History, Plus, X } from "lucide-react";
 import { type DragEvent, type KeyboardEvent, useEffect, useMemo, useRef, useState } from "react";
 import type { Job } from "../lib/data";
-import { cleanLocation, timeAgo } from "../lib/format";
+import { timeAgo } from "../lib/format";
 import { type CardState, cardState, closeSuggestion, groupTasks, lastActivity, nextSteps, type Task } from "../lib/nextSteps";
 import type { WeeklyPlan } from "../lib/prefs";
 import { useMedia } from "../lib/useMedia";
@@ -45,19 +45,12 @@ type Props = {
   /** Radar not set up yet: the empty state points to setup instead of the Radar. */
   onSetup?: () => void;
   goRadar: () => void;
-  /** The To review column (lib/toReview); left out while the Radar isn't set up. */
-  review?: { jobs: Job[]; total: number };
-  /** Save, or Not interested (which asks why and hides it on the Radar). */
-  onReview?: (job: Job, status: "saved" | "dismissed") => void;
   /** Tests pin the clock; the app moves it on every hour. */
   now?: Date;
 };
 
-type Column = PipelineStatus | "review";
-const COLUMN_LABEL: Record<Column, string> = { review: "To review", ...STATUS_LABEL };
 /** Closed shows this many cards, then "Show N more". */
 const CLOSED_SHOWN = 3;
-const REVIEW_DRAG = "review:";
 
 const shortDay = (day: string) => new Date(`${day}T12:00:00`).toLocaleDateString(undefined, { month: "short", day: "numeric" });
 
@@ -137,7 +130,7 @@ export function closedHint(items: Item[]): string {
   return [...counts].map(([label, n]) => `${n} ${label}`).join(", ");
 }
 
-export function Pipeline({ user, jobsById, onOpen, onPatch, onAdd, weeklyPlan, onWeeklyPlan, onSetup, goRadar, review, onReview, now: fixedNow }: Props) {
+export function Pipeline({ user, jobsById, onOpen, onPatch, onAdd, weeklyPlan, onWeeklyPlan, onSetup, goRadar, now: fixedNow }: Props) {
   const hourly = useHourlyNow();
   const nowMs = fixedNow?.getTime() ?? hourly;
   const now = useMemo(() => new Date(nowMs), [nowMs]);
@@ -162,11 +155,9 @@ export function Pipeline({ user, jobsById, onOpen, onPatch, onAdd, weeklyPlan, o
     if (status === "rejected" && entry.status !== "rejected") setClosing({ id, entry });
     else onPatch(id, entry, { status });
   };
-  const [dragOver, setDragOver] = useState<Column | null>(null);
-  /** A To review card being dragged: only Saved takes it. */
-  const [draggingReview, setDraggingReview] = useState(false);
+  const [dragOver, setDragOver] = useState<PipelineStatus | null>(null);
   /** Phones show one column at a time, picked from the status chips. */
-  const [mobileCol, setMobileCol] = useState<Column | null>(null);
+  const [mobileCol, setMobileCol] = useState<PipelineStatus | null>(null);
   /** What the last keyboard move or log did, for screen readers (design/components/Pipeline: a polite live region). */
   const [announce, setAnnounce] = useState("");
   /** The card just moved with [ or ]: it re-renders in its new column, then gets focus back. */
@@ -180,9 +171,8 @@ export function Pipeline({ user, jobsById, onOpen, onPatch, onAdd, weeklyPlan, o
     card?.querySelector<HTMLElement>("[data-card-title]")?.focus();
   });
   const entries = Object.entries(user).filter(([, e]) => e.status && e.status !== "dismissed");
-  const reviewJobs = review?.jobs ?? [];
 
-  if (entries.length === 0 && reviewJobs.length === 0) {
+  if (entries.length === 0) {
     return (
       <>
         {addDialog}
@@ -224,8 +214,7 @@ export function Pipeline({ user, jobsById, onOpen, onPatch, onAdd, weeklyPlan, o
       now,
     ),
   }));
-  const showReview = !!review;
-  const chips: { col: Column; count: number }[] = [...(showReview ? [{ col: "review" as const, count: review.total }] : []), ...columns.map((c) => ({ col: c.col, count: c.items.length }))];
+  const chips = columns.map((c) => ({ col: c.col, count: c.items.length }));
   // Default to the first column with cards in it.
   const shown = mobileCol ?? chips.find((c) => c.count)?.col ?? PIPELINE[0];
 
@@ -251,7 +240,6 @@ export function Pipeline({ user, jobsById, onOpen, onPatch, onAdd, weeklyPlan, o
 
   const dropTarget = (col: PipelineStatus) => ({
     onDragOver: (e: DragEvent) => {
-      if (draggingReview && col !== "saved") return;
       e.preventDefault();
       setDragOver(col);
     },
@@ -259,13 +247,7 @@ export function Pipeline({ user, jobsById, onOpen, onPatch, onAdd, weeklyPlan, o
     onDrop: (e: DragEvent) => {
       e.preventDefault();
       setDragOver(null);
-      setDraggingReview(false);
       const data = e.dataTransfer.getData("text/plain");
-      if (data.startsWith(REVIEW_DRAG)) {
-        const job = reviewJobs.find((j) => j.id === data.slice(REVIEW_DRAG.length));
-        if (job && col === "saved") onReview?.(job, "saved");
-        return;
-      }
       const entry = user[data];
       if (entry && entry.status !== col) onMove(data, entry, col);
     },
@@ -355,35 +337,13 @@ export function Pipeline({ user, jobsById, onOpen, onPatch, onAdd, weeklyPlan, o
         <ChipGroup label="Pipeline column" className="w-max pr-4">
           {chips.map(({ col, count }) => (
             <Chip key={col} pressed={shown === col} onClick={() => setMobileCol(col)} count={count} className="whitespace-nowrap">
-              {COLUMN_LABEL[col]}
+              {STATUS_LABEL[col]}
             </Chip>
           ))}
         </ChipGroup>
       </div>
       <div className="md:overflow-x-auto">
-        <div className={cx("grid gap-3", showReview ? "md:grid-cols-[repeat(6,minmax(220px,1fr))]" : "md:grid-cols-[repeat(5,minmax(220px,1fr))]")}>
-          {showReview && (
-            <section aria-labelledby="col-review" className={cx("min-h-64 flex-col rounded-md border border-dashed border-line p-2 md:flex", shown === "review" ? "flex" : "hidden")}>
-              <h2 id="col-review" className="flex items-center justify-between px-1.5 py-1 type-small font-semibold">
-                To review <span className="tabular type-meta font-medium text-muted">{review.total}</span>
-              </h2>
-              <p className="px-1.5 type-meta text-muted">New strong matches waiting for you</p>
-              {reviewJobs.length === 0 ? (
-                <p className="px-1.5 py-3 type-small text-muted">No new strong matches.</p>
-              ) : (
-                <ul className="mt-2 flex flex-col gap-2">
-                  {reviewJobs.map((job) => (
-                    <ReviewCard key={job.id} job={job} now={nowMs} onOpen={onOpen} onReview={onReview} onDrag={setDraggingReview} />
-                  ))}
-                </ul>
-              )}
-              {review.total > reviewJobs.length && (
-                <button type="button" className="mt-2 px-1.5 text-left type-small font-medium text-ink underline" onClick={goRadar}>
-                  See all {review.total} on the Radar
-                </button>
-              )}
-            </section>
-          )}
+        <div className="grid gap-3 md:grid-cols-[repeat(5,minmax(220px,1fr))]">
           {columns.map(({ col, items }) => {
             const closed = col === "rejected";
             const visible = closed && !moreClosed ? items.slice(0, CLOSED_SHOWN) : items;
@@ -539,54 +499,6 @@ function BoardCard({
         </span>
         {/* Time in this stage, not since the last note edit. */}
         <span className="shrink-0 type-meta text-muted">{timeAgo(stageSince(e), now.getTime())}</span>
-      </div>
-    </li>
-  );
-}
-
-/** A To review card: a strong match you haven't tracked yet. Save, or Not interested. */
-function ReviewCard({
-  job,
-  now,
-  onOpen,
-  onReview,
-  onDrag,
-}: {
-  job: Job;
-  now: number;
-  onOpen: (job: Job) => void;
-  onReview?: (job: Job, status: "saved" | "dismissed") => void;
-  onDrag: (on: boolean) => void;
-}) {
-  const place = cleanLocation(job.location);
-  return (
-    <li
-      draggable
-      onDragStart={(ev) => {
-        ev.dataTransfer.setData("text/plain", `${REVIEW_DRAG}${job.id}`);
-        onDrag(true);
-      }}
-      onDragEnd={() => onDrag(false)}
-      className="rounded-md border border-line bg-raised p-3 shadow-l1"
-    >
-      <button type="button" className="line-clamp-2 text-left type-small font-semibold leading-5 hover:underline" onClick={() => onOpen(job)}>
-        {job.title}
-      </button>
-      <p className="truncate type-small text-muted">
-        {displayName(job.company)}
-        {place ? ` · ${place}` : ""}
-      </p>
-      <p className="mt-2 flex items-center gap-1.5 type-meta text-muted">
-        <Radar className="size-3.5 shrink-0" aria-hidden />
-        <span className="truncate">Strong match · found {timeAgo(job.firstSeen, now)}</span>
-      </p>
-      <div className="mt-2 flex flex-wrap gap-2">
-        <Button size="sm" onClick={() => onReview?.(job, "saved")}>
-          Save
-        </Button>
-        <Button size="sm" onClick={() => onReview?.(job, "dismissed")}>
-          Not interested
-        </Button>
       </div>
     </li>
   );
