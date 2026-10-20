@@ -3,7 +3,24 @@ import { type ClipboardEvent, type FormEvent, type ReactNode, useId, useState } 
 import { copyText } from "../../lib/clipboard";
 import { contactLinks, LINK_REL, linkedInUrl } from "../../lib/contactLinks";
 import { timeAgo } from "../../lib/format";
-import { CAPS, type Contact, CONTACT_ROLES, type ContactRole, type Entry, type EntryPatch, newId, ROLE_LABEL, toContact } from "../../lib/userState";
+import {
+  CAPS,
+  type Contact,
+  CONTACT_ROLES,
+  type ContactRole,
+  type Entry,
+  type EntryPatch,
+  newId,
+  OUTREACH_LABEL,
+  OUTREACH_STAGES,
+  OUTREACH_VIA,
+  type Outreach,
+  type OutreachStage,
+  type OutreachVia,
+  ROLE_LABEL,
+  toContact,
+  VIA_LABEL,
+} from "../../lib/userState";
 import { buttonClass } from "../primitives";
 import { toast } from "../Toast";
 import { Button, cx, Select } from "../ui";
@@ -34,6 +51,11 @@ export function PeopleTab({ jobId, entry, onUpdate, adding, onAdding }: { jobId:
     if (people && contacts.some((x) => x.id === c.id)) people.updateContact(c);
     else onUpdate({ contacts: contacts.some((x) => x.id === c.id) ? contacts.map((x) => (x.id === c.id ? c : x)) : [...contacts, c] });
   };
+  /** The one place a person's referral stage changes; undefined stops tracking it. */
+  const onStage = (cid: string, o: Outreach | undefined) => {
+    const { [cid]: _, ...rest } = entry.outreach ?? {};
+    onUpdate({ outreach: o ? { ...rest, [cid]: o } : rest });
+  };
 
   return (
     <div className="grid gap-3">
@@ -63,11 +85,13 @@ export function PeopleTab({ jobId, entry, onUpdate, adding, onAdding }: { jobId:
               <PersonCard
                 key={c.id}
                 c={c}
+                outreach={entry.outreach?.[c.id]}
+                onStage={onStage}
                 touches={touchLine(entry, c.id, (iso) => timeAgo(iso))}
                 onEdit={() => setEditing(c.id)}
                 onRemove={() => {
                   onUpdate({ contacts: contacts.filter((x) => x.id !== c.id) });
-                  toast({ message: `Removed ${c.name} from this job`, actionLabel: "Undo", onAction: () => onUpdate({ contacts }) });
+                  toast({ message: `Removed ${c.name} from this job`, actionLabel: "Undo", onAction: () => onUpdate({ contacts, outreach: entry.outreach }) });
                 }}
               />
             ),
@@ -97,7 +121,7 @@ export function PeopleTab({ jobId, entry, onUpdate, adding, onAdding }: { jobId:
   );
 }
 
-function KnownPicker({ known, onPick }: { known: Contact[]; onPick: (c: Contact) => void }) {
+export function KnownPicker({ known, onPick }: { known: Contact[]; onPick: (c: Contact) => void }) {
   const id = useId();
   return (
     <label htmlFor={id} className="flex flex-wrap items-center gap-2 type-small text-muted">
@@ -121,7 +145,61 @@ function KnownPicker({ known, onPick }: { known: Contact[]; onPick: (c: Contact)
   );
 }
 
-function PersonCard({ c, touches, onEdit, onRemove }: { c: Contact; touches: string; onEdit: () => void; onRemove: () => void }) {
+/** A person's referral stage and how you're reaching them: shown for referrers and anyone already asked. */
+function StageFields({ c, outreach, onStage }: { c: Contact; outreach?: Outreach; onStage: (cid: string, o: Outreach | undefined) => void }) {
+  const id = useId();
+  if (!outreach && c.role !== "referrer") return null;
+  return (
+    <div className="flex flex-wrap items-center gap-x-4 gap-y-2 type-small">
+      <label htmlFor={`${id}-stage`} className="flex items-center gap-2 text-muted">
+        Referral
+        <Select
+          id={`${id}-stage`}
+          value={outreach?.stage ?? ""}
+          onChange={(e) => {
+            const stage = e.target.value as OutreachStage | "";
+            onStage(c.id, stage ? { ...outreach, stage, via: outreach?.via ?? "linkedin", at: new Date().toISOString() } : undefined);
+          }}
+        >
+          <option value="">Not asking</option>
+          {OUTREACH_STAGES.map((s) => (
+            <option key={s} value={s}>
+              {OUTREACH_LABEL[s]}
+            </option>
+          ))}
+        </Select>
+      </label>
+      {outreach && (
+        <label htmlFor={`${id}-via`} className="flex items-center gap-2 text-muted">
+          Via
+          <Select id={`${id}-via`} value={outreach.via ?? "linkedin"} onChange={(e) => onStage(c.id, { ...outreach, via: e.target.value as OutreachVia })}>
+            {OUTREACH_VIA.map((v) => (
+              <option key={v} value={v}>
+                {VIA_LABEL[v]}
+              </option>
+            ))}
+          </Select>
+        </label>
+      )}
+    </div>
+  );
+}
+
+function PersonCard({
+  c,
+  outreach,
+  onStage,
+  touches,
+  onEdit,
+  onRemove,
+}: {
+  c: Contact;
+  outreach?: Outreach;
+  onStage: (cid: string, o: Outreach | undefined) => void;
+  touches: string;
+  onEdit: () => void;
+  onRemove: () => void;
+}) {
   const links = contactLinks(c);
   const copy = async () => {
     if (await copyText(contactText(c))) toast({ message: `Copied ${c.name}'s details` });
@@ -166,6 +244,7 @@ function PersonCard({ c, touches, onEdit, onRemove }: { c: Contact; touches: str
         </dl>
       )}
       {links.needsCountryCode && <p className="type-small text-warning-text">Add the country code to use WhatsApp.</p>}
+      <StageFields c={c} outreach={outreach} onStage={onStage} />
       <p className="type-meta text-muted">{touches}</p>
       <div className="flex flex-wrap items-center gap-1.5">
         {links.email && link(links.email, "Email", <Mail className="rj-icon" aria-hidden />)}

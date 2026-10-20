@@ -19,6 +19,7 @@ export function JobTracking({
   foundAt,
   onUpdate,
   jobTab,
+  initialTab,
   now,
 }: {
   jobId: string;
@@ -28,17 +29,23 @@ export function JobTracking({
   onUpdate: (patch: EntryPatch) => void;
   /** The Job tab's content (title, company, link, CV used, offer): only for jobs tracked by hand. */
   jobTab?: ReactNode;
+  /** The tab to open on, focused ("On this job: Messaged" in the referral section opens People). */
+  initialTab?: Tab;
   now?: Date;
 }) {
   const id = useId();
-  const [tab, setTab] = useState<Tab>("activity");
+  const [tab, setTab] = useState<Tab>(initialTab ?? "activity");
   const [adding, setAdding] = useState(false);
   const [announce, setAnnounce] = useState("");
   // biome-ignore lint/correctness/useExhaustiveDependencies: another job opened: back to its activity
   useEffect(() => {
-    setTab("activity");
+    setTab(initialTab ?? "activity");
     setAdding(false);
   }, [jobId]);
+  // biome-ignore lint/correctness/useExhaustiveDependencies: only when opened on a tab
+  useEffect(() => {
+    if (initialTab) document.getElementById(`${id}-tab-${initialTab}`)?.focus();
+  }, []);
 
   // Cleared first, so the same words twice in a row are still read out.
   const say = (message: string) => {
