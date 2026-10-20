@@ -1,0 +1,199 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Scan start & background check</title>
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600&family=Geist+Mono:wght@500&display=swap" rel="stylesheet">
+<style>
+/* Tokens copied from apps/web/src/design/tokens.css (light + dark), only what this mockup uses. */
+:root, [data-theme="light"] {
+  --bg-canvas: #f5f1e8; --bg-raised: #fffbf5; --bg-hover: #ede9e2; --bg-active: #e5e1db; --bg-inset: #ede9e2;
+  --border-subtle: #d4d0c9; --border-default: #c4c0ba; --border-control: #888681;
+  --text-primary: #151412; --text-secondary: #605d59; --text-disabled: #888681;
+  --success-solid: #007d3e; --success-text: #007137; --warning-text: #7a5300;
+  --progress-track: var(--bg-active); --progress-fill: var(--text-primary);
+  --shadow-l3: 0 8px 24px rgba(21, 20, 18, 0.07);
+}
+[data-theme="dark"] {
+  --bg-canvas: #120f0b; --bg-raised: #181611; --bg-hover: #201d18; --bg-active: #27241f; --bg-inset: #120f0b;
+  --border-subtle: #37342e; --border-default: #45423c; --border-control: #6b6964;
+  --text-primary: #ecebe8; --text-secondary: #cac7c2; --text-disabled: #6b6964;
+  --success-solid: #5bcc80; --success-text: #89dea1; --warning-text: #f0c46b;
+  --progress-track: var(--bg-active); --progress-fill: var(--text-primary);
+  --shadow-l3: inset 0 1px 0 rgba(255,255,255,.06), 0 12px 32px rgba(0,0,0,.4);
+}
+:root {
+  --font-sans: "Geist", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  --text-small: 400 0.875rem/1.3125rem var(--font-sans);
+  --text-meta: 400 0.75rem/1rem var(--font-sans);
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: #e9e5dc; color: #151412; font: var(--text-small); -webkit-font-smoothing: antialiased; }
+.page { max-width: 1320px; margin: 0 auto; padding: 32px 16px 64px; }
+.page > h1 { font: 600 1.5rem/1.875rem var(--font-sans); margin: 0 0 4px; }
+.page > h2 { font: 600 1.125rem/1.5rem var(--font-sans); margin: 40px 0 4px; }
+.page > p { margin: 0 0 20px; color: #605d59; max-width: 80ch; }
+.grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 420px), 1fr)); gap: 24px; align-items: start; }
+.frame { background: var(--bg-canvas); color: var(--text-primary); border: 1px solid var(--border-subtle); border-radius: 6px; padding: 12px 16px 24px; }
+.frame__cap { font: 600 13px/18px var(--font-sans); margin: 0 0 2px; }
+.frame__note { font: var(--text-meta); color: var(--text-secondary); margin: 0 0 12px; min-height: 32px; }
+.tag { display: inline-block; font: 600 11px/16px var(--font-sans); padding: 0 6px; border-radius: 2px; margin-right: 6px; vertical-align: 1px; }
+.tag--bad { background: #ffe1e4; color: #a12b46; } .tag--good { background: #d3f3da; color: #007137; }
+
+.hdr { display: flex; justify-content: flex-end; align-items: center; gap: 4px; padding: 8px 0; border-bottom: 1px solid var(--border-subtle); margin-bottom: 8px; }
+.hdr__meta { font: var(--text-meta); color: var(--text-secondary); margin-right: 6px; }
+.btn { display: inline-flex; align-items: center; gap: 8px; height: 28px; padding: 0 12px; font: 500 0.875rem/1.25rem var(--font-sans); border-radius: 4px; border: 1px solid var(--border-control); background: var(--bg-raised); color: var(--text-primary); white-space: nowrap; }
+.btn--icon { width: 28px; padding: 0; justify-content: center; }
+.pill { display: inline-flex; align-items: center; gap: 6px; height: 28px; padding: 0 8px; font: 500 0.75rem/1rem var(--font-sans); border-radius: 4px; border: 1px solid var(--border-subtle); background: var(--bg-raised); color: var(--text-secondary); white-space: nowrap; }
+.muted { color: var(--text-secondary); }
+.tabular { font-variant-numeric: tabular-nums; }
+.icon { width: 16px; height: 16px; flex: none; stroke: currentColor; fill: none; stroke-width: 1.5; stroke-linecap: round; stroke-linejoin: round; }
+
+.pop { margin-left: auto; width: 24rem; max-width: 100%; background: var(--bg-raised); border: 1px solid var(--border-subtle); border-radius: 4px; box-shadow: var(--shadow-l3); padding: 16px; }
+.headline { margin: 0; font-weight: 600; display: flex; justify-content: space-between; gap: 12px; }
+.headline .elapsed { font: var(--text-meta); color: var(--text-secondary); font-weight: 400; padding-top: 2px; }
+.small { margin: 0; font: var(--text-small); color: var(--text-secondary); }
+.small b { color: var(--text-primary); font-weight: 600; }
+.foot { margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--border-subtle); display: grid; gap: 8px; }
+
+/* Overall bar: determinate, or an indeterminate sweep while the total isn't known yet. */
+.track { position: relative; display: block; height: 6px; margin-top: 8px; background: var(--progress-track); overflow: hidden; }
+.fill { display: block; height: 100%; background: var(--progress-fill); transform-origin: left; }
+.track--sweep::after { content: ""; position: absolute; top: 0; bottom: 0; width: 30%; background: var(--progress-fill); animation: sweep 1.6s cubic-bezier(0.4, 0, 0.2, 1) infinite; }
+.track--paused .fill { background: var(--text-disabled); }
+@keyframes sweep { from { left: -30%; } to { left: 100%; } }
+.barline { display: flex; justify-content: space-between; gap: 8px; margin-top: 6px; font: var(--text-meta); color: var(--text-secondary); }
+
+/* Steps */
+.steps { list-style: none; margin: 12px 0 0; padding: 0; display: grid; gap: 8px; }
+.step { display: grid; grid-template-columns: 16px minmax(0, 1fr) auto; gap: 10px; align-items: start; }
+.step__icon { width: 16px; height: 16px; margin-top: 2px; display: grid; place-items: center; }
+.step__label { font: var(--text-small); }
+.step__detail { display: block; font: var(--text-meta); color: var(--text-secondary); }
+.step__time { font: var(--text-meta); color: var(--text-secondary); padding-top: 3px; }
+.step[data-s="done"] .step__icon { color: var(--success-text); }
+.step[data-s="done"] .step__label { color: var(--text-secondary); }
+.step[data-s="todo"] .step__label { color: var(--text-disabled); }
+.step[data-s="now"] .step__label { font-weight: 500; }
+.dot { width: 6px; height: 6px; border-radius: 50%; border: 1.5px solid var(--text-disabled); }
+.spin { animation: spin 0.9s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* Stats */
+.stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-top: 12px; }
+.stat { background: var(--bg-inset); border-radius: 4px; padding: 8px 10px; }
+.stat b { display: block; font: 600 1rem/1.25rem var(--font-sans); font-variant-numeric: tabular-nums; }
+.stat span { font: var(--text-meta); color: var(--text-secondary); }
+.live { display: flex; align-items: center; gap: 8px; margin-top: 12px; font: var(--text-meta); color: var(--text-secondary); min-width: 0; }
+.live b { color: var(--text-primary); font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pulse { width: 6px; height: 6px; border-radius: 50%; background: var(--success-solid); flex: none; animation: pulse 1.6s ease-in-out infinite; }
+.pulse--off { background: var(--text-disabled); animation: none; }
+.warn { margin-top: 10px; font: var(--text-meta); color: var(--warning-text); display: flex; gap: 6px; }
+@keyframes pulse { 50% { opacity: .3; } }
+@media (prefers-reduced-motion: reduce) { .track--sweep::after { animation: none; left: 0; width: 100%; opacity: .25; } .spin, .pulse { animation: none; } }
+.data { margin-top: 24px; background: #fffbf5; border: 1px solid #d4d0c9; border-radius: 6px; padding: 16px 20px; max-width: 900px; }
+.data h3 { margin: 0 0 8px; font: 600 14px/20px var(--font-sans); }
+.data li { margin: 4px 0; color: #3d3b38; }
+.data code { font: 500 12px var(--font-mono, monospace); background: #ede9e2; padding: 0 4px; border-radius: 2px; }
+</style>
+</head>
+<body>
+<main class="page">
+  <h1>Scan start & background check: show it's working</h1>
+  <p>Two pop-overs that today say only "Starting…". Proposal: a step list with a moving bar and an elapsed timer while starting, then numbers, a live "last checked" line and a stall hint once it's running.</p>
+
+  <h2>1 · Scan button: "Starting scan…"</h2>
+  <p>Steps follow the events the scanner already sends (<code>sync</code> → <code>synced</code> → <code>start</code>). Once the total is known, this hands over to today's running view (overall bar + source rows), unchanged.</p>
+  <div class="grid" id="g1"></div>
+
+  <h2>2 · "Checking the rest" pill</h2>
+  <p>Today: one line ("Starting…" or "1,170 done · about 50 min left"). Proposal: bar with counts, matches and failures so far, the company it just checked, and a hint if nothing moves for a while.</p>
+  <div class="grid" id="g2"></div>
+
+  <div class="data">
+    <h3>What it needs (build notes)</h3>
+    <ul>
+      <li>Steps and elapsed timer: from events already sent; the timer counts on the page (no new server work).</li>
+      <li>Background stats: <code>bg.found</code> exists; add <code>bg.failed</code>, <code>bg.last</code> (company name) and <code>bg.lastAt</code> in <code>applyScanEvent</code>'s <code>company</code> case.</li>
+      <li>Stall hint: shown when no <code>company</code>/<code>progress</code> event for 45 s; goes away on the next one. Same hint in the Scan pop-over.</li>
+      <li>Telegram line stays in the Scan pop-over footer, unchanged.</li>
+      <li>Pill and button labels don't change. New: a <b>Resume now</b> button when paused on battery (today it only waits for the charger): optional, say if you want it.</li>
+    </ul>
+  </div>
+</main>
+
+<script>
+const I = {
+  check: '<svg viewBox="0 0 24 24" class="icon" style="width:14px;height:14px"><path d="M20 6 9 17l-5-5"/></svg>',
+  spin: '<svg viewBox="0 0 24 24" class="icon spin" style="width:14px;height:14px"><path d="M21 12a9 9 0 1 1-6.2-8.6"/></svg>',
+  dot: '<span class="dot"></span>',
+  stop: '<svg viewBox="0 0 24 24" class="icon" style="width:12px;height:12px;fill:currentColor"><rect x="4" y="4" width="16" height="16"/></svg>',
+  bell: '<svg viewBox="0 0 24 24" class="icon"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/></svg>',
+  pause: '<svg viewBox="0 0 24 24" class="icon" style="width:14px;height:14px"><rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/></svg>',
+  play: '<svg viewBox="0 0 24 24" class="icon" style="width:14px;height:14px"><path d="M6 4l14 8-14 8z"/></svg>',
+  ring: (v) => `<svg viewBox="0 0 16 16" class="icon ${v == null ? "spin" : ""}" style="transform:rotate(-90deg)"><circle cx="8" cy="8" r="6" stroke="var(--progress-track)" stroke-width="2.5"/><circle cx="8" cy="8" r="6" stroke="var(--progress-fill)" stroke-width="2.5" stroke-dasharray="37.7" stroke-dashoffset="${v == null ? 28 : 37.7 * (1 - v)}"/></svg>`,
+  warn: '<svg viewBox="0 0 24 24" class="icon" style="width:14px;height:14px"><path d="M12 9v4M12 17h.01"/><path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"/></svg>',
+};
+const steps = (list) => `<ol class="steps">${list.map(([s, label, detail, time]) => `<li class="step" data-s="${s}">
+  <span class="step__icon">${s === "done" ? I.check : s === "now" ? I.spin : I.dot}</span>
+  <span class="step__label">${label}${detail ? `<span class="step__detail">${detail}</span>` : ""}</span>
+  <span class="step__time tabular">${time ?? ""}</span></li>`).join("")}</ol>`;
+const sweep = (line) => `<span class="track track--sweep" role="progressbar" aria-label="Starting"></span><div class="barline"><span>${line}</span></div>`;
+const bar = (v, left, right, paused) => `<span class="track${paused ? " track--paused" : ""}"><span class="fill" style="transform:scaleX(${v})"></span></span><div class="barline"><span class="tabular">${left}</span><span class="tabular">${right}</span></div>`;
+
+const scanHdr = (pct) => `<div class="hdr"><span class="hdr__meta">Last scan 22h ago</span><span class="btn">${I.ring(pct == null ? null : pct / 100)}<span>Scanning</span>${pct == null ? "" : `<span class="tabular muted">${pct}%</span>`}</span><span class="btn btn--icon">${I.bell}</span><span class="btn btn--icon">${I.stop}</span></div>`;
+const bgHdr = (pct, paused) => `<div class="hdr"><span class="hdr__meta">Last scan 2h ago</span><span class="pill">${paused ? I.pause : I.ring(pct == null ? null : pct / 100)}<span>${paused ? "Paused: on battery" : "Checking the rest"}</span>${pct == null || paused ? "" : `<span class="tabular">${pct}%</span>`}</span><span class="btn">Scan now</span></div>`;
+const tg = `<p class="small">Sends you a Telegram message (@rawjobs_bot) when this scan finishes.</p>`;
+const tgAsking = `<p class="small">Asking for a Telegram message when this scan finishes…</p>`;
+const frame = (tag, cap, note, html) => `<section class="frame"><p class="frame__cap">${tag}${cap}</p><p class="frame__note">${note}</p>${html}</section>`;
+const NOW = '<span class="tag tag--bad">Today</span>', NEW = '<span class="tag tag--good">Proposed</span>';
+
+document.getElementById("g1").innerHTML = [
+  frame(NOW, "Starting", "One line, no movement: looks stuck.", scanHdr(null) + `<div class="pop"><p class="headline">Starting scan…</p><div class="foot">${tgAsking}</div></div>`),
+  frame(NEW, "Starting · step 1", "Scanner just launched. Bar sweeps, timer ticks every second.", scanHdr(null) + `<div class="pop">
+    <p class="headline">Starting scan <span class="elapsed tabular">0:03</span></p>${sweep("Step 1 of 3")}
+    ${steps([["now", "Opening the scanner"], ["todo", "Updating the company directory"], ["todo", "Choosing which companies to check"]])}
+    <div class="foot">${tgAsking}</div></div>`),
+  frame(NEW, "Starting · step 2", "Directory up to date; each finished step says what it found and how long it took.", scanHdr(null) + `<div class="pop">
+    <p class="headline">Starting scan <span class="elapsed tabular">0:11</span></p>${sweep("Step 3 of 3")}
+    ${steps([["done", "Opened the scanner", null, "2s"], ["done", "Updated the company directory", "Already up to date · job feed from today", "7s"], ["now", "Choosing which companies to check", "Your companies, past matches and feed picks"]])}
+    <div class="foot">${tg}</div></div>`),
+  frame(NEW, "Starting · slow", "A step takes longer than 30 s: say why, so a wait doesn't look like a hang.", scanHdr(null) + `<div class="pop">
+    <p class="headline">Starting scan <span class="elapsed tabular">0:48</span></p>${sweep("Step 2 of 3")}
+    ${steps([["done", "Opened the scanner", null, "2s"], ["now", "Updating the company directory", "Downloading the latest list: can take a minute on slow connections", "46s"], ["todo", "Choosing which companies to check"]])}
+    <div class="foot">${tg}</div></div>`),
+  frame(NEW, "Running · stalled", "Running view as today, plus a hint when nothing finishes for 45 s.", scanHdr(42) + `<div class="pop">
+    <p class="headline">Checking 126 of 300 companies · about 2 min left</p>${bar(0.42, "126 / 300 done", "42%")}
+    <div class="live"><span class="pulse"></span>Last checked <b>Stripe</b> · 52s ago</div>
+    <p class="warn">${I.warn}<span>Some career sites are slow to answer. Still working; nothing's lost if you stop.</span></p>
+    <div class="foot"><p class="small"><b class="tabular">7</b> matches so far. Stop any time: the next scan carries on from here.</p>${tg}</div></div>`),
+].join("");
+
+const bgCopy = `<p class="small">We'll only tell you if it finds a match. Pause any time; it picks up where it stopped.</p>`;
+const pauseBtn = `<span class="btn" style="justify-self:start">${I.pause} Pause</span>`;
+document.getElementById("g2").innerHTML = [
+  frame(NOW, "Starting", "No numbers, no movement.", bgHdr(null) + `<div class="pop"><p class="headline">Checking every other company</p><p class="small" style="margin-top:4px">Starting…. We'll only tell you if it finds a match. Pause any time; it picks up where it stopped.</p><span class="btn" style="margin-top:12px">${I.pause} Pause</span></div>`),
+  frame(NEW, "Starting", "Scan now's results are already saved: say so, then show what it's doing.", bgHdr(null) + `<div class="pop">
+    <p class="headline">Checking every other company <span class="elapsed tabular">0:05</span></p>${sweep("Getting ready")}
+    ${steps([["done", "Saved Scan now's results", "12 new matches on your Radar", "1s"], ["now", "Listing companies Scan now skipped"]])}
+    <div class="foot">${bgCopy}${pauseBtn}</div></div>`),
+  frame(NEW, "Running", "Bar + counts, matches and failures so far, and the company it just checked (updates live).", bgHdr(63) + `<div class="pop">
+    <p class="headline">Checking the other 1,840 companies</p>${bar(0.636, "1,170 / 1,840 done", "about 50 min left")}
+    <div class="stats"><div class="stat"><b>3</b><span>New matches</span></div><div class="stat"><b>1,152</b><span>Checked fine</span></div><div class="stat"><b>18</b><span>Couldn't reach</span></div></div>
+    <div class="live"><span class="pulse"></span>Just checked <b>Wise</b> · 2s ago</div>
+    <div class="foot">${bgCopy}${pauseBtn}</div></div>`),
+  frame(NEW, "Running · stalled", "No company finished for 45 s.", bgHdr(63) + `<div class="pop">
+    <p class="headline">Checking the other 1,840 companies</p>${bar(0.636, "1,171 / 1,840 done", "about 50 min left")}
+    <div class="stats"><div class="stat"><b>3</b><span>New matches</span></div><div class="stat"><b>1,153</b><span>Checked fine</span></div><div class="stat"><b>18</b><span>Couldn't reach</span></div></div>
+    <div class="live"><span class="pulse"></span>Last checked <b>Revolut</b> · 1 min ago</div>
+    <p class="warn">${I.warn}<span>Waiting on a slow career site. Still working; Pause any time.</span></p>
+    <div class="foot">${bgCopy}${pauseBtn}</div></div>`),
+  frame(NEW, "Paused on battery", "Grey bar keeps the progress visible; Resume replaces Pause.", bgHdr(63, true) + `<div class="pop">
+    <p class="headline">Paused: on battery</p>${bar(0.636, "1,170 / 1,840 done", "Paused", true)}
+    <div class="live"><span class="pulse pulse--off"></span>Carries on by itself when you plug in.</div>
+    <div class="foot"><p class="small"><b>3</b> new matches so far. It picks up where it stopped.</p><span class="btn" style="justify-self:start">${I.play} Resume now</span></div></div>`),
+].join("");
+</script>
+</body>
+</html>

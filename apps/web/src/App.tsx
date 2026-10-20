@@ -87,7 +87,7 @@ export function App() {
   const afterScan = useCallback(async () => {
     await Promise.all([reload(), setup.refresh()]);
   }, [reload, setup.refresh]);
-  const { scan, start: startScan, stop: stopScan, restart: restartScan, notify: notifyScan } = useScan(afterScan);
+  const { scan, start: startScan, stop: stopScan, restart: restartScan, notify: notifyScan, resume: resumeBackground } = useScan(afterScan);
   const afterBackgroundScan = useCallback(async () => {
     const [m] = await Promise.all([reload(), setup.refresh()]);
     return m;
@@ -330,6 +330,7 @@ export function App() {
                         location.hash = settingsHash("scans");
                       }}
                       onStop={() => void stopScan()}
+                      onResume={() => void resumeBackground()}
                       notifyLine={notifyLine(tg, scan, notifyFailed)}
                       notify={(openDetails) => <NotifyBell tg={tg} scan={scan} failed={notifyFailed} onDetails={openDetails} onSaved={() => setup.refresh()} onConnected={notifyNow} />}
                     />
