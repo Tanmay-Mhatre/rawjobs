@@ -24,6 +24,7 @@ describe("Settings pages and links", () => {
     expect(settingsHash("schedule")).toBe("settings/scans?section=schedule");
     expect(settingsHash("whats-new")).toBe("settings/whats-new");
     expect(settingsHash("companies")).toBe("settings/companies?section=companies");
+    expect(settingsHash("network")).toBe("settings/data?section=network");
   });
 
   it("puts every card on a real page, once", () => {

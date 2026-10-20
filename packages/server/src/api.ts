@@ -23,6 +23,7 @@ import {
   writeCacheFile,
 } from "@rawjobs/core";
 import { readTracking, saveTracking, suggestPoolSize, type ScanScope } from "@rawjobs/core";
+import { CONNECTION_ID, createNetworkStore } from "@rawjobs/core";
 import { refuse } from "./guard";
 import type { Updater } from "./updater";
 
@@ -54,6 +55,14 @@ type Line = string;
  *                             start it again. background: a scan this server didn't start (a scheduled one) is running.
  *                             dataVersion: meta.json's generatedAt, so an open page sees when a scan wrote new results
  *   GET/PUT /api/tracking     your statuses, notes and Radar preferences (profile/tracking.json)
+ *   GET  /api/network         your LinkedIn connections: { status, me } (me: your own positions and schools, or null)
+ *   POST /api/network/import  { fileName?, files: { connections?, positions?, education? } }: the three CSV texts the
+ *                             page read from LinkedIn's export ZIP. { ok: true, status }, or { ok: false, errors: [{ code }] }
+ *                             (400; 413 with TOO_BIG for a body over 12 MB)
+ *   GET  /api/network/summary { importedAt, counts: { networkKey: n } }, with ETag importedAt (304 when unchanged)
+ *   GET  /api/network/people?company=  who you know there: { how, people } (days since you connected, not the date)
+ *   PUT  /api/network/friends { id, friend }: mark or unmark a close contact
+ *   DELETE /api/network       delete your connections (profile/network.json and the files next to it)
  *   GET  /api/update          an installed copy's updates (POST …/check, …/apply, …/seen; PUT …/settings)
  *   GET  /api/setup           setup status (+ current config)
  *   POST /api/setup/config    validate and save rawjobs.config.local.yaml
@@ -89,6 +98,7 @@ export function createApi(opts: ApiOptions) {
   const { home, dataDir } = opts;
   const cliCmd = opts.cli ?? cliCommand();
   const version = opts.version ?? APP_VERSION;
+  const network = createNetworkStore(home);
 
   /** Run `rawjobs <args>` from the repo root (no shell, so no quoting issues). */
   function cli(args: string[], stdin?: string): ChildProcess {
@@ -319,6 +329,12 @@ Stopped after ${Math.round(timeoutMs / 1000)} s without finishing.`.trim(),
   async function handle(req: IncomingMessage, res: ServerResponse): Promise<boolean> {
     const url = req.url?.split("?")[0] ?? "";
     if (!url.startsWith("/api/")) return false;
+    if (url === "/api/network" || url.startsWith("/api/network/")) {
+      // Your connections: never cached, sniffed or read by another site's page.
+      res.setHeader("cache-control", "no-store");
+      res.setHeader("x-content-type-options", "nosniff");
+      res.setHeader("cross-origin-resource-policy", "same-origin");
+    }
     const why = refuse(req);
     if (why) json(res, { ok: false, errors: why }, 403);
     else {
@@ -369,10 +385,13 @@ Stopped after ${Math.round(timeoutMs / 1000)} s without finishing.`.trim(),
       const r = saveTracking(body, home);
       return r.ok ? json(res, { ok: true, updatedAt: r.tracking.updatedAt }) : json(res, { ok: false, errors: r.error }, 400);
     }
+    if (url === "/api/network" || url.startsWith("/api/network/")) return await networkRoute(url, req, res);
     if (url === "/api/setup" && req.method === "GET") return await respondJson(res, ["setup", "status", "--data", dataDir]);
     if (url === "/api/setup/config" && req.method === "POST") return await respondJson(res, ["setup", "save"], await readBody(req));
     if (url === "/api/setup/reset" && req.method === "POST") {
       if (busy()) return json(res, { ok: false, errors: "A scan is running; try again when it's done." });
+      // Starting over also deletes your LinkedIn connections.
+      await network.remove();
       return await respondJson(res, ["setup", "reset"]);
     }
     if (url === "/api/setup/resume" && req.method === "GET") return await respondJson(res, ["setup", "resume"]);
@@ -500,6 +519,61 @@ Stopped after ${Math.round(timeoutMs / 1000)} s without finishing.`.trim(),
     update.on("close", () => void oneSuggestRun(() => collect(["companies", "suggest", "--json", "--data", dataDir])));
   }
 
+  /** /api/network*: your LinkedIn connections. Error answers never repeat the company asked about. */
+  async function networkRoute(url: string, req: IncomingMessage, res: ServerResponse): Promise<void> {
+    const bad = (code: string, status = 400) => json(res, { ok: false, errors: [{ code }] }, status);
+    if (url === "/api/network" && req.method === "GET") return json(res, { status: network.status(), me: network.me() });
+    if (url === "/api/network" && req.method === "DELETE") {
+      await network.remove();
+      return json(res, { ok: true });
+    }
+    if (url === "/api/network/summary" && req.method === "GET") {
+      const summary = network.summary();
+      if (summary.importedAt) {
+        const tag = `"${summary.importedAt}"`;
+        res.setHeader("etag", tag);
+        if (req.headers["if-none-match"] === tag) {
+          res.statusCode = 304;
+          res.end();
+          return;
+        }
+      }
+      return json(res, summary);
+    }
+    if (url === "/api/network/people" && req.method === "GET") {
+      const company = new URL(req.url ?? "", "http://x").searchParams.get("company")?.trim() ?? "";
+      if (!company || company.length > 200) return bad("BAD_REQUEST");
+      return json(res, network.people(company));
+    }
+    if (url === "/api/network/import" && req.method === "POST") {
+      let body: unknown;
+      try {
+        body = JSON.parse(await readBody(req, IMPORT_MAX, true));
+      } catch (err) {
+        return (err as Error).message === TOO_LARGE ? bad("TOO_BIG", 413) : bad("BAD_REQUEST");
+      }
+      const b = (body ?? {}) as { fileName?: unknown; files?: unknown };
+      const files = (typeof b.files === "object" && b.files !== null ? b.files : {}) as Record<string, unknown>;
+      const text = (k: string) => (typeof files[k] === "string" ? (files[k] as string) : undefined);
+      const r = await network.import(
+        { connections: text("connections"), positions: text("positions"), education: text("education") },
+        { source: "file", fileName: typeof b.fileName === "string" ? b.fileName : undefined },
+      );
+      return r.ok ? json(res, r) : bad(r.code);
+    }
+    if (url === "/api/network/friends" && req.method === "PUT") {
+      let body: { id?: unknown; friend?: unknown };
+      try {
+        body = (JSON.parse(await readBody(req, 10_000)) ?? {}) as typeof body;
+      } catch {
+        return bad("BAD_REQUEST");
+      }
+      if (typeof body.id !== "string" || !CONNECTION_ID.test(body.id) || typeof body.friend !== "boolean") return bad("BAD_REQUEST");
+      return (await network.setFriend(body.id, body.friend)) ? json(res, { ok: true }) : bad("NOT_FOUND", 404);
+    }
+    return bad("NOT_FOUND", 404);
+  }
+
   /**
    * Before the server exits (Ctrl+C, an update): ask a running scan to stop (it saves what it has,
    * and the next scan resumes), and end it if it hasn't after `graceMs`. Tabs following it are closed.
@@ -521,18 +595,31 @@ Stopped after ${Math.round(timeoutMs / 1000)} s without finishing.`.trim(),
   return { handle, startBackground, version, scanning: busy, stop };
 }
 
-function readBody(req: IncomingMessage, maxBytes = 5_000_000): Promise<string> {
+/** The largest LinkedIn import body: the three CSV texts. */
+const IMPORT_MAX = 12_000_000;
+const TOO_LARGE = "Request too large.";
+
+/**
+ * The request body as text, failing past `maxBytes`. The connection is cut there, unless `answer` is
+ * set: then the rest is read and dropped and it fails at the end, so the route can still answer (413).
+ */
+function readBody(req: IncomingMessage, maxBytes = 5_000_000, answer = false): Promise<string> {
   return new Promise((done, fail) => {
     let body = "";
+    let over = false;
     req.setEncoding("utf8");
     req.on("data", (d: string) => {
+      if (over) return;
       body += d;
       if (body.length > maxBytes) {
-        fail(new Error("Request too large."));
+        over = true;
+        body = "";
+        if (answer) return;
+        fail(new Error(TOO_LARGE));
         req.destroy();
       }
     });
-    req.on("end", () => done(body));
+    req.on("end", () => (over ? fail(new Error(TOO_LARGE)) : done(body)));
     req.on("error", fail);
   });
 }
