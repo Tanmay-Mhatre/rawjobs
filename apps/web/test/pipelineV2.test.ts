@@ -33,12 +33,14 @@ describe("v1 data read as v2", () => {
   });
 
   it("maps free-text roles, keeping text that doesn't map as how you met", () => {
-    expect(roleFrom("Senior Recruiter")).toEqual({ role: "recruiter" });
+    expect(roleFrom("Recruiter")).toEqual({ role: "recruiter" });
     expect(roleFrom("Agency recruiter")).toEqual({ role: "agency" });
-    expect(roleFrom("Hiring manager")).toEqual({ role: "hiring-manager" });
-    expect(roleFrom("Engineering Manager")).toEqual({ role: "hiring-manager" });
-    expect(roleFrom("Referred me")).toEqual({ role: "referrer" });
-    expect(roleFrom("Panel interviewer")).toEqual({ role: "interviewer" });
+    expect(roleFrom("hiring manager")).toEqual({ role: "hiring-manager" });
+    // Anything more than the role's own word is kept.
+    expect(roleFrom("Senior recruiter, APAC")).toEqual({ role: "recruiter", howMet: "Senior recruiter, APAC" });
+    expect(roleFrom("Engineering Manager")).toEqual({ role: "hiring-manager", howMet: "Engineering Manager" });
+    expect(roleFrom("Referred me")).toEqual({ role: "referrer", howMet: "Referred me" });
+    expect(roleFrom("Panel interviewer")).toEqual({ role: "interviewer", howMet: "Panel interviewer" });
     expect(roleFrom("Friend from uni")).toEqual({ role: "other", howMet: "Friend from uni" });
   });
 
@@ -51,6 +53,7 @@ describe("v1 data read as v2", () => {
     });
     expect(toContact({ name: "Sam", link: "https://sam.example" }, "x")).toEqual({ id: "x", name: "Sam", link: "https://sam.example" });
     expect(toContact({ name: "Sam", link: "http://linkedin.com/in/sam" }, "x")?.linkedin).toBeUndefined();
+    expect(toContact({ name: "Sam", linkedin: "javascript:alert(1)" }, "x")?.linkedin).toBeUndefined();
     expect(toContact({ name: "  " }, "x")).toBeUndefined();
   });
 
@@ -173,6 +176,29 @@ describe("mergeStates", () => {
     ]);
     expect(m.skipped).toEqual(["close:0", "follow-up:2026-10-15"]);
   });
+  it("keeps both people when the same v1 id means different people in the two files", () => {
+    const mine: UserState = { [job.id]: entry({ contacts: [{ id: `v1:${job.id}:0`, name: "Priya" }] }) };
+    const theirs: UserState = {
+      [job.id]: entry({
+        updatedAt: "2026-10-12T09:00:00.000Z",
+        contacts: [
+          { id: `v1:${job.id}:0`, name: "Sam" },
+          { id: `v1:${job.id}:1`, name: "Lee" },
+        ],
+        activities: [touch({ id: "b", contactId: `v1:${job.id}:0` })],
+      }),
+    };
+    const m = mergeStates(mine, theirs, new Date("2026-10-20T12:00:00Z"))[job.id]!;
+    expect(m.contacts!.map((c) => c.name)).toEqual(["Priya", "Sam", "Lee"]);
+    const sam = m.contacts!.find((c) => c.name === "Sam")!;
+    expect(sam.id).not.toBe(`v1:${job.id}:0`);
+    // Their touch still points at Sam.
+    expect(m.activities![0]!.contactId).toBe(sam.id);
+    // The same person under the same v1 id stays one person.
+    const same = mergeStates(mine, { [job.id]: entry({ updatedAt: "2026-10-12T09:00:00.000Z", contacts: [{ id: `v1:${job.id}:0`, name: "Priya", email: "p@acme.example" }] }) })[job.id]!;
+    expect(same.contacts).toEqual([{ id: `v1:${job.id}:0`, name: "Priya", email: "p@acme.example" }]);
+  });
+
   it("keeps an entry only one side has", () => {
     expect(mergeStates({}, { x: entry() })).toEqual({ x: entry() });
   });

@@ -4,7 +4,7 @@ import { contactLinks, linkedInUrl, phoneDigits } from "../src/lib/contactLinks"
 describe("contactLinks", () => {
   it("builds every link from checked values", () => {
     expect(contactLinks({ email: "priya@acme.example", phone: "+971 50 123 4567", whatsapp: true, linkedin: "https://www.linkedin.com/in/priya" })).toEqual({
-      email: "mailto:priya%40acme.example",
+      email: "mailto:priya@acme.example",
       call: "tel:+971501234567",
       whatsapp: "https://wa.me/971501234567",
       linkedin: "https://www.linkedin.com/in/priya",
@@ -27,9 +27,9 @@ describe("contactLinks", () => {
     for (const email of ["a@b.co?cc=x@y.co", "a@b.co&body=hi", "a@b.co#x", "a b@c.co", "not-an-email", "a@b"]) {
       expect(contactLinks({ email }).email, email).toBeUndefined();
     }
-    expect(contactLinks({ email: " a.b+jobs@c.co " }).email).toBe("mailto:a.b%2Bjobs%40c.co");
+    expect(contactLinks({ email: " a.b+jobs@c.co " }).email).toBe("mailto:a.b%2Bjobs@c.co");
     // Whatever passes is encoded inside a mailto: link, never a link of its own.
-    expect(contactLinks({ email: "javascript:alert(1)//@x.co" }).email).toBe("mailto:javascript%3Aalert(1)%2F%2F%40x.co");
+    expect(contactLinks({ email: "javascript:alert(1)//@x.co" }).email).toBe("mailto:javascript%3Aalert(1)%2F%2F@x.co");
   });
 
   it("keeps local numbers off WhatsApp and asks for the country code", () => {

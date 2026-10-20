@@ -3,6 +3,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { Job } from "./data";
 import type { Reason } from "./notForMe";
 import type { Prefs } from "./prefs";
+import { linkedInUrl } from "./contactLinks";
 import { load, save, saveFailed } from "./storage";
 import { useSavedOnDisk } from "./tracking";
 
@@ -194,15 +195,25 @@ export const newId = () => `${Date.now().toString(36)}${Math.random().toString(3
 /** When a touch logged for `day` happened: now when it's today, else noon local that day. */
 export const activityAt = (day: string, now = new Date()) => (day === today(now) ? now.toISOString() : new Date(`${day}T12:00:00`).toISOString());
 
-/** A v1 free-text role ("Senior recruiter") as a v2 role; text that doesn't map is kept as how you met. */
+/** Which v2 role a v1 free-text role reads as. */
+function roleOfText(t: string): ContactRole {
+  if (t.includes("agency")) return "agency";
+  if (t.includes("recruit")) return "recruiter";
+  if (t.includes("hiring") || t.includes("manager")) return "hiring-manager";
+  if (t.includes("refer")) return "referrer";
+  if (t.includes("interview")) return "interviewer";
+  return "other";
+}
+
+/**
+ * A v1 free-text role ("Senior recruiter, APAC") as a v2 role. The text is kept as how you met,
+ * unless it's just the role's own word ("Recruiter", "Hiring manager").
+ */
 export function roleFrom(text: string): { role: ContactRole; howMet?: string } {
-  const t = text.toLowerCase();
-  if (t.includes("agency")) return { role: "agency" };
-  if (t.includes("recruit")) return { role: "recruiter" };
-  if (t.includes("hiring") || t.includes("manager")) return { role: "hiring-manager" };
-  if (t.includes("refer")) return { role: "referrer" };
-  if (t.includes("interview")) return { role: "interviewer" };
-  return { role: "other", howMet: text };
+  const t = text.trim().toLowerCase();
+  const role = roleOfText(t);
+  const plain = t === role || t === role.replace("-", " ") || t === ROLE_LABEL[role].toLowerCase();
+  return plain ? { role } : { role, howMet: text.trim() };
 }
 
 const isText = (v: unknown): v is string => typeof v === "string";
@@ -210,15 +221,6 @@ const isText = (v: unknown): v is string => typeof v === "string";
 const clip = (v: unknown, max: number) => (isText(v) && v.trim() ? v.trim().slice(0, max) : undefined);
 /** A structured value (email, phone, URL): kept whole or not at all. */
 const whole = (v: unknown, max: number) => (isText(v) && v.trim() && v.trim().length <= max ? v.trim() : undefined);
-
-const onLinkedIn = (url: string) => {
-  try {
-    const u = new URL(url);
-    return u.protocol === "https:" && (u.hostname === "linkedin.com" || u.hostname.endsWith(".linkedin.com"));
-  } catch {
-    return false;
-  }
-};
 
 /**
  * A person in the v2 shape, from v2 or v1 data ({ name, role?: string, link? }), within the size caps;
@@ -243,7 +245,7 @@ export function toContact(v: unknown, fallbackId: string): Contact | undefined {
     email: whole(c.email, CAPS.email),
     phone: whole(c.phone, CAPS.phone),
     whatsapp: c.whatsapp === true || undefined,
-    linkedin: whole(c.linkedin, CAPS.linkedin) ?? (link && onLinkedIn(link) ? link : undefined),
+    linkedin: linkedInUrl(whole(c.linkedin, CAPS.linkedin)) ?? (link && linkedInUrl(link) ? link : undefined),
     howMet: clip(c.howMet, CAPS.howMet) ?? mapped?.howMet,
     link,
   };
@@ -372,6 +374,25 @@ function unionById<T extends { id: string }>(older: readonly T[] = [], newer: re
 }
 
 /**
+ * A v1 id (`v1:<job>:<index>`) only says where a person was in their file, so the same id in two
+ * files can be two people. A person from `theirs` whose v1 id belongs to someone else in `mine`
+ * gets a new id, and their touches and interviews follow it, so both are kept.
+ */
+function sameV1Ids(mine: Entry, theirs: Entry): Entry {
+  const renamed = new Map<string, string>();
+  const contacts = theirs.contacts?.map((c) => {
+    const other = c.id.startsWith("v1:") ? mine.contacts?.find((x) => x.id === c.id) : undefined;
+    if (!other || other.name === c.name) return c;
+    const id = newId();
+    renamed.set(c.id, id);
+    return { ...c, id };
+  });
+  if (!renamed.size) return theirs;
+  const follow = <T extends { contactId?: string }>(x: T): T => (x.contactId && renamed.has(x.contactId) ? { ...x, contactId: renamed.get(x.contactId) } : x);
+  return { ...theirs, contacts, activities: theirs.activities?.map(follow), interviews: theirs.interviews?.map(follow) };
+}
+
+/**
  * Your tracking with an imported file folded in. For a job in both, the more recently changed entry
  * wins, except touches, people and done tasks, which are joined by id (a person's newer fields win).
  */
@@ -383,7 +404,8 @@ export function mergeStates(mine: UserState, theirs: UserState, now = new Date()
       out[id] = e;
       continue;
     }
-    const [older, newer] = e.updatedAt > m.updatedAt ? [m, e] : [e, m];
+    const incoming = sameV1Ids(m, e);
+    const [older, newer] = incoming.updatedAt > m.updatedAt ? [m, incoming] : [incoming, m];
     const merged: Entry = { ...newer };
     const activities = unionById(older.activities, newer.activities);
     const contacts = unionById(older.contacts, newer.contacts);

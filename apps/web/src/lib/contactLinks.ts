@@ -4,7 +4,7 @@ import type { Contact } from "./userState";
 export const LINK_REL = "noopener noreferrer";
 
 export type ContactLinks = {
-  /** mailto: with the address encoded, so nothing in it can add a subject, body or other recipients. */
+  /** mailto: with each side of the @ encoded, so nothing in it can add a subject, body or other recipients. */
   email?: string;
   /** tel: with the number's digits. */
   call?: string;
@@ -45,7 +45,10 @@ export function phoneDigits(raw: string | undefined): { digits: string; internat
 export function contactLinks(c: Pick<Contact, "email" | "phone" | "whatsapp" | "linkedin" | "link">): ContactLinks {
   const out: ContactLinks = {};
   const email = c.email?.trim();
-  if (email && EMAIL.test(email)) out.email = `mailto:${encodeURIComponent(email)}`;
+  if (email && EMAIL.test(email)) {
+    const at = email.lastIndexOf("@");
+    out.email = `mailto:${encodeURIComponent(email.slice(0, at))}@${encodeURIComponent(email.slice(at + 1))}`;
+  }
   const phone = phoneDigits(c.phone);
   if (phone) {
     // A local number dials as written; with a country code it dials internationally.

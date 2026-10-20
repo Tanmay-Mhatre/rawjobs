@@ -1,4 +1,4 @@
-import { type Activity, type Channel, dayAfter, type Entry, FOLLOW_UP_DAYS, isActive, isDay, QUIET_DAYS, STATUS_LABEL, stageSince, today, type UserState } from "./userState";
+import { type Activity, type Channel, dayAfter, type Entry, isActive, isDay, QUIET_DAYS, STATUS_LABEL, stageSince, today, type UserState } from "./userState";
 
 /**
  * What to do next on each tracked job, worked out from its entry (never stored): its follow-up date,
@@ -38,6 +38,17 @@ const isTouch = (a: Activity) => a.channel !== "note" && !!a.dir;
 const lastReceived = (e: Entry) => Math.max(0, ...(e.activities ?? []).filter((a) => isTouch(a) && a.dir === "received").map((a) => Date.parse(a.at)));
 const lastSent = (e: Entry) => (e.activities ?? []).filter((a) => isTouch(a) && a.dir === "sent").at(-1);
 
+/** HH:MM of an ISO time, local. */
+const localTime = (iso: string) => {
+  const d = new Date(iso);
+  return `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
+};
+/** A touch sent after the interview: a later local day, or the same day after its time when it has one. */
+const afterInterview = (at: string, i: { on: string; time?: string }) => {
+  const day = dayAfter(at, 0);
+  return day > i.on || (day === i.on && !!i.time && localTime(at) > i.time);
+};
+
 /** The tasks for one job, soonest first; done ones (in `skipped`) left out. */
 export function tasksFor(id: string, e: Entry, now = new Date()): Task[] {
   if (!isActive(e.status)) return [];
@@ -60,12 +71,12 @@ export function tasksFor(id: string, e: Entry, now = new Date()): Task[] {
   }
 
   const interviews = (e.interviews ?? []).filter((i) => isDay(i.on));
-  // A thank-you after the latest interview that has passed, until you send any touch from that day on.
+  // A thank-you after the latest interview that has passed, until you send a touch after it.
   const passed = interviews
     .filter((i) => i.on < day && i.on >= plusDays(day, -THANK_YOU_DAYS))
     .sort((a, b) => a.on.localeCompare(b.on))
     .at(-1);
-  if (passed && !(e.activities ?? []).some((a) => isTouch(a) && a.dir === "sent" && dayAfter(a.at, 0) >= passed.on)) {
+  if (passed && !(e.activities ?? []).some((a) => isTouch(a) && a.dir === "sent" && afterInterview(a.at, passed))) {
     tasks.push({
       key: `thank-you:${passed.on}`,
       id,
@@ -153,11 +164,11 @@ export function cardState(e: Entry, tasks: readonly Task[] = [], now = new Date(
   const task = tasks[0];
   if (task && task.due < day) return { tone: "overdue", task, days: daysBetween(task.due, day) };
   if (task && task.due === day) return { tone: "today", task };
-  // Applied, and no reply for a week or more: "No reply · Nd".
-  if (e.status === "applied") {
+  // Applied, no reply for QUIET_DAYS, and no follow-up date still ahead: "No reply · Nd".
+  if (e.status === "applied" && !(e.followUp && e.followUp > day)) {
     const since = Math.max(Date.parse(stageSince(e)), lastReceived(e));
     const days = Math.floor((now.getTime() - since) / DAY);
-    if (days >= FOLLOW_UP_DAYS) return { tone: "quiet", task, days };
+    if (days >= QUIET_DAYS) return { tone: "quiet", task, days };
   }
   return task ? { tone: "later", task } : { tone: "none" };
 }

@@ -33,8 +33,13 @@ describe("tasks", () => {
     expect(tasksFor("a", e, noon("2026-10-16"))).toMatchObject([{ key: "thank-you:2026-10-15", due: "2026-10-16", kind: "thank-you" }]);
     // Not on the day itself: it hasn't passed yet.
     expect(tasksFor("a", e, noon("2026-10-15")).some((t) => t.kind === "thank-you")).toBe(false);
-    const thanked = { ...e, activities: [touch({ at: noon("2026-10-15").toISOString() })] };
-    expect(tasksFor("a", thanked, noon("2026-10-16"))).toEqual([]);
+    // A touch the next day is the thank-you; one on the interview day (time unknown) may be from before it.
+    expect(tasksFor("a", { ...e, activities: [touch({ at: noon("2026-10-16").toISOString() })] }, noon("2026-10-16"))).toEqual([]);
+    expect(tasksFor("a", { ...e, activities: [touch({ at: noon("2026-10-15").toISOString() })] }, noon("2026-10-16"))).toHaveLength(1);
+    // With the interview's time, a touch later that day counts and one before it doesn't.
+    const timed = entry({ status: "interviewing", interviews: [{ on: "2026-10-15", what: "Technical", time: "10:00" }] });
+    expect(tasksFor("a", { ...timed, activities: [touch({ at: noon("2026-10-15").toISOString() })] }, noon("2026-10-16"))).toEqual([]);
+    expect(tasksFor("a", { ...timed, activities: [touch({ at: new Date("2026-10-15T09:00:00").toISOString() })] }, noon("2026-10-16"))).toHaveLength(1);
     // Long past: no thank-you any more.
     expect(tasksFor("a", e, noon("2026-11-15"))).toEqual([]);
   });
@@ -115,11 +120,15 @@ describe("cardState", () => {
     expect(state(entry({ status: "saved" }))).toEqual({ tone: "none" });
     expect(state(entry({ status: "rejected" }))).toEqual({ tone: "closed" });
   });
-  it("says quiet when applied with no reply for a week and nothing due", () => {
-    const e = entry({ followUp: "2026-10-25", history: [{ status: "applied", at: noon("2026-10-10").toISOString() }] });
-    expect(state(e)).toMatchObject({ tone: "quiet", days: 10 });
+  it("says quiet when applied with no reply for 21 days and no follow-up date ahead", () => {
+    const e = entry({ skipped: ["close:0"], history: [{ status: "applied", at: noon("2026-09-28").toISOString() }] });
+    expect(state(e)).toMatchObject({ tone: "quiet", days: 22 });
+    // A follow-up date still ahead: you chased it, so it's waiting, not quiet.
+    expect(state({ ...e, followUp: "2026-10-25" })).toMatchObject({ tone: "later" });
+    // A week without a reply isn't quiet yet.
+    expect(state(entry({ history: [{ status: "applied", at: noon("2026-10-10").toISOString() }] }))).toEqual({ tone: "none" });
     const replied = { ...e, activities: [touch({ dir: "received", at: "2026-10-18T09:00:00.000Z" })] };
-    expect(state(replied)).toMatchObject({ tone: "later" });
+    expect(state(replied)).toEqual({ tone: "none" });
   });
 });
 
@@ -148,10 +157,10 @@ describe("timezones", () => {
     process.env.TZ = "America/Los_Angeles";
     const e = entry({ status: "interviewing", interviews: [{ on: "2026-10-20", what: "Final" }] });
     const later = new Date("2026-10-22T20:00:00.000Z");
-    // Oct 20, 7pm in Los Angeles (Oct 21 in UTC): a thank-you sent that evening counts.
-    expect(tasksFor("a", { ...e, activities: [touch({ at: "2026-10-21T02:00:00.000Z" })] }, later)).toEqual([]);
-    // Oct 19, 10pm in Los Angeles (Oct 20 in UTC): before the interview, so it doesn't.
-    expect(tasksFor("a", { ...e, activities: [touch({ at: "2026-10-20T05:00:00.000Z" })] }, later).map((t) => t.kind)).toEqual(["thank-you"]);
+    // Oct 21, 7pm in Los Angeles (Oct 22 in UTC): the next local day, so it counts.
+    expect(tasksFor("a", { ...e, activities: [touch({ at: "2026-10-22T02:00:00.000Z" })] }, later)).toEqual([]);
+    // Oct 20, 10pm in Los Angeles but Oct 21 in UTC: still the interview day locally, so it doesn't.
+    expect(tasksFor("a", { ...e, activities: [touch({ at: "2026-10-21T05:00:00.000Z" })] }, later).map((t) => t.kind)).toEqual(["thank-you"]);
   });
 
   it("puts the thank-you the next calendar day across a clock change", () => {

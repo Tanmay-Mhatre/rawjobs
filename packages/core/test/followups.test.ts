@@ -21,7 +21,7 @@ function setup(state: Record<string, unknown>) {
 }
 
 describe("follow-up reminders", () => {
-  it("finds jobs in an active stage whose date has come", () => {
+  it("finds jobs you applied to whose date has come, not Saved ones (that date is Apply by)", () => {
     const state = {
       a: { status: "applied", followUp: "2026-10-23" },
       b: { status: "applied", followUp: "2026-10-30" },
@@ -33,7 +33,6 @@ describe("follow-up reminders", () => {
     expect(dueFollowUps(state, "2026-10-23")).toEqual([
       { id: "a", followUp: "2026-10-23" },
       { id: "c", followUp: "2026-10-01" },
-      { id: "f", followUp: "2026-10-22" },
     ]);
     expect(dueFollowUps(undefined, "2026-10-23")).toEqual([]);
   });

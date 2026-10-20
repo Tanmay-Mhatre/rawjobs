@@ -10,11 +10,11 @@ const plural = (n: number, one: string, many: string) => `<b>${n.toLocaleString(
 /** Which follow-ups were already sent (job id -> its follow-up date), so each is sent once. */
 export const FOLLOW_UPS_SENT = "followups-sent.json";
 
-/** Stages where a follow-up date counts (the dashboard keeps one in each). */
-const ACTIVE = new Set(["saved", "applied", "interviewing", "offer"]);
+/** Stages where a follow-up date means "follow up" (on Saved it means "Apply by": no reminder). */
+const ACTIVE = new Set(["applied", "interviewing", "offer"]);
 
 /**
- * Jobs in an active stage whose follow-up date (YYYY-MM-DD) is `today` or past, from the dashboard's
+ * Jobs you applied to (Applied, Interviewing or Offer) whose follow-up date (YYYY-MM-DD) is `today` or past, from the dashboard's
  * tracking. Read loosely: the dashboard owns that shape, and anything unexpected is skipped.
  */
 export function dueFollowUps(state: Record<string, unknown> | undefined, today: string): { id: string; followUp: string }[] {
