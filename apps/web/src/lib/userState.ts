@@ -293,11 +293,12 @@ export function capEntry(e: Entry, now = new Date()): Entry {
 
 /**
  * Log a touch: the patch that adds it, and then sets the next follow-up (a sent touch,
- * `followUpDays` from today) or clears it (a received one).
+ * `followUpDays` from today) or clears it (a received one). Not on a Saved job, whose date is "Apply by".
  */
 export function addActivity(entry: Entry | undefined, a: Activity, { followUpDays }: { followUpDays?: number } = {}, now = new Date()): EntryPatch {
   const patch: EntryPatch = { activities: [...(entry?.activities ?? []), a] };
-  if (a.channel === "note") return patch;
+  // On a Saved job the date is "Apply by", not a follow-up: a touch leaves it alone.
+  if (a.channel === "note" || entry?.status === "saved") return patch;
   if (a.dir === "received") patch.followUp = undefined;
   else if (a.dir === "sent" && followUpDays) patch.followUp = dayAfter(`${today(now)}T12:00:00`, followUpDays);
   return patch;
@@ -312,7 +313,9 @@ export function applyPatch(prev: Entry | undefined, job: JobLike, patch: EntryPa
   const next: Entry = {
     ...prev,
     ...fields,
-    updatedAt: now,
+    // An empty patch only refreshes the job's details (a rename): it isn't a change of yours, so
+    // updatedAt (which dates a stage tracked before history existed) stays put.
+    updatedAt: prev && Object.keys(patch).length === 0 ? prev.updatedAt : now,
     snapshot: { title: job.title, company: job.company, url: job.url, location: job.location, score: job.score, ...withFit(job, prev) },
   };
   const changed = "status" in patch && patch.status !== prev?.status;

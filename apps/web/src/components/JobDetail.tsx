@@ -34,14 +34,15 @@ import { atsLabel, evergreenReason, INDEX_MAX_AGE_DAYS, isOlder } from "../lib/f
 import { isRoleStale, isStale, staleReasons } from "../lib/stale";
 import { type FitFix, fitFixes, fixApplied, useProfileFix } from "../lib/profileFix";
 import { load, save } from "../lib/storage";
-import { CLOSED_AS, type ClosedAs, type Entry, type EntryPatch, dayAfter, followUpDue, PIPELINE, quickStatus, STATUS_LABEL, type Status, stageSince, statusLabel } from "../lib/userState";
+import { CLOSED_AS, type ClosedAs, type Entry, type EntryPatch, dayAfter, followUpDue, isActive, PIPELINE, quickStatus, STATUS_LABEL, type Status, stageSince, statusLabel } from "../lib/userState";
 import { Dialog } from "./Dialog";
 import { settingsHash } from "./settings/registry";
 import { HiringActivity } from "./HiringActivity";
 import { ReasonPicker, useNotForMe } from "./NotForMe";
 import { Button, buttonClass, IconButton, Menu, ScoreBadge, scoreBandOf, ScoreBreakdown, scoreParts, Tooltip } from "./primitives";
 import { toast } from "./Toast";
-import { TrackingExtras } from "./TrackedJob";
+import { JobTracking } from "./pipeline/JobTracking";
+import { OfferFields } from "./TrackedJob";
 import { cx, Select } from "./ui";
 
 export type JobDetailProps = {
@@ -132,6 +133,8 @@ export function JobDetail(p: JobDetailProps) {
   const rootRef = useRef<HTMLDivElement>(null);
   const salary = formatSalary(job.salary);
   const status = entry?.status;
+  /** On the board (any stage, Closed too): the progress tabs show. */
+  const tracked = !!status && status !== "dismissed";
   const notForMe = useNotForMe();
   const source = atsLabel(job.ats);
 
@@ -405,11 +408,13 @@ export function JobDetail(p: JobDetailProps) {
                 ))}
                 <option value="dismissed">{STATUS_LABEL.dismissed}</option>
               </Select>
-              <NotesField key={job.id} id={`notes-${job.id}`} note={entry?.note ?? ""} onSave={(note) => p.onUpdate({ note: note || undefined })} />
+              {/* Tracked: notes are logged in Activity (an older note shows there too). */}
+              {!tracked && <NotesField key={job.id} id={`notes-${job.id}`} note={entry?.note ?? ""} onSave={(note) => p.onUpdate({ note: note || undefined })} />}
               <CvField key={`cv:${job.id}`} id={`cv-${job.id}`} cv={entry?.cv ?? ""} onSave={(cv) => p.onUpdate({ cv: cv || undefined })} />
             </div>
             {entry && <ProgressLine entry={entry} onUpdate={p.onUpdate} id={`follow-${job.id}`} />}
-            {entry?.status && entry.status !== "dismissed" && entry.status !== "saved" && <TrackingExtras key={`extras:${job.id}`} entry={entry} onUpdate={p.onUpdate} />}
+            {tracked && entry && (entry.status === "offer" || entry.offer) && <OfferFields key={`offer:${job.id}`} offer={entry.offer ?? {}} onSave={(offer) => p.onUpdate({ offer })} />}
+            {tracked && entry && <JobTracking jobId={job.id} entry={entry} title={job.title} foundAt={job.firstSeen} onUpdate={p.onUpdate} />}
             {status === "dismissed" && <ReasonPicker key={`why:${job.id}`} job={job} label="Why not? Optional." live />}
           </section>
 
@@ -898,15 +903,16 @@ const progressValue = (e: Entry | undefined) => (e?.status === "rejected" ? `rej
 const shortDay = (iso: string) => new Date(iso.length === 10 ? `${iso}T12:00:00` : iso).toLocaleDateString(undefined, { month: "short", day: "numeric" });
 
 /**
- * Where a tracked job stands, with dates: "Saved Oct 15 › Applied Oct 16", then, while applied, when to
- * follow up (changeable, amber once it's due).
+ * Where a tracked job stands, with dates: "Saved Oct 15 › Applied Oct 16", then, in an active stage, when to
+ * follow up, or apply by while saved (changeable, amber once it's due).
  */
 function ProgressLine({ entry, id, onUpdate }: { entry: Entry; id: string; onUpdate: (patch: EntryPatch) => void }) {
   // Only the steps still standing: a status set and later cleared drops out of the line.
   const steps = (entry.history ?? []).filter((h): h is { status: Status; at: string } => h.status !== null).slice(-6);
   const since = entry.status && entry.status !== "dismissed" ? stageSince(entry) : undefined;
   const due = followUpDue(entry);
-  if (!steps.length && entry.status !== "applied") return null;
+  const active = isActive(entry.status);
+  if (!steps.length && !active) return null;
   return (
     <div className="flex flex-wrap items-center gap-x-4 gap-y-2 type-small text-muted">
       {steps.length > 0 && (
@@ -933,9 +939,9 @@ function ProgressLine({ entry, id, onUpdate }: { entry: Entry; id: string; onUpd
           />
         </label>
       )}
-      {entry.status === "applied" && (
+      {active && (
         <label htmlFor={id} className={cx("flex items-center gap-2", due && "font-medium text-warning-text")}>
-          {due ? "Follow up now" : "Follow up on"}
+          {entry.status === "saved" ? (due ? "Apply now" : "Apply by") : due ? "Follow up now" : "Follow up on"}
           <input
             id={id}
             type="date"

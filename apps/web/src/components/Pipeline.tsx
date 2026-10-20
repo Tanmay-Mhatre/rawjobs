@@ -126,7 +126,13 @@ export function Pipeline({ user, jobsById, min, onOpen, onPatch, onAdd, weeklyPl
   return (
     <div ref={boardRef} className="pb-2 md:overflow-x-auto">
       {addDialog}
-      <TrackedJobDialog entry={editing ? user[editing] : undefined} onClose={() => setEditing(null)} onUpdate={(patch) => editing && user[editing] && onPatch(editing, user[editing], patch)} />
+      <TrackedJobDialog
+        id={editing}
+        entry={editing ? user[editing] : undefined}
+        onClose={() => setEditing(null)}
+        // A new title, company or link goes in through the entry's snapshot, which the patch is applied to.
+        onUpdate={(patch, job) => editing && user[editing] && onPatch(editing, job ? { ...user[editing], snapshot: { ...user[editing].snapshot, ...job } } : user[editing], patch)}
+      />
       {comparing && <CompareOffers offers={offers} onClose={() => setComparing(false)} />}
       <div className="mb-3 flex justify-end gap-2">
         {offers.length >= 2 && (

@@ -46,6 +46,8 @@ export type ComposerProps = {
   initial?: { channel?: Channel; dir?: Direction; contactId?: string; text?: string; followUp?: boolean };
   /** A follow-up date is set: a received touch clears it, and the hint says so. */
   hasFollowUp?: boolean;
+  /** False on a Saved job: its date is "Apply by", so a touch neither sets nor clears it, and there's no "Next follow-up in". */
+  followUps?: boolean;
   /** Log it: the caller saves the touch (addActivity) with the next follow-up in `followUpDays` days, if any. */
   onLog: (activity: Activity, opts: { followUpDays?: number }) => void;
   /** "Logged email. Next follow-up Oct 28.": for the caller's live region. */
@@ -102,7 +104,7 @@ const shortDay = (day: string) => new Date(`${day}T12:00:00`).toLocaleDateString
  * person, the day (today or earlier) and a line of text. A sent touch sets the next follow-up; a
  * received one clears it. Ctrl or Cmd + Enter logs. RawJobs sends nothing: this only records it.
  */
-export function Composer({ contacts, initial, hasFollowUp, onLog, onAnnounce, onAddPerson, now = new Date(), className }: ComposerProps) {
+export function Composer({ contacts, initial, hasFollowUp, followUps = true, onLog, onAnnounce, onAddPerson, now = new Date(), className }: ComposerProps) {
   const id = useId();
   const day = today(now);
   const [channel, setChannel] = useState<Channel>(initial?.channel ?? "email");
@@ -126,9 +128,9 @@ export function Composer({ contacts, initial, hasFollowUp, onLog, onAnnounce, on
       ...(words ? { text: words } : {}),
       ...(initial?.followUp && sent ? { followUp: true as const } : {}),
     };
-    const followUpDays = sent && chase ? days : undefined;
+    const followUpDays = followUps && sent && chase ? days : undefined;
     onLog(activity, { followUpDays });
-    const next = followUpDays ? ` Next follow-up ${shortDay(dayAfter(`${day}T12:00:00`, followUpDays))}.` : !note && dir === "received" && hasFollowUp ? " Follow-up cleared." : "";
+    const next = followUpDays ? ` Next follow-up ${shortDay(dayAfter(`${day}T12:00:00`, followUpDays))}.` : followUps && !note && dir === "received" && hasFollowUp ? " Follow-up cleared." : "";
     onAnnounce?.(`${LOGGED[channel]}.${next}`);
     setText("");
   };
@@ -198,7 +200,7 @@ export function Composer({ contacts, initial, hasFollowUp, onLog, onAnnounce, on
         />
       </div>
       <div className="flex flex-wrap items-center gap-3">
-        {sent && (
+        {followUps && sent && (
           <label className="inline-flex items-center gap-2 type-small">
             <input type="checkbox" checked={chase} onChange={(ev) => setChase(ev.target.checked)} className="size-4 accent-ink" />
             Next follow-up in
@@ -211,7 +213,7 @@ export function Composer({ contacts, initial, hasFollowUp, onLog, onAnnounce, on
             </Select>
           </label>
         )}
-        {!note && dir === "received" && hasFollowUp && <p className="type-small text-muted">Logging a reply clears the follow-up date.</p>}
+        {followUps && !note && dir === "received" && hasFollowUp && <p className="type-small text-muted">Logging a reply clears the follow-up date.</p>}
         <Button type="submit" variant="primary" className="ml-auto">
           {LOG_LABEL[channel]}
         </Button>
