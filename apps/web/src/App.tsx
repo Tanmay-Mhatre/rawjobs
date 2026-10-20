@@ -8,6 +8,7 @@ import { ApplyPrompt } from "./components/ApplyPrompt";
 import { JobDrawer } from "./components/JobDrawer";
 import { type NotForMeApi, NotForMeProvider, useNotForMeApi } from "./components/NotForMe";
 import { type PeopleApi, PeopleProvider } from "./components/pipeline/PeopleContext";
+import { PipHost } from "./components/referral/PipHost";
 import { Pipeline } from "./components/Pipeline";
 import { FeedSkeleton } from "./components/radar/FeedSkeleton";
 import { RadarPage } from "./components/radar/RadarPage";
@@ -41,7 +42,8 @@ import { hasNewTag } from "./lib/filters";
 import { roleOf } from "./lib/identity";
 import { ignoreShortcut, useGoToKeys } from "./lib/keys";
 import { useSavedAppearance, useTheme } from "./lib/theme";
-import { quickStatus, STATUS_LABEL, type Status, useUserState } from "./lib/userState";
+import { type CardJob, type LogInput, type LogResult, logPersonPatch } from "./lib/seePeople";
+import { type JobLike, quickStatus, STATUS_LABEL, type Status, useUserState } from "./lib/userState";
 import wordmarkInk from "./design/logos/rawjobs-wordmark-ink.svg";
 import wordmarkPaper from "./design/logos/rawjobs-wordmark-paper.svg";
 import { Wizard } from "./setup/Wizard";
@@ -208,6 +210,17 @@ export function App() {
   const hourlyNow = useHourlyNow();
   const onApply = useCallback((job: Job) => setApplying(job), []);
 
+  /** A person logged from the See people card: on that job's contacts, To contact on LinkedIn. */
+  const logPerson = useCallback(
+    (card: CardJob, input: LogInput): LogResult => {
+      const job: JobLike = jobs.find((j) => j.id === card.id) ?? { id: card.id, title: card.title, company: card.company, url: card.url ?? "", location: card.place ?? "", score: 0 };
+      const { patch, result } = logPersonPatch(user.state[card.id], card, input);
+      if (patch) user.update(job, patch);
+      return result;
+    },
+    [jobs, user.state, user.update],
+  );
+
   const inSetup = "setup" in route;
   const tab = "tab" in route ? route.tab : null;
 
@@ -260,7 +273,7 @@ export function App() {
   const items = checklistItems(notSetUp ? draftToConfig(draft) : status?.config, meta, !!resume.text);
 
   return (
-    <Providers notForMe={notForMe} profileFix={profileFix} people={people}>
+    <Providers notForMe={notForMe} profileFix={profileFix} people={people} onLog={logPerson}>
       <div className="min-h-dvh">
         {/* biome-ignore lint/a11y/useValidAnchor: a real link (its href works without script); onClick only adds in-page focus or routing */}
         <a
@@ -651,12 +664,26 @@ function ShortcutHelp({ open, onClose, canScan }: { open: boolean; onClose: () =
   );
 }
 
-/** The app-wide contexts: "Not for me" and the "Why it matched" profile fixes. */
-function Providers({ notForMe, profileFix, people, children }: { notForMe: NotForMeApi; profileFix: ProfileFixApi | null; people: PeopleApi; children: ReactNode }) {
+/** The app-wide contexts: "Not for me", the "Why it matched" profile fixes, people, and the See people card. */
+function Providers({
+  notForMe,
+  profileFix,
+  people,
+  onLog,
+  children,
+}: {
+  notForMe: NotForMeApi;
+  profileFix: ProfileFixApi | null;
+  people: PeopleApi;
+  onLog: (job: CardJob, p: LogInput) => LogResult;
+  children: ReactNode;
+}) {
   return (
     <NotForMeProvider value={notForMe}>
       <ProfileFixProvider value={profileFix}>
-        <PeopleProvider value={people}>{children}</PeopleProvider>
+        <PeopleProvider value={people}>
+          <PipHost onLog={onLog}>{children}</PipHost>
+        </PeopleProvider>
       </ProfileFixProvider>
     </NotForMeProvider>
   );

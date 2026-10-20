@@ -105,7 +105,7 @@ export function MessageDrafts({ name, inputs, onClose, onMessaged }: { name: str
  * "142 / 200" under the connection note. Not a live region: a separate line announces only when the
  * note crosses into the last 20 characters (181) and past the limit (201).
  */
-function NoteCounter({ n, id, liveId }: { n: number; id: string; liveId: string }) {
+export function NoteCounter({ n, id, liveId }: { n: number; id: string; liveId: string }) {
   const level = n > NOTE_LIMIT ? 2 : n > NOTE_WARN ? 1 : 0;
   const last = useRef(level);
   const [announce, setAnnounce] = useState("");

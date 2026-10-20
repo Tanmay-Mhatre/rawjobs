@@ -76,3 +76,47 @@ export function profileHref(url: string | undefined): string | undefined {
   const u = new URL(safe);
   return u.protocol === "https:" && (u.hostname === "www.linkedin.com" || u.hostname === "linkedin.com") && /^\/in\/[^/]+\/?$/.test(u.pathname) ? safe : undefined;
 }
+
+/**
+ * Where "Open LinkedIn beside this" goes: the company's People page searched for the role when its
+ * LinkedIn slug is known, else a people search for the company and the role.
+ */
+export function seePeopleHref({ company, title, slug }: { company: string; title: string; slug?: string }): string {
+  const s = slug?.trim();
+  if (s && /^[\w-]{1,100}$/.test(s)) return `https://www.linkedin.com/company/${enc(s)}/people/?keywords=${enc(title.trim())}`;
+  return people(`${quoted(company)} ${title.trim()}`);
+}
+
+/**
+ * A profile link you paste ("linkedin.com/in/ada-lovelace?trk=…"), cleaned to
+ * https://www.linkedin.com/in/<slug>. Anything that isn't a /in/ profile on linkedin.com is refused:
+ * the contact check (linkedInUrl) alone accepts any LinkedIn page.
+ */
+export function profileLink(input: string): string | undefined {
+  const s = input.trim();
+  if (!s || s.length > 300 || /\s/.test(s)) return undefined;
+  let u: URL;
+  try {
+    u = new URL(/^https?:\/\//i.test(s) ? s : `https://${s}`);
+  } catch {
+    return undefined;
+  }
+  if (u.hostname !== "linkedin.com" && !u.hostname.endsWith(".linkedin.com")) return undefined;
+  const m = u.pathname.match(/^\/in\/([^/]+)\/?$/);
+  return m ? profileHref(`https://www.linkedin.com/in/${m[1]}`) : undefined;
+}
+
+/** A name from a profile link's slug ("ada-lovelace-1a2b3c" is "Ada Lovelace"), for someone logged without one. */
+export function nameFromProfile(url: string): string | undefined {
+  let slug = "";
+  try {
+    slug = decodeURIComponent(new URL(url).pathname.split("/")[2] ?? "");
+  } catch {
+    return undefined;
+  }
+  const words = slug
+    .split(/[-_]+/)
+    .filter((w) => /^\p{L}+$/u.test(w))
+    .slice(0, 3);
+  return words.length ? words.map((w) => w.charAt(0).toUpperCase() + w.slice(1)).join(" ") : undefined;
+}

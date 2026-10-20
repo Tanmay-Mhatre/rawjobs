@@ -7,8 +7,9 @@ import { LINK_REL } from "../../lib/contactLinks";
 import { canRunLocally, type Job, type Profile } from "../../lib/data";
 import { companyName } from "../../lib/format";
 import { type NetworkMe, type NetworkPersonRow, REFRESH_AFTER_DAYS, setCloseContact, useNetwork, usePeopleAt } from "../../lib/network";
-import { coldLinks, profileHref, recruiterLinks, type SearchLink, warmLinks } from "../../lib/referralLinks";
-import { addActivity, CAPS, type Contact, type Entry, type EntryPatch, newId, OUTREACH_LABEL, type Outreach, toContact } from "../../lib/userState";
+import { coldLinks, profileHref, recruiterLinks, type SearchLink, seePeopleHref, warmLinks } from "../../lib/referralLinks";
+import { openBeside } from "../../lib/seePeople";
+import { addActivity, addContactPatch, CAPS, type Contact, type Entry, type EntryPatch, newId, OUTREACH_LABEL, type Outreach, toContact } from "../../lib/userState";
 import { knownPeople } from "../pipeline/detail";
 import { usePeople } from "../pipeline/PeopleContext";
 import { KnownPicker } from "../pipeline/PeopleTab";
@@ -17,6 +18,7 @@ import { Button, cx } from "../ui";
 import { ConnectLinkedIn, WatchLine } from "./ConnectLinkedIn";
 import { FindFriends } from "./FindFriends";
 import { MessageDrafts } from "./MessageDrafts";
+import { usePip } from "./PipHost";
 
 /** Rows shown before "Show all". */
 export const TOP_PEOPLE = 5;
@@ -72,6 +74,7 @@ function Section({ job, entry, profile, onUpdate, onOpenPeople }: Props) {
   const connected = !!status?.connected;
   const people = usePeopleAt(job.company, connected && !agency);
   const [connecting, setConnecting] = useState(false);
+  const [cardFailed, setCardFailed] = useState(false);
   const loading = useAfter(network?.state === "loading" || people?.state === "loading");
   const headingId = `talk-${job.id}`;
 
@@ -90,8 +93,7 @@ function Section({ job, entry, profile, onUpdate, onOpenPeople }: Props) {
     onUpdate &&
     ((c: Contact, networkId?: string, pasted?: Pick<Outreach, "degree" | "mutual">, before?: string) => {
       const saving = !entry?.status;
-      const ask: Outreach = { stage: "to-contact", via: "linkedin", at: new Date().toISOString(), ...(networkId ? { networkId } : {}), ...pasted };
-      onUpdate({ ...(saving ? { status: "saved" as const } : {}), contacts: [...contacts, c], outreach: { ...entry?.outreach, [c.id]: ask } });
+      onUpdate(addContactPatch(entry, c, { ...(networkId ? { networkId } : {}), ...pasted }));
       toast({
         message: `${before ?? ""}${saving ? `Saved this job and added ${c.name}` : `Added ${c.name} to this job`}`,
         actionLabel: "Undo",
@@ -180,9 +182,11 @@ function Section({ job, entry, profile, onUpdate, onOpenPeople }: Props) {
   return (
     <section className="rj-drawer__section" aria-labelledby={headingId}>
       <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2">
-        <h3 id={headingId} className="rj-h">
+        {/* mr-auto keeps the buttons together on the right; Find friends' paste box wraps below them all. */}
+        <h3 id={headingId} className="rj-h mr-auto">
           Talk to someone who works here
         </h3>
+        {!agency && <SeePeople job={job} company={company} onFailed={() => setCardFailed(true)} />}
         {!agency && (
           <FindFriends
             key={key ?? company}
@@ -194,6 +198,7 @@ function Section({ job, entry, profile, onUpdate, onOpenPeople }: Props) {
           />
         )}
       </div>
+      {cardFailed && !agency && <OpenLinkedInInline company={company} title={job.title} />}
       {loading && (
         <p role="status" className="type-small text-muted">
           Looking for people you know…
@@ -204,6 +209,39 @@ function Section({ job, entry, profile, onUpdate, onOpenPeople }: Props) {
       {links.length > 0 && <MoreWaysIn links={links} />}
       {canRunLocally && <ConnectLinkedIn open={connecting} onClose={() => setConnecting(false)} />}
     </section>
+  );
+}
+
+/** "See people at {Company}": opens only the floating card; LinkedIn opens from the card's own button. */
+function SeePeople({ job, company, onFailed }: { job: Job; company: string; onFailed: () => void }) {
+  const pip = usePip();
+  if (!pip) return null;
+  const open = async (from: HTMLElement) => {
+    const r = await pip.open({ id: job.id, title: job.title, company, place: job.location || undefined, url: job.url }, from);
+    if (r === "failed") onFailed();
+  };
+  return (
+    <Button size="sm" onClick={(e) => void open(e.currentTarget)}>
+      See people at {company}
+    </Button>
+  );
+}
+
+/** The card couldn't open (Picture-in-Picture refused, or the popup blocked): LinkedIn straight from the panel. */
+function OpenLinkedInInline({ company, title }: { company: string; title: string }) {
+  const [blocked, setBlocked] = useState(false);
+  return (
+    <div className="space-y-1">
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
+        <p className="min-w-0 flex-1 type-small text-muted">The card didn't open in this browser. Search LinkedIn from here instead.</p>
+        <Button size="sm" onClick={() => setBlocked(!openBeside(seePeopleHref({ company, title })))}>
+          <ExternalLink className="size-4" aria-hidden /> Open LinkedIn
+        </Button>
+      </div>
+      <p role="status" className="type-small text-warning-text">
+        {blocked && "Your browser blocked the LinkedIn window. Allow pop-ups for RawJobs, or use the search links."}
+      </p>
+    </div>
   );
 }
 
