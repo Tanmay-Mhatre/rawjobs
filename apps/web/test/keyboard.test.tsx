@@ -52,7 +52,6 @@ describe("Pipeline [ / ] moves (design/components/Pipeline)", () => {
       <Pipeline
         user={user}
         jobsById={new Map([[j.id, j]])}
-        min={65}
         onOpen={() => {}}
         onPatch={(id, entry, { status }) => {
           onMove?.(status ?? "");

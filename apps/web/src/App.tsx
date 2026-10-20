@@ -25,6 +25,7 @@ import { Button, Card, cx, IconButton } from "./components/ui";
 import { keyOf } from "./lib/companies";
 import { canRunLocally, useData, useOtherJobs, type Job } from "./lib/data";
 import { newCtx } from "./lib/newSince";
+import { toReview } from "./lib/toReview";
 import { usePrefs } from "./lib/prefs";
 import { scanPrefs, useScan, withLive } from "./lib/scan";
 import { useBackgroundScan } from "./lib/backgroundScan";
@@ -204,6 +205,11 @@ export function App() {
     [statusOf, toggleStatus, askWhy],
   );
   const onOpen = useCallback((job: Job) => setOpenId(job.id), []);
+  // The Pipeline's To review column: new strong matches you haven't tracked; none while the Radar isn't set up.
+  const review = useMemo(
+    () => (notSetUp ? undefined : toReview(jobs, { user: user.state, min: meta?.profile.min_score ?? 70, hiddenCompanies: new Set(prefs.prefs.hiddenCompanies), hideRules: prefs.prefs.hideRules })),
+    [notSetUp, jobs, user.state, meta?.profile.min_score, prefs.prefs.hiddenCompanies, prefs.prefs.hideRules],
+  );
   const onApply = useCallback((job: Job) => setApplying(job), []);
 
   const inSetup = "setup" in route;
@@ -445,8 +451,9 @@ export function App() {
                 <Pipeline
                   user={user.state}
                   jobsById={jobsById}
-                  min={meta?.profile.min_score ?? 70}
                   onOpen={onOpen}
+                  review={review}
+                  onReview={onStatus}
                   onPatch={(id, entry, patch) => user.update({ id, ...entry.snapshot, ...pick(jobsById.get(id)) }, patch)}
                   weeklyPlan={prefs.prefs.weeklyPlan}
                   onWeeklyPlan={prefs.setWeeklyPlan}

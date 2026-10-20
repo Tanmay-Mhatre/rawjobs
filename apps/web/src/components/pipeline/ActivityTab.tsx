@@ -1,11 +1,11 @@
 import { AlarmClock, CalendarClock, Check, Radar, StickyNote } from "lucide-react";
 import { useId, useState } from "react";
 import { type Task, tasksFor } from "../../lib/nextSteps";
-import { addActivity, CHANNEL_LABEL, type Channel, dayAfter, type Entry, type EntryPatch, isDay, today } from "../../lib/userState";
+import { addActivity, CHANNEL_LABEL, dayAfter, type Entry, type EntryPatch, isDay, today } from "../../lib/userState";
 import { buttonClass, Chip, ChipGroup, Menu } from "../primitives";
 import { Button, cx } from "../ui";
 import { CHANNEL_ICON, Composer, type ComposerProps } from "./Composer";
-import { filterTimeline, isLong, TIMELINE_FILTERS, type TimelineFilter, type TimelineItem, templateText, timeline } from "./detail";
+import { filterTimeline, isLong, TIMELINE_FILTERS, type TimelineFilter, type TimelineItem, taskPrefill, timeline } from "./detail";
 
 const shortDay = (day: string) => new Date(`${day}T12:00:00`).toLocaleDateString(undefined, { month: "short", day: "numeric" });
 const when = (iso: string) => new Date(iso).toLocaleString(undefined, { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
@@ -45,12 +45,7 @@ export function ActivityTab({
   const shown = filterTimeline(items, filter);
 
   const logTask = (t: Task) => {
-    const kind = t.kind === "thank-you" ? "thank-you" : "follow-up";
-    const lastSent = (entry.activities ?? []).filter((a) => a.dir === "sent" && a.channel !== "note").at(-1);
-    const contactId = t.contactId ?? lastSent?.contactId;
-    const name = entry.contacts?.find((c) => c.id === contactId)?.name;
-    const channel: Channel = lastSent?.channel ?? "email";
-    setPrefill((p) => ({ n: p.n + 1, initial: { channel, dir: "sent", contactId, text: templateText(kind, name, title), followUp: true } }));
+    setPrefill((p) => ({ n: p.n + 1, initial: taskPrefill(entry, t, title) }));
     // The composer is just below: put the cursor in its text so the template can be edited and logged.
     requestAnimationFrame(() => document.getElementById(`${composerId}-composer`)?.querySelector("textarea")?.focus());
   };
@@ -96,35 +91,9 @@ export function ActivityTab({
 }
 
 /** The next step on this job, with its actions: Log and Snooze, Log and Mark done, or close it. */
-function NextStep({
-  task,
-  skipped,
-  onLog,
-  onMarkDone,
-  onUpdate,
-  now,
-}: {
-  task: Task;
-  skipped: string[];
-  onLog: (t: Task) => void;
-  onMarkDone: (t: Task) => void;
-  onUpdate: (p: EntryPatch) => void;
-  now: Date;
-}) {
+function NextStep({ task, skipped, onLog, onMarkDone, onUpdate, now }: TaskActionsProps) {
   const day = today(now);
-  const [picking, setPicking] = useState(false);
-  const [picked, setPicked] = useState("");
   const overdue = task.due < day;
-  const snooze = (to: string) => onUpdate({ followUp: to });
-  const plus = (n: number) => dayAfter(`${day}T12:00:00`, n);
-  /** A picked date counts from tomorrow on (and within 2 years); anything else is left unsaved. */
-  const commitPick = () => {
-    if (isDay(picked) && picked >= plus(1) && picked <= plus(730)) {
-      snooze(picked);
-      setPicking(false);
-      setPicked("");
-    }
-  };
   const due = overdue ? `Overdue since ${shortDay(task.due)}` : task.due === day ? "Today" : shortDay(task.due);
   return (
     <section aria-label="Next step" className="grid gap-2 rounded-md border border-line bg-inset p-3">
@@ -135,72 +104,113 @@ function NextStep({
         <span className={cx("type-small", overdue ? "font-medium text-danger-text" : "text-muted")}>{due}</span>
       </div>
       <p className="type-small text-muted">{task.why}</p>
-      <div className="flex flex-wrap items-center gap-2">
-        {task.kind === "follow-up" && (
-          <>
-            <Button size="sm" variant="primary" onClick={() => onLog(task)}>
-              Log follow-up
-            </Button>
-            <Menu
-              label="Snooze until"
-              align="start"
-              trigger={(t) => (
-                <button type="button" className={buttonClass("secondary", "sm")} {...t}>
-                  <AlarmClock className="rj-icon" aria-hidden /> Snooze
-                </button>
-              )}
-              items={[
-                { id: "1", label: "Tomorrow", onSelect: () => snooze(plus(1)) },
-                { id: "3", label: "In 3 days", onSelect: () => snooze(plus(3)) },
-                { id: "7", label: "Next week", onSelect: () => snooze(plus(7)) },
-                { id: "pick", label: "Pick a date", onSelect: () => setPicking(true) },
-              ]}
-            />
-            {picking && (
-              <label className="inline-flex items-center gap-2 type-small">
-                Follow up on
-                <input
-                  type="date"
-                  // biome-ignore lint/a11y/noAutofocus: focus moves into what "Pick a date" just opened
-                  autoFocus
-                  min={plus(1)}
-                  value={picked}
-                  // Saved on Enter or when you leave the field, so a year still being typed (0002-…) never lands.
-                  onChange={(e) => setPicked(e.target.value)}
-                  onBlur={commitPick}
-                  onKeyDown={(e) => {
-                    if (e.key !== "Enter") return;
-                    e.preventDefault();
-                    commitPick();
-                  }}
-                  className="h-8 rounded-md border border-line bg-raised px-2 type-small text-ink"
-                />
-              </label>
-            )}
-          </>
-        )}
-        {task.kind === "thank-you" && (
-          <>
-            <Button size="sm" variant="primary" onClick={() => onLog(task)}>
-              Log thank-you
-            </Button>
-            <Button size="sm" onClick={() => onMarkDone(task)}>
-              <Check className="rj-icon" aria-hidden /> Mark done
-            </Button>
-          </>
-        )}
-        {task.kind === "close" && (
-          <>
-            <Button size="sm" variant="primary" onClick={() => onUpdate({ status: "rejected", closedAs: "no-response" })}>
-              Close as no response
-            </Button>
-            <Button size="sm" onClick={() => onUpdate({ followUp: plus(7), skipped: [...skipped, task.key] })}>
-              Follow up once more
-            </Button>
-          </>
-        )}
-      </div>
+      <TaskActions task={task} skipped={skipped} onLog={onLog} onMarkDone={onMarkDone} onUpdate={onUpdate} now={now} />
     </section>
+  );
+}
+
+type TaskActionsProps = {
+  task: Task;
+  skipped: string[];
+  onLog: (t: Task) => void;
+  onMarkDone: (t: Task) => void;
+  onUpdate: (p: EntryPatch) => void;
+  now: Date;
+  /** Interview and deadline tasks: open the job (the detail, or Compare offers). */
+  onOpen?: (t: Task) => void;
+  /** The deadline's button ("Compare offers" with two or more offers); Open otherwise. */
+  deadlineLabel?: string;
+};
+
+/**
+ * A task's buttons, shared by the job's pinned next step and the Pipeline's Next steps list: Log
+ * follow-up and Snooze, Log thank-you and Mark done, Close as no response and Follow up once more, or Open.
+ */
+export function TaskActions({ task, skipped, onLog, onMarkDone, onUpdate, now, onOpen, deadlineLabel = "Open" }: TaskActionsProps) {
+  const day = today(now);
+  const [picking, setPicking] = useState(false);
+  const [picked, setPicked] = useState("");
+  const snooze = (to: string) => onUpdate({ followUp: to });
+  const plus = (n: number) => dayAfter(`${day}T12:00:00`, n);
+  /** A picked date counts from tomorrow on (and within 2 years); anything else is left unsaved. */
+  const commitPick = () => {
+    if (isDay(picked) && picked >= plus(1) && picked <= plus(730)) {
+      snooze(picked);
+      setPicking(false);
+      setPicked("");
+    }
+  };
+  return (
+    <div className="flex flex-wrap items-center gap-2">
+      {task.kind === "follow-up" && (
+        <>
+          <Button size="sm" variant="primary" onClick={() => onLog(task)}>
+            Log follow-up
+          </Button>
+          <Menu
+            label="Snooze until"
+            align="start"
+            trigger={(t) => (
+              <button type="button" className={buttonClass("secondary", "sm")} {...t}>
+                <AlarmClock className="rj-icon" aria-hidden /> Snooze
+              </button>
+            )}
+            items={[
+              { id: "1", label: "Tomorrow", onSelect: () => snooze(plus(1)) },
+              { id: "3", label: "In 3 days", onSelect: () => snooze(plus(3)) },
+              { id: "7", label: "Next week", onSelect: () => snooze(plus(7)) },
+              { id: "pick", label: "Pick a date", onSelect: () => setPicking(true) },
+            ]}
+          />
+          {picking && (
+            <label className="inline-flex items-center gap-2 type-small">
+              Follow up on
+              <input
+                type="date"
+                // biome-ignore lint/a11y/noAutofocus: focus moves into what "Pick a date" just opened
+                autoFocus
+                min={plus(1)}
+                value={picked}
+                // Saved on Enter or when you leave the field, so a year still being typed (0002-…) never lands.
+                onChange={(e) => setPicked(e.target.value)}
+                onBlur={commitPick}
+                onKeyDown={(e) => {
+                  if (e.key !== "Enter") return;
+                  e.preventDefault();
+                  commitPick();
+                }}
+                className="h-8 rounded-md border border-line bg-raised px-2 type-small text-ink"
+              />
+            </label>
+          )}
+        </>
+      )}
+      {task.kind === "thank-you" && (
+        <>
+          <Button size="sm" variant="primary" onClick={() => onLog(task)}>
+            Log thank-you
+          </Button>
+          <Button size="sm" onClick={() => onMarkDone(task)}>
+            <Check className="rj-icon" aria-hidden /> Mark done
+          </Button>
+        </>
+      )}
+      {task.kind === "close" && (
+        <>
+          <Button size="sm" variant="primary" onClick={() => onUpdate({ status: "rejected", closedAs: "no-response" })}>
+            Close as no response
+          </Button>
+          <Button size="sm" onClick={() => onUpdate({ followUp: plus(7), skipped: [...skipped, task.key] })}>
+            Follow up once more
+          </Button>
+        </>
+      )}
+      {onOpen && (task.kind === "interview" || task.kind === "deadline") && (
+        <Button size="sm" onClick={() => onOpen(task)}>
+          {task.kind === "deadline" ? deadlineLabel : "Open"}
+        </Button>
+      )}
+    </div>
   );
 }
 
