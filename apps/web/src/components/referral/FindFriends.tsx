@@ -107,7 +107,7 @@ export function FindFriends({ company, memoryKey, title, onJob, add }: Props) {
             className="w-full rounded-md border border-line bg-raised px-2.5 py-2 type-small text-ink"
           />
           <div className="flex flex-wrap gap-1.5">
-            <Button size="sm" variant="primary" onClick={() => read(text)}>
+            <Button size="sm" variant="secondary" onClick={() => read(text)}>
               Find my friends
             </Button>
             {(result || text) && (
