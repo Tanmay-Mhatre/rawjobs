@@ -81,6 +81,34 @@ export type Contact = {
   link?: string;
 };
 
+/** Where asking one person about this job for a referral stands, from first to last. */
+export const OUTREACH_STAGES = ["to-contact", "warming", "messaged", "replied", "referred"] as const;
+export type OutreachStage = (typeof OUTREACH_STAGES)[number];
+export const OUTREACH_LABEL: Record<OutreachStage, string> = { "to-contact": "To contact", warming: "Warming up", messaged: "Messaged", replied: "Replied", referred: "Referred" };
+export const OUTREACH_VIA = ["linkedin", "email", "topmate", "adplist", "other"] as const;
+export type OutreachVia = (typeof OUTREACH_VIA)[number];
+export const VIA_LABEL: Record<OutreachVia, string> = { linkedin: "LinkedIn", email: "Email", topmate: "Topmate", adplist: "ADPList", other: "Other" };
+
+/** Asking one person on this job for a referral. */
+export type Outreach = {
+  stage: OutreachStage;
+  via?: OutreachVia;
+  /** When the stage last changed (ISO). */
+  at: string;
+  /** The LinkedIn connection this person came from (network.json id). */
+  networkId?: string;
+  /** From a pasted search: 1st or 2nd degree, and the shared connection to ask for an introduction. */
+  degree?: 1 | 2;
+  mutual?: string;
+};
+
+/** The Radar's word for how far a referral got: the furthest stage from Messaged on, else nothing. */
+export function referralWord(e: Pick<Entry, "outreach"> | undefined): string | undefined {
+  let best = -1;
+  for (const o of Object.values(e?.outreach ?? {})) best = Math.max(best, OUTREACH_STAGES.indexOf(o.stage));
+  return best >= OUTREACH_STAGES.indexOf("messaged") ? OUTREACH_LABEL[OUTREACH_STAGES[best]!] : undefined;
+}
+
 /** Size limits, so one job (or an import) can't grow the file without end. */
 export const CAPS = {
   text: 1000,
@@ -95,6 +123,7 @@ export const CAPS = {
   phone: 32,
   linkedin: 300,
   howMet: 500,
+  mutual: 120,
 } as const;
 
 /** What an offer says, as you'd write it ("AED 45k a month", "15%"); dates are YYYY-MM-DD. */
@@ -123,6 +152,8 @@ export type Entry = {
   skipped?: string[];
   /** The offer's terms, kept once you have one (also after you accept or decline). */
   offer?: Offer;
+  /** Referral asks, by contact id (only people in `contacts`). */
+  outreach?: Record<string, Outreach>;
   updatedAt: string;
   /** Copy of the job's basics, so the pipeline survives the job leaving jobs.json. */
   snapshot: {
@@ -150,7 +181,7 @@ function withFit(job: JobLike, prev: Entry | undefined): { fit?: number[] } {
 const KEY = "rawjobs.state.v1";
 
 /** What a change to one job's tracking can set; a key given as undefined clears it. */
-export type EntryPatch = Partial<Pick<Entry, "status" | "note" | "reason" | "closedAs" | "followUp" | "cv" | "interviews" | "contacts" | "activities" | "skipped" | "offer">> & {
+export type EntryPatch = Partial<Pick<Entry, "status" | "note" | "reason" | "closedAs" | "followUp" | "cv" | "interviews" | "contacts" | "activities" | "skipped" | "offer" | "outreach">> & {
   /** Move the date you reached the current status (YYYY-MM-DD), e.g. you applied before tracking it. */
   since?: string;
 };
@@ -257,6 +288,14 @@ export function capEntry(e: Entry, now = new Date()): Entry {
       .map((a) => (a.text && a.text.length > CAPS.text ? { ...a, text: a.text.slice(0, CAPS.text) } : a));
   }
   if (next.contacts && next.contacts.length > CAPS.contacts) next.contacts = next.contacts.slice(0, CAPS.contacts);
+  if (next.outreach) {
+    // Only people still on the job keep their referral stage.
+    const people = new Set((next.contacts ?? []).map((c) => c.id));
+    const kept = Object.entries(next.outreach).filter(([id]) => people.has(id));
+    if (kept.length) {
+      if (kept.length < Object.keys(next.outreach).length) next.outreach = Object.fromEntries(kept);
+    } else delete next.outreach;
+  }
   if (next.skipped) {
     const oldest = dayAfter(now.toISOString(), -CAPS.skippedDays);
     next.skipped = [...new Set(next.skipped)].filter((k) => !((dayIn(k) ?? oldest) < oldest)).slice(-CAPS.skipped);
@@ -359,7 +398,8 @@ function sameV1Ids(mine: Entry, theirs: Entry): Entry {
   });
   if (!renamed.size) return theirs;
   const follow = <T extends { contactId?: string }>(x: T): T => (x.contactId && renamed.has(x.contactId) ? { ...x, contactId: renamed.get(x.contactId) } : x);
-  return { ...theirs, contacts, activities: theirs.activities?.map(follow), interviews: theirs.interviews?.map(follow) };
+  const outreach = theirs.outreach && Object.fromEntries(Object.entries(theirs.outreach).map(([id, o]) => [renamed.get(id) ?? id, o]));
+  return { ...theirs, contacts, activities: theirs.activities?.map(follow), interviews: theirs.interviews?.map(follow), ...(outreach ? { outreach } : {}) };
 }
 
 /**
@@ -383,6 +423,10 @@ export function mergeStates(mine: UserState, theirs: UserState, now = new Date()
     if (activities.length) merged.activities = activities;
     if (contacts.length) merged.contacts = contacts;
     if (skipped.length) merged.skipped = skipped;
+    // Referral stages join by person; for someone in both, the later change wins.
+    const outreach = { ...older.outreach };
+    for (const [cid, o] of Object.entries(newer.outreach ?? {})) if (!outreach[cid] || o.at >= outreach[cid].at) outreach[cid] = o;
+    if (Object.keys(outreach).length) merged.outreach = outreach;
     out[id] = capEntry(merged, now);
   }
   return out;
@@ -492,6 +536,23 @@ function activityFrom(v: unknown, now: Date): Activity | undefined {
   return a;
 }
 
+/** An imported referral ask, if it has the right shape: a known stage and channel, a time that isn't in the future. */
+function outreachFrom(v: unknown, now: Date): Outreach | undefined {
+  if (!isRecord(v) || !(OUTREACH_STAGES as readonly unknown[]).includes(v.stage)) return undefined;
+  const t = isText(v.at) ? Date.parse(v.at) : Number.NaN;
+  if (!Number.isFinite(t) || t > now.getTime() + SKEW_MS) return undefined;
+  const o: Outreach = { stage: v.stage as OutreachStage, at: v.at as string };
+  if ((OUTREACH_VIA as readonly unknown[]).includes(v.via)) o.via = v.via as OutreachVia;
+  if (isText(v.networkId) && /^[un]:[\w-]{1,100}$/.test(v.networkId)) o.networkId = v.networkId;
+  if (v.degree === 1 || v.degree === 2) o.degree = v.degree;
+  const mutual = clip(v.mutual, CAPS.mutual);
+  if (mutual) o.mutual = mutual;
+  return o;
+}
+
+/** The fields this version reads; an entry's other fields (from a newer RawJobs) are kept as they are. */
+const ENTRY_FIELDS = new Set(["status", "note", "reason", "history", "closedAs", "followUp", "cv", "interviews", "contacts", "activities", "skipped", "offer", "outreach", "updatedAt", "snapshot"]);
+
 /** An imported entry, if it has the shape the pipeline relies on; anything else is left out. */
 function entryFrom(v: unknown, id: string, now: Date): Entry | undefined {
   if (!isRecord(v)) return undefined;
@@ -533,7 +594,17 @@ function entryFrom(v: unknown, id: string, now: Date): Entry | undefined {
         OFFER_FIELDS.flatMap((k) => (isText((e.offer as Record<string, unknown>)[k]) && (e.offer as Record<string, string>)[k] ? [[k, (e.offer as Record<string, string>)[k]]] : [])),
       ) as Offer)
     : {};
+  const outreach = isRecord(e.outreach)
+    ? Object.fromEntries(
+        Object.entries(e.outreach).flatMap(([cid, o]) => {
+          const ask = people.has(cid) ? outreachFrom(o, now) : undefined;
+          return ask ? [[cid, ask] as const] : [];
+        }),
+      )
+    : {};
   const entry: Entry = {
+    // A field a newer RawJobs added survives a trip through this one.
+    ...Object.fromEntries(Object.entries(e).filter(([k]) => !ENTRY_FIELDS.has(k))),
     ...(status ? { status } : {}),
     ...(e.note ? { note: e.note as string } : {}),
     ...(status === "dismissed" && isText(e.reason) ? { reason: e.reason as Reason } : {}),
@@ -546,6 +617,7 @@ function entryFrom(v: unknown, id: string, now: Date): Entry | undefined {
     ...(contacts.length ? { contacts } : {}),
     ...(activities.length ? { activities } : {}),
     ...(skipped.length ? { skipped } : {}),
+    ...(Object.keys(outreach).length ? { outreach } : {}),
     updatedAt: e.updatedAt,
     snapshot: {
       title: snap.title,

@@ -136,6 +136,9 @@ export function JobDetail(p: JobDetailProps) {
   const status = entry?.status;
   /** On the board (any stage, Closed too): the progress tabs show. */
   const tracked = !!status && status !== "dismissed";
+  /** "On this job: Messaged" in the referral section asked for the People tab (a new count reopens it). */
+  const [peopleAsk, setPeopleAsk] = useState<{ jobId: string; n: number } | null>(null);
+  const openPeople = peopleAsk?.jobId === job.id ? peopleAsk.n : 0;
   const notForMe = useNotForMe();
   const source = atsLabel(job.ats);
 
@@ -385,7 +388,7 @@ export function JobDetail(p: JobDetailProps) {
 
           <WhyItMatches job={job} profile={profile} yours={!!p.yours} />
 
-          <TalkToSomeone job={job} entry={entry} profile={profile} />
+          <TalkToSomeone job={job} entry={entry} profile={profile} onUpdate={p.onUpdate} onOpenPeople={() => setPeopleAsk((x) => ({ jobId: job.id, n: (x?.n ?? 0) + 1 }))} />
 
           {job.estimated && <NotCheckedYet indexGeneratedAt={p.indexGeneratedAt} onCheck={p.onCheck} />}
 
@@ -417,7 +420,9 @@ export function JobDetail(p: JobDetailProps) {
             </div>
             {entry && <ProgressLine entry={entry} onUpdate={p.onUpdate} id={`follow-${job.id}`} />}
             {tracked && entry && (entry.status === "offer" || entry.offer) && <OfferFields key={`offer:${job.id}`} offer={entry.offer ?? {}} onSave={(offer) => p.onUpdate({ offer })} />}
-            {tracked && entry && <JobTracking jobId={job.id} entry={entry} title={job.title} foundAt={job.firstSeen} onUpdate={p.onUpdate} />}
+            {tracked && entry && (
+              <JobTracking key={openPeople} jobId={job.id} entry={entry} title={job.title} foundAt={job.firstSeen} onUpdate={p.onUpdate} initialTab={openPeople ? "people" : undefined} />
+            )}
             {status === "dismissed" && <ReasonPicker key={`why:${job.id}`} job={job} label="Why not? Optional." live />}
           </section>
 

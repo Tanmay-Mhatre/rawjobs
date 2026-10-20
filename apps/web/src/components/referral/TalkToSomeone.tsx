@@ -1,3 +1,4 @@
+import { networkKey } from "@rawjobs/core/network/company";
 import { type PersonScore, scorePerson } from "@rawjobs/core/network/score";
 import { ChevronRight, ExternalLink, Users } from "lucide-react";
 import { type ReactNode, useEffect, useMemo, useRef, useState } from "react";
@@ -7,7 +8,10 @@ import { canRunLocally, type Job, type Profile } from "../../lib/data";
 import { companyName } from "../../lib/format";
 import { type NetworkMe, type NetworkPersonRow, REFRESH_AFTER_DAYS, setCloseContact, useNetwork, usePeopleAt } from "../../lib/network";
 import { coldLinks, profileHref, recruiterLinks, type SearchLink, warmLinks } from "../../lib/referralLinks";
-import type { Entry } from "../../lib/userState";
+import { CAPS, type Contact, type Entry, type EntryPatch, newId, OUTREACH_LABEL, type Outreach, toContact } from "../../lib/userState";
+import { knownPeople } from "../pipeline/detail";
+import { usePeople } from "../pipeline/PeopleContext";
+import { KnownPicker } from "../pipeline/PeopleTab";
 import { toast } from "../Toast";
 import { Button, cx } from "../ui";
 import { ConnectLinkedIn } from "./ConnectLinkedIn";
@@ -31,13 +35,31 @@ function useAfter(on: boolean, ms = 100): boolean {
   return on && late;
 }
 
+type Props = {
+  job: Job;
+  entry?: Entry;
+  profile?: Pick<Profile, "past_employers">;
+  /** Changes this job's tracking; without it the section only shows who you know. */
+  onUpdate?: (patch: EntryPatch) => void;
+  /** Opens Pipeline's People tab for this job, where stages are edited. */
+  onOpenPeople?: () => void;
+};
+
+/** Adds people to the job's contacts from the section: what a row needs to know and do. */
+type Contacts = {
+  /** Who on this job came from this connection (by network id or profile link), and their referral stage. */
+  onJob: (person: NetworkPersonRow) => { contact: Contact; outreach?: Outreach } | undefined;
+  add?: (c: Contact, networkId?: string) => void;
+  onOpenPeople?: () => void;
+};
+
 /** "Talk to someone who works here": who you know at the job's company, ranked, and searches to find more. Hidden on Not interested jobs. */
-export function TalkToSomeone({ job, entry, profile }: { job: Job; entry?: Entry; profile?: Pick<Profile, "past_employers"> }) {
-  if (entry?.status === "dismissed") return null;
-  return <Section job={job} profile={profile} />;
+export function TalkToSomeone(p: Props) {
+  if (p.entry?.status === "dismissed") return null;
+  return <Section {...p} />;
 }
 
-function Section({ job, profile }: { job: Job; profile?: Pick<Profile, "past_employers"> }) {
+function Section({ job, entry, profile, onUpdate, onOpenPeople }: Props) {
   const company = companyName(job.company);
   const agency = isAgencyPosting(job);
   const network = useNetwork();
@@ -48,6 +70,46 @@ function Section({ job, profile }: { job: Job; profile?: Pick<Profile, "past_emp
   const [connecting, setConnecting] = useState(false);
   const loading = useAfter(network?.state === "loading" || people?.state === "loading");
   const headingId = `talk-${job.id}`;
+
+  const tracking = usePeople();
+  const contacts = entry?.contacts ?? [];
+  const full = contacts.length >= CAPS.contacts;
+  const key = networkKey(job.company);
+  const known = useMemo(() => (tracking ? knownPeople(tracking.state, job.id) : []), [tracking, job.id]);
+  const alsoHere = key ? known.filter((c) => networkKey(c.company) === key) : [];
+
+  /**
+   * Add someone to this job's contacts, To contact on LinkedIn. The first person on a job you
+   * haven't saved saves it too; Undo puts back what was there.
+   */
+  const add =
+    onUpdate &&
+    ((c: Contact, networkId?: string) => {
+      const saving = !entry?.status;
+      const ask: Outreach = { stage: "to-contact", via: "linkedin", at: new Date().toISOString(), ...(networkId ? { networkId } : {}) };
+      onUpdate({ ...(saving ? { status: "saved" as const } : {}), contacts: [...contacts, c], outreach: { ...entry?.outreach, [c.id]: ask } });
+      toast({
+        message: saving ? `Saved this job and added ${c.name}` : `Added ${c.name} to this job`,
+        actionLabel: "Undo",
+        onAction: () => onUpdate({ ...(saving ? { status: entry?.status } : {}), contacts: entry?.contacts, outreach: entry?.outreach }),
+      });
+    });
+  const rowContacts: Contacts = {
+    onJob: (person) => {
+      const href = profileHref(person.url);
+      const contact = contacts.find((c) => entry?.outreach?.[c.id]?.networkId === person.id || (!!href && c.linkedin === href));
+      return contact && { contact, outreach: entry?.outreach?.[contact.id] };
+    },
+    add:
+      add && !full
+        ? (c, networkId) => {
+            // Someone already on another job (same profile) is the same person here.
+            const same = c.linkedin ? known.find((k) => k.linkedin === c.linkedin) : undefined;
+            add(same ?? c, networkId);
+          }
+        : undefined,
+    onOpenPeople,
+  };
 
   const me = info?.me ?? null;
   const links = useMemo(() => searchLinks({ company, title: job.title, me, pastEmployers: profile?.past_employers ?? [], agency }), [company, job.title, me, profile?.past_employers, agency]);
@@ -80,7 +142,7 @@ function Section({ job, profile }: { job: Job; profile?: Pick<Profile, "past_emp
         {stale}
         {people?.state === "ready" &&
           (people.value.people.length ? (
-            <PeopleList people={people.value.people} loose={people.value.how === "prefix"} job={job} me={me} />
+            <PeopleList people={people.value.people} loose={people.value.how === "prefix"} job={job} me={me} contacts={rowContacts} />
           ) : (
             <p className="type-small text-muted">You don't know anyone at {company} on LinkedIn yet. These searches find people one step away.</p>
           ))}
@@ -100,6 +162,7 @@ function Section({ job, profile }: { job: Job; profile?: Pick<Profile, "past_emp
         </p>
       )}
       {body}
+      {!agency && add && !full && alsoHere.length > 0 && <KnownPicker known={alsoHere} onPick={(c) => add(c)} />}
       {links.length > 0 && <MoreWaysIn links={links} />}
       {canRunLocally && <ConnectLinkedIn open={connecting} onClose={() => setConnecting(false)} />}
     </section>
@@ -136,7 +199,7 @@ function MoreWaysIn({ links }: { links: SearchLink[] }) {
 
 type Ranked = { person: NetworkPersonRow; score: PersonScore };
 
-function PeopleList({ people, loose, job, me }: { people: NetworkPersonRow[]; loose: boolean; job: Job; me: NetworkMe | null }) {
+function PeopleList({ people, loose, job, me, contacts }: { people: NetworkPersonRow[]; loose: boolean; job: Job; me: NetworkMe | null; contacts: Contacts }) {
   const [all, setAll] = useState(false);
   const rows = useRef<(HTMLLIElement | null)[]>([]);
   const focusNext = useRef(false);
@@ -174,7 +237,7 @@ function PeopleList({ people, loose, job, me }: { people: NetworkPersonRow[]; lo
             tabIndex={-1}
             className="py-2 first:pt-0 focus:outline-none focus-visible:ring-2 focus-visible:ring-ink"
           >
-            <PersonRow {...r} loose={loose} />
+            <PersonRow {...r} loose={loose} contacts={contacts} />
           </li>
         ))}
       </ul>
@@ -196,9 +259,14 @@ function PeopleList({ people, loose, job, me }: { people: NetworkPersonRow[]; lo
   );
 }
 
-function PersonRow({ person, score, loose }: Ranked & { loose: boolean }) {
+function PersonRow({ person, score, loose, contacts }: Ranked & { loose: boolean; contacts: Contacts }) {
   const name = `${person.first} ${person.last}`.trim();
   const href = profileHref(person.url);
+  const here = contacts.onJob(person);
+  const addThem = () => {
+    const c = toContact({ name, role: "referrer", company: person.company, linkedin: href }, newId());
+    if (c) contacts.add?.(c, person.id);
+  };
   const toggle = async () => {
     const ok = await setCloseContact(person.id, !person.friend);
     if (!ok) toast({ message: "Couldn't save that. Check that RawJobs is running, then try again." });
@@ -214,6 +282,14 @@ function PersonRow({ person, score, loose }: Ranked & { loose: boolean }) {
           <span className="type-body font-medium text-ink">{name}</span>
         )}
         <span className={cx("type-meta", BAND_CLASS[score.band])}>Likely to help: {score.band}</span>
+        {here &&
+          (contacts.onOpenPeople ? (
+            <button type="button" className="type-meta font-medium text-ink underline underline-offset-2 hover:text-muted" onClick={contacts.onOpenPeople}>
+              {onJobLabel(here.outreach)}
+            </button>
+          ) : (
+            <span className="type-meta font-medium text-ink">{onJobLabel(here.outreach)}</span>
+          ))}
       </div>
       {(person.position || (loose && person.company)) && (
         <p className="type-small text-muted">
@@ -240,11 +316,21 @@ function PersonRow({ person, score, loose }: Ranked & { loose: boolean }) {
             </dl>
             <p className="mt-1 type-meta text-muted">{score.total} in all. 60 or more is high, 35 to 59 medium, under 35 low.</p>
           </div>
-          <Button size="sm" aria-pressed={person.friend} aria-label={`Mark ${name} as a close contact`} onClick={() => void toggle()}>
-            Close contact
-          </Button>
+          <div className="flex flex-wrap gap-1.5">
+            {!here && contacts.add && (
+              <Button size="sm" onClick={addThem}>
+                Add to contacts
+              </Button>
+            )}
+            <Button size="sm" aria-pressed={person.friend} aria-label={`Mark ${name} as a close contact`} onClick={() => void toggle()}>
+              Close contact
+            </Button>
+          </div>
         </div>
       </details>
     </div>
   );
 }
+
+/** "On this job: Messaged": the stage is edited in Pipeline's People tab, never here. */
+const onJobLabel = (o: Outreach | undefined) => (o ? `On this job: ${OUTREACH_LABEL[o.stage]}` : "On this job");
