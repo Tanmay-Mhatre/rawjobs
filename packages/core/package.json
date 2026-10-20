@@ -30,7 +30,14 @@
     "./release": "./src/release.ts",
     "./release-notes": "./src/release-notes.ts",
     "./update": "./src/update.ts",
-    "./next-steps": "./src/next-steps.ts"
+    "./next-steps": "./src/next-steps.ts",
+    "./network/types": "./src/network/types.ts",
+    "./network/zip": "./src/network/zip.ts",
+    "./network/zip-browser": "./src/network/zip-browser.ts",
+    "./network/linkedin-export": "./src/network/linkedin-export.ts",
+    "./network/company": "./src/network/company.ts",
+    "./network/score": "./src/network/score.ts",
+    "./network/paste": "./src/network/paste.ts"
   },
   "dependencies": {
     "yaml": "^2.8.0",

@@ -30,6 +30,28 @@ export const NAME_OVERRIDES: ReadonlyMap<string, string> = new Map([
 ]);
 
 /**
+ * One employer under several names, from a company key (companyNameKey) to the key people are
+ * looked up by: someone at "Facebook" or "Instagram" works at Meta, someone at "AWS" at Amazon.
+ * For matching your LinkedIn connections to a job's company, never for display.
+ */
+export const COMPANY_ALIASES: Readonly<Record<string, string>> = {
+  facebook: "meta",
+  metaplatforms: "meta",
+  instagram: "meta",
+  whatsapp: "meta",
+  alphabet: "google",
+  googlecloud: "google",
+  youtube: "google",
+  twitter: "x",
+  xcorp: "x",
+  square: "block",
+  cashapp: "block",
+  aws: "amazon",
+  amazonwebservices: "amazon",
+  amazoncom: "amazon",
+};
+
+/**
  * Web endings we drop, only when title-cased ("Rillet.Com"). That casing means a machine
  * capitalised a web address. Brands write theirs as they like and keep it: "Crypto.com",
  * "Apollo.io", "Character.AI". Endings that read as words ("Talon.One", "Rocket.Chat") stay.
