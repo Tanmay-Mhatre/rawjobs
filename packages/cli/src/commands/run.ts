@@ -73,7 +73,7 @@ export function stopSignal(dataDir: string): () => boolean {
   let interrupted = false;
   process.once("SIGINT", () => {
     interrupted = true;
-    console.error("\nStopping after the companies in progress… (progress is saved; run again to resume)");
+    console.error("\nStopping… (progress is saved; run again to resume)");
   });
   return () => interrupted || existsSync(stopFile(dataDir));
 }

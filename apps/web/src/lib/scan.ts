@@ -44,11 +44,13 @@ export type ScanState = {
   lastAt?: number;
   /** About how long the scan takes, from the start. */
   seconds?: number;
+  /** How fast this run is really going: what time left is worked out from once it's measured. */
+  pace?: Pace;
   /** Health of your companies, and directory ones that matched or failed, by company name. */
   results: Record<string, CompanyHealth>;
   /** Matches fetched live by this scan so far, shown on the Radar before it ends (newer CLIs only). */
   live: Job[];
-  /** Stop was asked for; the scan finishes the companies in progress. */
+  /** Stop was asked for; the scan ends within seconds. */
   stopping?: boolean;
   /** A Telegram message when this scan finishes: asked for, then what happened ("sent", "off", or why it failed). */
   notify?: { asked: true; result?: string };
@@ -69,9 +71,43 @@ export type Background = {
   last?: string;
   lastAt?: number;
   pausing?: boolean;
+  pace?: Pace;
   /** How it ended: `stopped` when it was paused (Resume now carries it on). */
   summary?: Extract<RunEvent, { type: "done" }>;
 };
+
+/**
+ * Companies done over time in this run, a sample every SAMPLE_MS over the last WINDOW_MS. Samples start
+ * SETTLE_MS after the start event: a page that picks up a running scan gets its events replayed in a burst first.
+ */
+export type Pace = { after: number; samples: { at: number; done: number }[] };
+const SETTLE_MS = 3_000;
+const SAMPLE_MS = 10_000;
+const WINDOW_MS = 10 * 60_000;
+/** The measured pace is trusted after this long and this many companies. */
+const TRUST_MS = 30_000;
+const TRUST_DONE = 10;
+/** The start's estimate (scan-speed.json) is shown only below this: a longer one can be hours out. */
+const TRUST_PLANNED_S = 3600;
+
+export const newPace = (now = Date.now()): Pace => ({ after: now + SETTLE_MS, samples: [] });
+
+/** The pace with `done` at `now`: a new sample once the last is SAMPLE_MS old, the ones before the window dropped. */
+export function track(p: Pace | undefined, done: number, now = Date.now()): Pace | undefined {
+  if (!p || now < p.after) return p;
+  const last = p.samples[p.samples.length - 1];
+  if (last && now - last.at < SAMPLE_MS) return p;
+  const samples = [...p.samples, { at: now, done }];
+  while (samples.length > 2 && samples[1]!.at <= now - WINDOW_MS) samples.shift();
+  return { ...p, samples };
+}
+
+/** Companies a second over the window, or null until it's measured long enough to trust. */
+export function measuredRate(p: Pace | undefined, done: number, at: number): number | null {
+  const first = p?.samples[0];
+  if (!first || at - first.at < TRUST_MS || done - first.done < TRUST_DONE) return null;
+  return (done - first.done) / ((at - first.at) / 1000);
+}
 
 const IDLE: ScanState = { phase: "idle", companies: [], total: 0, done: 0, resumed: 0, results: {}, live: [] };
 const newBackground = (): Background => ({ total: 0, done: 0, resumed: 0, found: 0, failed: 0, startedAt: Date.now() });
@@ -110,7 +146,7 @@ export function applyScanEvent(s: ScanState, e: RunEvent): ScanState {
       if (e.stage === "background")
         return {
           ...s,
-          bg: { ...(s.bg ?? newBackground()), total: e.total ?? 0, done: e.resumed ?? 0, resumed: e.resumed ?? 0, seconds: e.seconds, found: 0, failed: 0, lastAt: Date.now() },
+          bg: { ...(s.bg ?? newBackground()), total: e.total ?? 0, done: e.resumed ?? 0, resumed: e.resumed ?? 0, seconds: e.seconds, found: 0, failed: 0, lastAt: Date.now(), pace: newPace() },
         };
       return {
         ...s,
@@ -125,6 +161,7 @@ export function applyScanEvent(s: ScanState, e: RunEvent): ScanState {
         done: e.resumed ?? 0,
         resumed: e.resumed ?? 0,
         seconds: e.seconds,
+        pace: newPace(),
         skippedByFeed: e.skippedByFeed,
         byAts: e.byAts,
         doneByAts: e.byAts ? { ...e.doneByAts } : undefined,
@@ -132,11 +169,16 @@ export function applyScanEvent(s: ScanState, e: RunEvent): ScanState {
     case "company": {
       const { type: _, done, doneByAts, doneBySource, ...h } = e;
       const seen = { last: h.company, lastAt: Date.now() };
-      if (s.bg) return { ...s, bg: { ...s.bg, ...seen, done: done ?? s.bg.done + 1, found: s.bg.found + (h.ok ? h.matches : 0), failed: s.bg.failed + (!h.ok && !h.unsupported ? 1 : 0) } };
+      if (s.bg) {
+        const n = done ?? s.bg.done + 1;
+        return { ...s, bg: { ...s.bg, ...seen, done: n, pace: track(s.bg.pace, n, seen.lastAt), found: s.bg.found + (h.ok ? h.matches : 0), failed: s.bg.failed + (!h.ok && !h.unsupported ? 1 : 0) } };
+      }
+      const n = done ?? s.done + 1;
       return {
         ...s,
         ...seen,
-        done: done ?? s.done + 1,
+        done: n,
+        pace: track(s.pace, n, seen.lastAt),
         results: { ...s.results, [h.company]: h },
         ...(doneByAts ? { doneByAts: { ...doneByAts } } : {}),
         ...(doneBySource ? { doneBySource: { ...doneBySource } } : {}),
@@ -148,8 +190,19 @@ export function applyScanEvent(s: ScanState, e: RunEvent): ScanState {
     }
     case "progress": {
       const seen = { last: e.last ?? (s.bg ?? s).last, lastAt: Date.now() };
-      if (s.bg) return { ...s, bg: { ...s.bg, ...seen, done: Math.max(s.bg.done, e.done) } };
-      return { ...s, ...seen, done: Math.max(s.done, e.done), ...(e.doneByAts ? { doneByAts: { ...e.doneByAts } } : {}), ...(e.doneBySource ? { doneBySource: { ...e.doneBySource } } : {}) };
+      if (s.bg) {
+        const n = Math.max(s.bg.done, e.done);
+        return { ...s, bg: { ...s.bg, ...seen, done: n, pace: track(s.bg.pace, n, seen.lastAt) } };
+      }
+      const n = Math.max(s.done, e.done);
+      return {
+        ...s,
+        ...seen,
+        done: n,
+        pace: track(s.pace, n, seen.lastAt),
+        ...(e.doneByAts ? { doneByAts: { ...e.doneByAts } } : {}),
+        ...(e.doneBySource ? { doneBySource: { ...e.doneBySource } } : {}),
+      };
     }
     case "done":
       if (e.stage === "background") return { ...s, bg: { ...(s.bg ?? newBackground()), pausing: false, summary: e } };
@@ -339,11 +392,13 @@ export function useScan(onFinished: () => void | Promise<void>) {
   return { scan, start, stop, restart, notify, reset, resume };
 }
 
-/** "about 2 min", "about 1.9 h". */
+/** "about 2 min", "about 1.9 h", "about 14 h", "about 10 days". */
 export function aboutTime(seconds: number): string {
   if (seconds < 90) return "about 1 min";
   if (seconds < 5400) return `about ${Math.round(seconds / 60)} min`;
-  return `about ${(seconds / 3600).toFixed(1)} h`;
+  if (seconds < 36_000) return `about ${(seconds / 3600).toFixed(1)} h`;
+  if (seconds < 172_800) return `about ${Math.round(seconds / 3600)} h`;
+  return `about ${Math.round(seconds / 86_400)} days`;
 }
 
 export const SCOPE_LABEL: Record<ScanScope, string> = {
@@ -355,20 +410,31 @@ export const SCOPE_LABEL: Record<ScanScope, string> = {
 /** SCOPE_LABEL (the second argument is kept for older callers). */
 export const scopeLabel = (scope: ScanScope, _hasIndustries = true): string => SCOPE_LABEL[scope];
 
-/** "about 2 min left", from the start's estimate and the share done since. */
-function timeLeft(seconds: number | undefined, total: number, done: number, resumed: number): number {
-  return seconds && total > resumed ? seconds * (1 - (done - resumed) / (total - resumed)) : 0;
+/**
+ * Seconds left, or 0 when it isn't known well enough to show. The start's estimate (scan-speed.json)
+ * can be hours out on a long check, so it's used only when short; once this run's own pace is
+ * measured, that takes over (blended in over two minutes when the estimate is short).
+ */
+export function timeLeft(r: { seconds?: number; total: number; done: number; resumed: number; pace?: Pace; lastAt?: number }): number {
+  const planned = r.seconds && r.total > r.resumed ? r.seconds * (1 - (r.done - r.resumed) / (r.total - r.resumed)) : undefined;
+  const at = r.lastAt ?? Date.now();
+  const rate = measuredRate(r.pace, r.done, at);
+  if (!rate) return planned !== undefined && planned < TRUST_PLANNED_S ? planned : 0;
+  const measured = Math.max(0, r.total - r.done) / rate;
+  if (planned === undefined || planned >= TRUST_PLANNED_S) return measured;
+  const w = Math.min(1, (at - r.pace!.samples[0]!.at) / 120_000);
+  return w * measured + (1 - w) * planned;
 }
 
 /** "Updating the company directory…", then "Checking 126 of 300 companies · about 2 min left". */
 export function scanLine(scan: ScanState): string {
   if (scan.syncing) return "Updating the company directory…";
   if (!scan.total) return "Starting scan…";
-  const left = timeLeft(scan.seconds, scan.total, scan.done, scan.resumed);
+  const left = timeLeft(scan);
   return [
     `Checking ${Math.min(scan.done + 1, scan.total).toLocaleString()} of ${scan.total.toLocaleString()} companies`,
     scan.scope && scan.scope !== "mine" ? SCOPE_LABEL[scan.scope] : null,
-    left > 60 ? `${aboutTime(left)} left` : null,
+    left > 60 ? `${aboutRange(left)} left` : null,
   ]
     .filter(Boolean)
     .join(" · ");
@@ -382,8 +448,8 @@ export function backgroundLine(bg: Background): string {
 
 /** "about 50 min left", or "" when it's nearly done or not known. */
 export function backgroundLeft(bg: Background): string {
-  const left = timeLeft(bg.seconds, bg.total, bg.done, bg.resumed);
-  return left > 60 ? `${aboutTime(left)} left` : "";
+  const left = timeLeft(bg);
+  return left > 60 ? `${aboutRange(left)} left` : "";
 }
 
 /** A running time: "0:07", "12:30", "1:02:05". */
@@ -453,8 +519,16 @@ export function backgroundSteps(scan: ScanState): Step[] {
 /** "about 60 to 70 min": a long estimate as an honest range (the speed of thousands of sites varies). */
 export function aboutRange(seconds: number): string {
   if (seconds < 1200) return aboutTime(seconds);
-  const lo = Math.max(1, Math.floor(seconds / 600)) * 10;
-  return lo >= 120 ? `about ${(lo / 60).toFixed(0)} to ${((lo + 30) / 60).toFixed(1)} h` : `about ${lo} to ${lo + 10} min`;
+  if (seconds < 7200) {
+    const lo = Math.floor(seconds / 600) * 10;
+    return `about ${lo} to ${lo + 10} min`;
+  }
+  if (seconds < 172_800) {
+    const h = Math.floor(seconds / 3600);
+    return `about ${h} to ${h + 1} h`;
+  }
+  const d = Math.floor(seconds / 86_400);
+  return `about ${d} to ${d + 1} days`;
 }
 
 /** Scan preferences, kept in step across the page (header button, pop-up, Settings). */

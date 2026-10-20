@@ -103,7 +103,10 @@ export type RunOptions = {
   onCompanyResult?: (h: CompanyHealth, jobs: Job[]) => void;
   /** jobCompanyKey()s of companies already fetched (a resumed scan): skipped. */
   skip?: ReadonlySet<string>;
-  /** Stop starting new companies once this returns true (companies in flight finish). */
+  /**
+   * Stop starting new companies once this returns true. Companies in flight are left unrecorded (a
+   * resumed scan fetches them again); pass the same check as the HttpClient's `stopped` to cut them short.
+   */
   stopped?: () => boolean;
   /** A company's industry ids, when the directory knows them (for the industry part of the score). */
   industriesOf?: (c: CompanyRef) => readonly string[] | undefined;
@@ -125,6 +128,8 @@ export const laneOf = (c: Pick<CompanyRef, "ats" | "region" | "shard">) => `${c.
 /** Companies in flight per lane: more where the API's own pace (http.ts paceOf) is the limit, not the lane. */
 const LANE_WORKERS = 4;
 const LANE_WORKERS_BY_ATS: Partial<Record<CompanyRef["ats"], number>> = { greenhouse: 8, workday: 8, smartrecruiters: 6 };
+/** Companies a lane of this hiring system fetches at once (scope.ts learns and estimates speeds with it). */
+export const laneWorkers = (ats: string): number => LANE_WORKERS_BY_ATS[ats as CompanyRef["ats"]] ?? LANE_WORKERS;
 
 /**
  * One pass over every enabled company (then any extra `checks`). A failing company never stops the
@@ -313,6 +318,10 @@ export async function runRadar(config: Config, opts: RunOptions = {}): Promise<R
       h.error = err instanceof HttpError && err.status === 404 ? `board not found (404): check the slug "${company.slug}" against the careers URL` : (err as Error).message;
       if (!h.unsupported) h.failure = failureOf(err);
     }
+    // Stopped while in flight: the company may have been cut short anywhere (StoppedError, or a
+    // connector that caught it and kept what it had), so it's neither done nor failed. Left out of
+    // the results and progress, a resumed scan fetches it again.
+    if (opts.stopped?.()) return;
     h.durationMs = Date.now() - started;
     jobs.push(...kept);
     health.push(h);
@@ -337,7 +346,7 @@ export async function runRadar(config: Config, opts: RunOptions = {}): Promise<R
           await fetchOne(company, extra);
         }
       };
-      return Array.from({ length: Math.min(LANE_WORKERS_BY_ATS[lane[0]![0].ats] ?? LANE_WORKERS, lane.length) }, worker);
+      return Array.from({ length: Math.min(laneWorkers(lane[0]![0].ats), lane.length) }, worker);
     }),
   );
   health.sort((a, b) => (order.get(`${a.ats}:${a.slug}`) ?? 0) - (order.get(`${b.ats}:${b.slug}`) ?? 0));

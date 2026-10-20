@@ -59,6 +59,14 @@ export class HostSkippedError extends HttpError {
   override name = "HostSkippedError";
 }
 
+/** No answer waited for: the scan was stopped (HttpOptions.stopped). Not the host's fault, so never counted against it. */
+export class StoppedError extends HttpError {
+  override name = "StoppedError";
+  constructor(url: string) {
+    super(`stopped (${url})`, url);
+  }
+}
+
 export type HttpOptions = {
   userAgent?: string;
   timeoutMs?: number;
@@ -85,7 +93,15 @@ export type HttpOptions = {
   adaptive?: boolean;
   fetchImpl?: typeof fetch;
   sleep?: (ms: number) => Promise<void>;
+  /**
+   * Once this returns true, requests in flight are cut short and new ones, retries and waits for a
+   * host's turn fail at once with StoppedError, so a stopped scan ends in seconds. Checked every STOP_POLL_MS.
+   */
+  stopped?: () => boolean;
 };
+
+/** How often requests in flight check HttpOptions.stopped. */
+const STOP_POLL_MS = 250;
 
 const realSleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
 const MAX_RETRY_AFTER_MS = 60_000;
@@ -165,7 +181,7 @@ export type HttpStats = {
  * whole host down; a host that keeps failing is skipped for the rest of the run.
  */
 export class HttpClient {
-  private readonly opts: Required<Omit<HttpOptions, "cache">> & Pick<HttpOptions, "cache">;
+  private readonly opts: Required<Omit<HttpOptions, "cache" | "stopped">> & Pick<HttpOptions, "cache" | "stopped">;
   /** Adaptive pacing per API, by paceOf()'s key. */
   private readonly paces = new Map<string, Pace>();
   /** Earliest time (ms) the next request to each host may start. */
@@ -174,6 +190,10 @@ export class HttpClient {
   private readonly delays: Map<string, number>;
   /** Failed requests in a row per host. */
   private readonly failures = new Map<string, number>();
+  /** Aborted once `stopped` says so; every request in flight listens to it. */
+  private readonly stop = new AbortController();
+  private inFlight = 0;
+  private stopPoll: ReturnType<typeof setInterval> | undefined;
   readonly stats: HttpStats = { requests: 0, notModified: 0, failures: 0, rateLimited: 0, timeouts: 0, slowedHosts: [], brokenHosts: [] };
 
   constructor(opts: HttpOptions = {}) {
@@ -191,6 +211,7 @@ export class HttpClient {
       adaptive: opts.adaptive ?? false,
       fetchImpl: opts.fetchImpl ?? fetch,
       sleep: opts.sleep ?? realSleep,
+      stopped: opts.stopped,
     };
     this.delays = new Map(Object.entries(this.opts.hostDelays));
   }
@@ -241,12 +262,15 @@ export class HttpClient {
 
   private async send(url: string, init: RequestInit, readBody: boolean): Promise<{ res: Response; body?: string }> {
     const host = new URL(url).host;
+    if (this.isStopped()) throw new StoppedError(url);
     if ((this.failures.get(host) ?? 0) >= this.opts.breakAfter) throw new HostSkippedError(`skipped: ${host} failed ${this.opts.breakAfter} times in a row (${url})`, url);
+    this.track(1);
     try {
       const out = await this.attempt(url, init, host, readBody);
       this.failures.delete(host);
       return out;
     } catch (err) {
+      if (err instanceof StoppedError) throw err;
       // A 4xx is about this URL, not the host.
       const status = (err as HttpError).status;
       if (status === undefined || status === 429 || status >= 500) {
@@ -256,18 +280,52 @@ export class HttpClient {
         if (n === this.opts.breakAfter) this.stats.brokenHosts.push(host);
       }
       throw err;
+    } finally {
+      this.track(-1);
     }
   }
 
+  /** True once `stopped` has said so (it's asked again only until then). */
+  private isStopped(): boolean {
+    if (!this.stop.signal.aborted && this.opts.stopped?.()) {
+      this.stop.abort();
+      clearInterval(this.stopPoll);
+    }
+    return this.stop.signal.aborted;
+  }
+
+  /** Count requests in flight: `stopped` is polled only while there are some. */
+  private track(n: 1 | -1): void {
+    this.inFlight += n;
+    if (!this.opts.stopped) return;
+    if (this.inFlight === 0) {
+      clearInterval(this.stopPoll);
+      this.stopPoll = undefined;
+    } else if (!this.stopPoll && !this.stop.signal.aborted) {
+      this.stopPoll = setInterval(() => this.isStopped(), STOP_POLL_MS);
+      this.stopPoll.unref?.();
+    }
+  }
+
+  /** sleep(), in short steps when it can be stopped; throws StoppedError once it is. */
+  private async pause(ms: number, url: string): Promise<void> {
+    if (!this.opts.stopped) return this.opts.sleep(ms);
+    for (let left = ms; left > 0; left -= STOP_POLL_MS) {
+      if (this.isStopped()) throw new StoppedError(url);
+      await this.opts.sleep(Math.min(left, STOP_POLL_MS));
+    }
+    if (this.isStopped()) throw new StoppedError(url);
+  }
+
   private async attempt(url: string, init: RequestInit, host: string, readBody: boolean): Promise<{ res: Response; body?: string }> {
-    const { retries, backoffMs, sleep } = this.opts;
+    const { retries, backoffMs } = this.opts;
     let lastError: HttpError | undefined;
     /** After a 429 the host's own slot holds the pause (see slowDown), so the retry doesn't wait twice. */
     let hostPaused = false;
     for (let attempt = 0; attempt <= retries; attempt++) {
-      if (attempt > 0 && !hostPaused) await sleep(backoffMs * 2 ** (attempt - 1));
+      if (attempt > 0 && !hostPaused) await this.pause(backoffMs * 2 ** (attempt - 1), url);
       hostPaused = false;
-      await this.waitForHost(host);
+      await this.waitForHost(host, url);
       this.stats.requests++;
       const pace = this.paceFor(host);
       const sent = Date.now();
@@ -278,6 +336,8 @@ export class HttpClient {
       let waited = this.opts.connectTimeoutMs;
       const expire = (ms: number) => setTimeout(() => ctrl.abort(new DOMException(`timed out after ${ms / 1000}s`, "TimeoutError")), ms);
       let timer = expire(waited);
+      const onStop = () => ctrl.abort(new StoppedError(url));
+      this.stop.signal.addEventListener("abort", onStop);
       try {
         res = await this.opts.fetchImpl(url, {
           ...init,
@@ -292,6 +352,7 @@ export class HttpClient {
         if (readBody && res.ok) body = await res.text();
       } catch (err) {
         clearTimeout(timer);
+        if (ctrl.signal.reason instanceof StoppedError) throw ctrl.signal.reason;
         const e = err as Error;
         const timedOut = e.name === "TimeoutError" || (ctrl.signal.reason as Error | undefined)?.name === "TimeoutError";
         if (timedOut) this.stats.timeouts++;
@@ -300,6 +361,8 @@ export class HttpClient {
         const reason = timedOut ? `timed out after ${waited / 1000}s` : e.message;
         lastError = new HttpError(`${reason} (${url})`, url);
         continue;
+      } finally {
+        this.stop.signal.removeEventListener("abort", onStop);
       }
       // A caller reading the body itself (request()) keeps the read clock, but it mustn't hold the process open.
       if (readBody) clearTimeout(timer);
@@ -328,13 +391,13 @@ export class HttpClient {
    * Reserve the next free slot for this host (and for its API, when pacing), then wait for it. Safe
    * for parallel callers. A host paced as part of its API keeps no gap of its own, only pauses.
    */
-  private async waitForHost(host: string): Promise<void> {
+  private async waitForHost(host: string, url: string): Promise<void> {
     const now = Date.now();
     const pace = this.paceFor(host);
     const slot = Math.max(now, this.nextSlot.get(host) ?? 0, pace?.next ?? 0);
     this.nextSlot.set(host, slot + (pace && !pace.spec.hostGap ? 0 : (this.delays.get(host) ?? this.opts.hostDelayMs)));
     if (pace) pace.next = slot + 1000 / pace.rate;
-    if (slot > now) await this.opts.sleep(slot - now);
+    if (slot > now) await this.pause(slot - now, url);
   }
 
   private paceFor(host: string): Pace | undefined {
