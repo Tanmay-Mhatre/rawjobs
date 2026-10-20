@@ -124,6 +124,10 @@ your browser. Those sites see what you searched for (the company's name, a role,
 past employer) like any visit, and your IP address. RawJobs itself never contacts these sites, and
 the dashboard sends no referrer, so they don't see which RawJobs page you came from.
 
+Message drafts ("Draft a message") are filled in on your computer and only copied to your
+clipboard: you paste and send them yourself. RawJobs never sends a message, and "Copy a prompt for
+your own AI" only copies text for you to paste wherever you choose.
+
 ### No telemetry
 The app has no analytics, no crash reporting and no usage tracking. The web dashboard loads no
 outside scripts or fonts.
