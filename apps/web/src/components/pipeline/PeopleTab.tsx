@@ -65,7 +65,10 @@ export function PeopleTab({ jobId, entry, onUpdate, adding, onAdding }: { jobId:
                 c={c}
                 touches={touchLine(entry, c.id, (iso) => timeAgo(iso))}
                 onEdit={() => setEditing(c.id)}
-                onRemove={() => onUpdate({ contacts: contacts.filter((x) => x.id !== c.id) })}
+                onRemove={() => {
+                  onUpdate({ contacts: contacts.filter((x) => x.id !== c.id) });
+                  toast({ message: `Removed ${c.name} from this job`, actionLabel: "Undo", onAction: () => onUpdate({ contacts }) });
+                }}
               />
             ),
           )}
@@ -204,6 +207,7 @@ const draftOf = (c?: Contact): Draft => ({
 export function PersonForm({ initial, onSave, onCancel }: { initial?: Contact; onSave: (c: Contact) => void; onCancel: () => void }) {
   const id = useId();
   const [d, setD] = useState<Draft>(() => draftOf(initial));
+  const [linkError, setLinkError] = useState("");
   const set = <K extends keyof Draft>(k: K, v: Draft[K]) => setD((x) => ({ ...x, [k]: v }));
   const needsCode = !!contactLinks({ phone: d.phone, whatsapp: d.whatsapp }).needsCountryCode;
 
@@ -217,16 +221,43 @@ export function PersonForm({ initial, onSave, onCancel }: { initial?: Contact; o
 
   const submit = (ev: FormEvent<HTMLFormElement>) => {
     ev.preventDefault();
-    const linkedin = d.linkedin.trim();
-    // `link` mirrors LinkedIn so older versions of RawJobs still show it.
-    const c = toContact({ ...d, role: d.role || undefined, linkedin, link: linkedInUrl(linkedin), whatsapp: d.whatsapp }, initial?.id ?? newId());
+    const raw = d.linkedin.trim();
+    const url = linkedInUrl(raw) ?? pasteField(raw)?.value;
+    const kept = !!raw && raw === draftOf(initial).linkedin;
+    if (raw && !linkedInUrl(url) && !kept) {
+      setLinkError("Use a LinkedIn profile link, like https://www.linkedin.com/in/your-name.");
+      return;
+    }
+    // `link` mirrors LinkedIn so older versions of RawJobs still show it. An older link that isn't
+    // LinkedIn (a portfolio, say) is kept as it was while you leave the field alone.
+    const link = linkedInUrl(url) ?? (kept ? initial?.link : undefined);
+    const c = toContact({ ...d, role: d.role || undefined, linkedin: linkedInUrl(url), link, whatsapp: d.whatsapp }, initial?.id ?? newId());
     if (c) onSave(c);
   };
 
   const field = (k: "company" | "email" | "phone" | "linkedin" | "howMet", label: string, type: string, max: number, hint?: string) => (
     <label htmlFor={`${id}-${k}`} className={cx("grid gap-1 type-label", k === "howMet" && "sm:col-span-2")}>
       {label}
-      <input id={`${id}-${k}`} name={k} type={type} value={d[k]} maxLength={max} placeholder={hint} onChange={(e) => set(k, e.target.value)} className={input} />
+      <input
+        id={`${id}-${k}`}
+        name={k}
+        type={type}
+        value={d[k]}
+        maxLength={max}
+        placeholder={hint}
+        aria-invalid={(k === "linkedin" && !!linkError) || undefined}
+        aria-describedby={k === "linkedin" && linkError ? `${id}-linkedin-error` : undefined}
+        onChange={(e) => {
+          set(k, e.target.value);
+          if (k === "linkedin") setLinkError("");
+        }}
+        className={input}
+      />
+      {k === "linkedin" && linkError && (
+        <span id={`${id}-linkedin-error`} className="type-small font-normal text-danger-text">
+          {linkError}
+        </span>
+      )}
     </label>
   );
 
@@ -260,7 +291,7 @@ export function PersonForm({ initial, onSave, onCancel }: { initial?: Contact; o
           </label>
           {needsCode && <p className="type-small text-warning-text">Add the country code to use WhatsApp.</p>}
         </div>
-        {field("linkedin", "LinkedIn", "url", CAPS.linkedin, "https://www.linkedin.com/in/…")}
+        {field("linkedin", "LinkedIn", "text", CAPS.linkedin, "https://www.linkedin.com/in/…")}
         {field("howMet", "How you met", "text", CAPS.howMet)}
       </div>
       <div className="flex justify-end gap-2">

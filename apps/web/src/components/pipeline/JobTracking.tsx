@@ -40,6 +40,11 @@ export function JobTracking({
     setAdding(false);
   }, [jobId]);
 
+  // Cleared first, so the same words twice in a row are still read out.
+  const say = (message: string) => {
+    setAnnounce("");
+    setTimeout(() => setAnnounce(message), 50);
+  };
   const people = entry.contacts?.length ?? 0;
   const items: TabItem<Tab>[] = [
     { id: "activity", label: "Activity" },
@@ -53,21 +58,22 @@ export function JobTracking({
     <div className="grid gap-3">
       <Tabs label="Job progress" items={items} value={current} onChange={setTab} idPrefix={`${id}-tab`} panelId={`${id}-panel`} />
       <div id={`${id}-panel`} role="tabpanel" aria-labelledby={`${id}-tab-${current}`}>
-        {current === "activity" && (
+        {/* Activity stays mounted while another tab shows, so a half-written touch survives "Add a person". */}
+        <div hidden={current !== "activity"}>
           <ActivityTab
             jobId={jobId}
             entry={entry}
             title={title}
             foundAt={foundAt}
             onUpdate={onUpdate}
-            onAnnounce={setAnnounce}
+            onAnnounce={say}
             onAddPerson={() => {
               setTab("people");
               setAdding(true);
             }}
             now={now}
           />
-        )}
+        </div>
         {current === "people" && <PeopleTab jobId={jobId} entry={entry} onUpdate={onUpdate} adding={adding} onAdding={setAdding} />}
         {current === "interviews" && <InterviewsTab entry={entry} onUpdate={onUpdate} />}
         {current === "job" && jobTab}

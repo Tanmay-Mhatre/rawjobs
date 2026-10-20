@@ -1,7 +1,7 @@
 import { AlarmClock, CalendarClock, Check, Radar, StickyNote } from "lucide-react";
 import { useId, useState } from "react";
 import { type Task, tasksFor } from "../../lib/nextSteps";
-import { addActivity, CHANNEL_LABEL, type Channel, dayAfter, type Entry, type EntryPatch, today } from "../../lib/userState";
+import { addActivity, CHANNEL_LABEL, type Channel, dayAfter, type Entry, type EntryPatch, isDay, today } from "../../lib/userState";
 import { buttonClass, Chip, ChipGroup, Menu } from "../primitives";
 import { Button, cx } from "../ui";
 import { CHANNEL_ICON, Composer, type ComposerProps } from "./Composer";
@@ -65,6 +65,7 @@ export function ActivityTab({
           contacts={entry.contacts ?? []}
           initial={prefill.initial}
           hasFollowUp={!!entry.followUp}
+          followUps={entry.status !== "saved"}
           onLog={(a, opts) => onUpdate(addActivity(entry, a, opts, now))}
           onAnnounce={onAnnounce}
           onAddPerson={onAddPerson}
@@ -85,7 +86,7 @@ export function ActivityTab({
         ) : (
           <ol className="grid gap-0.5" aria-label="History">
             {shown.map((it) => (
-              <Row key={it.key} item={it} />
+              <Row key={it.key} item={it} onNote={(note) => onUpdate({ note: note || undefined })} />
             ))}
           </ol>
         )}
@@ -112,9 +113,18 @@ function NextStep({
 }) {
   const day = today(now);
   const [picking, setPicking] = useState(false);
+  const [picked, setPicked] = useState("");
   const overdue = task.due < day;
   const snooze = (to: string) => onUpdate({ followUp: to });
   const plus = (n: number) => dayAfter(`${day}T12:00:00`, n);
+  /** A picked date counts from tomorrow on (and within 2 years); anything else is left unsaved. */
+  const commitPick = () => {
+    if (isDay(picked) && picked >= plus(1) && picked <= plus(730)) {
+      snooze(picked);
+      setPicking(false);
+      setPicked("");
+    }
+  };
   const due = overdue ? `Overdue since ${shortDay(task.due)}` : task.due === day ? "Today" : shortDay(task.due);
   return (
     <section aria-label="Next step" className="grid gap-2 rounded-md border border-line bg-inset p-3">
@@ -154,10 +164,14 @@ function NextStep({
                   // biome-ignore lint/a11y/noAutofocus: focus moves into what "Pick a date" just opened
                   autoFocus
                   min={plus(1)}
-                  onChange={(e) => {
-                    if (!e.target.value) return;
-                    snooze(e.target.value);
-                    setPicking(false);
+                  value={picked}
+                  // Saved on Enter or when you leave the field, so a year still being typed (0002-…) never lands.
+                  onChange={(e) => setPicked(e.target.value)}
+                  onBlur={commitPick}
+                  onKeyDown={(e) => {
+                    if (e.key !== "Enter") return;
+                    e.preventDefault();
+                    commitPick();
                   }}
                   className="h-8 rounded-md border border-line bg-raised px-2 type-small text-ink"
                 />
@@ -191,8 +205,10 @@ function NextStep({
 }
 
 /** One timeline row: stage changes small and grey, touches and notes full with their text. */
-function Row({ item }: { item: TimelineItem }) {
+function Row({ item, onNote }: { item: TimelineItem; onNote: (note: string) => void }) {
   const [open, setOpen] = useState(false);
+  const [editing, setEditing] = useState(false);
+  const noteId = useId();
   if (item.kind === "stage" || item.kind === "found") {
     return (
       <li className="flex items-center gap-2 py-1 pl-6 type-meta text-muted">
@@ -207,6 +223,7 @@ function Row({ item }: { item: TimelineItem }) {
   const Icon = item.kind === "note" ? StickyNote : CHANNEL_ICON[item.activity.channel];
   const text = item.kind === "note" ? item.text : (item.activity.text ?? "");
   const long = isLong(text);
+  const legacy = item.kind === "note" && !!item.legacy;
   return (
     <li className="flex gap-2 rounded-md py-2">
       <Icon className="mt-0.5 size-4 shrink-0 text-muted" aria-hidden />
@@ -227,11 +244,46 @@ function Row({ item }: { item: TimelineItem }) {
             </time>
           )}
         </div>
-        {text && <p className={cx("whitespace-pre-line break-words type-small", long && !open && "line-clamp-6")}>{text}</p>}
-        {long && (
+        {legacy && editing ? (
+          <form
+            className="grid gap-2"
+            onSubmit={(e) => {
+              e.preventDefault();
+              onNote(String(new FormData(e.currentTarget).get("note") ?? "").trim());
+              setEditing(false);
+            }}
+          >
+            <label htmlFor={noteId} className="sr-only">
+              Your note
+            </label>
+            {/* biome-ignore lint/a11y/noAutofocus: focus moves into the note that Edit just opened */}
+            <textarea id={noteId} name="note" autoFocus defaultValue={text} rows={3} className="rounded-md border border-line bg-raised px-2.5 py-2 type-small text-ink" />
+            <div className="flex gap-2">
+              <Button size="sm" type="submit" variant="primary">
+                Save note
+              </Button>
+              <Button size="sm" variant="ghost" onClick={() => setEditing(false)}>
+                Cancel
+              </Button>
+            </div>
+          </form>
+        ) : (
+          text && <p className={cx("whitespace-pre-line break-words type-small", long && !open && "line-clamp-6")}>{text}</p>
+        )}
+        {long && !editing && (
           <button type="button" className="justify-self-start type-small text-muted underline hover:text-ink" aria-expanded={open} onClick={() => setOpen(!open)}>
             {open ? "Show less" : "Show more"}
           </button>
+        )}
+        {legacy && !editing && (
+          <div className="flex gap-1.5">
+            <Button size="sm" variant="ghost" onClick={() => setEditing(true)}>
+              Edit note
+            </Button>
+            <Button size="sm" variant="ghost" onClick={() => onNote("")}>
+              Delete note
+            </Button>
+          </div>
         )}
       </div>
     </li>

@@ -118,19 +118,20 @@ function JobFields({ entry, onUpdate }: { entry: Entry; onUpdate: (patch: EntryP
       <div className="grid gap-3 sm:grid-cols-2">
         <label className="grid gap-1 type-label">
           Job title
-          <input defaultValue={s.title} required onBlur={(e) => saveJob("title", e.target.value)} className={`${input} h-9`} />
+          <input key={s.title} defaultValue={s.title} required onBlur={(e) => saveJob("title", e.target.value)} className={`${input} h-9`} />
         </label>
         <label className="grid gap-1 type-label">
           Company
-          <input defaultValue={s.company} required onBlur={(e) => saveJob("company", e.target.value)} className={`${input} h-9`} />
+          <input key={s.company} defaultValue={s.company} required onBlur={(e) => saveJob("company", e.target.value)} className={`${input} h-9`} />
         </label>
         <label className="grid gap-1 type-label">
           Link to the posting
-          <input type="url" defaultValue={s.url} placeholder="https://" onBlur={(e) => saveJob("url", e.target.value)} className={`${input} h-9`} />
+          <input key={s.url} type="url" defaultValue={s.url} placeholder="https://" onBlur={(e) => saveJob("url", e.target.value)} className={`${input} h-9`} />
         </label>
         <label className="grid gap-1 type-label">
           CV used
           <input
+            key={entry.cv ?? ""}
             defaultValue={entry.cv ?? ""}
             placeholder="Fintech PM v3"
             onBlur={(e) => e.target.value.trim() !== (entry.cv ?? "") && onUpdate({ cv: e.target.value.trim() || undefined })}
