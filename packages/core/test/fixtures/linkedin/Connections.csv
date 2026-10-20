@@ -1,0 +1,12 @@
+Notes:
+"When exporting your connection data, you may notice that some of the email addresses are missing. You will only see email addresses for connections who have allowed their connections to see or download their email address using this setting https://www.linkedin.com/psettings/privacy/email. You can learn more about email visibility here: https://www.linkedin.com/help/linkedin/answer/261"
+,,,,,,
+First Name,Last Name,URL,Email Address,Company,Position,Connected On
+Ada,Testperson,https://www.linkedin.com/in/ada-testperson-1a2b3c,ada.secret@example.invalid,"Acme, Inc.",Senior Product Manager,15 Oct 2024
+Ben,Sample,https://www.linkedin.com/in/ben-sample,,Kraken Digital Asset Exchange,Software Engineer,03 Jan 2019
+,,,,,,
+Cara,"Quote ""CQ"" Example",https://www.linkedin.com/in/cara-q/,,Facebook,Technical Recruiter,10/15/24
+Dev,Nourl,,dev.secret@example.invalid,Self-Employed,Consultant,2023-06-01
+LinkedIn Member,,,,,,
+Eve,Multiline,https://evil.example/in/eve,,"Stealth
+Startup",Founder,Jun 2022

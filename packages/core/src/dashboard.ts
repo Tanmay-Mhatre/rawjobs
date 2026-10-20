@@ -101,11 +101,7 @@ const companyCache = new Map<string, string>();
 function companyKey(company: string): string {
   let key = companyCache.get(company);
   if (key === undefined) {
-    const w = words(displayName(company));
-    if (w.length > 1 && w[0] === "the" && !COMPANY_SUFFIXES.has(w[1]!)) w.shift();
-    // "Procter & Gamble Co." loses "Co." and then the "and" it leaves hanging.
-    while (w.length > 1 && (COMPANY_SUFFIXES.has(w.at(-1)!) || w.at(-1) === "and")) w.pop();
-    key = w.join("") || company.trim().toLowerCase();
+    key = companyNameWords(company).join("") || company.trim().toLowerCase();
     if (companyCache.size > 20_000) companyCache.clear();
     companyCache.set(company, key);
   }
@@ -114,6 +110,19 @@ function companyKey(company: string): string {
 
 /** The company part of a role's key, for matching a job board's company name to a company's own board. */
 export const companyNameKey = companyKey;
+
+/**
+ * The words of a company's key before they're joined: "The Kraken Digital Asset Exchange, Inc." is
+ * ["kraken", "digital", "asset", "exchange"]. The same pipeline as companyNameKey, for telling when
+ * one company name is the start of another.
+ */
+export function companyNameWords(company: string): string[] {
+  const w = words(displayName(company));
+  if (w.length > 1 && w[0] === "the" && !COMPANY_SUFFIXES.has(w[1]!)) w.shift();
+  // "Procter & Gamble Co." loses "Co." and then the "and" it leaves hanging.
+  while (w.length > 1 && (COMPANY_SUFFIXES.has(w.at(-1)!) || w.at(-1) === "and")) w.pop();
+  return w;
+}
 
 /** A title piece that only says who may apply ("m/w/d", "f/m/x", "all genders", "h/f"): not part of the role. */
 const GENDER_PIECE = /^(?:[mwfdhxi*](?:\s*[/|,]\s*[mwfdhxi*]){1,3}|all genders?|gn|gender neutral)$/i;

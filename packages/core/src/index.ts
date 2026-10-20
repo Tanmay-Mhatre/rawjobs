@@ -50,3 +50,4 @@ export * from "./today";
 export * from "./liveness";
 export * from "./schedule";
 export * from "./companies-page";
+export { fileZipSource, inflateRawNode } from "./network/zip-node";
