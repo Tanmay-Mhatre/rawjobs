@@ -100,13 +100,59 @@ function loadPeople(company: string, key: string) {
   );
 }
 
+/** How many people you know per company key, for the Radar. Counts exact and alias matches only. */
+export type NetworkSummary = { importedAt: string | null; counts: Record<string, number> };
+let summary: NetworkSummary | undefined;
+let summaryAsked = false;
+
+function loadSummary() {
+  if (!canRunLocally || summaryAsked) return;
+  summaryAsked = true;
+  const g = gen;
+  getJson<NetworkSummary>("/api/network/summary").then(
+    (value) => {
+      if (g !== gen) return;
+      summary = value;
+      emit();
+    },
+    () => {},
+  );
+}
+
+/** Your connections per company key, once imported; undefined before that and on the hosted copy. */
+export function useNetworkSummary(): NetworkSummary | undefined {
+  useEffect(loadSummary, []);
+  return useSyncExternalStore(subscribe, () => (summary?.importedAt ? summary : undefined));
+}
+
+/**
+ * How many people you know at a job's company, from the summary's counts. Each company name is keyed
+ * (networkKey) once and remembered, so a long list doesn't key the same name for every job.
+ */
+export function knownCounter(counts: Readonly<Record<string, number>>): (j: { company: string }) => number {
+  const byName = new Map<string, number>();
+  return (j) => {
+    let n = byName.get(j.company);
+    if (n === undefined) {
+      const key = networkKey(j.company);
+      n = key && Object.hasOwn(counts, key) ? (counts[key] ?? 0) : 0;
+      byName.set(j.company, n);
+    }
+    return n;
+  };
+}
+
 /** After an import or delete: forget everything and read the status again. */
 export function networkChanged(): void {
   gen++;
   info = undefined;
+  summary = undefined;
+  const reloadSummary = summaryAsked;
+  summaryAsked = false;
   people.clear();
   emit();
   loadInfo();
+  if (reloadSummary) loadSummary();
 }
 
 /** Your import status and your own positions and schools. Undefined on the hosted copy. */
@@ -196,5 +242,7 @@ export async function setCloseContact(id: string, on: boolean): Promise<boolean>
 export function resetNetworkStore(): void {
   gen++;
   info = undefined;
+  summary = undefined;
+  summaryAsked = false;
   people.clear();
 }

@@ -1,7 +1,7 @@
 import { surgeTitle } from "@rawjobs/core/activity";
 import { sponsorOf, sponsorTitle } from "@rawjobs/core/catalog/visa";
 import { fitLine } from "@rawjobs/core/fit";
-import { Bookmark, CircleCheck, CircleHelp, CircleX, Star, X } from "lucide-react";
+import { Bookmark, CircleCheck, CircleHelp, CircleX, Star, Users, X } from "lucide-react";
 import { forwardRef, type ReactNode } from "react";
 import type { JobGroup } from "../../lib/filters";
 import { atsLabel, evergreenReason, isOlder } from "../../lib/filters";
@@ -21,6 +21,8 @@ type Props = {
   onStatus: (s: Status) => void;
   /** At one of your companies. */
   yours?: boolean;
+  /** How many of your LinkedIn connections work at the company. */
+  known?: number;
 };
 
 /** Where the role is, across all its postings: "Berlin +3" (cities when recognised, else the raw location). */
@@ -141,13 +143,22 @@ function rowFlag(group: JobGroup): ReactNode {
  * where the job came from. The title is a real button whose click area stretches over the whole row;
  * Save and Not interested sit above it and show on hover or focus (always on touch screens and phones).
  */
-export const JobCard = forwardRef<HTMLLIElement, Props>(function JobCard({ group, entry, min, isNew, selected, onSelect, onStatus, yours }, ref) {
+export const JobCard = forwardRef<HTMLLIElement, Props>(function JobCard({ group, entry, min, isNew, selected, onSelect, onStatus, yours, known }, ref) {
   const job = group.lead;
   const status = entry?.status;
   const muted = job.status === "closed" || status === "dismissed" || !!job.why.gate;
 
   const place = placeLine(group);
-  const meta: ReactNode[] = [companyName(job.company), place];
+  const meta: ReactNode[] = [companyName(job.company)];
+  // Right after the company it's about, so a narrow row never cuts it off.
+  if (known)
+    meta.push(
+      <span className="inline-flex items-center gap-1" title={`${known} ${known === 1 ? "person" : "people"} you know work${known === 1 ? "s" : ""} at ${companyName(job.company)}`}>
+        <Users className="rj-icon" aria-hidden />
+        {known} you know
+      </span>,
+    );
+  meta.push(place);
   const workplace = workplaceBeside(place, WORKPLACE[job.workplace]);
   if (workplace) meta.push(workplace);
   // Your own progress always shows; then the one fact that matters most.
