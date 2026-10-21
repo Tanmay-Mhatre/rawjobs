@@ -45,4 +45,6 @@ To deploy without pushing, run the workflow from the Actions tab with **Run work
 
 Jobs in the scoring demo and the dashboard screenshots are made-up examples. The hero's stamped matches are real postings from the 11 Oct 2026 feed with example scores for a sample resume, and the page says so. The scoring demo's rules are in `src/score.js`, and `packages/core/test/site-demo.test.ts` checks them against `packages/core/src/score.ts` for every choice the demo offers: change the scorer and that test tells you to update the demo.
 
+Next to every "Star on GitHub" the build shows the repo's star count, and under the numbers a line with the latest release (tag and date) and the star count, all read from the GitHub API at build time (with `GITHUB_TOKEN` when set). When GitHub can't be reached, each is left out rather than shown stale.
+
 The page's numbers (companies in the directory, companies hiring, jobs in the daily feed, build dates) are read from the directory repo's latest release at build time. The Site workflow also runs every Monday after the directory rebuild, so they stay current. Without network access the build uses the last known numbers and says so.
