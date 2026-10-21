@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { detectCompany, getConnector } from "../src/connectors";
+import { firstPageFingerprint } from "../src/connectors/types";
 import type { CompanyRef } from "../src/schema";
 import { fakeHttp, json } from "./helpers";
 
@@ -54,6 +55,37 @@ describe("join", () => {
     );
     expect(calls).toEqual(["https://join.com/api/public/companies/54/jobs?page=1&pageSize=5"]);
     expect(await c.describe!(raws[0]!, r, { http, now: new Date() })).toBe("About us\n\nWe build heat pumps. Apply");
+  });
+
+  it("keeps the id it read off the careers page, so the next run asks the API straight away", async () => {
+    const ids = new Map<string, string>();
+    const route = (url: string) => (url === "https://join.com/companies/acme" ? text('{"company":{"id":30107}}') : json({ items: [job(1, "PM")], pagination: { pageCount: 1, rowCount: 1 } }));
+    const c = getConnector("join")!;
+    const r = { name: "Acme", enabled: true, ats: "join", slug: "acme" } as CompanyRef;
+    const first = fakeHttp(route);
+    await c.fetch(r, { http: first.http, now: new Date(), ids });
+    expect(ids.get("join:acme")).toBe("30107");
+    const second = fakeHttp(route);
+    await c.fetch(r, { http: second.http, now: new Date(), ids });
+    expect(second.calls).toEqual(["https://join.com/api/public/companies/30107/jobs?page=1&pageSize=5"]);
+  });
+
+  it("stops after the first page when it's as the last full read saw it", async () => {
+    const seen: [string, number][] = [];
+    const { http, calls } = fakeHttp((url) => {
+      const page = Number(new URL(url).searchParams.get("page"));
+      return json({ items: page === 1 ? [1, 2, 3, 4, 5].map((i) => job(i, `Role ${i}`)) : [job(6, "PM")], pagination: { pageCount: 2, rowCount: 6 } });
+    });
+    const c = getConnector("join")!;
+    const r = { name: "Acme", enabled: true, ats: "join", slug: "acme", shard: "54" } as CompanyRef;
+    const firstPage = (f: string, n: number) => {
+      seen.push([f, n]);
+      return true;
+    };
+    const raws = await c.fetch(r, { http, now: new Date(), firstPage });
+    expect(calls).toEqual(["https://join.com/api/public/companies/54/jobs?page=1&pageSize=5"]);
+    expect(raws).toHaveLength(5);
+    expect(seen).toEqual([[firstPageFingerprint(6, ["1", "2", "3", "4", "5"]), 6]]);
   });
 
   it("says so when the company doesn't exist", async () => {

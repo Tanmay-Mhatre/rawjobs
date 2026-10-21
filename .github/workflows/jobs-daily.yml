@@ -3,7 +3,7 @@
 # nothing for the user and still fetch the rest live. Unchanged boards cost an empty 304.
 # Setup: docs/shared-directory.md ("Job feed"). The file keeps its old name so its run history stays.
 #
-# Four crawl jobs (one per group of hiring systems, scripts/catalog/jobs.ts GROUPS) run side by side and
+# Five crawl jobs (one per group of hiring systems, scripts/catalog/jobs.ts GROUPS) run side by side and
 # each saves its own state; the merge job alone writes, signs and publishes the feed. A group that fails
 # is replaced by its previous saved copy. GitHub's cron often starts hours late, so a Cloudflare cron
 # (services/feed-trigger) also starts this workflow; the guard skips a run when the feed is fresh.
@@ -86,7 +86,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        group: [sr, payroll, enterprise, rest]
+        group: [sr, payroll, enterprise, join, rest]
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
@@ -175,7 +175,7 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.DATA_REPO_TOKEN }}
         run: |
-          for g in sr payroll enterprise rest; do
+          for g in sr payroll enterprise join rest; do
             if [ ! -f "scripts/catalog/out/jobs/groups/$g/group.json" ]; then
               echo "::warning::Group $g has no shards from this run; using its previous copy."
               bash scripts/catalog/state.sh restore "jobs-$g"
