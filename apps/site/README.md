@@ -4,7 +4,7 @@ The marketing page at <https://www.rawjobs.workers.dev>. One static HTML page bu
 
 - tokens, fonts and logos from `apps/web/src/design`
 - components (`rj-*` classes) from `design/components/bundle.css`
-- page content in `src/index.html`, the 404 page in `src/404.html` (both get the tokens and the theme script at build time), static files (the share image) in `public/`
+- page content in `src/index.html`, the features page in `src/features.html` (served at `/features`; every claim on it comes from the main README, and the examples inside its small mocks say so), the 404 page in `src/404.html` (all three get the tokens and the theme script at build time), static files (the share image) in `public/`
 - the install steps in Get it pick the visitor's computer (Windows, Mac, Linux) and show a mock of their screen at each step; its colors imitate those systems, so they are fixed values marked `design-lint-ignore`
 - `/install` redirects to the install steps (`public/_redirects`)
 - the share image, `public/og.png`, is rendered from `src/og.html`: run `pnpm site:og` after changing it
