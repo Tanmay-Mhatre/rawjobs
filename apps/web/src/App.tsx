@@ -18,6 +18,7 @@ import { ServerNotices } from "./components/Updates";
 import { UpdatePill } from "./components/WhatsNew";
 import { ScanButton } from "./components/ScanButton";
 import { FeedStaleNotice } from "./components/FeedStaleNotice";
+import { ReminderNotice } from "./components/referral/ReminderNotice";
 import { Settings } from "./components/Settings";
 import { settingsHash } from "./components/settings/registry";
 import { ShortcutList } from "./components/ShortcutList";
@@ -378,6 +379,7 @@ export function App() {
         >
           <ServerNotices onRadar={!inSetup && tab === "radar" && !openId && !showKeys && status !== undefined} />
           {!inSetup && tab === "radar" && <FeedStaleNotice scan={scan} onOnlyMine={() => void restartScan("yours")} />}
+          {!inSetup && tab === "radar" && <ReminderNotice />}
           {status === undefined || state.kind === "loading" ? (
             <FeedSkeleton />
           ) : inSetup ? (

@@ -4,7 +4,7 @@ import type { AddressInfo } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
-import type { WatchDeps } from "@rawjobs/core";
+import { type ReminderDeps, reminderMessage, type WatchDeps } from "@rawjobs/core";
 import { makeZip } from "../../core/test/fixtures/linkedin/make-zip";
 import { createApi } from "../src/api";
 
@@ -31,7 +31,12 @@ describe("the network API", () => {
   let pending: (() => void)[] = [];
   let logs: string[] = [];
 
-  async function start(watchDeps: Partial<WatchDeps> = {}) {
+  /** The reminder's fake clock, its timers, and what it sent on Telegram. */
+  const clock = { t: Date.parse("2026-10-21T09:00:00.000Z") };
+  let reminderTimers: (() => void)[] = [];
+  let sent: string[] = [];
+
+  async function start(watchDeps: Partial<WatchDeps> = {}, reminderDeps: Partial<ReminderDeps> = {}) {
     const dir = mkdtempSync(join(tmpdir(), "rawjobs-network-"));
     const home = join(dir, "home");
     const downloads = join(dir, "Downloads");
@@ -40,6 +45,9 @@ describe("the network API", () => {
     mkdirSync(join(dir, "data"));
     pending = [];
     logs = [];
+    reminderTimers = [];
+    sent = [];
+    clock.t = Date.parse("2026-10-21T09:00:00.000Z");
     // The CLI stand-in answers any command with "{}".
     const fake = join(dir, "fake-cli.mjs");
     writeFileSync(fake, `console.log("{}");`);
@@ -50,6 +58,16 @@ describe("the network API", () => {
       version: "9.9.9",
       // Never the real Downloads folder: a temp one, and timers this test runs.
       watchDeps: { env: { RAWJOBS_DOWNLOADS: downloads }, schedule: (fn) => pending.push(fn), cancel: () => {}, log: (l) => logs.push(l), ...watchDeps },
+      // Never the real Telegram: a fake one, set up unless a test says otherwise.
+      reminderDeps: {
+        now: () => clock.t,
+        schedule: (fn) => reminderTimers.push(fn),
+        cancel: () => {},
+        telegram: () => ({ token: "123456:ABCDEF", chatId: "42" }),
+        send: async (text) => void sent.push(text),
+        log: () => {},
+        ...reminderDeps,
+      },
     });
     server = createServer((rq, rs) => void api.handle(rq, rs));
     await new Promise<void>((r) => server!.listen(0, "127.0.0.1", r));
@@ -74,7 +92,7 @@ describe("the network API", () => {
 
   it("imports the three CSVs, answers status, people and summary, and keeps no email", async () => {
     const { port, home } = await start();
-    expect((await call(port, "GET", "/api/network")).json()).toEqual({ status: { connected: false, watch: null }, me: null, watchable: true });
+    expect((await call(port, "GET", "/api/network")).json()).toEqual({ status: { connected: false, watch: null }, me: null, watchable: true, reminder: null });
 
     const r = await call(port, "POST", "/api/network/import", importBody({ connections: CONNECTIONS, positions: POSITIONS, education: EDUCATION }));
     expect(r.status).toBe(200);
@@ -250,5 +268,68 @@ describe("the network API", () => {
   it("refuses a watch started from another site", async () => {
     const { port } = await start();
     expect((await call(port, "POST", "/api/network/watch", "{}", { origin: "https://evil.example" })).status).toBe(403);
+  });
+
+  /** Run the reminder's timers, and let what they started finish. */
+  const tick = async () => {
+    for (const fn of reminderTimers.splice(0)) fn();
+    await new Promise((r) => setTimeout(r, 20));
+  };
+
+  it("sets, snoozes and cancels the LinkedIn file reminder, and shows it in GET", async () => {
+    const { port, home } = await start();
+    const set = await call(port, "POST", "/api/network/reminder", "{}");
+    expect(set.json()).toEqual({ reminder: { at: "2026-10-23T09:00:00.000Z", due: false } });
+    expect(set.headers["cache-control"]).toBe("no-store");
+    expect((await call(port, "GET", "/api/network")).json().reminder).toEqual({ at: "2026-10-23T09:00:00.000Z", due: false });
+    // Capped at 72 hours; 24 to snooze.
+    expect((await call(port, "POST", "/api/network/reminder", JSON.stringify({ hours: 500 }))).json().reminder.at).toBe("2026-10-24T09:00:00.000Z");
+    expect((await call(port, "POST", "/api/network/reminder", JSON.stringify({ hours: 24 }))).json().reminder.at).toBe("2026-10-22T09:00:00.000Z");
+    expect((await call(port, "POST", "/api/network/reminder", "nope")).status).toBe(400);
+    expect((await call(port, "DELETE", "/api/network/reminder")).json()).toEqual({ ok: true });
+    expect(existsSync(join(home, "profile/network-reminder.json"))).toBe(false);
+    expect((await call(port, "GET", "/api/network")).json().reminder).toBeNull();
+    expect((await call(port, "POST", "/api/network/reminder", "{}", { origin: "https://evil.example" })).status).toBe(403);
+  });
+
+  it("fires the reminder once: due in GET, one Telegram message, and a snooze starts it over", async () => {
+    const { port } = await start();
+    await call(port, "POST", "/api/network/reminder", "{}");
+    await tick();
+    expect(sent).toEqual([]);
+    clock.t += 48 * 3_600_000;
+    await tick();
+    await tick();
+    expect(sent).toEqual([reminderMessage()]);
+    expect((await call(port, "GET", "/api/network")).json().reminder).toEqual({ at: "2026-10-23T09:00:00.000Z", due: true });
+    await call(port, "POST", "/api/network/reminder", JSON.stringify({ hours: 24 }));
+    expect((await call(port, "GET", "/api/network")).json().reminder.due).toBe(false);
+  });
+
+  it("sends nothing on Telegram when it isn't set up", async () => {
+    const { port } = await start({}, { telegram: () => null });
+    await call(port, "POST", "/api/network/reminder", JSON.stringify({ hours: 1 }));
+    clock.t += 3_600_000;
+    await tick();
+    expect(sent).toEqual([]);
+    expect((await call(port, "GET", "/api/network")).json().reminder.due).toBe(true);
+  });
+
+  it("importing, deleting connections and starting over each clear the reminder", async () => {
+    const { port, home } = await start();
+    const file = join(home, "profile/network-reminder.json");
+    await call(port, "POST", "/api/network/reminder", "{}");
+    clock.t += 1000;
+    await call(port, "POST", "/api/network/import", importBody({ connections: CONNECTIONS }));
+    expect(existsSync(file)).toBe(false);
+    for (const [method, path] of [
+      ["DELETE", "/api/network"],
+      ["POST", "/api/setup/reset"],
+    ] as const) {
+      await call(port, "POST", "/api/network/reminder", "{}");
+      expect(existsSync(file)).toBe(true);
+      await call(port, method, path);
+      expect(existsSync(file)).toBe(false);
+    }
   });
 });
