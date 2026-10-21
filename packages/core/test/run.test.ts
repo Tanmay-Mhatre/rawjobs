@@ -78,6 +78,23 @@ describe("runRadar", () => {
     expect(result.jobs.every((j) => !j.id.startsWith("greenhouse"))).toBe(true);
   });
 
+  it("records a board whose site had stopped answering as not reached, not failed", async () => {
+    const lever = config.companies[1]!;
+    const twoOnLever = {
+      ...config,
+      companies: [
+        { ...lever, name: "Lever A", slug: "a" },
+        { ...lever, name: "Lever B", slug: "b" },
+      ],
+    };
+    const http = new HttpClient({ hostDelayMs: 0, retries: 0, breakAfter: 1, sleep: async () => {}, fetchImpl: (async () => new Response("", { status: 503 })) as unknown as typeof fetch });
+    const result = await runRadar(twoOnLever, { http, now, maxCompaniesInFlight: 1 });
+    expect(result.health.map((h) => [h.company, h.failure, h.notReached])).toEqual([
+      ["Lever A", "server", undefined],
+      ["Lever B", undefined, true],
+    ]);
+  });
+
   it("skips a posting it can't read and keeps the company's other jobs", async () => {
     const gh = fixture("greenhouse.json") as { jobs: unknown[] };
     const { http } = fakeHttp((url) => (url.includes("greenhouse") ? json({ ...gh, jobs: [...gh.jobs, { id: 999, location: { name: "Dubai" } }] }) : routes(url)));

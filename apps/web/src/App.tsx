@@ -1,5 +1,6 @@
 import { ArrowRight, Keyboard, RefreshCw, TriangleAlert, X } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { failedHealth } from "@rawjobs/core/health";
 import { CompaniesTab } from "./components/CompaniesTab";
 import { Dialog } from "./components/Dialog";
 import { SetupBanner } from "./components/EmptyState";
@@ -264,7 +265,7 @@ export function App() {
 
   const lastRun = meta?.runs[0];
   // Only your companies: the extra ones a scan checks aren't yours to fix.
-  const failing = lastRun?.health.filter((h) => !h.ok && !h.unsupported && yourKeys.has(keyOf(h))).length ?? 0;
+  const failing = lastRun?.health.filter((h) => failedHealth(h) && yourKeys.has(keyOf(h))).length ?? 0;
   const matched = jobs.filter((j) => !j.why.gate && j.status === "open").length;
   /** The Radar list is showing: on laptops and up the page then fits the window (no page scroll). */
   const radarFits = !inSetup && tab === "radar" && state.kind === "ready" && (matched > 0 || !lastRun);

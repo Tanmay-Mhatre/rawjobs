@@ -6,6 +6,7 @@
   "exports": {
     ".": "./src/index.ts",
     "./schema": "./src/schema.ts",
+    "./health": "./src/health.ts",
     "./diagnose": "./src/diagnose.ts",
     "./yaml-writer": "./src/yaml-writer.ts",
     "./text": "./src/text.ts",
