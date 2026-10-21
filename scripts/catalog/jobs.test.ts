@@ -1,6 +1,6 @@
 import { type FeedRow, HostSkippedError, HttpError } from "@rawjobs/core";
 import { describe, expect, it } from "vitest";
-import { describeReasons, failReason, sameJobs, sameSwing, slowHosts } from "./jobs";
+import { describeReasons, failReason, feedCoverage, sameJobs, sameSwing, slowHosts } from "./jobs";
 
 describe("failReason", () => {
   it("groups HTTP errors by status", () => {
@@ -56,6 +56,20 @@ describe("sameJobs", () => {
     // b was refused partway this run: 20 of its 300 jobs read. d is new.
     const current = { a: board(110), b: board(20, true), d: board(500) };
     expect(sameJobs(previous, current)).toEqual({ before: 100, after: 110 });
+  });
+});
+
+describe("feedCoverage", () => {
+  const board = (fetched_at: string, n: number) => ({ fetched_at, jobs: Array.from({ length: n }, (_, i) => [String(i), "t", "", "onsite", null] as FeedRow) });
+  const run = "2026-10-21T06:13:00Z";
+
+  it("splits companies read this run from those kept from an earlier one", () => {
+    const companies = { a: board(run, 3), b: board("2026-10-20T06:13:00Z", 2), c: board(run, 0) };
+    expect(feedCoverage(companies, 4, run)).toEqual({ companies: 3, previous: 4, this_run: 2, kept: 1, jobs: 5 });
+  });
+
+  it("says there was no previous feed rather than 0", () => {
+    expect(feedCoverage({}, undefined, run).previous).toBeNull();
   });
 });
 

@@ -101,6 +101,15 @@ jobs:
           GH_TOKEN: ${{ secrets.DATA_REPO_TOKEN }}
         run: bash scripts/catalog/state.sh save
 
+      - name: Summary
+        if: always() && steps.state.outputs.restored == 'true'
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          since=$(gh run view "${{ github.run_id }}" -R "${{ github.repository }}" --json createdAt -q .createdAt)
+          pnpm exec tsx scripts/catalog/tally.ts --since "$since" >> "$GITHUB_STEP_SUMMARY"
+
       - name: Start the weekly rebuild if it's overdue
         if: always() && steps.checkout.outcome == 'success'
         env:
