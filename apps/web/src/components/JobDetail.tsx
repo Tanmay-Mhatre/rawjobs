@@ -25,11 +25,14 @@ import {
   RefreshCw,
   Star,
   StickyNote,
+  Users,
   X,
 } from "lucide-react";
-import { Fragment, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { Fragment, type ReactNode, type RefObject, useEffect, useMemo, useRef, useState } from "react";
 import { copyText } from "../lib/clipboard";
+import { isAgencyPosting } from "../lib/agency";
 import { useDescription, useHiring, type Job, type Profile } from "../lib/data";
+import { useNetwork, usePeopleAt } from "../lib/network";
 import { cleanLocation, companyName, eligibilityNotes, formatDate, formatSalary, jobTitle, placeSummary, postedOrSeen, timeAgo, workplaceBeside } from "../lib/format";
 import { atsLabel, evergreenReason, INDEX_MAX_AGE_DAYS, isOlder } from "../lib/filters";
 import { isRoleStale, isStale, staleReasons } from "../lib/stale";
@@ -371,6 +374,7 @@ export function JobDetail(p: JobDetailProps) {
           <span className="min-w-0">{jobTitle(job.title)}</span>
         </h2>
         <MetaLine className="rj-drawer__meta" parts={metaLine} />
+        {status !== "dismissed" && <PeopleYouKnow job={job} scrollRef={scrollRef} />}
       </header>
 
       <div ref={scrollRef} className={cx("rj-drawer__body min-h-0 flex-1", p.expanded && "md:grid-cols-[minmax(0,1fr)_20rem] md:gap-x-10")}>
@@ -586,6 +590,31 @@ export function JobDetail(p: JobDetailProps) {
         </Dialog>
       )}
     </section>
+  );
+}
+
+/**
+ * "3 you know" under the title once your LinkedIn connections are imported: jumps to the people section.
+ * Same request as that section (the network store keeps one per company).
+ */
+function PeopleYouKnow({ job, scrollRef }: { job: Job; scrollRef: RefObject<HTMLDivElement | null> }) {
+  const network = useNetwork();
+  const connected = network?.state === "ready" && !!network.value.status.connected;
+  const agency = isAgencyPosting(job);
+  const people = usePeopleAt(job.company, connected && !agency);
+  const n = people?.state === "ready" ? people.value.people.length : 0;
+  if (!n) return null;
+  // A match on the start of the name only ("Acme" for "Acme Bank"): not sure they work here.
+  const label = people?.state === "ready" && people.value.how === "prefix" ? `${n} you may know` : `${n} you know`;
+  const jump = () => {
+    const heading = scrollRef.current?.querySelector(`#talk-${CSS.escape(job.id)}`);
+    heading?.scrollIntoView({ behavior: "smooth", block: "start" });
+  };
+  return (
+    <button type="button" onClick={jump} className="rj-pill justify-self-start text-ink hover:bg-hover" title={`People you know at ${companyName(job.company)}, from your LinkedIn connections`}>
+      <Users className="size-4 shrink-0 text-muted" aria-hidden />
+      {label}
+    </button>
   );
 }
 
