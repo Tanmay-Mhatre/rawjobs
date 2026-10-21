@@ -59,7 +59,7 @@ export const GROUPS: Record<string, string[]> = {
   sr: ["smartrecruiters"],
   payroll: ["paylocity", "paycom", "hireology", "workable"],
   enterprise: ["workday", "icims", "oracle", "successfactors", "taleo", "phenom", "eightfold", "avature", "radancy"],
-  // ~13,000 small boards on one host: alone in "rest" it used the whole time limit and left half unread.
+  // ~13,000 small boards on one host: in "rest" it used the whole time limit and left half unread.
   join: ["join"],
   rest: [],
 };
@@ -82,7 +82,6 @@ const CI_HOST_DELAYS: Record<string, number> = {
   "api.smartrecruiters.com": 500,
   "recruiting.paylocity.com": 550,
   "www.paycomonline.net": 667,
-  "join.com": 300,
 };
 /**
  * Hiring systems whose every board is its own host, with the gap the feed keeps on each. Eightfold's CDN
@@ -210,6 +209,9 @@ async function crawl(out: string, group: string, generated: string, directoryFil
     backoffMs: 3_000,
     breakAfter: 8,
     hostDelays: { ...CI_HOST_DELAYS, ...slowHosts(directory) },
+    // JOIN is paced like the app paces it (http.ts paceOf: up to 3/s, halved on a 429 and back up after).
+    // A fixed gap that a 429 doubles stays doubled for the run: two early 429s left it at 1.2 s for 4 h.
+    adaptive: group === "join",
     userAgent: "RawJobs-feed/0.2 (open-source job radar; one read per board every 6 hours; https://github.com/Tanmay-Mhatre/rawjobs)",
   });
   const now = new Date(generated);
