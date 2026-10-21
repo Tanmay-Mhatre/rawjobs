@@ -51,6 +51,10 @@ on:
         description: "Smoke test: every stage for 2 minutes, nothing published"
         type: boolean
         default: false
+      due_only:
+        description: "Run only if no rebuild published in the last 5 days, like a scheduled run (for the scheduler Worker)"
+        type: boolean
+        default: false
 
 # Workflow-level on purpose: per job, another run could take the group between collect and publish.
 # queue: max — waiting runs queue up instead of the default, where a newer one cancels the waiting one.
@@ -69,8 +73,8 @@ env:
   DATA_REPO: ${{ vars.DATA_REPO || 'Tanmay-Mhatre/rawjobs-directory' }}
 
 jobs:
-  # A scheduled run goes ahead only if no rebuild published in the last 5 days (the backups above);
-  # a run started by hand always does.
+  # A scheduled run (or one dispatched with due_only) goes ahead only if no rebuild published in the
+  # last 5 days (the backups above); a run started by hand always does.
   due:
     runs-on: ubuntu-24.04
     timeout-minutes: 5
@@ -82,7 +86,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          if [ "${{ github.event_name }}" != schedule ]; then echo "run=true" >> "$GITHUB_OUTPUT"; exit 0; fi
+          if [ "${{ github.event_name }}" != schedule ] && [ "${{ inputs.due_only }}" != true ]; then echo "run=true" >> "$GITHUB_OUTPUT"; exit 0; fi
           # The weekly rebuild's releases are directory-YYYY-MM-DD; contributions' end in -shared.
           last=$(gh release list -R "$DATA_REPO" --limit 100 --json tagName,publishedAt -q '[.[] | select((.tagName | startswith("directory-")) and (.tagName | endswith("-shared") | not))] | max_by(.publishedAt) | .publishedAt // ""')
           if [ -n "$last" ] && [ $(( $(date -u +%s) - $(date -u -d "$last" +%s) )) -lt $(( 5 * 86400 )) ]; then
