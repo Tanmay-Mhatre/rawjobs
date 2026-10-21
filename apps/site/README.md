@@ -15,7 +15,7 @@ The marketing page at <https://www.rawjobs.workers.dev>. One static HTML page bu
 - the hiring systems marquee under the numbers repeats the FAQ's list (`__ATS__` is filled everywhere it appears) and is hidden from screen readers, which get the FAQ list
 - Get it: a step bar over the five steps, and the mock screen sits in a frame shaped like the visitor's machine (a MacBook, a Windows monitor on a stand, a Linux laptop). Like the mock screen, the frame's hardware colors are fixed values marked for the design lint
 - Where your resume goes is full width: each stop is an icon card, the middlemen stamp the resume ("Copied", "Held") as it passes, "No reply" lands with a jolt and "Hiring team" with a green pulse, over a dotted grid with a red and a green glow
-- an intro animation can hold the wall's scan: add the `intro` class to `<html>`, then dispatch `rawjobs:intro-done` on `window` (or call `window.rawjobsWall.start()`); it starts on its own after 2.5s
+- an intro animation can hold the wall's scan: add the `intro` class to `<html>`, then dispatch `rawjobs:intro-done` on `window` (or call `window.rawjobsWall.start()`); it starts on its own after 4.5s
 
 `pnpm design:lint` checks `src/` too, with CSS-aware rules: no accent tokens outside their four jobs, durations only from the motion tokens, no px type sizes.
 

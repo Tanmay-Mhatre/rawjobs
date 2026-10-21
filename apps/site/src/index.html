@@ -33,19 +33,17 @@
 <link rel="preload" href="/fonts/GeistMono-500.woff2" as="font" type="font/woff2" crossorigin>
 <link rel="preload" href="/fonts/InstrumentSerif-Italic.woff2" as="font" type="font/woff2" crossorigin>
 <script>
-/* Intro: first visit per browser session only, never with reduced motion, never on a deep link or a background tab.
+/* Intro: on every load and reload, but never with reduced motion, on a deep link (/#get) or in a background tab.
    html.intro shows the overlay (CSS) and makes the wall wait for rawjobs:intro-done. Without JS nothing happens. */
 (function () {
   var r = document.documentElement;
   try {
     if (!('animate' in r) || matchMedia('(prefers-reduced-motion: reduce)').matches) return;
     if (location.hash.length > 1 || document.visibilityState === 'hidden') return;
-    if (sessionStorage.getItem('rawjobs:intro')) return;
-    sessionStorage.setItem('rawjobs:intro', '1');
   } catch (e) { return; }
   r.classList.add('intro');
   /* failsafe: if the intro script never runs, the overlay goes and the wall starts anyway */
-  setTimeout(function () { if (r.classList.contains('intro')) { r.classList.remove('intro'); dispatchEvent(new Event('rawjobs:intro-done')); } }, 4000);
+  setTimeout(function () { if (r.classList.contains('intro')) { r.classList.remove('intro'); dispatchEvent(new Event('rawjobs:intro-done')); } }, 6000);
 })();
 </script>
 <style>
@@ -630,7 +628,7 @@ label.rj-chip:has(input:focus-visible) { outline: 2px solid var(--focus-ring); o
 }
 
 /* ---------- intro and micro-animations (21st.dev Preloader, Scramble Text, Animate Digits, Text Blur Reveal; ported to plain CSS/JS) ---------- */
-/* ---------- intro: first visit only (html.intro, set by the head script) ----------
+/* ---------- intro: every load (html.intro, set by the head script) ----------
    A paper sheet over the real page: the cursor blinks, "rawjobs" types itself in from symbols, the directory count
    rolls, then the sheet lifts with a curved edge that flattens (21st.dev Preloader) and the cursor drops into the
    headline. Timing lives in intro.js, computed from the motion tokens. Without html.intro none of this renders. */
@@ -1182,8 +1180,9 @@ h1 .serif, h2 .serif { font-size: 1.08em; line-height: 0; }
 })();
 </script>
 <script>
-/* RawJobs intro: runs only when the head script set html.intro (first visit this session, motion allowed).
-   Story, about 1.5s, all on a paper sheet over the already-rendered page:
+/* RawJobs intro: runs only when the head script set html.intro (every load, motion allowed).
+   Story, about 2.9s (the timings below are at PACE 1; PACE and HOLD slow it so it can be read), all on a paper
+   sheet over the already-rendered page:
      0      the orange cursor sits alone and blinks once
      ~200   "rawjobs" types in left to right, each letter decoding from symbols (21st.dev Scramble Text, 32ms tick)
      ~350   "reading 47,737 careers pages" fades in; the count rolls up, only changing digits move (Animate Digits)
@@ -1208,16 +1207,18 @@ h1 .serif, h2 .serif { font-size: 1.08em; line-height: 0; }
   var LIFT_EASE = 'cubic-bezier(0.76, 0, 0.24, 1)'; /* 21st Preloader */
   var TICK = 32; /* 21st Scramble Text */
 
-  /* the timeline, from the motion tokens (default tokens: type 250, line 400, roll 380, lift at 880 for 680, curve 580) */
-  var T_TYPE = QUICK + INSTANT;         /* the blink (on 150, off 100), then typing starts */
-  var PER_CHAR = TICK * 1.5;            /* a new letter every 48ms */
-  var RESOLVE = TICK * 3;               /* each letter shows symbols for ~3 ticks before it settles */
-  var T_LINE = T_TYPE + QUICK;          /* the count line fades in */
-  var ROLL = STORY;                     /* the count rolls */
-  var T_LIFT = T_LINE + ROLL + INSTANT; /* a beat on the final count, then the sheet lifts and the wall sweeps */
-  var LIFT = STORY + SLOW;              /* sheet travel */
-  var CURVE = STORY + BASE;             /* bulge flattening, ends with the travel (Preloader: 0.7s inside 0.8s) */
-  var FLIGHT = STORY;                   /* the cursor's trip into the headline: it lands just after the sheet uncovers its slot */
+  /* the timeline, from the motion tokens, slowed by PACE so it plays on every load without rushing
+     (default tokens: type 375, line 600, roll 910, hold 500, lift at 2010 for 880, curve 750) */
+  var PACE = 1.5, HOLD = 500;                  /* HOLD: the final count stays up long enough to read */
+  var T_TYPE = (QUICK + INSTANT) * PACE;       /* the blink, then typing starts */
+  var PER_CHAR = TICK * 1.5 * PACE;            /* a new letter every 72ms */
+  var RESOLVE = TICK * 3 * PACE;               /* each letter shows symbols for a moment before it settles */
+  var T_LINE = T_TYPE + QUICK * PACE;          /* the count line fades in */
+  var ROLL = STORY * PACE * 1.6;               /* the count rolls */
+  var T_LIFT = T_LINE + ROLL + HOLD;           /* a beat on the final count, then the sheet lifts and the wall sweeps */
+  var LIFT = (STORY + SLOW) * 1.3;             /* sheet travel */
+  var CURVE = (STORY + BASE) * 1.3;            /* bulge flattening, ends with the travel (Preloader: 0.7s inside 0.8s) */
+  var FLIGHT = STORY * 1.3;                    /* the cursor's trip into the headline: it lands just after the sheet uncovers its slot */
 
   var sheet = box.querySelector('.rj-intro__sheet');
   var edge = box.querySelector('.rj-intro__edge');
@@ -2166,11 +2167,11 @@ h1 .serif, h2 .serif { font-size: 1.08em; line-height: 0; }
       if (p < 1) requestAnimationFrame(count); else wallDone();
     })(t0);
   }
-  /* Hook for an intro animation: with html.intro, the wall waits for rawjobs:intro-done (or 2.5s at most). */
+  /* Hook for an intro animation: with html.intro, the wall waits for rawjobs:intro-done (or 4.5s at most). */
   window.rawjobsWall = { start: function () { if (!wallStarted) startWall(); } };
   if (document.documentElement.classList.contains('intro')) {
     addEventListener('rawjobs:intro-done', window.rawjobsWall.start, { once: true });
-    setTimeout(window.rawjobsWall.start, 2500);
+    setTimeout(window.rawjobsWall.start, 4500);
   } else if (document.fonts && document.fonts.ready) {
     var wallGo = window.rawjobsWall.start;
     document.fonts.ready.then(wallGo); setTimeout(wallGo, 120);
