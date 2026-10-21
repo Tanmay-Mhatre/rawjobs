@@ -4,11 +4,13 @@ import { join } from "node:path";
 import { act, cleanup, render, renderHook, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { JobDetail } from "../src/components/JobDetail";
 import { BANNER_DISMISSED_KEY, ConnectBanner } from "../src/components/referral/ConnectBanner";
 import { TalkToSomeone } from "../src/components/referral/TalkToSomeone";
 import { NetworkSection } from "../src/components/settings/NetworkSection";
 import { Toaster } from "../src/components/Toast";
 import { isAgencyPosting } from "../src/lib/agency";
+import type { Profile } from "../src/lib/data";
 import { type NetworkPersonRow, networkChanged, resetNetworkStore, usePeopleAt } from "../src/lib/network";
 import { callLinks, coldLinks, companySlug, friendsSearch, profileHref, recruiterLinks, warmLinks } from "../src/lib/referralLinks";
 import { makeJob } from "./helpers";
@@ -50,6 +52,36 @@ afterEach(() => {
   cleanup();
   vi.unstubAllGlobals();
   localStorage.removeItem(BANNER_DISMISSED_KEY);
+});
+
+describe("People you know, under the job's title", () => {
+  const profile = { titles: { include: [], exclude: [] }, keywords: {}, min_score: 65, industries: [], past_employers: [] } as unknown as Profile;
+  const detail = (job = makeJob({ company: "Acme" })) => render(<JobDetail job={job} profile={profile} onUpdate={() => {}} />);
+  const chip = (name: RegExp) => screen.queryByRole("button", { name });
+
+  it("counts the people you know there, and says when the company match is loose", async () => {
+    stubApi({ network: connected(), people: { how: "exact", people: PEOPLE.slice(0, 3) } });
+    detail();
+    expect(await screen.findByRole("button", { name: "3 you know" })).toBeTruthy();
+    cleanup();
+    resetNetworkStore();
+    stubApi({ network: connected(), people: { how: "prefix", people: PEOPLE.slice(0, 2) } });
+    detail();
+    expect(await screen.findByRole("button", { name: "2 you may know" })).toBeTruthy();
+  });
+
+  it("shows nothing before an import or with nobody there", async () => {
+    stubApi({ network: notConnected });
+    detail();
+    await screen.findByRole("heading", { name: "Talk to someone who works here" });
+    expect(chip(/you (may )?know$/)).toBeNull();
+    cleanup();
+    resetNetworkStore();
+    stubApi({ network: connected(), people: { how: "exact", people: [] } });
+    detail();
+    await screen.findByText(/You don't know anyone at Acme/);
+    expect(chip(/you (may )?know$/)).toBeNull();
+  });
 });
 
 describe("The LinkedIn banner at the top of a job", () => {
