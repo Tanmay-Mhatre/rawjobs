@@ -254,7 +254,8 @@ export function Pipeline({ user, jobsById, onOpen, onPatch, onAdd, weeklyPlan, o
   });
 
   return (
-    <div ref={boardRef} className="pb-2">
+    // Grows to the bottom of the page, and the columns with it.
+    <div ref={boardRef} className="flex flex-1 flex-col pb-2">
       {addDialog}
       <TrackedJobDialog
         id={editing}
@@ -342,8 +343,8 @@ export function Pipeline({ user, jobsById, onOpen, onPatch, onAdd, weeklyPlan, o
           ))}
         </ChipGroup>
       </div>
-      <div className="md:overflow-x-auto">
-        <div className="grid gap-3 md:grid-cols-[repeat(5,minmax(220px,1fr))]">
+      <div className="flex flex-1 flex-col md:overflow-x-auto">
+        <div className="grid flex-1 gap-3 md:grid-cols-[repeat(5,minmax(220px,1fr))]">
           {columns.map(({ col, items }) => {
             const closed = col === "rejected";
             const visible = closed && !moreClosed ? items.slice(0, CLOSED_SHOWN) : items;

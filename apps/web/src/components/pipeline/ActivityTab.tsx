@@ -1,4 +1,4 @@
-import { AlarmClock, CalendarClock, Check, Radar, StickyNote } from "lucide-react";
+import { AlarmClock, CalendarClock, Check, History, Pencil, Radar, StickyNote } from "lucide-react";
 import { useId, useState } from "react";
 import { type Task, tasksFor } from "../../lib/nextSteps";
 import { addActivity, CHANNEL_LABEL, dayAfter, type Entry, type EntryPatch, isDay, today } from "../../lib/userState";
@@ -13,7 +13,7 @@ const whenDay = (iso: string) => new Date(iso).toLocaleDateString(undefined, { m
 
 /**
  * The Activity tab: the next step pinned on top, the composer, then everything that happened on
- * the job, newest first, with All / Messages / Stages / Notes filters.
+ * the job, newest first, with All / Messages / Stages / Notes / Changes filters.
  */
 export function ActivityTab({
   jobId,
@@ -232,15 +232,17 @@ export function TaskActions({ task, skipped, onLog, onMarkDone, onUpdate, now, o
   );
 }
 
-/** One timeline row: stage changes small and grey, touches and notes full with their text. */
+/** One timeline row: stage changes and edits small and grey, touches and notes full with their text. */
 function Row({ item, onNote }: { item: TimelineItem; onNote: (note: string) => void }) {
   const [open, setOpen] = useState(false);
   const [editing, setEditing] = useState(false);
   const noteId = useId();
-  if (item.kind === "stage" || item.kind === "found") {
+  if (item.kind === "stage" || item.kind === "change" || item.kind === "found") {
     return (
       <li className="flex items-center gap-2 py-1 pl-6 type-meta text-muted">
         {item.kind === "found" && <Radar className="size-3.5" aria-hidden />}
+        {item.kind === "stage" && <History className="size-3.5 shrink-0" aria-hidden />}
+        {item.kind === "change" && <Pencil className="size-3.5 shrink-0" aria-hidden />}
         <span>{item.kind === "found" ? "Found on your Radar" : item.text}</span>
         <time dateTime={item.at} className="tabular">
           {whenDay(item.at)}

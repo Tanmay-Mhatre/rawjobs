@@ -124,7 +124,11 @@ export const CAPS = {
   linkedin: 300,
   howMet: 500,
   mutual: 120,
+  changes: 100,
 } as const;
+
+/** One edit to a job that isn't a touch or a stage move ("Follow-up moved to Oct 28"), for its Activity. */
+export type Change = { at: string; text: string };
 
 /** What an offer says, as you'd write it ("AED 45k a month", "15%"); dates are YYYY-MM-DD. */
 export type Offer = { pay?: string; bonus?: string; equity?: string; location?: string; start?: string; deadline?: string; note?: string };
@@ -154,6 +158,8 @@ export type Entry = {
   offer?: Offer;
   /** Referral asks, by contact id (only people in `contacts`). */
   outreach?: Record<string, Outreach>;
+  /** Your other edits (dates, CV, people, interviews, offer), oldest first (at most CAPS.changes). */
+  changes?: Change[];
   updatedAt: string;
   /** Copy of the job's basics, so the pipeline survives the job leaving jobs.json. */
   snapshot: {
@@ -309,7 +315,86 @@ export function capEntry(e: Entry, now = new Date()): Entry {
     const oldest = dayAfter(now.toISOString(), -CAPS.skippedDays);
     next.skipped = [...new Set(next.skipped)].filter((k) => !((dayIn(k) ?? oldest) < oldest)).slice(-CAPS.skipped);
   }
+  if (next.changes) next.changes = next.changes.filter((c) => isText(c?.at) && isText(c.text)).slice(-CAPS.changes);
   return next;
+}
+
+const dayLabel = (day: string) => new Date(`${day}T12:00:00`).toLocaleDateString(undefined, { month: "short", day: "numeric" });
+const interviewLabel = (i: Interview) => [i.what || "Interview", dayLabel(i.on), i.time].filter(Boolean).join(", ");
+const OFFER_LABEL: Record<(typeof OFFER_FIELDS)[number], string> = { pay: "pay", bonus: "bonus", equity: "equity", location: "location", start: "start date", deadline: "deadline", note: "note" };
+const TASK_LABEL: Record<string, string> = { "follow-up": "Follow-up", "thank-you": "Thank-you", interview: "Interview", deadline: "Deadline" };
+
+/**
+ * What a change did, in words, for the job's Activity. Stage moves (history) and new touches have
+ * rows of their own, so only the rest is described; the dates they set on their own aren't either.
+ */
+export function describeChanges(prev: Entry | undefined, next: Entry, patch: EntryPatch): string[] {
+  if (!prev) return [];
+  const out: string[] = [];
+  const moved = "status" in patch && patch.status !== prev.status;
+  const name = (id: string) => next.contacts?.find((c) => c.id === id)?.name ?? prev.contacts?.find((c) => c.id === id)?.name ?? "Someone";
+
+  // A move or a logged touch sets the follow-up by itself; only a date you picked is a change.
+  if ("followUp" in patch && !moved && !("activities" in patch) && next.followUp !== prev.followUp) {
+    const word = next.status === "saved" ? "Apply by" : "Follow-up";
+    out.push(!next.followUp ? `${word} date cleared` : prev.followUp ? `${word} moved to ${dayLabel(next.followUp)}` : `${word} set for ${dayLabel(next.followUp)}`);
+  }
+  if ("closedAs" in patch && !moved && next.closedAs && next.closedAs !== prev.closedAs) out.push(`Outcome set to ${CLOSED_AS[next.closedAs]}`);
+  if (patch.since && isDay(patch.since) && next.status) out.push(`${STATUS_LABEL[next.status]} date set to ${dayLabel(patch.since)}`);
+  if ("cv" in patch && (next.cv ?? "") !== (prev.cv ?? "")) out.push(next.cv ? `CV set to ${next.cv}` : "CV removed");
+  if ("note" in patch && (next.note ?? "") !== (prev.note ?? "")) out.push(next.note ? "Note edited" : "Note deleted");
+
+  if ("interviews" in patch) {
+    const key = (i: Interview) => JSON.stringify([i.on, i.time, i.what, i.contactId]);
+    const before = new Set((prev.interviews ?? []).map(key));
+    const after = new Set((next.interviews ?? []).map(key));
+    const added = (next.interviews ?? []).filter((i) => !before.has(key(i)));
+    const removed = (prev.interviews ?? []).filter((i) => !after.has(key(i)));
+    // As many in as out: the same rounds, edited.
+    if (added.length && added.length === removed.length) for (const i of added) out.push(`Interview changed: ${interviewLabel(i)}`);
+    else {
+      for (const i of added) out.push(`Interview added: ${interviewLabel(i)}`);
+      for (const i of removed) out.push(`Interview removed: ${interviewLabel(i)}`);
+    }
+  }
+
+  const prevPeople = new Map((prev.contacts ?? []).map((c) => [c.id, c]));
+  if ("contacts" in patch) {
+    const nextIds = new Set((next.contacts ?? []).map((c) => c.id));
+    for (const c of next.contacts ?? []) {
+      const was = prevPeople.get(c.id);
+      if (!was) out.push(`Added ${c.name}${c.role ? ` (${ROLE_LABEL[c.role]})` : ""}`);
+      else if (JSON.stringify(was) !== JSON.stringify(c)) out.push(`Updated ${c.name}'s details`);
+    }
+    for (const c of prev.contacts ?? []) if (!nextIds.has(c.id)) out.push(`Removed ${c.name}`);
+  }
+  if ("outreach" in patch) {
+    for (const [id, o] of Object.entries(next.outreach ?? {})) {
+      // A new person's first stage comes with "Added …".
+      if (prevPeople.has(id) && o.stage !== prev.outreach?.[id]?.stage) out.push(`Referral ask with ${name(id)}: ${OUTREACH_LABEL[o.stage]}`);
+    }
+  }
+
+  if ("activities" in patch) {
+    const after = new Map((next.activities ?? []).map((a) => [a.id, a]));
+    for (const a of prev.activities ?? []) {
+      const now = after.get(a.id);
+      const what = a.channel === "note" ? "note" : "message";
+      if (!now) out.push(`Deleted a ${what}`);
+      else if (JSON.stringify(now) !== JSON.stringify(a)) out.push(`Edited a ${what}`);
+    }
+  }
+  if ("skipped" in patch) {
+    const before = new Set(prev.skipped ?? []);
+    for (const k of next.skipped ?? []) if (!before.has(k)) out.push(`${TASK_LABEL[k.split(":")[0]!] ?? "Next step"} marked done`);
+  }
+  if ("offer" in patch) {
+    const changed = OFFER_FIELDS.filter((f) => (next.offer?.[f] ?? "") !== (prev.offer?.[f] ?? ""));
+    if (!next.offer && prev.offer) out.push("Offer details removed");
+    else if (!prev.offer && next.offer) out.push("Offer details added");
+    else if (changed.length) out.push(`Offer updated: ${changed.map((f) => OFFER_LABEL[f]).join(", ")}`);
+  }
+  return out;
 }
 
 /**
@@ -365,6 +450,8 @@ export function applyPatch(prev: Entry | undefined, job: JobLike, patch: EntryPa
   for (const k of ["note", "cv", "followUp", "closedAs", "reason"] as const) if (!next[k]) delete next[k];
   for (const k of ["interviews", "contacts", "activities", "skipped"] as const) if (!next[k]?.length) delete next[k];
   if (next.offer && !Object.values(next.offer).some(Boolean)) delete next.offer;
+  const changes = describeChanges(prev, next, patch).map((text) => ({ at: now, text: text.slice(0, CAPS.text) }));
+  if (changes.length) next.changes = [...(prev?.changes ?? []), ...changes];
   return keep(next) ? capEntry(next, new Date(now)) : null;
 }
 
