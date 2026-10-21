@@ -12,7 +12,8 @@ The marketing page at <https://www.rawjobs.workers.dev>. One static HTML page bu
 - the cinematic layer (end of the page's `<style>`, and the last `<script>`) builds on the tokens with site-only extras: display type sizes, one accent serif (Instrument Serif Italic, OFL, self-hosted in `public/fonts/` with its licence), longer `--duration-cinematic`/`--duration-reveal` motion, glass surfaces and a soft glow behind "signal" moments. The dashboard never loads it
 - the hero radar is a 2D canvas behind the wall: a seeded field of dots, a sweep every 6s, and an orange blip on each stamped match that flashes the stamp when the sweep reaches it. It pauses off screen and in background tabs; reduced motion, Save-Data and devices with fewer than 4 cores get one still frame
 - the hiring systems marquee under the numbers repeats the FAQ's list (`__ATS__` is filled everywhere it appears) and is hidden from screen readers, which get the FAQ list
-- Get it shows one install line first; the five-step walkthrough with the mock screen sits in "Never used a terminal? Walk me through it"
+- Get it: a step bar over the five steps, and the mock screen sits in a frame shaped like the visitor's machine (a MacBook, a Windows monitor on a stand, a Linux laptop). Like the mock screen, the frame's hardware colors are fixed values marked for the design lint
+- Where your resume goes is full width: each stop is an icon card, the middlemen stamp the resume ("Copied", "Held") as it passes, "No reply" lands with a jolt and "Hiring team" with a green pulse, over a dotted grid with a red and a green glow
 - an intro animation can hold the wall's scan: add the `intro` class to `<html>`, then dispatch `rawjobs:intro-done` on `window` (or call `window.rawjobsWall.start()`); it starts on its own after 2.5s
 
 `pnpm design:lint` checks `src/` too, with CSS-aware rules: no accent tokens outside their four jobs, durations only from the motion tokens, no px type sizes.
