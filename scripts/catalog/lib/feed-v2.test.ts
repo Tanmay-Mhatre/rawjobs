@@ -8,6 +8,6 @@ describe("brotliAsync", () => {
     const rows = Array.from({ length: 20_000 }, (_, i) => `lever:acme-${i % 997}\t${i}\tSenior Engineer ${i % 13}\tLondon, UK\tonsite\t${randomBytes(4).toString("hex")}\n`);
     const samples = [rows.join(""), JSON.stringify({ jobs: rows.slice(0, 5000) }), "", "x"];
     const parallel = await Promise.all(samples.map((s) => brotliAsync(s)));
-    samples.forEach((s, i) => expect(parallel[i]!.equals(brotli(s))).toBe(true));
+    for (const [i, s] of samples.entries()) expect(parallel[i]!.equals(brotli(s))).toBe(true);
   });
 });
