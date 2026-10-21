@@ -226,9 +226,18 @@ jobs:
             echo "|---|---|---|---|---|---|---|---|---|---|"
             jq -r '.ats | to_entries[] | "| \(.key) | \(.value.companies) | \(.value.jobs) | \(.value.fetched) | \(.value.notModified) | \(.value.failed) | \(.value.skipped)\(if .value.tripped then " (stopped)" else "" end) | \(.value.partial) | \(.value.described) | \(.value.seconds / 60 | floor) |"' stats.json
             echo
+            # Coverage: no company may drop. Kept = rows from an earlier run (a board that failed or wasn't reached).
+            # These two report lines must never stop the feed from publishing, hence `|| true`.
+            jq -r '.coverage // empty | "Coverage: \(.companies) companies (previous feed: \(.previous // "none")), \(.this_run) read this run, \(.kept) kept from an earlier run, \(.jobs) jobs."' stats.json || true
+            echo
+            # Push-back per group: what tells a faster pace is too fast.
+            echo "| Group | Requests | Unchanged | Failures | Rate-limited | Timeouts | Slowed hosts | Broken hosts | Paces (rate/s, slow-downs) |"
+            echo "|---|---|---|---|---|---|---|---|---|"
+            jq -r '.groups | to_entries[] | select(.value.http) | .key as $g | .value.http | "| \($g) | \(.requests) | \(.notModified) | \(.failures) | \(.rateLimited) | \(.timeouts) | \(.slowedHosts | length) | \(.brokenHosts | join(", ")) | \((.paces // {}) | to_entries | map("\(.key) \(.value.rate) (\(.value.downs))") | join(", ")) |"' stats.json || true
+            echo
             jq -r '.alerts[] | "- \(.text)"' stats.json
           } >> "$GITHUB_STEP_SUMMARY"
-          jq '{generated_at, groups, alerts, v2, v3}' stats.json
+          jq '{generated_at, groups, alerts, coverage, v2, v3}' stats.json
 
       - name: Sign the manifests
         if: needs.guard.outputs.publish == 'true'
