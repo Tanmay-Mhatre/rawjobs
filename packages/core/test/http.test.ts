@@ -95,6 +95,7 @@ describe("HttpClient", () => {
         hostDelayMs: 0,
         retries: 0,
         breakAfter: 2,
+        hostRests: true,
         sleep: async (ms) => {
           sleeps.push(ms);
           tick(ms);
@@ -108,6 +109,14 @@ describe("HttpClient", () => {
       });
       return { http, sleeps, seen };
     }
+
+    it("without hostRests, is skipped for the run at once", async () => {
+      const noRest = new HttpClient({ hostDelayMs: 0, retries: 0, breakAfter: 2, sleep: async () => {}, fetchImpl: (async () => new Response("", { status: 503 })) as unknown as typeof fetch });
+      await expect(noRest.getJson("https://h.example/1")).rejects.toMatchObject({ status: 503 });
+      await expect(noRest.getJson("https://h.example/2")).rejects.toMatchObject({ status: 503 });
+      await expect(noRest.getJson("https://h.example/3")).rejects.toThrow(/failed 2 times in a row/);
+      expect(noRest.stats.brokenHosts).toEqual(["h.example"]);
+    });
 
     it("doesn't rest after a 404", async () => {
       const { http } = client([new Response("", { status: 404 }), new Response("", { status: 404 }), json({ ok: 1 })], { breakAfter: 2 });
@@ -194,7 +203,7 @@ describe("HttpClient", () => {
     const { http: down } = client([stalled(), stalled(), stalled(), stalled(), stalled(), stalled(), stalled(), stalled()], { breakAfter: 2 });
     await expect(down.getText("https://h.example/1")).rejects.toThrow(/^timed out after 30s \(https:\/\/h\.example\/1\)$/);
     await expect(down.getText("https://h.example/2")).rejects.toThrow(/timed out after/);
-    expect(down.stats.restedHosts).toEqual(["h.example"]);
+    expect(down.stats.brokenHosts).toEqual(["h.example"]);
     expect(down.stats.timeouts).toBeGreaterThanOrEqual(6);
   });
 

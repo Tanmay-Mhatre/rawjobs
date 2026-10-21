@@ -54,7 +54,7 @@ export class NotModifiedError extends HttpError {
   }
 }
 
-/** No request made: the host kept failing for other URLs this run, through every rest (HOST_RESTS_MS). */
+/** No request made: the host kept failing for other URLs this run (with hostRests, through every rest). */
 export class HostSkippedError extends HttpError {
   override name = "HostSkippedError";
 }
@@ -82,11 +82,13 @@ export type HttpOptions = {
   hostDelays?: Record<string, number>;
   /** First backoff wait; doubles each retry. */
   backoffMs?: number;
-  /**
-   * After this many failed requests in a row to one host, it rests (HOST_RESTS_MS): later requests wait,
-   * then one tries it again. A host that keeps failing while others answer is skipped for the run.
-   */
+  /** After this many failed requests in a row to one host, later ones fail at once (the host is down), or wait with hostRests. */
   breakAfter?: number;
+  /**
+   * For the app's scans: a host that failed breakAfter times in a row rests (HOST_RESTS_MS), then one request
+   * tries it again; it's skipped for the run only if it keeps failing while other hosts answer.
+   */
+  hostRests?: boolean;
   /** For getJson(): conditional requests against saved responses. */
   cache?: HttpCache;
   /**
@@ -228,6 +230,7 @@ export class HttpClient {
       hostDelays: opts.hostDelays ?? (opts.hostDelayMs === undefined ? HOST_DELAYS : {}),
       backoffMs: opts.backoffMs ?? 2_000,
       breakAfter: opts.breakAfter ?? Infinity,
+      hostRests: opts.hostRests ?? false,
       cache: opts.cache,
       adaptive: opts.adaptive ?? false,
       fetchImpl: opts.fetchImpl ?? fetch,
@@ -320,7 +323,8 @@ export class HttpClient {
    */
   private async waitOutRest(host: string, url: string): Promise<(() => void) | undefined> {
     for (;;) {
-      if (this.givenUp.has(host)) throw new HostSkippedError(`skipped: ${host} kept failing (${url})`, url);
+      if (this.givenUp.has(host))
+        throw new HostSkippedError(this.opts.hostRests ? `skipped: ${host} kept failing (${url})` : `skipped: ${host} failed ${this.opts.breakAfter} times in a row (${url})`, url);
       const rest = this.rests.get(host);
       if (!rest) return undefined;
       if (rest.until > Date.now()) {
@@ -343,14 +347,14 @@ export class HttpClient {
     }
   }
 
-  /** The host failed breakAfter times in a row, or failed its try after a rest: it rests (longer), or is skipped for the run. */
+  /** The host failed breakAfter times in a row, or failed its try after a rest: it rests (longer), or is skipped for the run (at once without hostRests). */
   private rest(host: string): void {
     const prev = this.rests.get(host);
     const now = Date.now();
     // Nothing anywhere answered since the last rest began: the network is down, not this host, so the rest doesn't grow.
     const step = !prev ? 0 : this.lastAnswerAt < prev.since ? prev.step : prev.step + 1;
     const firstAt = prev?.firstAt ?? now;
-    if (step >= HOST_RESTS_MS.length || now - firstAt >= MAX_RESTING_MS) {
+    if (!this.opts.hostRests || step >= HOST_RESTS_MS.length || now - firstAt >= MAX_RESTING_MS) {
       this.rests.delete(host);
       this.givenUp.add(host);
       this.stats.brokenHosts.push(host);
