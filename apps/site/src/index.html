@@ -31,6 +31,7 @@
 })();
 </script>
 <link rel="preload" href="/fonts/GeistMono-500.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="preload" href="/fonts/InstrumentSerif-Italic.woff2" as="font" type="font/woff2" crossorigin>
 <script>
 /* Intro: first visit per browser session only, never with reduced motion, never on a deep link or a background tab.
    html.intro shows the overlay (CSS) and makes the wall wait for rawjobs:intro-done. Without JS nothing happens. */
@@ -55,7 +56,7 @@
    Layout: a source log on paper. The hero's copy sits on clean paper over a wall of real careers-page addresses,
    then sections with a sticky label column on the left and content on the right.
    Colors, type, spacing and motion come only from the RawJobs tokens above (design/README.md).
-   The one marketing exception is duration-story, for the hero load and the route animation. */
+   The marketing exceptions are duration-story (hero load, route animation) and the cinematic layer at the end. */
 :root {
   --page-max: 1200px;
   --gutter: clamp(16px, 4vw, 32px);
@@ -673,6 +674,198 @@ html.intro .rj-intro { display: block; position: fixed; inset: 0; z-index: calc(
 .rj-bw { display: inline-block; }
 .rj-bw-wait .rj-bw { opacity: 0; filter: blur(6px); transform: translateY(0.2em); }
 @media (prefers-reduced-motion: reduce) { .rj-bw-wait .rj-bw { opacity: 1; filter: none; transform: none; } }
+/* ===== Cinematic layer (site only) =====
+   "Signal in the noise": the web is a wall of careers pages, RawJobs is the radar that pulls the matches out.
+   This layer adds what a launch page needs and the app doesn't: display type, one accent serif, longer
+   cinematic durations, glass surfaces, a soft glow behind "signal" moments and a little film grain.
+   It only builds on the tokens above; the dashboard never loads it. */
+@font-face { font-family: 'Instrument Serif'; src: url('/fonts/InstrumentSerif-Italic.woff2') format('woff2'); font-weight: 400; font-style: italic; font-display: swap; }
+:root {
+  --font-serif: "Instrument Serif", ui-serif, Georgia, serif;
+  --text-display-hero: 600 clamp(3rem, 7.4vw, 6.75rem)/0.98 var(--font-sans);
+  --text-display-section: 600 clamp(2rem, 3.6vw, 3.25rem)/1.04 var(--font-sans);
+  --text-display-big: 600 clamp(2.5rem, 6vw, 5rem)/1 var(--font-sans);
+  --duration-cinematic: 700ms;
+  --duration-reveal: 1200ms;
+  --duration-marquee: 70s;
+  --ease-cinematic: cubic-bezier(0.22, 1, 0.36, 1);
+  --radius-card: 12px;
+  --glass: color-mix(in srgb, var(--bg-raised) 72%, transparent);
+  --glass-line: color-mix(in srgb, var(--text-primary) 10%, transparent);
+  --signal-glow: color-mix(in srgb, var(--accent-mark) 16%, transparent);
+  --grain: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='3' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 .06 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+}
+:root[data-theme^="dark"] { --glass: color-mix(in srgb, var(--bg-raised) 58%, transparent); --signal-glow: color-mix(in srgb, var(--accent-mark) 22%, transparent); }
+html { scroll-padding-top: 88px; }
+body { background-image: var(--grain); }
+.serif { font-family: var(--font-serif); font-style: italic; font-weight: 400; letter-spacing: -0.01em; }
+h1 .serif, h2 .serif { font-size: 1.08em; line-height: 0; }
+
+/* ---------- nav: a glass pill that floats, hides on the way down and returns on the way up ---------- */
+.nav { background: transparent; padding-top: var(--space-3); pointer-events: none; transition: transform var(--duration-slow) var(--ease-cinematic); }
+.nav[data-stuck="true"] { border-bottom-color: transparent; }
+.nav[data-away="true"] { transform: translateY(calc(-100% - var(--space-3))); }
+.nav__in.wrap {
+  pointer-events: auto; box-sizing: border-box; width: calc(100% - 2 * var(--gutter)); max-width: calc(var(--page-max) - 2 * var(--gutter));
+  height: 56px; padding: 0 var(--space-2) 0 var(--space-6); border-radius: var(--radius-dot);
+  background: var(--glass); border: 1px solid var(--glass-line);
+  -webkit-backdrop-filter: blur(16px) saturate(1.4); backdrop-filter: blur(16px) saturate(1.4);
+  transition: box-shadow var(--duration-base) var(--ease-standard);
+}
+.nav[data-stuck="true"] .nav__in { box-shadow: var(--shadow-l2); }
+.nav__links a { border-radius: var(--radius-dot); }
+.nav__cta .rj-btn { border-radius: var(--radius-dot); }
+@media (max-width: 860px) {
+  .nav__in.wrap { height: auto; border-radius: var(--radius-card); padding: var(--space-2) var(--space-2) 0 var(--space-4); }
+}
+
+/* ---------- hero: the radar ---------- */
+.hero { min-height: min(calc(100svh - 68px), 860px); isolation: isolate; }
+.hero__copy { max-width: 46rem; }
+.hero h1 { font: var(--text-display-hero); letter-spacing: -0.05em; }
+.hero__lede { max-width: 38ch; }
+.wall { --clear: calc((100% - min(100%, var(--page-max))) / 2 + var(--gutter) + 44rem); }
+.js .wall__hosts span { color: color-mix(in srgb, var(--border-subtle) 70%, transparent); }
+.js .wall__hosts span[data-read] { color: color-mix(in srgb, var(--text-disabled) 70%, transparent); }
+.radar { position: absolute; inset: 0; z-index: 0; width: 100%; height: 100%; pointer-events: none; opacity: 0; transition: opacity var(--duration-reveal) var(--ease-cinematic); }
+.radar[data-on] { opacity: 1; }
+/* the warm glow sits where the radar's centre is (set by the radar script, a fair guess without it) */
+.hero::before { content: ""; position: absolute; z-index: 0; inset: 0; pointer-events: none;
+  background: radial-gradient(closest-side, var(--signal-glow), transparent) no-repeat;
+  background-size: calc(var(--rr, 300px) * 2.4) calc(var(--rr, 300px) * 2.4);
+  background-position: calc(var(--rx, 75%) - var(--rr, 300px) * 1.2) calc(var(--ry, 50%) - var(--rr, 300px) * 1.2); opacity: 0.9; }
+.wall__meter { background: var(--glass); border-color: var(--glass-line); border-radius: var(--radius-dot); padding-inline: var(--space-4);
+  -webkit-backdrop-filter: blur(12px); backdrop-filter: blur(12px); }
+.stamp { box-shadow: 0 0 0 4px var(--bg-canvas), 0 0 24px 2px var(--signal-glow); }
+/* the radar's sweep reaching a match: a short flash of its glow */
+@keyframes ping { 40% { box-shadow: 0 0 0 4px var(--bg-canvas), 0 0 0 6px var(--accent-mark), 0 0 40px 8px var(--signal-glow); } }
+.stamp[data-ping] { animation: ping var(--duration-cinematic) var(--ease-cinematic); }
+@media (max-width: 760px) {
+  .hero { min-height: 0; }
+  .hero h1 { font-size: clamp(2.75rem, 13vw, 4rem); }
+}
+
+/* ---------- proof strip ---------- */
+.proof { border-block: 0; }
+.stat { padding-block: var(--space-8); }
+.stat__n { font: var(--text-display-big); font-family: var(--font-mono); font-weight: 500; letter-spacing: -0.06em; }
+.stat + .stat { border-left-color: var(--glass-line); }
+
+/* ---------- hiring systems: two rows that drift past in opposite directions ---------- */
+.band { padding-block: var(--space-8) clamp(48px, 7vw, 96px); overflow: hidden; }
+.band__label { font: var(--text-small); color: var(--text-secondary); margin-bottom: var(--space-6); }
+.band__label b { color: var(--text-primary); font-weight: 500; }
+.marquee { display: grid; gap: var(--space-3); -webkit-mask-image: linear-gradient(90deg, transparent, black 12%, black 88%, transparent); mask-image: linear-gradient(90deg, transparent, black 12%, black 88%, transparent); }
+.marquee__row { list-style: none; margin: 0; padding: 0; display: flex; width: max-content; gap: var(--space-3); animation: marquee var(--duration-marquee) linear infinite; }
+.marquee__row--rev { animation-direction: reverse; animation-duration: calc(var(--duration-marquee) * 1.3); }
+.marquee:hover .marquee__row { animation-play-state: paused; }
+.marquee .ats { font: var(--text-subheading); color: var(--text-secondary); padding: var(--space-2) var(--space-4); border: 1px solid var(--glass-line); border-radius: var(--radius-dot); background: var(--glass); }
+@keyframes marquee { to { transform: translateX(calc(-50% - var(--space-3) / 2)); } }
+
+/* ---------- sections: bigger type, more air, no rules between ---------- */
+.section { padding-block: clamp(80px, 11vw, 160px); }
+.section + .section { border-top: 0; }
+.split { grid-template-columns: minmax(0, 5fr) minmax(0, 7fr); }
+.section h2 { font: var(--text-display-section); letter-spacing: -0.045em; }
+.section .eyebrow { font-family: var(--font-mono); font-weight: 500; letter-spacing: 0; }
+.section .eyebrow::before { content: "// "; color: var(--text-disabled); }
+@media (max-width: 920px) { .split { grid-template-columns: minmax(0, 1fr); } }
+/* how it works gets the full width: three steps side by side, then the dashboard big */
+#how .split { grid-template-columns: minmax(0, 1fr); gap: var(--space-12); }
+#how .split__head { position: static; max-width: 40rem; }
+#how .split__body { gap: var(--space-12); }
+@media (min-width: 1100px) { #how .features { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
+
+/* floating cards: glass, softer corners */
+.panel, .rj-panel.routes, .rj-panel.lab, .more { border-radius: var(--radius-card); border-color: var(--glass-line); }
+.step, .feature { background: var(--glass); -webkit-backdrop-filter: blur(8px); backdrop-filter: blur(8px);
+  transition: transform var(--duration-base) var(--ease-enter), border-color var(--duration-base) var(--ease-standard); }
+@media (hover: hover) and (pointer: fine) { .step:hover, .feature:hover { transform: translateY(-3px); border-color: var(--border-control); } }
+.step__demo { border-radius: var(--radius-md); }
+
+/* the direct route lands with a glow: that's the signal */
+.node--good { box-shadow: 0 0 0 4px color-mix(in srgb, var(--success-text) 12%, transparent), 0 0 32px 4px color-mix(in srgb, var(--success-text) 22%, transparent); }
+.lane--good { background: linear-gradient(90deg, var(--bg-inset), color-mix(in srgb, var(--success-text) 6%, var(--bg-inset))); }
+
+/* ---------- the dashboard: tilted back, it rises flat as it scrolls to the middle (script sets --p) ---------- */
+.shot { position: relative; perspective: 1400px; }
+.shot::before { content: ""; position: absolute; inset: 10% 6% 0; z-index: -1; border-radius: 50%; background: radial-gradient(closest-side, var(--signal-glow), transparent); filter: blur(24px); opacity: var(--p, 1); }
+.shot picture { display: block; transform-origin: 50% 100%; transform: rotateX(calc((1 - var(--p, 1)) * 22deg)) scale(calc(0.9 + var(--p, 1) * 0.1)); will-change: transform; }
+.shot img { border-radius: var(--radius-card); box-shadow: var(--shadow-l2); }
+
+/* ---------- scoring: a gauge that fills to the score ---------- */
+.lab__result { background: linear-gradient(160deg, var(--bg-inset), color-mix(in srgb, var(--bg-inset) 92%, var(--text-primary))); }
+.gauge { position: relative; width: 96px; height: 96px; flex: none; display: grid; place-items: center; }
+.gauge svg { position: absolute; inset: 0; width: 100%; height: 100%; transform: rotate(-90deg); }
+.gauge circle { fill: none; stroke-width: 8; }
+.gauge__track { stroke: var(--border-subtle); }
+.gauge__fill { stroke: var(--text-primary); stroke-linecap: round; stroke-dasharray: 100 100; transition: stroke-dashoffset var(--duration-cinematic) var(--ease-cinematic), stroke var(--duration-base) var(--ease-standard); }
+.lab[data-band="strong"] .gauge__fill { stroke: var(--success-solid); filter: drop-shadow(0 0 6px color-mix(in srgb, var(--success-solid) 55%, transparent)); }
+.lab[data-band="weak"] .gauge__fill { stroke: var(--text-disabled); }
+.gauge__n { font: var(--text-title); font-family: var(--font-mono); font-weight: 500; letter-spacing: -0.04em; font-variant-numeric: tabular-nums; }
+/* the gauge shows the number; the badge stays for screen readers (its label says the band and the score) */
+.verdict .rj-score--lg { position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
+
+/* ---------- get it: one terminal line first, the full walkthrough on request ---------- */
+.qi { margin-bottom: var(--space-6); border: 1px solid var(--glass-line); border-radius: var(--radius-card); background: var(--bg-raised); box-shadow: var(--shadow-l2), 0 24px 80px -24px var(--signal-glow); overflow: hidden; }
+.qi__bar { display: flex; align-items: center; gap: var(--space-2); padding: var(--space-3) var(--space-4); border-bottom: 1px solid var(--border-subtle); background: var(--bg-inset); font: var(--text-meta); color: var(--text-secondary); }
+.qi__bar i { width: 10px; height: 10px; border-radius: var(--radius-dot); background: var(--border-control); }
+.qi__bar span { margin-left: var(--space-2); }
+.qi__line { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: var(--space-4); padding: clamp(20px, 3vw, 32px) var(--space-6); }
+.qi__prompt { font: var(--text-code); color: var(--text-disabled); }
+.qi__line code { font: 400 clamp(0.9375rem, 1.6vw, 1.125rem)/1.6 var(--font-mono); color: var(--text-primary); overflow-wrap: anywhere; }
+.qi__line code::after { content: ""; display: inline-block; width: 0.55em; height: 1.1em; margin-left: 0.2em; vertical-align: text-bottom; background: var(--text-primary); animation: blink 1s steps(1) infinite; }
+.qi__steps { list-style: none; margin: 0; padding: var(--space-4) var(--space-6); display: flex; flex-wrap: wrap; gap: var(--space-3) var(--space-8); border-top: 1px solid var(--border-subtle); font: var(--text-small); color: var(--text-secondary); }
+.qi__steps li { display: flex; align-items: center; gap: var(--space-2); }
+.qi__steps b { color: var(--text-primary); font-weight: 500; }
+.qi__n { width: 22px; height: 22px; display: grid; place-items: center; border-radius: var(--radius-dot); border: 1px solid var(--border-control); font: var(--text-meta); color: var(--text-primary); }
+.walk { margin-bottom: var(--space-3); }
+.walk .more__in { padding-top: var(--space-2); }
+@media (max-width: 640px) {
+  .qi__line { grid-template-columns: minmax(0, 1fr); gap: var(--space-3); padding-inline: var(--space-4); }
+  .qi__prompt { display: none; }
+  .qi__steps { padding-inline: var(--space-4); }
+}
+
+/* ---------- privacy: three statements, big ---------- */
+.facts { grid-template-columns: minmax(0, 1fr); gap: 0; }
+.fact { grid-template-columns: auto minmax(0, 1fr); column-gap: var(--space-6); align-items: baseline; padding-block: var(--space-6); border-top: 1px solid var(--glass-line); }
+.fact:last-child { border-bottom: 1px solid var(--glass-line); }
+.fact svg { grid-row: span 2; align-self: center; width: 28px; height: 28px; }
+.fact h3 { font: var(--text-display-section); font-size: clamp(1.5rem, 2.6vw, 2.25rem); letter-spacing: -0.04em; }
+
+/* ---------- final call: the radar again, slower and quieter ---------- */
+.final__in { position: relative; overflow: hidden; isolation: isolate; background: var(--bg-raised); padding: clamp(40px, 8vw, 104px); }
+.final__in::before { content: ""; position: absolute; z-index: -1; width: 900px; height: 900px; right: -300px; top: 50%; margin-top: -450px; border-radius: 50%;
+  background: conic-gradient(from 0deg, transparent 0 300deg, color-mix(in srgb, var(--text-primary) 10%, transparent) 355deg, transparent 360deg),
+              repeating-radial-gradient(circle, transparent 0 89px, var(--glass-line) 89px 90px),
+              radial-gradient(closest-side, var(--signal-glow), transparent);
+  animation: sweep calc(var(--duration-reveal) * 8) linear infinite; }
+@keyframes sweep { to { transform: rotate(1turn); } }
+.final h2 { font: var(--text-display-big); letter-spacing: -0.05em; max-width: 16ch; }
+.section.final { padding-bottom: var(--space-12); }
+
+/* ---------- footer: the wordmark, huge ---------- */
+.foot { border-top: 0; padding-bottom: 0; overflow: hidden; }
+.mark { margin: clamp(32px, 6vw, 72px) 0 0; display: flex; justify-content: center; align-items: baseline; font: 500 clamp(4rem, 21vw, 19rem)/0.78 var(--font-mono); letter-spacing: -0.06em; user-select: none;
+  color: var(--text-primary); }
+/* each letter carries its own fade: a text-clipped gradient on the parent doesn't paint through animated children */
+.mark span { display: inline-block; color: transparent; background: linear-gradient(180deg, var(--text-primary) 10%, color-mix(in srgb, var(--text-primary) 0%, transparent) 95%); -webkit-background-clip: text; background-clip: text; }
+.mark__cursor { display: inline-block; width: 0.5em; height: 0.62em; margin-left: 0.1em; background: var(--brand-signal); }
+.js .mark[data-wait] span, .js .mark[data-wait] .mark__cursor { opacity: 0; transform: translateY(0.3em); }
+.mark[data-in] span, .mark[data-in] .mark__cursor { animation: rise var(--duration-cinematic) var(--ease-cinematic) both; animation-delay: calc(var(--i) * 60ms); }
+
+/* ---------- motion off: every scene shows its end state ---------- */
+@media (prefers-reduced-motion: reduce) {
+  .radar { transition: none; }
+  .marquee__row { animation: none; }
+  .marquee { overflow-x: auto; }
+  .shot picture { transform: none; }
+  .final__in::before { animation: none; }
+  .js .mark[data-wait] span, .js .mark[data-wait] .mark__cursor { opacity: 1; transform: none; }
+  .nav[data-away="true"] { transform: none; }
+}
+@media (forced-colors: active) { .mark span { color: CanvasText; background: none; } .mark__cursor { background: CanvasText; forced-color-adjust: none; } }
 </style>
 <!--__ANALYTICS__-->
 </head>
@@ -1078,10 +1271,11 @@ html.intro .rj-intro { display: block; position: fixed; inset: 0; z-index: calc(
 <main id="main">
 <!-- ================= HERO ================= -->
 <section class="hero" id="top" aria-labelledby="hero-title">
+  <canvas class="radar" id="radar" aria-hidden="true"></canvas>
   <div class="wrap">
     <div class="hero__copy">
       <p class="eyebrow" data-step style="--i:0">Free and open source</p>
-      <h1 id="hero-title" data-step style="--i:1">Jobs, straight from the source.<span class="cursor" aria-hidden="true"></span></h1>
+      <h1 id="hero-title" data-step style="--i:1">Jobs, <em class="serif">straight</em> from the source.<span class="cursor" aria-hidden="true"></span></h1>
       <div class="wall" id="wall">
         <p class="rj-sr">Behind the headline: a wall of real careers-page addresses from the RawJobs directory. A few example matches are marked on it with their score.</p>
         <div class="wall__hosts" id="wall-hosts" aria-hidden="true"><!--__WALL__--></div>
@@ -1129,12 +1323,22 @@ html.intro .rj-intro { display: block; position: fixed; inset: 0; z-index: calc(
   </div>
 </section>
 
+<!-- ================= HIRING SYSTEMS ================= -->
+<!-- Decorative: the same names are listed for screen readers in the FAQ (Which job sites does it read?). -->
+<section class="band" aria-label="Hiring systems it reads">
+  <p class="wrap band__label">Straight from the careers pages on <b>__SYSTEMS_N__ hiring systems</b></p>
+  <div class="marquee" aria-hidden="true">
+    <ul class="marquee__row">__ATS____ATS__</ul>
+    <ul class="marquee__row marquee__row--rev">__ATS____ATS__</ul>
+  </div>
+</section>
+
 <!-- ================= PROBLEM ================= -->
 <section class="section" id="problem" aria-labelledby="problem-title">
   <div class="wrap split">
     <div class="split__head">
       <p class="eyebrow">The problem</p>
-      <h2 id="problem-title">Sent 50 applications and heard back from 2?</h2>
+      <h2 id="problem-title">Sent 50 applications and heard back from <em class="serif">2</em>?</h2>
       <p class="prose">Where you applied may be why.</p>
     </div>
     <div class="split__body">
@@ -1184,7 +1388,7 @@ html.intro .rj-intro { display: block; position: fixed; inset: 0; z-index: calc(
   <div class="wrap split">
     <div class="split__head">
       <p class="eyebrow">How it works</p>
-      <h2 id="how-title">Set it up once, then one scan button</h2>
+      <h2 id="how-title">Set it up <em class="serif">once</em>, then one scan button</h2>
       <p class="prose">Setup takes about 3 minutes. After that, a scan is one click, or it runs on a schedule.</p>
     </div>
     <div class="split__body">
@@ -1220,7 +1424,7 @@ html.intro .rj-intro { display: block; position: fixed; inset: 0; z-index: calc(
           </div>
         </li>
       </ol>
-      <figure class="shot">
+      <figure class="shot" data-tilt>
         <picture>
           <source srcset="/images/radar-dark.png" media="(prefers-color-scheme: dark)">
           <img src="/images/radar-light.png" width="1280" height="761" loading="lazy" decoding="async" alt="The RawJobs dashboard: scored jobs on the left, and on the right why the selected job matched, with Apply, Save and status buttons.">
@@ -1242,7 +1446,7 @@ html.intro .rj-intro { display: block; position: fixed; inset: 0; z-index: calc(
   <div class="wrap split">
     <div class="split__head">
       <p class="eyebrow">Scoring</p>
-      <h2 id="scoring-title">A score you can argue with</h2>
+      <h2 id="scoring-title">A score you can <em class="serif">argue</em> with</h2>
       <p class="prose">No black box. Up to <strong>30</strong> for the title, <strong>20</strong> for the place, <strong>40</strong> for keywords and <strong>10</strong> for the industry. Try it.</p>
     </div>
     <div class="split__body">
@@ -1310,6 +1514,7 @@ html.intro .rj-intro { display: block; position: fixed; inset: 0; z-index: calc(
             <p class="jobcard__text" id="lab-text">Own the roadmap for our regulated <mark data-kw="crypto">crypto</mark> <mark data-kw="exchange">exchange</mark>: spot trading, custody and <mark data-kw="tokenization">tokenization</mark> of real-world assets. You'll work with compliance on KYC and launch new markets.</p>
           </div>
           <div class="verdict">
+            <div class="gauge" aria-hidden="true"><svg viewBox="0 0 120 120" focusable="false"><circle class="gauge__track" cx="60" cy="60" r="52"/><circle class="gauge__fill" id="gauge-fill" cx="60" cy="60" r="52" pathLength="100" style="stroke-dashoffset:17"/></svg><span class="gauge__n num" id="gauge-n">83</span></div>
             <span class="rj-score rj-score--lg rj-score--strong" id="lab-score" role="img" aria-label="Strong match, score 83"><i class="rj-glyph rj-glyph--full" id="lab-glyph"></i><span id="lab-num">83</span></span>
             <span class="verdict__label" id="lab-verdict">Strong match<span>Shown near the top of your Radar</span></span>
           </div>
@@ -1336,7 +1541,7 @@ html.intro .rj-intro { display: block; position: fixed; inset: 0; z-index: calc(
   <div class="wrap">
     <div class="get__head">
       <p class="eyebrow">Get it</p>
-      <h2 id="get-title">Install it in about a minute</h2>
+      <h2 id="get-title">Install it in about a <em class="serif">minute</em></h2>
       <p class="section__lede">Pick your computer and follow along. Nothing to download first, no account, no admin rights.</p>
     </div>
 
@@ -1357,6 +1562,22 @@ html.intro .rj-intro { display: block; position: fixed; inset: 0; z-index: calc(
       </div>
     </div>
 
+    <div class="qi" id="quick-install">
+      <div class="qi__bar" aria-hidden="true"><i></i><i></i><i></i><span data-only="win">Windows PowerShell</span><span data-only="mac">Terminal</span><span data-only="linux">Terminal</span></div>
+      <div class="qi__line" data-only="win"><span class="qi__prompt" aria-hidden="true">PS&gt;</span><code>irm https://github.com/Tanmay-Mhatre/rawjobs/releases/latest/download/install.ps1 | iex</code>
+        <button class="rj-btn rj-btn--primary btn-lg" type="button" data-copy="irm https://github.com/Tanmay-Mhatre/rawjobs/releases/latest/download/install.ps1 | iex"><span class="ic" aria-hidden="true"><svg class="rj-icon ic-copy" viewBox="0 0 24 24"><rect width="14" height="14" x="8" y="8" rx="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></svg><svg class="rj-icon ic-check" viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5"/></svg></span><span>Copy</span></button></div>
+      <div class="qi__line" data-only="mac linux"><span class="qi__prompt" aria-hidden="true">$</span><code>curl -fsSL https://github.com/Tanmay-Mhatre/rawjobs/releases/latest/download/install.sh | sh</code>
+        <button class="rj-btn rj-btn--primary btn-lg" type="button" data-copy="curl -fsSL https://github.com/Tanmay-Mhatre/rawjobs/releases/latest/download/install.sh | sh"><span class="ic" aria-hidden="true"><svg class="rj-icon ic-copy" viewBox="0 0 24 24"><rect width="14" height="14" x="8" y="8" rx="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></svg><svg class="rj-icon ic-check" viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5"/></svg></span><span>Copy</span></button></div>
+      <ol class="qi__steps">
+        <li><span class="qi__n">1</span>Open <b data-only="win">PowerShell</b><b data-only="mac linux">Terminal</b></li>
+        <li><span class="qi__n">2</span>Paste the line and press <b data-only="win linux">Enter</b><b data-only="mac">Return</b></li>
+        <li><span class="qi__n">3</span>RawJobs opens in your browser</li>
+      </ol>
+    </div>
+
+    <details class="more walk" id="walkthrough">
+      <summary><span>Never used a terminal? Walk me through it<small>Five steps, with a picture of your screen at each one</small></span><svg class="rj-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14"/><path d="M12 5v14"/></svg></summary>
+      <div class="more__in">
     <div class="installer" id="installer" role="tabpanel" aria-labelledby="os-win">
       <ol class="isteps" id="isteps">
         <li class="istep" data-step="1" data-active>
@@ -1473,6 +1694,8 @@ html.intro .rj-intro { display: block; position: fixed; inset: 0; z-index: calc(
         </div>
       </div>
     </div>
+      </div>
+    </details>
 
     <div class="after">
       <details class="more help" id="help">
@@ -1519,7 +1742,7 @@ html.intro .rj-intro { display: block; position: fixed; inset: 0; z-index: calc(
   <div class="wrap split">
     <div class="split__head">
       <p class="eyebrow">Privacy</p>
-      <h2 id="privacy-title">Runs on your computer</h2>
+      <h2 id="privacy-title">Runs on <em class="serif">your</em> computer</h2>
       <p class="prose"><a href="https://github.com/Tanmay-Mhatre/rawjobs/blob/main/PRIVACY.md" target="_blank" rel="noopener">Everything it connects to<span class="rj-sr"> (opens in a new tab)</span></a></p>
     </div>
     <div class="split__body">
@@ -1549,7 +1772,7 @@ html.intro .rj-intro { display: block; position: fixed; inset: 0; z-index: calc(
   <div class="wrap split">
     <div class="split__head">
       <p class="eyebrow">FAQ</p>
-      <h2 id="faq-title">Common questions</h2>
+      <h2 id="faq-title">Common <em class="serif">questions</em></h2>
     </div>
     <div class="split__body">
       <div class="faq">
@@ -1571,7 +1794,7 @@ html.intro .rj-intro { display: block; position: fixed; inset: 0; z-index: calc(
   <div class="wrap">
     <div class="panel final__in">
       <p class="eyebrow">Get started</p>
-      <h2 id="final-title">Your next role may already be on a careers page</h2>
+      <h2 id="final-title">Your next role may <em class="serif">already</em> be on a careers page</h2>
       <p class="prose">Schedule a scan for 08:00 and read new matches with your coffee.</p>
       <div class="hero__ctas">
         <a class="rj-btn rj-btn--primary btn-lg" href="#get"><span data-cta>Get RawJobs</span><svg class="rj-icon rj-icon--nudge" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></svg></a>
@@ -1599,6 +1822,7 @@ html.intro .rj-intro { display: block; position: fixed; inset: 0; z-index: calc(
       </nav>
     </div>
   </div>
+  <p class="mark" aria-hidden="true"><span style="--i:0">r</span><span style="--i:1">a</span><span style="--i:2">w</span><span style="--i:3">j</span><span style="--i:4">o</span><span style="--i:5">b</span><span style="--i:6">s</span><i class="mark__cursor" style="--i:7"></i></p>
 </footer>
 </div>
 
@@ -1615,8 +1839,13 @@ html.intro .rj-intro { display: block; position: fixed; inset: 0; z-index: calc(
   var ENTER = css.getPropertyValue('--ease-enter').trim() || 'ease-out', STANDARD = css.getPropertyValue('--ease-standard').trim() || 'ease';
 
   /* ---------- nav border once scrolled ---------- */
-  var nav = $('#nav');
-  var onScroll = function () { nav.setAttribute('data-stuck', window.scrollY > 8 ? 'true' : 'false'); };
+  /* it steps aside while you read down the page and comes back as soon as you scroll up */
+  var nav = $('#nav'), lastY = window.scrollY;
+  var onScroll = function () {
+    var y = window.scrollY;
+    nav.setAttribute('data-stuck', y > 8 ? 'true' : 'false');
+    if (Math.abs(y - lastY) > 6) { nav.setAttribute('data-away', y > lastY && y > 240 && !nav.contains(document.activeElement) ? 'true' : 'false'); lastY = y; }
+  };
   addEventListener('scroll', onScroll, { passive: true }); onScroll();
 
   /* ---------- scroll reveals: only below-the-fold blocks, revealed once ---------- */
@@ -1667,6 +1896,10 @@ html.intro .rj-intro { display: block; position: fixed; inset: 0; z-index: calc(
     var cls = r.gated ? 'weak' : total >= 70 ? 'strong' : total >= 40 ? 'fair' : 'weak';
     badge.className = 'rj-score rj-score--lg rj-score--' + cls;
     glyph.className = 'rj-glyph rj-glyph--' + (r.gated ? 'slash' : cls === 'strong' ? 'full' : cls === 'fair' ? 'half' : 'empty');
+    /* the gauge fills to the score (pathLength 100, so the offset is what's missing) */
+    animateNum($('#gauge-n'), last, total);
+    $('#gauge-fill').style.strokeDashoffset = String(100 - total);
+    $('#lab').setAttribute('data-band', cls);
     animateNum(num, last, total); last = total;
     if (!reduce) { badge.removeAttribute('data-bump'); void badge.offsetWidth; badge.setAttribute('data-bump', ''); }
     var name = { strong: 'Strong match', fair: 'Fair match', weak: 'Weak match' }[cls];
@@ -2100,6 +2333,154 @@ html.intro .rj-intro { display: block; position: fixed; inset: 0; z-index: calc(
 
   setOS(os);
   setStep(1);
+})();
+</script>
+<script>
+/* RawJobs cinematic layer: the hero radar, the dashboard tilt and the footer wordmark. Plain JS, no dependencies.
+   The radar is a 2D canvas: a dim field of careers pages (dots), a sweep that brightens what it passes, and the
+   example matches as orange blips that flash when the sweep reads them. It never blocks the page: the copy is
+   painted first, the canvas fades in, and it stops drawing when the hero is off screen or the tab is hidden.
+   Reduced motion, Save-Data and low-power devices get one still frame. */
+(function () {
+  var reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+  /* ---------- the radar ---------- */
+  var canvas = document.getElementById('radar');
+  var ctx = canvas && canvas.getContext && canvas.getContext('2d');
+  if (ctx) (function () {
+    var hero = canvas.parentNode, copy = hero.querySelector('.hero__copy'), wall = document.getElementById('wall');
+    var still = reduce || (navigator.connection && navigator.connection.saveData) || (navigator.hardwareConcurrency || 4) < 4;
+    var DPR = Math.min(2, window.devicePixelRatio || 1), PERIOD = 6000, WEDGE = 0.9, TRAIL = 1.5, TAU = Math.PI * 2;
+    var base = document.createElement('canvas'), bctx = base.getContext('2d');
+    var probe = document.createElement('span'); probe.hidden = true; hero.appendChild(probe);
+    var ink = [0, 0, 0], signal = [255, 90, 31];
+    var W = 0, H = 0, cx = 0, cy = 0, R = 0, dots = [], blips = [], running = false, visible = true, raf = 0, t0 = performance.now();
+
+    /* a seeded random, so the field is the same on every visit */
+    var seed = 210606;
+    var rand = function () { seed |= 0; seed = seed + 0x6D2B79F5 | 0; var t = Math.imul(seed ^ seed >>> 15, 1 | seed); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; };
+    var N = matchMedia('(max-width: 760px)').matches ? 1400 : 3600;
+    for (var i = 0; i < N; i++) {
+      /* most pages scatter across the disc; some sit near the rings, like boards grouped by hiring system */
+      var r = Math.sqrt(rand()), th = rand() * TAU;
+      if (rand() < 0.22) r = Math.round(r * 4) / 4 + (rand() - 0.5) * 0.03;
+      dots.push({ r: Math.min(1, r), th: th, s: rand() < 0.08 ? 1.6 : 1 });
+    }
+    for (var b = 0; b < 7; b++) blips.push({ r: 0.32 + rand() * 0.55, th: rand() * TAU });
+
+    var token = function (v) { probe.style.color = 'var(' + v + ')'; var m = getComputedStyle(probe).color.match(/[\d.]+/g); return m ? m.slice(0, 3).map(Number) : [0, 0, 0]; };
+    /* a token's color at an alpha (canvas can't read CSS variables) */
+    var tint = function (c, a) { return 'rgba(' + c[0] + ',' + c[1] + ',' + c[2] + ',' + a + ')'; }; // design-lint-ignore: builds a canvas color from a token read above
+
+    function layout() {
+      var hr = hero.getBoundingClientRect();
+      W = hr.width; H = hr.height;
+      if (matchMedia('(max-width: 760px)').matches) {
+        var wr = wall.getBoundingClientRect();
+        cx = W / 2; cy = wr.top - hr.top + wr.height / 2; R = Math.min(W * 0.62, wr.height * 0.9);
+      } else {
+        var left = copy.getBoundingClientRect().right - hr.left, avail = Math.max(260, W - left);
+        cx = left + avail * 0.5; cy = H * 0.5; R = Math.max(200, Math.min(H * 0.46, avail * 0.56));
+      }
+      hero.style.setProperty('--rx', cx + 'px'); hero.style.setProperty('--ry', cy + 'px'); hero.style.setProperty('--rr', R + 'px');
+      canvas.width = base.width = Math.round(W * DPR); canvas.height = base.height = Math.round(H * DPR);
+      ink = token('--text-primary'); signal = token('--accent-mark');
+      paintBase(); aim();
+    }
+    /* Put the blips on the wall's stamped matches (left of each score), so the sweep finds the real examples.
+       Until the stamps are placed, the seeded spots stand in. */
+    function aim() {
+      var hr = hero.getBoundingClientRect(), list = Array.prototype.slice.call(document.querySelectorAll('#wall-stamps .stamp'));
+      if (!list.length || !R) return;
+      blips = list.map(function (el) {
+        var r = el.getBoundingClientRect(), x = r.left - hr.left - 10, y = r.top - hr.top + r.height / 2;
+        return { r: Math.hypot(x - cx, y - cy) / R, th: Math.atan2(y - cy, x - cx), el: el, pinged: true };
+      });
+    }
+    function paintBase() {
+      var c = bctx, X = cx * DPR, Y = cy * DPR, RR = R * DPR;
+      c.clearRect(0, 0, base.width, base.height);
+      c.lineWidth = DPR;
+      for (var k = 1; k <= 4; k++) { c.strokeStyle = tint(ink, k === 4 ? 0.16 : 0.09); c.beginPath(); c.arc(X, Y, RR * k / 4, 0, TAU); c.stroke(); }
+      c.strokeStyle = tint(ink, 0.06); c.beginPath(); c.moveTo(X - RR, Y); c.lineTo(X + RR, Y); c.moveTo(X, Y - RR); c.lineTo(X, Y + RR); c.stroke();
+      c.fillStyle = tint(ink, 0.18);
+      dots.forEach(function (d) { var s = 1.4 * d.s * DPR; c.fillRect(X + Math.cos(d.th) * d.r * RR - s / 2, Y + Math.sin(d.th) * d.r * RR - s / 2, s, s); });
+    }
+    function frame(now) {
+      var a = still ? -0.5 : ((now - t0) / PERIOD * TAU - Math.PI / 2) % TAU;
+      var X = cx * DPR, Y = cy * DPR, RR = R * DPR;
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      ctx.drawImage(base, 0, 0);
+      /* the sweep: a fading wedge behind a bright edge */
+      if (ctx.createConicGradient) {
+        var g = ctx.createConicGradient(a - WEDGE, X, Y), f = WEDGE / TAU;
+        g.addColorStop(0, tint(ink, 0)); g.addColorStop(f, tint(ink, 0.13)); g.addColorStop(Math.min(1, f + 0.001), tint(ink, 0)); g.addColorStop(1, tint(ink, 0));
+        ctx.fillStyle = g; ctx.beginPath(); ctx.moveTo(X, Y); ctx.arc(X, Y, RR, a - WEDGE, a); ctx.closePath(); ctx.fill();
+      }
+      ctx.strokeStyle = tint(ink, 0.5); ctx.lineWidth = 1.2 * DPR;
+      ctx.beginPath(); ctx.moveTo(X, Y); ctx.lineTo(X + Math.cos(a) * RR, Y + Math.sin(a) * RR); ctx.stroke();
+      /* pages the sweep just read glow, then fade back into the field */
+      ctx.fillStyle = tint(ink, 1);
+      for (var i = 0; i < dots.length; i++) {
+        var d = dots[i], dl = ((a - d.th) % TAU + TAU) % TAU;
+        if (dl > TRAIL) continue;
+        var s = 2.2 * d.s * DPR, k = 1 - dl / TRAIL;
+        ctx.globalAlpha = 0.75 * k * k;
+        ctx.fillRect(X + Math.cos(d.th) * d.r * RR - s / 2, Y + Math.sin(d.th) * d.r * RR - s / 2, s, s);
+      }
+      ctx.globalAlpha = 1;
+      /* the matches: they flash when read and stay lit, dimming, until the next pass */
+      blips.forEach(function (bl) {
+        var dl = still ? 0.6 : ((a - bl.th) % TAU + TAU) % TAU;
+        if (bl.el && !still) { if (dl < 0.12 && !bl.pinged) { bl.pinged = true; bl.el.removeAttribute('data-ping'); void bl.el.offsetWidth; bl.el.setAttribute('data-ping', ''); } else if (dl > 1) bl.pinged = false; }
+        var x = X + Math.cos(bl.th) * bl.r * RR, y = Y + Math.sin(bl.th) * bl.r * RR;
+        var life = dl / TAU, alpha = Math.max(0.3, 1 - life * 1.3);
+        ctx.fillStyle = tint(signal, alpha); ctx.beginPath(); ctx.arc(x, y, 3.4 * DPR, 0, TAU); ctx.fill();
+        if (!still && dl < 1.4) { var p = dl / 1.4; ctx.strokeStyle = tint(signal, 0.6 * (1 - p)); ctx.lineWidth = 1.5 * DPR; ctx.beginPath(); ctx.arc(x, y, (4 + p * 24) * DPR, 0, TAU); ctx.stroke(); }
+      });
+      ctx.fillStyle = tint(ink, 0.6); ctx.beginPath(); ctx.arc(X, Y, 2.5 * DPR, 0, TAU); ctx.fill();
+      if (running) raf = requestAnimationFrame(frame);
+    }
+    function play() {
+      var go = !still && visible && !document.hidden;
+      if (go && !running) { running = true; raf = requestAnimationFrame(frame); }
+      if (!go && running) { running = false; cancelAnimationFrame(raf); }
+    }
+    function start() {
+      layout(); frame(performance.now()); canvas.setAttribute('data-on', ''); play();
+      if ('IntersectionObserver' in window) new IntersectionObserver(function (es) { visible = es[0].isIntersecting; play(); }).observe(hero);
+      document.addEventListener('visibilitychange', play);
+      /* the wall places (and on resize re-places) its stamps: follow them */
+      new MutationObserver(function () { setTimeout(aim, 50); }).observe(document.getElementById('wall-stamps'), { childList: true });
+      var tid = 0, w = innerWidth;
+      addEventListener('resize', function () { if (innerWidth === w && !matchMedia('(max-width: 760px)').matches) return; w = innerWidth; clearTimeout(tid); tid = setTimeout(function () { layout(); if (!running) frame(performance.now()); }, 150); });
+      /* a theme switch repaints the field in the new ink */
+      var repaint = function () { setTimeout(function () { layout(); if (!running) frame(performance.now()); }, 0); };
+      matchMedia('(prefers-color-scheme: dark)').addEventListener('change', repaint);
+      new MutationObserver(repaint).observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
+    }
+    /* after the fonts settle, so the copy column (and the radar's centre) is where it will stay */
+    if (document.fonts && document.fonts.ready) document.fonts.ready.then(start); else start();
+  })();
+
+  if (reduce) return;
+
+  /* ---------- the dashboard rises flat as it scrolls up the screen ---------- */
+  var tilts = Array.prototype.slice.call(document.querySelectorAll('[data-tilt]')), ticking = false;
+  function tilt() {
+    ticking = false;
+    var vh = innerHeight;
+    tilts.forEach(function (el) { var p = Math.max(0, Math.min(1, (vh - el.getBoundingClientRect().top) / (vh * 0.7))); el.style.setProperty('--p', p.toFixed(3)); });
+  }
+  if (tilts.length) { addEventListener('scroll', function () { if (!ticking) { ticking = true; requestAnimationFrame(tilt); } }, { passive: true }); tilt(); }
+
+  /* ---------- the footer wordmark: letters rise in when it scrolls in ---------- */
+  var mark = document.querySelector('.mark');
+  if (mark && 'IntersectionObserver' in window && mark.getBoundingClientRect().top > innerHeight) {
+    mark.setAttribute('data-wait', '');
+    var mio = new IntersectionObserver(function (es) { if (!es[0].isIntersecting) return; mio.disconnect(); mark.removeAttribute('data-wait'); mark.setAttribute('data-in', ''); }, { threshold: 0.3 });
+    mio.observe(mark);
+  }
 })();
 </script>
 </body>

@@ -56,7 +56,7 @@ export const SITE_RULES: { id: string; pattern: RegExp; message: string }[] = [
   {
     id: "site-duration",
     pattern: /(?:transition|animation)[\w-]*\s*:[^;]*\b\d{3,}ms\b/,
-    message: "Durations come from the motion tokens (duration-instant/quick/base/slow; duration-story for the hero and route animation only).",
+    message: "Durations come from the motion tokens (duration-instant/quick/base/slow; duration-story for the hero and route animation; the site's cinematic layer adds duration-cinematic/reveal/marquee).",
   },
   { id: "site-font-px", pattern: /\bfont(?:-size)?\s*:[^;]*\b\d+(?:\.\d+)?px/, message: "Type sizes come from the type tokens (var(--text-…)), never px." },
 ];
