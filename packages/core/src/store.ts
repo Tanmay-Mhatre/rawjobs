@@ -1,4 +1,4 @@
-import { existsSync, mkdirSync, readFileSync, statSync } from "node:fs";
+import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, statSync } from "node:fs";
 import { join } from "node:path";
 import { activityMonths, baselineReady, localActivity, viewSummary, type ActivityView } from "./activity";
 import type { BoardHealth } from "./board-health";
@@ -9,7 +9,7 @@ import { fromJobBoard, toDashboardJob } from "./dashboard";
 import type { MergeResult } from "./diff";
 import { readFeedActivity } from "./job-feed";
 import type { RunResult } from "./run";
-import type { Config, DashboardJob, DashboardJobsFile, DataMeta, Job, JobsFile, RunSummary } from "./schema";
+import type { CompanyHealth, Config, DashboardJob, DashboardJobsFile, DataMeta, Job, JobsFile, RunSummary } from "./schema";
 import { readJsonOrSetAside, writeFileAtomic } from "./atomic";
 import { readJsonOnce } from "./json-once";
 
@@ -48,6 +48,38 @@ function yourFailingBoards(config: Config, boards: BoardHealth): NonNullable<Dat
     if (r?.fails && r.since !== undefined) out[companyKey(c)] = { since: new Date(r.since).toISOString() };
   }
   return out;
+}
+
+const failed = (h: CompanyHealth) => !h.ok && !h.unsupported;
+
+/**
+ * A run as meta.json keeps it: health for your companies only (all the Companies page shows), with totals
+ * for every board the run checked. An "All companies" run checks about 200,000 boards, which made meta.json
+ * hundreds of MB that every scan rewrote and every page load read. A run that's already slim stays as it is.
+ */
+export function slimRun(run: RunSummary, yours: ReadonlySet<string>): RunSummary {
+  if (run.counts) return run;
+  return { ...run, health: run.health.filter((h) => yours.has(companyKey(h))), counts: { checked: run.health.length, failed: run.health.filter(failed).length } };
+}
+
+const yourKeys = (config: Config) => new Set(config.companies.map(companyKey));
+const runFile = (run: RunSummary) => `${run.startedAt.replace(/:/g, "-").replace(/\.\d+Z$/, "Z")}.json`;
+
+/** Slim meta.json's run history and runs/ to match it (once, when the data format moves to 2). */
+export function slimRunHistory(dir: string, config: Config): void {
+  const meta = readMeta(dir);
+  if (!meta) return;
+  const yours = yourKeys(config);
+  const runs = meta.runs.map((r) => slimRun(r, yours));
+  writeFileAtomic(join(dir, "meta.json"), JSON.stringify({ ...meta, runs }));
+  const kept = new Map(runs.map((r) => [runFile(r), r]));
+  const runsDir = join(dir, "runs");
+  if (!existsSync(runsDir)) return;
+  for (const f of readdirSync(runsDir)) {
+    const run = kept.get(f);
+    if (run) writeFileAtomic(join(runsDir, f), JSON.stringify(run));
+    else rmSync(join(runsDir, f), { force: true });
+  }
 }
 
 export function summarize(run: RunResult, merged: MergeResult): RunSummary {
@@ -151,7 +183,8 @@ export function saveRun(
   } = {},
 ): RunSummary {
   mkdirSync(join(dir, "runs"), { recursive: true });
-  const summary = summarize(run, merged);
+  const yours = yourKeys(config);
+  const summary = slimRun(summarize(run, merged), yours);
   const generatedAt = run.finishedAt;
 
   const jobs = merged.jobs.map((j) => (j.why.gate ? { ...j, description: undefined } : j));
@@ -201,7 +234,7 @@ export function saveRun(
   writeIfChanged(join(dir, "descriptions.json"), JSON.stringify(Object.fromEntries(jobs.filter((j) => j.description).map((j) => [j.id, j.description]))));
 
   const prev = readMeta(dir);
-  const prevRuns = prev?.runs ?? [];
+  const prevRuns = (prev?.runs ?? []).map((r) => slimRun(r, yours));
   const boardHealth = opts.boards ? yourFailingBoards(config, opts.boards) : prev?.boardHealth;
   const meta: DataMeta = {
     version: 1,
@@ -215,10 +248,11 @@ export function saveRun(
     ...(activity.ready ? { hiringReady: true } : {}),
     ...(boardHealth && Object.keys(boardHealth).length ? { boardHealth } : {}),
   };
-  writeFileAtomic(join(dir, "meta.json"), JSON.stringify(meta, null, 2));
+  writeFileAtomic(join(dir, "meta.json"), JSON.stringify(meta));
 
   if (opts.record === false) return summary;
-  const stamp = run.startedAt.replace(/:/g, "-").replace(/\.\d+Z$/, "Z");
-  writeFileAtomic(join(dir, "runs", `${stamp}.json`), JSON.stringify(summary, null, 2));
+  writeFileAtomic(join(dir, "runs", runFile(summary)), JSON.stringify(summary));
+  // runs/ keeps as many runs as meta.json (oldest first by name, as names are times).
+  for (const f of readdirSync(join(dir, "runs")).sort().slice(0, -KEEP_RUNS)) rmSync(join(dir, "runs", f), { force: true });
   return summary;
 }

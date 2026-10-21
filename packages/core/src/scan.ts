@@ -482,10 +482,8 @@ export async function scan(config: Config, opts: ScanOptions): Promise<ScanResul
     openCheck = { checked, closed: closed.size };
   }
 
-  // Run history keeps your companies and the directory ones that matched or failed, not every board.
-  const yourKeys = new Set(config.companies.map(companyKey));
-  const health = result.health.filter((h) => yourKeys.has(companyKey(h)) || h.matches > 0 || (!h.ok && !h.unsupported));
-  const summary = saveRun(opts.dataDir, config, { ...result, health, checked: checks.length, ...(moves.length ? { moves } : {}) }, merged, { record: !checkOnly, boards });
+  // Run history keeps your companies' health and counts the rest (saveRun).
+  const summary = saveRun(opts.dataDir, config, { ...result, checked: checks.length, ...(moves.length ? { moves } : {}) }, merged, { record: !checkOnly, boards });
   writeLedger(opts.dataDir, ledger);
   writeBoardHealth(opts.dataDir, boards);
   if (!checkOnly && !stopped) recordSpeeds(opts.dataDir, run.health);
