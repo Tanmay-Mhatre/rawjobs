@@ -1,6 +1,6 @@
 import { displayName } from "@rawjobs/core/display-name";
 import { safeUrl } from "@rawjobs/core/text";
-import { ArrowRight, ExternalLink, X } from "lucide-react";
+import { ArrowRight, ExternalLink, Eye, EyeOff, X } from "lucide-react";
 import { type FormEvent, useId, useState } from "react";
 import type { Job } from "../lib/data";
 import { cleanLocation, companyName, formatSalary, postedOrSeen, timeAgo } from "../lib/format";
@@ -30,16 +30,36 @@ const OFFER_LABEL: Record<keyof Offer, string> = {
 const OFFER_HINT: Partial<Record<keyof Offer, string>> = { pay: "AED 45k a month", bonus: "15% yearly", equity: "0.1% over 4 years", location: "Dubai, hybrid" };
 const isDate = (k: keyof Offer) => k === "start" || k === "deadline";
 
-/** The offer's terms, each saved when you leave the field. */
+/**
+ * The offer's terms, each saved when you leave the field. Hidden until you press Show, every time
+ * the job opens, so pay and equity never sit on screen by themselves.
+ */
 export function OfferFields({ offer, onSave }: { offer: Offer; onSave: (offer: Offer) => void }) {
   const uid = useId();
+  const [shown, setShown] = useState(false);
   const save = (k: keyof Offer, v: string) => {
     if ((offer[k] ?? "") === v) return;
     onSave({ ...offer, [k]: v.trim() || undefined });
   };
+  const toggle = (
+    <Button size="sm" variant="ghost" aria-expanded={shown} onClick={() => setShown((v) => !v)}>
+      {shown ? <EyeOff className="rj-icon" aria-hidden /> : <Eye className="rj-icon" aria-hidden />}
+      {shown ? "Hide" : "Show"}
+    </Button>
+  );
+  if (!shown) {
+    return (
+      <div className="flex items-center gap-2 rounded-md border border-line py-1 pl-3 pr-1">
+        <span className="type-label">The offer</span>
+        <span className="type-small text-muted">{Object.values(offer).some(Boolean) ? "Hidden" : "Not added yet"}</span>
+        <span className="ml-auto">{toggle}</span>
+      </div>
+    );
+  }
   return (
     <fieldset className="@container grid gap-2 rounded-md border border-line p-3">
       <legend className="px-1 type-label">The offer</legend>
+      <div className="-mt-1 justify-self-end">{toggle}</div>
       <div className="grid gap-2 @md:grid-cols-2">
         {OFFER_FIELDS.map((k) =>
           isDate(k) ? (

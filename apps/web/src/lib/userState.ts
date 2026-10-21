@@ -146,6 +146,8 @@ export type Entry = {
   closedAs?: ClosedAs;
   /** When to chase it (YYYY-MM-DD): a week after you apply, yours to change. Kept in every active stage (on Saved it reads "Apply by"). */
   followUp?: string;
+  /** The follow-up date is one you picked (Details, Snooze, Pick a date), so a reply keeps it; an automatic one it clears. */
+  followUpPicked?: true;
   /** Which CV you sent ("Fintech PM v3"). */
   cv?: string;
   interviews?: Interview[];
@@ -340,6 +342,8 @@ export function describeChanges(prev: Entry | undefined, next: Entry, patch: Ent
     const word = next.status === "saved" ? "Apply by" : "Follow-up";
     out.push(!next.followUp ? `${word} date cleared` : prev.followUp ? `${word} moved to ${dayLabel(next.followUp)}` : `${word} set for ${dayLabel(next.followUp)}`);
   }
+  // A reply logged on a job being chased clears its automatic date: say so, or the next step just vanishes.
+  if ("activities" in patch && "followUp" in patch && !next.followUp && prev.followUp) out.push("Follow-up cleared: they replied");
   if ("closedAs" in patch && !moved && next.closedAs && next.closedAs !== prev.closedAs) out.push(`Outcome set to ${CLOSED_AS[next.closedAs]}`);
   if (patch.since && isDay(patch.since) && next.status) out.push(`${STATUS_LABEL[next.status]} date set to ${dayLabel(patch.since)}`);
   if ("cv" in patch && (next.cv ?? "") !== (prev.cv ?? "")) out.push(next.cv ? `CV set to ${next.cv}` : "CV removed");
@@ -406,8 +410,10 @@ export function addActivity(entry: Entry | undefined, a: Activity, { followUpDay
   const patch: EntryPatch = { activities: [...(entry?.activities ?? []), a] };
   // On a Saved job the date is "Apply by", not a follow-up: a touch leaves it alone.
   if (a.channel === "note" || entry?.status === "saved") return patch;
-  if (a.dir === "received") patch.followUp = undefined;
-  else if (a.dir === "sent" && followUpDays) patch.followUp = dayAfter(`${today(now)}T12:00:00`, followUpDays);
+  // A reply ends the chase, unless the date is one you picked yourself.
+  if (a.dir === "received") {
+    if (!entry?.followUpPicked) patch.followUp = undefined;
+  } else if (a.dir === "sent" && followUpDays) patch.followUp = dayAfter(`${today(now)}T12:00:00`, followUpDays);
   return patch;
 }
 
@@ -434,13 +440,18 @@ export function applyPatch(prev: Entry | undefined, job: JobLike, patch: EntryPa
   // Each extra belongs to one status: moving the job anywhere else drops it.
   if (next.status !== "dismissed") delete next.reason;
   if (next.status !== "rejected") delete next.closedAs;
-  // A follow-up date belongs to the active stages. A move clears it unless the patch sets one, and
-  // applying sets it a week out.
+  // A follow-up date belongs to the active stages. A move clears it unless the patch sets one or it's
+  // a date you picked yourself, and applying sets it a week out.
+  const keepPicked = changed && !("followUp" in patch) && !!prev?.followUpPicked && !!prev.followUp;
   if (!isActive(next.status)) delete next.followUp;
-  else if (changed && !("followUp" in patch)) {
+  else if (changed && !("followUp" in patch) && !keepPicked) {
     if (next.status === "applied") next.followUp = dayAfter(now, FOLLOW_UP_DAYS);
     else delete next.followUp;
   }
+  // Whose date it is: one set on its own (not by a logged touch or a move) is yours, and a reply keeps it.
+  if ("followUp" in patch && patch.followUp && !changed && !("activities" in patch)) next.followUpPicked = true;
+  else if ("followUp" in patch || (changed && !keepPicked)) delete next.followUpPicked;
+  if (!next.followUp) delete next.followUpPicked;
   if (since && isDay(since) && next.status) {
     // Noon local, so the day reads the same wherever it's shown in your timezone.
     const at = new Date(`${since}T12:00:00`).toISOString();
@@ -648,7 +659,24 @@ function outreachFrom(v: unknown, now: Date): Outreach | undefined {
 }
 
 /** The fields this version reads; an entry's other fields (from a newer RawJobs) are kept as they are. */
-const ENTRY_FIELDS = new Set(["status", "note", "reason", "history", "closedAs", "followUp", "cv", "interviews", "contacts", "activities", "skipped", "offer", "outreach", "updatedAt", "snapshot"]);
+const ENTRY_FIELDS = new Set([
+  "status",
+  "note",
+  "reason",
+  "history",
+  "closedAs",
+  "followUp",
+  "followUpPicked",
+  "cv",
+  "interviews",
+  "contacts",
+  "activities",
+  "skipped",
+  "offer",
+  "outreach",
+  "updatedAt",
+  "snapshot",
+]);
 
 /** An imported entry, if it has the shape the pipeline relies on; anything else is left out. */
 function entryFrom(v: unknown, id: string, now: Date): Entry | undefined {
@@ -707,7 +735,7 @@ function entryFrom(v: unknown, id: string, now: Date): Entry | undefined {
     ...(status === "dismissed" && isText(e.reason) ? { reason: e.reason as Reason } : {}),
     ...(history.length ? { history } : {}),
     ...(status === "rejected" && isText(e.closedAs) && e.closedAs in CLOSED_AS ? { closedAs: e.closedAs as ClosedAs } : {}),
-    ...(isActive(status) && isDay(e.followUp) ? { followUp: e.followUp } : {}),
+    ...(isActive(status) && isDay(e.followUp) ? { followUp: e.followUp, ...(e.followUpPicked === true ? { followUpPicked: true as const } : {}) } : {}),
     ...(isText(e.cv) && e.cv ? { cv: e.cv } : {}),
     ...(interviews.length ? { interviews } : {}),
     ...(Object.keys(offer).length ? { offer } : {}),

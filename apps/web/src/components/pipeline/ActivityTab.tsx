@@ -126,7 +126,8 @@ export function ActivityTab({
               key={prefill.n}
               contacts={entry.contacts ?? []}
               initial={prefill.initial}
-              hasFollowUp={!!entry.followUp}
+              // A date you picked survives a reply, so only an automatic one gets the "clears it" note.
+              hasFollowUp={!!entry.followUp && !entry.followUpPicked}
               followUps={entry.status !== "saved"}
               onLog={(a, opts) => {
                 onUpdate(addActivity(entry, a, opts, now));
