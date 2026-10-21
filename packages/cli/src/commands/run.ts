@@ -40,6 +40,7 @@ import {
   type ScanOptions,
   type ScanResult,
 } from "@rawjobs/core";
+import { failedHealth, notReached } from "@rawjobs/core/health";
 import type { ScanSource } from "@rawjobs/core/protocol";
 import type { RunEvent } from "@rawjobs/core/protocol";
 
@@ -220,12 +221,14 @@ export async function cmdRun(args: string[]): Promise<number> {
       console.log("");
       if (shown.length) printJobs(shown, min);
 
-      const failed = result.health.filter((h) => !h.ok && !h.unsupported);
+      const failed = result.health.filter(failedHealth);
+      const unreached = result.health.filter(notReached).length;
       if (failed.length) {
         console.log(`\n${failed.length} compan${failed.length === 1 ? "y" : "ies"} failed:`);
         for (const h of failed.slice(0, 50)) console.log(`  ${h.company} (${h.ats}:${h.slug}): ${h.error}`);
         if (failed.length > 50) console.log(`  …and ${failed.length - 50} more`);
       }
+      if (unreached) console.log(`\n${unreached} compan${unreached === 1 ? "y" : "ies"} not reached: their hiring system's site stopped answering this scan. The next scan checks them.`);
       if (resting)
         console.log(
           `\n${resting.toLocaleString()} directory board${resting === 1 ? "" : "s"} left alone this scan: failed last time, tried again after a rest (up to a day; your companies are always checked).`,
@@ -405,7 +408,7 @@ export async function runNdjson(values: RunValues): Promise<number> {
           matches: matches.length,
           strong: matches.filter((j) => j.score >= config.profile.min_score).length,
           newMatches,
-          failed: r.result.health.filter((h) => !h.ok && !h.unsupported).length,
+          failed: r.result.health.filter(failedHealth).length,
           checked: r.checks.length,
           stopped: r.stopped,
           ...(r.result.everyCompany ? { everyCompany: true } : {}),
