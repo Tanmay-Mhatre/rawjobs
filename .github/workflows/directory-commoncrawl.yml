@@ -1,8 +1,11 @@
-# Every day: read more of the Common Crawl URL index (our richest board source: one crawl added
-# 16,295 boards no other source had, 9,438 of them live). The weekly rebuild alone reads ~35
-# minutes a week, which would take about 10 months to cover the crawls; this adds 45 minutes a day.
-# Only the 12 newest crawls (about a year). Resumes per query, and stops at once when the index
-# keeps failing. What it finds is merged and checked by the next contributions run or rebuild.
+# Every day: read more of our own URL indexes, which the weekly rebuild no longer reads.
+# - Common Crawl (our richest board source: one crawl added 16,295 boards no other source had,
+#   9,438 of them live): 50 minutes a day, only the 12 newest crawls (about a year).
+# - The Wayback Machine's index: 25 minutes on Tuesday, Thursday and Saturday (never Monday, the
+#   rebuild's day), gently: one request at a time, 4.5 s apart.
+# Both resume per query and stop at once when their index keeps failing. What they find is merged
+# and checked by the next contributions run or rebuild. Data · health alerts when Wayback is blocked
+# or stops making progress.
 # Setup: docs/shared-directory.md
 name: Directory · Common Crawl
 # Runs the scheduler Worker starts are named so; empty means GitHub's usual name.
@@ -11,6 +14,7 @@ run-name: ${{ inputs.source == 'scheduler' && format('{0} · scheduler', github.
 on:
   schedule:
     # Between the contributions runs at :17 every 3 hours, and never near Monday's 03:00 rebuild.
+    # Takes up to ~2 hours on a Wayback day, so the 15:17 contributions run may queue behind it.
     - cron: "40 13 * * *"
   workflow_dispatch:
     inputs:
@@ -72,7 +76,8 @@ jobs:
     needs: covered
     if: needs.covered.outputs.run == 'true'
     runs-on: ubuntu-24.04
-    timeout-minutes: 70
+    # Setup ~5 + Common Crawl step 62 + Wayback step 52, with a few minutes to save.
+    timeout-minutes: 125
     steps:
       - id: checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -92,8 +97,21 @@ jobs:
       - name: Common Crawl
         if: steps.state.outputs.restored == 'true'
         continue-on-error: true
-        timeout-minutes: 57
-        run: bash scripts/catalog/capped.sh "Common Crawl" 55 pnpm exec tsx scripts/catalog/commoncrawl.ts --crawls 12 --per-run 2 --max-minutes 45
+        timeout-minutes: 62
+        run: bash scripts/catalog/capped.sh "Common Crawl" 60 pnpm exec tsx scripts/catalog/commoncrawl.ts --crawls 12 --per-run 2 --max-minutes 50
+
+      - name: Is it a Wayback day?
+        id: day
+        # Tuesday, Thursday and Saturday (UTC), never Monday.
+        run: case "$(date -u +%u)" in 2 | 4 | 6) echo "wayback=true" >> "$GITHUB_OUTPUT" ;; *) echo "wayback=false" >> "$GITHUB_OUTPUT" ;; esac
+
+      # A query in flight can run well past the soft cap (retries on a slow index); wayback.ts saves
+      # after every page, so the hard cap loses at most that page.
+      - name: Wayback
+        if: steps.state.outputs.restored == 'true' && steps.day.outputs.wayback == 'true'
+        continue-on-error: true
+        timeout-minutes: 52
+        run: bash scripts/catalog/capped.sh "Wayback" 50 pnpm exec tsx scripts/catalog/wayback.ts --max-minutes 25
 
       - name: Save the working state
         if: always() && steps.state.outputs.restored == 'true'
