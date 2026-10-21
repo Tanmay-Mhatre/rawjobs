@@ -4,6 +4,8 @@
 # (scripts/catalog/connector-health.ts). A system where no board gave usable jobs opens (or updates)
 # one issue; once none fails it closes it. A few requests per system, at the usual polite pace.
 name: Connectors · health
+# Runs the scheduler Worker starts are named so; empty means GitHub's usual name.
+run-name: ${{ inputs.source == 'scheduler' && format('{0} · scheduler', github.workflow) || '' }}
 
 on:
   schedule:
@@ -11,6 +13,11 @@ on:
     # the contributions runs (:17 every 3 hours) and Monday's rebuild.
     - cron: "53 6 * * *"
   workflow_dispatch:
+    inputs:
+      source:
+        description: "Who started this run (the scheduler Worker sends scheduler)"
+        type: string
+        default: manual
 
 permissions:
   contents: read

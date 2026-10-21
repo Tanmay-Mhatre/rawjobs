@@ -1,7 +1,7 @@
 /**
  * Starts the job feed workflow (.github/workflows/jobs-daily.yml) every 6 hours. GitHub's own cron
  * often starts runs hours late; this one is on time. When both fire, the workflow's first job skips
- * the second run (the feed is under 4 hours old), so nothing runs twice.
+ * the second run (this slot's feed is already built), so nothing runs twice.
  *
  * Setup: see wrangler.toml. Needs one secret, GITHUB_TOKEN: a fine-grained token for the app repo
  * with "Actions: read and write" and nothing else.

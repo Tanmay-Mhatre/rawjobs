@@ -11,18 +11,24 @@
 # Test without publishing: gh workflow run jobs-daily.yml --ref <branch> -f publish=false -f force=true
 # A run publishes, saves state and opens issues only when publish is on AND it runs from main.
 name: Jobs · feed every 6 h
+# Runs the scheduler Worker starts are named so; empty means GitHub's usual name.
+run-name: ${{ inputs.source == 'scheduler' && format('{0} · scheduler', github.workflow) || '' }}
 
 on:
   schedule:
     - cron: "23 */6 * * *"
   workflow_dispatch:
     inputs:
+      source:
+        description: "Who started this run (the scheduler Worker sends scheduler)"
+        type: string
+        default: manual
       publish:
         description: "Publish the feed and save state (off: a test run that changes nothing)"
         type: boolean
         default: true
       force:
-        description: "Run even if the feed was built less than 4 hours ago"
+        description: "Run even if this schedule slot's feed is already built"
         type: boolean
         default: false
 
@@ -49,10 +55,17 @@ jobs:
       publish: ${{ steps.check.outputs.publish }}
       run_at: ${{ steps.check.outputs.run_at }}
     steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          sparse-checkout: |
+            scripts/catalog/slot-covered.mjs
+            .github/workflows/jobs-daily.yml
+          sparse-checkout-cone-mode: false
       - id: check
-        name: Skip when the feed is under 4 hours old
+        name: Skip when this slot's feed is already built
         env:
           GH_TOKEN: ${{ secrets.DATA_REPO_TOKEN }}
+          RUN_TOKEN: ${{ github.token }}
           PUBLISH: ${{ (github.event_name != 'workflow_dispatch' || inputs.publish) && github.ref == 'refs/heads/main' }}
           FORCE: ${{ github.event_name == 'workflow_dispatch' && inputs.force }}
         run: |
@@ -63,16 +76,18 @@ jobs:
           echo "Publish: $PUBLISH"
           run=true
           if [ "$FORCE" != true ]; then
-            # The feed's time is when its run started, so a run every 6 hours is never skipped,
-            # but a second trigger (GitHub's cron and Cloudflare's) within 4 hours is.
+            # The feed's time is when its run started. A slot (from 10 minutes before each cron time,
+            # when the scheduler Worker dispatches) gets one feed: a second trigger for the same slot
+            # (GitHub's late cron, or the Worker) skips, and the next slot's run never does.
             generated=""
             for m in jobs-v3-manifest.json jobs-manifest.json; do
               generated=$(gh release download jobs -R "$DATA_REPO" -p "$m" -O - 2> /dev/null | jq -r '.generated_at // empty') && [ -n "$generated" ] && break
             done
             if [ -n "$generated" ]; then
-              age=$(( $(date -u +%s) - $(date -u -d "$generated" +%s) ))
-              echo "The feed was started $((age / 60)) minutes ago ($generated)."
-              if [ "$age" -lt 14400 ]; then run=false; echo "::notice::Skipped: the feed is under 4 hours old."; fi
+              echo "The feed was started at $generated."
+              out=$(GH_TOKEN="$RUN_TOKEN" node scripts/catalog/slot-covered.mjs .github/workflows/jobs-daily.yml since "$generated")
+              echo "$out"
+              if grep -q '^covered=true' <<< "$out"; then run=false; echo "::notice::Skipped: this slot's feed is already built."; fi
             fi
           fi
           echo "run=$run" >> "$GITHUB_OUTPUT"

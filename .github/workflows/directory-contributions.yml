@@ -7,11 +7,18 @@
 # evidence, review issues, auto-accept when MOVES_AUTO_ACCEPT is set (docs/plans/auto-accept-moves.md).
 # Setup: docs/shared-directory.md
 name: Directory · contributions
+# Runs the scheduler Worker starts are named so; empty means GitHub's usual name.
+run-name: ${{ inputs.source == 'scheduler' && format('{0} · scheduler', github.workflow) || '' }}
 
 on:
   schedule:
     - cron: "17 */3 * * *"
   workflow_dispatch:
+    inputs:
+      source:
+        description: "Who started this run (the scheduler Worker sends scheduler)"
+        type: string
+        default: manual
 
 # queue: max — runs wait their turn (up to 100) instead of the default, where a newer waiting run
 # cancels the older one (which could be a queued weekly rebuild).
@@ -30,7 +37,42 @@ env:
   DATA_REPO: ${{ vars.DATA_REPO || 'Tanmay-Mhatre/rawjobs-directory' }}
 
 jobs:
+  # GitHub's cron starts runs late, and a slot can get two triggers (it and the scheduler Worker):
+  # a scheduled run whose slot another run already covers does nothing. Other runs always go ahead.
+  covered:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      actions: read
+    outputs:
+      run: ${{ steps.check.outputs.run }}
+    steps:
+      - if: github.event_name == 'schedule'
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          sparse-checkout: |
+            scripts/catalog/slot-covered.mjs
+            .github/workflows/directory-contributions.yml
+          sparse-checkout-cone-mode: false
+      - id: check
+        name: Is this slot already covered?
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if [ "${{ github.event_name }}" != schedule ]; then echo "run=true" >> "$GITHUB_OUTPUT"; exit 0; fi
+          out=$(node scripts/catalog/slot-covered.mjs .github/workflows/directory-contributions.yml runs)
+          echo "$out"
+          if grep -q '^covered=true' <<< "$out"; then
+            echo "run=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::Skipped: another run already covers this schedule slot."
+          else
+            echo "run=true" >> "$GITHUB_OUTPUT"
+          fi
+
   accept:
+    needs: covered
+    if: needs.covered.outputs.run == 'true'
     runs-on: ubuntu-24.04
     timeout-minutes: 90
     steps:
