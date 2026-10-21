@@ -51,6 +51,30 @@ describe("change log", () => {
     expect(texts(e, { activities: [...e.activities!, touch({ id: "a2" })] })).toEqual([]);
   });
 
+  it("keeps a follow-up date you picked when they reply, and says when a reply clears an automatic one", () => {
+    const reply = touch({ id: "r1", dir: "received" });
+    // Picked in Details or Snooze: yours, and a reply leaves it.
+    const picked = applyPatch(entry(), job, { followUp: "2026-10-28" }, at)!;
+    expect(picked.followUpPicked).toBe(true);
+    const kept = applyPatch(picked, job, addActivity(picked, reply), at)!;
+    expect(kept.followUp).toBe("2026-10-28");
+    // Set by applying: a reply ends the chase, and the Activity says why the step went.
+    const auto = applyPatch(entry({ status: "saved" }), job, { status: "applied" }, at)!;
+    expect(auto.followUp).toBeTruthy();
+    expect(auto.followUpPicked).toBeUndefined();
+    const cleared = applyPatch(auto, job, addActivity(auto, reply), at)!;
+    expect(cleared.followUp).toBeUndefined();
+    expect(cleared.changes?.at(-1)?.text).toBe("Follow-up cleared: they replied");
+    // A sent touch's own next date, or a move, makes it automatic again.
+    const resent = applyPatch(picked, job, addActivity(picked, touch({ id: "s2" }), { followUpDays: 7 }), at)!;
+    expect(resent.followUpPicked).toBeUndefined();
+    expect(applyPatch(picked, job, { status: "interviewing", followUp: "2026-11-02" }, at)!.followUpPicked).toBeUndefined();
+    // Your own date stays through a move to another active stage, and goes when it closes.
+    const moved = applyPatch(picked, job, { status: "offer" }, at)!;
+    expect([moved.followUp, moved.followUpPicked]).toEqual(["2026-10-28", true]);
+    expect(applyPatch(picked, job, { status: "rejected" }, at)!.followUp).toBeUndefined();
+  });
+
   it("logs the date you moved a stage to", () => {
     expect(texts(entry(), { since: "2026-10-12" })).toEqual([`Applied date set to ${d("2026-10-12")}`]);
   });

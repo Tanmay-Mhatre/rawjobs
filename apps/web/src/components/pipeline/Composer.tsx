@@ -45,7 +45,7 @@ export type ComposerProps = {
   contacts: readonly Contact[];
   /** Filled in by Log follow-up and Log thank-you: channel, person and a short text; `followUp` marks the touch as a follow-up. */
   initial?: { channel?: Channel; dir?: Direction; contactId?: string; text?: string; followUp?: boolean };
-  /** A follow-up date is set: a received touch clears it, and the hint says so. */
+  /** An automatic follow-up date is set: a received touch clears it, and the hint says so. */
   hasFollowUp?: boolean;
   /** False on a Saved job: its date is "Apply by", so a touch neither sets nor clears it, and there's no "Next follow-up in". */
   followUps?: boolean;
