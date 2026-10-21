@@ -100,7 +100,9 @@ export function scoreJob(job: Scorable, profile: Profile, company: CompanyFit = 
   const location = withTitleRegion(gateLocation(job), title);
   const titleOk = titlePasses(title, profile, forms);
   const focus = titleOk ? titleFocus(title, profile) : 0;
-  const description = job.description ?? "";
+  // A title that isn't yours scores 0 whatever the description says, so it isn't read: only the title's
+  // topics are looked for (most jobs a scan sees stop here, and history keeps no description for them).
+  const description = titleOk ? (job.description ?? "") : "";
   const req = extractRequirements(description);
   const experience = experienceCheck(req, profile);
   // Asking for more years than you have takes the level a step down: a "Senior" title wanting 10+ years isn't your senior.
@@ -148,9 +150,11 @@ export function scoreJob(job: Scorable, profile: Profile, company: CompanyFit = 
   const keywordPoints =
     totalWeight === 0
       ? 0
-      : description.trim()
-        ? Math.max(POINTS.keywordCap * Math.min(1, matchedWeight / Math.min(totalWeight, POINTS.keywordTarget)), POINTS.titleKeywordCap * titleShare)
-        : POINTS.unknownTopics + POINTS.unknownTitleTopics * titleShare;
+      : !titleOk
+        ? POINTS.titleKeywordCap * titleShare
+        : description.trim()
+          ? Math.max(POINTS.keywordCap * Math.min(1, matchedWeight / Math.min(totalWeight, POINTS.keywordTarget)), POINTS.titleKeywordCap * titleShare)
+          : POINTS.unknownTopics + POINTS.unknownTitleTopics * titleShare;
   const missing = Object.entries(profile.keywords)
     .filter(([k]) => !strength.has(k))
     .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))

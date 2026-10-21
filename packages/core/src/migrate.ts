@@ -1,6 +1,9 @@
-import { readFileSync } from "node:fs";
+import { mkdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { writeFileAtomic } from "./atomic";
+import { findConfigPath, loadConfig } from "./config";
+import type { Config } from "./schema";
+import { slimRunHistory } from "./store";
 
 /**
  * The format of your RawJobs folder's data (data/, profile/, the config). When a release changes how
@@ -11,11 +14,25 @@ import { writeFileAtomic } from "./atomic";
  * version had already converted the data (format.json changed); otherwise your data, including
  * anything saved since the update began, is left exactly as it is.
  */
-export const DATA_FORMAT = 1;
+export const DATA_FORMAT = 2;
 
 type Migration = { to: number; run: (home: string, dataDir: string) => void };
-/** Step n converts format n-1 to n. Empty while the format is still the first one. */
-const MIGRATIONS: Migration[] = [];
+/** Step n converts format n-1 to n. */
+const MIGRATIONS: Migration[] = [
+  {
+    // 2: the run history keeps only your companies' health. Without a readable config the next scan does it.
+    to: 2,
+    run: (home, dataDir) => {
+      let config: Config;
+      try {
+        config = loadConfig(findConfigPath(home)).config;
+      } catch {
+        return;
+      }
+      slimRunHistory(dataDir, config);
+    },
+  },
+];
 
 const formatFile = (dataDir: string) => join(dataDir, "format.json");
 
@@ -36,6 +53,7 @@ export function readDataFormat(dataDir: string): number {
 export function migrateData(home: string, dataDir: string): number {
   const found = readDataFormat(dataDir);
   if (found >= DATA_FORMAT) return found;
+  mkdirSync(dataDir, { recursive: true });
   for (const m of MIGRATIONS.filter((x) => x.to > found && x.to <= DATA_FORMAT).sort((a, b) => a.to - b.to)) {
     console.log(`Updating your data to format ${m.to}.`);
     m.run(home, dataDir);

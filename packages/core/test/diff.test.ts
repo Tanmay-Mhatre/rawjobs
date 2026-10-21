@@ -6,6 +6,7 @@ import { parseConfig } from "../src/config";
 import { mergeHistory } from "../src/diff";
 import type { RunResult } from "../src/run";
 import type { CompanyHealth, Job } from "../src/schema";
+import { migrateData } from "../src/migrate";
 import { KEEP_RUNS, readJobs, readMeta, saveRun } from "../src/store";
 import { makeJob } from "./helpers";
 
@@ -283,5 +284,56 @@ companies:
     const check = run(at(99), [job("1", { firstSeen: T0, lastSeen: at(99) })]);
     saveRun(dir, config, check, mergeHistory(stored, check, config.companies), { record: false });
     expect(readMeta(dir)!.runs[0]!.startedAt).toBe(at(KEEP_RUNS + 1));
+    // runs/ keeps as many as meta.json, written compact.
+    expect(readdirSync(join(dir, "runs"))).toHaveLength(KEEP_RUNS);
+    expect(readFileSync(join(dir, "meta.json"), "utf8")).not.toContain("\n");
+  });
+
+  const acme = `
+profile:
+  titles: { include: ["product manager"] }
+  locations: { include: ["dubai"] }
+companies:
+  - { name: "Acme", ats: greenhouse, slug: "acme" }
+`;
+  const other = (slug: string, ok: boolean): CompanyHealth => ({ company: slug, ats: "lever", slug, ok, jobsFound: 0, matches: 0, durationMs: 1 });
+
+  it("keeps only your companies' health, with totals for every board checked", () => {
+    dir = mkdtempSync(join(tmpdir(), "rawjobs-"));
+    const r = { ...run(T0, [job("1")]), health: [...health(true), other("a", false), other("b", true), { ...other("c", false), unsupported: true }] };
+    saveRun(dir, parseConfig(acme), r, mergeHistory([], r, companies));
+    const last = readMeta(dir)!.runs[0]!;
+    expect(last.health.map((h) => h.slug)).toEqual(["acme"]);
+    expect(last.counts).toEqual({ checked: 4, failed: 1 });
+  });
+
+  it("format 2 slims an old run history and runs/, once", () => {
+    dir = mkdtempSync(join(tmpdir(), "rawjobs-"));
+    const data = join(dir, "data");
+    mkdirSync(join(data, "runs"), { recursive: true });
+    writeFileSync(join(dir, "rawjobs.config.yaml"), acme);
+    const old = (at: string) => ({
+      startedAt: at,
+      finishedAt: at,
+      partial: false,
+      jobsFound: 0,
+      matches: 0,
+      newMatches: 0,
+      closed: 0,
+      health: [...health(true), other("a", false), other("b", false)],
+    });
+    writeFileSync(join(data, "meta.json"), JSON.stringify({ version: 1, generatedAt: T1, profile: {}, companies: [], runs: [old(T1), old(T0)] }, null, 2));
+    writeFileSync(join(data, "runs", "2026-10-02T03-00-00Z.json"), "{}");
+    writeFileSync(join(data, "runs", "2025-01-01T00-00-00Z.json"), "{}");
+    expect(migrateData(dir, data)).toBe(1);
+    const meta = readMeta(data)!;
+    expect(meta.generatedAt).toBe(T1);
+    expect(meta.runs.map((r) => [r.health.length, r.counts])).toEqual([
+      [1, { checked: 3, failed: 2 }],
+      [1, { checked: 3, failed: 2 }],
+    ]);
+    expect(readdirSync(join(data, "runs"))).toEqual(["2026-10-02T03-00-00Z.json"]);
+    expect(JSON.parse(readFileSync(join(data, "runs", "2026-10-02T03-00-00Z.json"), "utf8")).counts.checked).toBe(3);
+    expect(migrateData(dir, data)).toBe(2);
   });
 });
