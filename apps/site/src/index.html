@@ -269,7 +269,7 @@ h1, h2, h3 { margin: 0; text-wrap: balance; }
 .routes[data-play="ready"] .link > i { transform: scaleX(0); }
 .routes[data-play="ready"] .node--end { opacity: 0.35; }
 .routes .node--end { transition: opacity var(--duration-base) var(--ease-enter), border-color var(--duration-instant) var(--ease-standard); }
-@media (max-width: 640px) {
+@media (max-width: 860px) {
   .track { flex-direction: column; align-items: stretch; }
   .node { max-width: none; min-width: 0; }
   .link { flex: none; width: 2px; min-width: 0; height: 20px; margin-left: var(--space-6); }
@@ -783,9 +783,6 @@ h1 .serif, h2 .serif { font-size: 1.08em; line-height: 0; }
 @media (hover: hover) and (pointer: fine) { .step:hover, .feature:hover { transform: translateY(-3px); border-color: var(--border-control); } }
 .step__demo { border-radius: var(--radius-md); }
 
-/* the direct route lands with a glow: that's the signal */
-.node--good { box-shadow: 0 0 0 4px color-mix(in srgb, var(--success-text) 12%, transparent), 0 0 32px 4px color-mix(in srgb, var(--success-text) 22%, transparent); }
-.lane--good { background: linear-gradient(90deg, var(--bg-inset), color-mix(in srgb, var(--success-text) 6%, var(--bg-inset))); }
 
 /* ---------- the dashboard: tilted back, it rises flat as it scrolls to the middle (script sets --p) ---------- */
 .shot { position: relative; perspective: 1400px; }
@@ -806,25 +803,83 @@ h1 .serif, h2 .serif { font-size: 1.08em; line-height: 0; }
 /* the gauge shows the number; the badge stays for screen readers (its label says the band and the score) */
 .verdict .rj-score--lg { position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
 
-/* ---------- get it: one terminal line first, the full walkthrough on request ---------- */
-.qi { margin-bottom: var(--space-6); border: 1px solid var(--glass-line); border-radius: var(--radius-card); background: var(--bg-raised); box-shadow: var(--shadow-l2), 0 24px 80px -24px var(--signal-glow); overflow: hidden; }
-.qi__bar { display: flex; align-items: center; gap: var(--space-2); padding: var(--space-3) var(--space-4); border-bottom: 1px solid var(--border-subtle); background: var(--bg-inset); font: var(--text-meta); color: var(--text-secondary); }
-.qi__bar i { width: 10px; height: 10px; border-radius: var(--radius-dot); background: var(--border-control); }
-.qi__bar span { margin-left: var(--space-2); }
-.qi__line { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: var(--space-4); padding: clamp(20px, 3vw, 32px) var(--space-6); }
-.qi__prompt { font: var(--text-code); color: var(--text-disabled); }
-.qi__line code { font: 400 clamp(0.9375rem, 1.6vw, 1.125rem)/1.6 var(--font-mono); color: var(--text-primary); overflow-wrap: anywhere; }
-.qi__line code::after { content: ""; display: inline-block; width: 0.55em; height: 1.1em; margin-left: 0.2em; vertical-align: text-bottom; background: var(--text-primary); animation: blink 1s steps(1) infinite; }
-.qi__steps { list-style: none; margin: 0; padding: var(--space-4) var(--space-6); display: flex; flex-wrap: wrap; gap: var(--space-3) var(--space-8); border-top: 1px solid var(--border-subtle); font: var(--text-small); color: var(--text-secondary); }
-.qi__steps li { display: flex; align-items: center; gap: var(--space-2); }
-.qi__steps b { color: var(--text-primary); font-weight: 500; }
-.qi__n { width: 22px; height: 22px; display: grid; place-items: center; border-radius: var(--radius-dot); border: 1px solid var(--border-control); font: var(--text-meta); color: var(--text-primary); }
-.walk { margin-bottom: var(--space-3); }
-.walk .more__in { padding-top: var(--space-2); }
-@media (max-width: 640px) {
-  .qi__line { grid-template-columns: minmax(0, 1fr); gap: var(--space-3); padding-inline: var(--space-4); }
-  .qi__prompt { display: none; }
-  .qi__steps { padding-inline: var(--space-4); }
+/* ---------- get it: the visitor's own computer, step by step ----------
+   The mock screen sits in a frame shaped like their machine: a MacBook, a Windows monitor on a stand, or a
+   Linux laptop. The frame's colors imitate hardware, not RawJobs' UI, so like the mock screen they are fixed
+   values marked for the design lint. */
+.iprogress { display: flex; align-items: center; gap: var(--space-4); margin-bottom: var(--space-6); font: var(--text-label); color: var(--text-secondary); }
+.iprogress b { color: var(--text-primary); font-weight: 600; font-variant-numeric: tabular-nums; }
+.iprogress__bar { flex: 1; height: 4px; border-radius: var(--radius-dot); background: var(--border-subtle); overflow: hidden; }
+.iprogress__bar i { display: block; height: 100%; width: 100%; background: var(--text-primary); border-radius: inherit; transform-origin: left; transform: scaleX(calc(var(--s, 1) / 5)); transition: transform var(--duration-cinematic) var(--ease-cinematic); }
+@media (min-width: 921px) { .installer { grid-template-columns: minmax(0, 4fr) minmax(0, 8fr); } }
+.istep { border-color: var(--glass-line); }
+.istep[data-active] { background: linear-gradient(90deg, color-mix(in srgb, var(--text-primary) 4%, transparent), transparent); }
+.istep[data-active] .istep__n { box-shadow: 0 0 0 4px color-mix(in srgb, var(--text-primary) 12%, transparent); }
+
+.device { position: relative; padding-bottom: var(--space-6); }
+.device::after { content: ""; position: absolute; z-index: -1; left: 8%; right: 8%; bottom: 0; height: 40%; border-radius: 50%; background: radial-gradient(closest-side, var(--signal-glow), transparent); filter: blur(28px); }
+.device__bezel { position: relative; padding: 2.4%; border-radius: 18px; background: #101010; /* design-lint-ignore: device bezel */
+  box-shadow: 0 0 0 1px color-mix(in srgb, white 10%, transparent) inset, 0 30px 60px -20px color-mix(in srgb, black 55%, transparent); } /* design-lint-ignore: device bezel shadow */
+.device__bezel::before { content: ""; position: absolute; top: 0.9%; left: 50%; width: 6px; height: 6px; margin-left: -3px; border-radius: 50%; background: #2a2a2a; } /* design-lint-ignore: camera */
+.device .screen { border: 0; border-radius: 6px; box-shadow: none; }
+.device__base { position: relative; margin: 0 -7%; height: 14px; border-radius: 0 0 16px 16px; background: linear-gradient(#d8d9dd, #a3a4a9); } /* design-lint-ignore: aluminium laptop base */
+.device__base::before { content: ""; position: absolute; left: 50%; top: 0; width: 14%; height: 5px; margin-left: -7%; border-radius: 0 0 8px 8px; background: #8d8e93; } /* design-lint-ignore: lid notch */
+.get[data-os="linux"] .device__base { background: linear-gradient(#4a4a4e, #2b2b2e); } /* design-lint-ignore: dark laptop base */
+.get[data-os="linux"] .device__base::before { background: #1c1c1e; } /* design-lint-ignore: lid notch */
+/* Windows: a monitor on a stand */
+.get[data-os="win"] .device__bezel { border-radius: 10px; padding: 1.6% 1.6% 3.2%; }
+.get[data-os="win"] .device__bezel::before { display: none; }
+.get[data-os="win"] .device__base { margin: 0 auto; width: 14%; height: 44px; border-radius: 0; background: linear-gradient(90deg, #2a2a2c, #3b3b3e, #2a2a2c); } /* design-lint-ignore: monitor neck */
+.get[data-os="win"] .device__base::before { top: auto; bottom: -8px; left: 50%; width: 300%; height: 10px; margin-left: -150%; border-radius: 6px 6px 3px 3px; background: linear-gradient(#3b3b3e, #232325); } /* design-lint-ignore: monitor foot */
+.get[data-os="win"] .device { padding-bottom: var(--space-8); }
+@media (max-width: 920px) { .device__bezel { border-radius: 12px; } .device__base { height: 10px; } .get[data-os="win"] .device__base { height: 28px; } }
+
+/* ---------- where your resume goes: a full-width stage ----------
+   Each stop is a card with an icon. Through middlemen the resume gets stamped as it is copied and held, and the
+   trail ends in silence; direct, it lands with a green pulse. A dotted grid and two glows set the scene. */
+#problem .split { grid-template-columns: minmax(0, 1fr); gap: var(--space-8); }
+#problem .split__head { position: static; max-width: 44rem; }
+#problem .split__body { gap: var(--space-8); }
+.routes { box-shadow: var(--shadow-l2); background:
+  radial-gradient(circle, var(--glass-line) 1px, transparent 1.6px) 0 0 / 22px 22px,
+  var(--bg-raised); }
+.lane { padding: var(--space-8) clamp(16px, 3vw, 40px); gap: var(--space-6); }
+.lane--bad { background: radial-gradient(60% 120% at 100% 50%, color-mix(in srgb, var(--danger-text) 9%, transparent), transparent); }
+.lane--good { background: radial-gradient(60% 120% at 100% 50%, color-mix(in srgb, var(--success-text) 12%, transparent), transparent); }
+.lane__label { font: var(--text-subheading); }
+.track { gap: 0; }
+.node { flex: 0 1 220px; min-width: 0; max-width: none; grid-template-columns: auto minmax(0, 1fr); column-gap: var(--space-3); row-gap: 2px; align-items: center;
+  padding: var(--space-3) var(--space-4); border-radius: var(--radius-card); background: var(--bg-raised); font: var(--text-body-strong); box-shadow: var(--shadow-l1);
+  transition: border-color var(--duration-base) var(--ease-standard), transform var(--duration-cinematic) var(--ease-cinematic), box-shadow var(--duration-cinematic) var(--ease-cinematic); }
+.node small { grid-column: 2; }
+.node__ic { grid-row: span 2; width: 40px; height: 40px; display: grid; place-items: center; border-radius: 10px; background: var(--bg-inset); color: var(--text-primary); }
+.node__ic .rj-icon { width: 20px; height: 20px; }
+.node--you { border-style: dashed; }
+.node[data-reached]:not(.node--end) { transform: translateY(-2px); }
+.node--bad .node__ic { background: color-mix(in srgb, var(--danger-text) 12%, transparent); color: var(--danger-text); }
+.node--good .node__ic { background: color-mix(in srgb, var(--success-text) 14%, transparent); color: var(--success-text); }
+.node--bad, .node--bad[data-reached] { border-color: var(--danger-text); }
+.node--good, .node--good[data-reached] { border-color: var(--success-text); box-shadow: none; }
+.node--bad[data-reached] { animation: thud var(--duration-cinematic) var(--ease-cinematic); }
+.node--good[data-reached] { animation: land var(--duration-reveal) var(--ease-cinematic) both; }
+@keyframes thud { 20% { transform: translateX(-4px); } 40% { transform: translateX(4px); } 60% { transform: translateX(-2px); } }
+@keyframes land { 0% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--success-text) 40%, transparent); } 60% { box-shadow: 0 0 0 10px color-mix(in srgb, var(--success-text) 0%, transparent), 0 0 40px 6px color-mix(in srgb, var(--success-text) 25%, transparent); } 100% { box-shadow: 0 0 32px 2px color-mix(in srgb, var(--success-text) 20%, transparent); } }
+/* the middlemen stamp the resume as it passes: "Copied", "Held" */
+.node[data-stamp]::after { content: attr(data-stamp); position: absolute; top: -10px; right: 10px; padding: 1px var(--space-2); border: 1.5px solid var(--danger-text); border-radius: var(--radius-sm);
+  font: var(--text-meta); font-weight: 600; color: var(--danger-text); background: var(--bg-raised); transform: rotate(-6deg); opacity: 0; }
+.node[data-stamp][data-reached]::after { animation: stamp var(--duration-slow) var(--ease-enter) forwards; }
+.routes[data-play="static"] .node[data-stamp]::after { opacity: 1; }
+@keyframes stamp { 0% { opacity: 0; transform: rotate(-6deg) scale(1.6); } 100% { opacity: 1; transform: rotate(-6deg) scale(1); } }
+.link { flex: 1 1 40px; min-width: 24px; height: 3px; border-radius: var(--radius-dot); }
+.link > i { border-radius: inherit; }
+.link--good > i { background: var(--success-solid); box-shadow: 0 0 10px color-mix(in srgb, var(--success-solid) 60%, transparent); }
+.token { width: 36px; height: 36px; border-radius: 10px; box-shadow: 0 6px 20px -4px color-mix(in srgb, var(--text-primary) 35%, transparent); }
+.lane--good .token { border-color: var(--success-text); color: var(--success-text); box-shadow: 0 0 24px 2px color-mix(in srgb, var(--success-text) 35%, transparent); }
+.routes[data-play="ready"] .node--end { opacity: 0.3; }
+@media (max-width: 860px) {
+  .node { flex: none; }
+  .link { flex: none; width: 3px; min-width: 0; height: 24px; margin-left: 33px; }
+  .node[data-stamp]::after { right: var(--space-3); }
 }
 
 /* ---------- privacy: three statements, big ---------- */
@@ -1355,13 +1410,13 @@ h1 .serif, h2 .serif { font-size: 1.08em; line-height: 0; }
           <p class="lane__label">Through middlemen <small>2 in between</small></p>
           <p class="rj-sr">Through middlemen: your resume goes to a job aggregator, then a staffing agency, and often never reaches the company. No reply.</p>
           <div class="track" aria-hidden="true">
-            <div class="node node--you">Your resume<small>applied on a job site</small></div>
+            <div class="node node--you"><span class="node__ic" aria-hidden="true"><svg class="rj-icon" viewBox="0 0 24 24"><path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/><path d="M14 2v4a2 2 0 0 0 2 2h4"/><path d="M10 13H8"/><path d="M16 17H8"/></svg></span>Your resume<small>applied on a job site</small></div>
             <span class="link"><i></i></span>
-            <div class="node">Job aggregator<small>copied listing</small></div>
+            <div class="node" data-stamp="Copied"><span class="node__ic" aria-hidden="true"><svg class="rj-icon" viewBox="0 0 24 24"><rect width="14" height="14" x="8" y="8" rx="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></svg></span>Job aggregator<small>copied listing</small></div>
             <span class="link"><i></i></span>
-            <div class="node">Staffing agency<small>talent pool</small></div>
+            <div class="node" data-stamp="Held"><span class="node__ic" aria-hidden="true"><svg class="rj-icon" viewBox="0 0 24 24"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg></span>Staffing agency<small>talent pool</small></div>
             <span class="link link--broken"><i></i></span>
-            <div class="node node--end node--bad"><i class="rj-glyph rj-glyph--slash"></i><b>No reply</b><small>The company may never see it</small></div>
+            <div class="node node--end node--bad"><span class="node__ic" aria-hidden="true"><svg class="rj-icon" viewBox="0 0 24 24"><path d="M22 13V6a2 2 0 0 0-2-2H4a2 2 0 0 0-2 2v12c0 1.1.9 2 2 2h9"/><path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7"/><path d="m17 17 4 4"/><path d="m21 17-4 4"/></svg></span><b>No reply</b><small>The company may never see it</small></div>
           </div>
           <span class="token" aria-hidden="true"><svg class="rj-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/><path d="M14 2v4a2 2 0 0 0 2 2h4"/><path d="M10 13H8"/><path d="M16 17H8"/></svg></span>
         </div>
@@ -1369,11 +1424,11 @@ h1 .serif, h2 .serif { font-size: 1.08em; line-height: 0; }
           <p class="lane__label">Direct to the company <small>nothing in between</small></p>
           <p class="rj-sr">Direct to the company: your resume goes to the company's own careers page and into its own hiring system.</p>
           <div class="track" aria-hidden="true">
-            <div class="node node--you">Your resume<small>applied on the careers page</small></div>
+            <div class="node node--you"><span class="node__ic" aria-hidden="true"><svg class="rj-icon" viewBox="0 0 24 24"><path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/><path d="M14 2v4a2 2 0 0 0 2 2h4"/><path d="M10 13H8"/><path d="M16 17H8"/></svg></span>Your resume<small>applied on the careers page</small></div>
             <span class="link link--good"><i></i></span>
-            <div class="node">Company careers page<small>Lever, Greenhouse, Workday…</small></div>
+            <div class="node"><span class="node__ic" aria-hidden="true"><svg class="rj-icon" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M12 2a14.5 14.5 0 0 0 0 20 14.5 14.5 0 0 0 0-20"/><path d="M2 12h20"/></svg></span>Company careers page<small>Lever, Greenhouse, Workday…</small></div>
             <span class="link link--good"><i></i></span>
-            <div class="node node--end node--good"><i class="rj-glyph rj-glyph--full"></i><b>Hiring team</b><small>Goes into the company's own hiring system</small></div>
+            <div class="node node--end node--good"><span class="node__ic" aria-hidden="true"><svg class="rj-icon" viewBox="0 0 24 24"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="m16 11 2 2 4-4"/></svg></span><b>Hiring team</b><small>Goes into the company's own hiring system</small></div>
           </div>
           <span class="token" aria-hidden="true"><svg class="rj-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/><path d="M14 2v4a2 2 0 0 0 2 2h4"/><path d="M10 13H8"/><path d="M16 17H8"/></svg></span>
         </div>
@@ -1562,22 +1617,7 @@ h1 .serif, h2 .serif { font-size: 1.08em; line-height: 0; }
       </div>
     </div>
 
-    <div class="qi" id="quick-install">
-      <div class="qi__bar" aria-hidden="true"><i></i><i></i><i></i><span data-only="win">Windows PowerShell</span><span data-only="mac">Terminal</span><span data-only="linux">Terminal</span></div>
-      <div class="qi__line" data-only="win"><span class="qi__prompt" aria-hidden="true">PS&gt;</span><code>irm https://github.com/Tanmay-Mhatre/rawjobs/releases/latest/download/install.ps1 | iex</code>
-        <button class="rj-btn rj-btn--primary btn-lg" type="button" data-copy="irm https://github.com/Tanmay-Mhatre/rawjobs/releases/latest/download/install.ps1 | iex"><span class="ic" aria-hidden="true"><svg class="rj-icon ic-copy" viewBox="0 0 24 24"><rect width="14" height="14" x="8" y="8" rx="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></svg><svg class="rj-icon ic-check" viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5"/></svg></span><span>Copy</span></button></div>
-      <div class="qi__line" data-only="mac linux"><span class="qi__prompt" aria-hidden="true">$</span><code>curl -fsSL https://github.com/Tanmay-Mhatre/rawjobs/releases/latest/download/install.sh | sh</code>
-        <button class="rj-btn rj-btn--primary btn-lg" type="button" data-copy="curl -fsSL https://github.com/Tanmay-Mhatre/rawjobs/releases/latest/download/install.sh | sh"><span class="ic" aria-hidden="true"><svg class="rj-icon ic-copy" viewBox="0 0 24 24"><rect width="14" height="14" x="8" y="8" rx="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></svg><svg class="rj-icon ic-check" viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5"/></svg></span><span>Copy</span></button></div>
-      <ol class="qi__steps">
-        <li><span class="qi__n">1</span>Open <b data-only="win">PowerShell</b><b data-only="mac linux">Terminal</b></li>
-        <li><span class="qi__n">2</span>Paste the line and press <b data-only="win linux">Enter</b><b data-only="mac">Return</b></li>
-        <li><span class="qi__n">3</span>RawJobs opens in your browser</li>
-      </ol>
-    </div>
-
-    <details class="more walk" id="walkthrough">
-      <summary><span>Never used a terminal? Walk me through it<small>Five steps, with a picture of your screen at each one</small></span><svg class="rj-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14"/><path d="M12 5v14"/></svg></summary>
-      <div class="more__in">
+    <div class="iprogress" id="iprogress" aria-hidden="true"><span class="iprogress__label">Step <b id="iprogress-n">1</b> of 5</span><span class="iprogress__bar"><i></i></span></div>
     <div class="installer" id="installer" role="tabpanel" aria-labelledby="os-win">
       <ol class="isteps" id="isteps">
         <li class="istep" data-step="1" data-active>
@@ -1638,6 +1678,7 @@ h1 .serif, h2 .serif { font-size: 1.08em; line-height: 0; }
       </ol>
 
       <div class="screen-slot" id="screen-slot">
+        <div class="device"><div class="device__bezel">
         <div class="screen" id="screen" data-os="win" data-scene="1" role="img" aria-label="Example of what your screen looks like at this step">
           <!-- desktop bars -->
           <div class="dk-bar dk-bar--bottom only-win" aria-hidden="true">
@@ -1692,10 +1733,9 @@ h1 .serif, h2 .serif { font-size: 1.08em; line-height: 0; }
             </picture>
           </div>
         </div>
+        </div><div class="device__base"></div></div>
       </div>
     </div>
-      </div>
-    </details>
 
     <div class="after">
       <details class="more help" id="help">
@@ -2066,7 +2106,7 @@ h1 .serif, h2 .serif { font-size: 1.08em; line-height: 0; }
 
   /* ---------- routes: the resume goes the long way first, then the direct way ---------- */
   var routes = $('#routes'), replay = $('#routes-replay'), run = 0;
-  var vertical = function () { return matchMedia('(max-width: 640px)').matches; };
+  var vertical = function () { return matchMedia('(max-width: 860px)').matches; };
   function center(el, box) { var r = el.getBoundingClientRect(), b = box.getBoundingClientRect(); return { x: r.left - b.left + Math.min(r.width / 2, 40) - 14, y: r.top - b.top + r.height / 2 - 14 }; }
   function resetRoutes() {
     routes.setAttribute('data-play', 'ready');
@@ -2095,14 +2135,14 @@ h1 .serif, h2 .serif { font-size: 1.08em; line-height: 0; }
         var drop = v ? { x: mid.x + 16, y: mid.y } : { x: mid.x, y: mid.y + 16 };
         await token.animate([{ transform: at(mid), opacity: 1 }, { transform: at(drop), opacity: 0 }], { duration: SLOW, easing: STANDARD, fill: 'forwards' }).finished;
         if (!live()) return;
-        nodes[i + 1].style.opacity = '1';
+        nodes[i + 1].style.opacity = '1'; nodes[i + 1].setAttribute('data-reached', '');
         return;
       }
       links[i].animate([{ transform: axis + '(0)' }, { transform: axis + '(1)' }], { duration: hop, easing: ENTER, fill: 'forwards' });
       await move(p[i], p[i + 1], hop); if (!live()) return;
       if (last) {
         token.animate([{ opacity: 1 }, { opacity: 0 }], { duration: BASE, fill: 'forwards' });
-        nodes[i + 1].style.opacity = '1';
+        nodes[i + 1].style.opacity = '1'; nodes[i + 1].setAttribute('data-reached', '');
       } else {
         nodes[i + 1].setAttribute('data-reached', '');
         if (bad) { await sleep(250); if (!live()) return; } /* the middleman sits on it */
@@ -2242,6 +2282,8 @@ h1 .serif, h2 .serif { font-size: 1.08em; line-height: 0; }
       if (k < step) li.setAttribute('data-done', ''); else li.removeAttribute('data-done');
       head.setAttribute('aria-expanded', k === step ? 'true' : 'false');
     });
+    $('#iprogress-n').textContent = step;
+    $('#iprogress').style.setProperty('--s', step);
     placeScreen();
     playScene(step);
     if (fromAction) {
