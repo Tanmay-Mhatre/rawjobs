@@ -154,8 +154,9 @@ const PACES: Record<string, PaceSpec> = {
   "jobs.dayforcehcm.com": shared("dayforce", 3),
   "ats.rippling.com": shared("rippling", 3),
   "www.comeet.com": shared("comeet", 3),
-  // Careers pages and the public API on one host; 10 requests back to back answered fine (2026-10-21).
-  "join.com": shared("join", 4),
+  // Careers pages and the public API on one host. Measured (2026-10-21, 100 boards): 4/s drew a few 429s,
+  // it settled at ~3.6/s; 3 keeps clear of them.
+  "join.com": shared("join", 3),
   // Slow to answer (1-6 s), so several at once; neither refused 10 requests back to back (2026-10-21).
   "open.api.manatal.com": shared("manatal", 3),
   "jobs.jobvite.com": shared("jobvite", 3),
