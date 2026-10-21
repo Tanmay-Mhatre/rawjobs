@@ -5,6 +5,8 @@
 # signature, a release changed by hand. A problem opens (or updates) one issue; once all is well
 # again it closes it.
 name: Data · health
+# Runs the scheduler Worker starts are named so; empty means GitHub's usual name.
+run-name: ${{ inputs.source == 'scheduler' && format('{0} · scheduler', github.workflow) || '' }}
 
 on:
   schedule:
@@ -12,6 +14,11 @@ on:
     - cron: "37 11 * * *"
     - cron: "37 23 * * *"
   workflow_dispatch:
+    inputs:
+      source:
+        description: "Who started this run (the scheduler Worker sends scheduler)"
+        type: string
+        default: manual
 
 permissions:
   contents: read

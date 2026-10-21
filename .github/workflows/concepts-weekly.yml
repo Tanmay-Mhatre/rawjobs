@@ -4,11 +4,18 @@
 # that makes the eval worse is never published, so apps keep last week's. Nothing here needs a person
 # to approve it. Apps read concepts.json only with a valid signature (packages/core/src/concepts-remote.ts).
 name: Concepts · weekly word list
+# Runs the scheduler Worker starts are named so; empty means GitHub's usual name.
+run-name: ${{ inputs.source == 'scheduler' && format('{0} · scheduler', github.workflow) || '' }}
 
 on:
   schedule:
     - cron: "41 3 * * 0"
   workflow_dispatch:
+    inputs:
+      source:
+        description: "Who started this run (the scheduler Worker sends scheduler)"
+        type: string
+        default: manual
 
 permissions:
   contents: read
@@ -22,7 +29,42 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  # GitHub's cron starts runs late, and a slot can get two triggers (it and the scheduler Worker):
+  # a scheduled run whose slot another run already covers does nothing. Other runs always go ahead.
+  covered:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      actions: read
+    outputs:
+      run: ${{ steps.check.outputs.run }}
+    steps:
+      - if: github.event_name == 'schedule'
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          sparse-checkout: |
+            scripts/catalog/slot-covered.mjs
+            .github/workflows/concepts-weekly.yml
+          sparse-checkout-cone-mode: false
+      - id: check
+        name: Is this slot already covered?
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if [ "${{ github.event_name }}" != schedule ]; then echo "run=true" >> "$GITHUB_OUTPUT"; exit 0; fi
+          out=$(node scripts/catalog/slot-covered.mjs .github/workflows/concepts-weekly.yml runs)
+          echo "$out"
+          if grep -q '^covered=true' <<< "$out"; then
+            echo "run=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::Skipped: another run already covers this schedule slot."
+          else
+            echo "run=true" >> "$GITHUB_OUTPUT"
+          fi
+
   build:
+    needs: covered
+    if: needs.covered.outputs.run == 'true'
     runs-on: ubuntu-24.04
     timeout-minutes: 60
     steps:

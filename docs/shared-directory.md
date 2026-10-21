@@ -311,8 +311,8 @@ jobs, where they are; no descriptions) on the `jobs` release of the directory re
   release). The merge job alone writes, signs and publishes; a group that failed is replaced by its
   previous saved copy. CI paces the shared APIs faster than the app does (`CI_HOST_DELAYS`).
 - **Started twice, run once:** GitHub's cron often starts hours late, so a Cloudflare cron
-  (`services/feed-trigger`) also starts the workflow. The first job skips the run when the feed was
-  started less than 4 hours ago (`force` overrides). `publish: false` runs everything but publishes,
+  (`services/feed-trigger`) also starts the workflow. The first job skips the run when this schedule
+  slot's feed is already built (`scripts/catalog/slot-covered.mjs`; `force` overrides). `publish: false` runs everything but publishes,
   saves and opens nothing (and a run publishes only from `main`).
 - **Cheap to run:** Greenhouse, Lever and Ashby boards that haven't changed answer an empty 304.
   A board that fails, or that the 4-hour limit leaves out, keeps its previous rows and time. A system

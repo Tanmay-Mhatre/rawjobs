@@ -24,6 +24,8 @@
 # A smoke run (dispatch with smoke) gives every stage 2 minutes, publishes nothing and checks
 # that a step past its timeout-minutes fails without stopping the job: about 25 minutes.
 name: Directory · weekly rebuild
+# Runs the scheduler Worker starts are named so; empty means GitHub's usual name.
+run-name: ${{ inputs.source == 'scheduler' && format('{0} · scheduler', github.workflow) || '' }}
 
 on:
   schedule:
@@ -37,6 +39,10 @@ on:
     - cron: "13 3 * * 2"
   workflow_dispatch:
     inputs:
+      source:
+        description: "Who started this run (the scheduler Worker sends scheduler)"
+        type: string
+        default: manual
       allow_shrink:
         description: "Publish even if the directory shrank more than the release gate allows (a deliberate purge)"
         type: boolean
