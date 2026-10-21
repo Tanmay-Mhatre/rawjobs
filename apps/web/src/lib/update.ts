@@ -2,6 +2,7 @@ import type { ChangelogEntry, ReleaseChange } from "@rawjobs/core/release-notes"
 import { useCallback, useEffect, useRef, useState } from "react";
 import { PORTS } from "@rawjobs/server/pages";
 import { canRunLocally } from "./data";
+import { type Health, healthState, refreshHealth, requestFast, subscribeHealth, useHealth } from "./health";
 
 /** What GET /api/update says (packages/server/src/updater.ts). */
 export type UpdateStatus = {
@@ -66,6 +67,8 @@ async function rememberUpdating(answer: Promise<UpdateStatus | null>): Promise<U
     } catch {
       // no storage: the plain reconnecting note shows instead
     }
+    // Watch every second for it to come back.
+    refreshHealth();
   }
   return s;
 }
@@ -136,59 +139,58 @@ export function useUpdateStatus() {
 /** Tell every useUpdateStatus on the page to read the status again. */
 export const announceUpdateStatus = () => window.dispatchEvent(new Event("rawjobs:update-status"));
 
-const POLL_MS = 5000;
-
 /**
- * Whether the local server answers. While it doesn't (it's restarting for an update, or stopped),
- * `down` is true; when it comes back as another version, the page reloads to match it. When the
- * server finds a new version (its `update` changes), every useUpdateStatus reads the status again,
- * so the Update pill shows within seconds.
+ * Whether the local server answers (from the shared health poller, lib/health.ts). While it
+ * doesn't (it's restarting for an update, or stopped), `down` is true; when it comes back as
+ * another version, the page reloads to match it. When the server finds a new version (its `update`
+ * changes), every useUpdateStatus reads the status again, so the Update pill shows within seconds.
  */
 export function useServerHealth(): ServerHealth {
-  const [down, setDown] = useState(false);
-  const [since, setSince] = useState<number | null>(null);
-  const [start, setStart] = useState<StartInfo>({ startLink: false, platform: null });
-  const [fast, setFast] = useState(false);
-  const first = useRef<string | null>(null);
-  const hint = useRef<string | null | undefined>(undefined);
+  const { health, down, since } = useHealth();
+  const release = useRef<(() => void) | null>(null);
+  const setFast = useCallback((fast: boolean) => {
+    if (fast) release.current ??= requestFast();
+    else {
+      release.current?.();
+      release.current = null;
+    }
+  }, []);
+  useEffect(() => () => release.current?.(), []);
   useEffect(() => {
     if (!canRunLocally) return;
     let live = true;
-    const poll = async () => {
-      try {
-        const res = await fetch("/api/health", { cache: "no-store", signal: AbortSignal.timeout(3000) });
-        const h = (await res.json()) as Health;
-        if (!live) return;
-        if (h.ok && h.version) {
-          first.current ??= h.version;
-          if (h.version !== first.current) location.reload();
-        }
-        // Kept for while it's down: how the "isn't running" window can start it again.
-        if (h.ok) setStart((s) => (s.startLink === !!h.startLink && s.platform === (h.platform ?? null) ? s : { startLink: !!h.startLink, platform: h.platform ?? null }));
-        const waiting = h.update?.version ?? null;
-        if (hint.current !== undefined && waiting !== hint.current) announceUpdateStatus();
-        hint.current = waiting;
-        setDown(!h.ok);
-      } catch {
-        if (!live) return;
-        setDown(true);
+    let first: string | null = null;
+    let hint: string | null | undefined;
+    let looking = false;
+    const stop = subscribeHealth(() => {
+      const { health: h, down } = healthState();
+      if (down) {
         // Running on another of its ports (this one was taken when it started): go there.
-        const other = await findElsewhere();
-        if (live && other) location.replace(other + location.pathname + location.search + location.hash);
+        if (looking) return;
+        looking = true;
+        void findElsewhere().then((other) => {
+          looking = false;
+          if (live && other) location.replace(other + location.pathname + location.search + location.hash);
+        });
+        return;
       }
-    };
-    void poll();
-    const t = setInterval(() => void poll(), fast ? FAST_POLL_MS : POLL_MS);
+      if (!h) return;
+      if (h.version) {
+        first ??= h.version;
+        if (h.version !== first) location.reload();
+      }
+      const waiting = h.update?.version ?? null;
+      if (hint !== undefined && waiting !== hint) announceUpdateStatus();
+      hint = waiting;
+    });
     return () => {
       live = false;
-      clearInterval(t);
+      stop();
     };
-  }, [fast]);
-  useEffect(() => setSince(down ? Date.now() : null), [down]);
-  return { down, since, ...start, setFast };
+  }, []);
+  // Kept from while it was up: how the "isn't running" window can start it again.
+  return { down, since, startLink: !!health?.startLink, platform: health?.platform ?? null, setFast };
 }
-
-const FAST_POLL_MS = 1000;
 
 /** RawJobs on another of its ports on this computer ("http://127.0.0.1:4318"), or null. As the offline page does (pages.ts). */
 export async function findElsewhere(): Promise<string | null> {
@@ -213,8 +215,6 @@ export async function findElsewhere(): Promise<string | null> {
 export function openStartLink(): void {
   location.href = "rawjobs://open";
 }
-
-type Health = { ok?: boolean; version?: string; update?: { version: string } | null; startLink?: boolean; platform?: string };
 
 /** How RawJobs can be started again on this computer, as the server said while it was up. */
 type StartInfo = {

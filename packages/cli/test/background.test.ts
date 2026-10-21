@@ -4,6 +4,7 @@ import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { parseConfig } from "../../core/src/config";
 import { HttpClient } from "../../core/src/http";
+import { JOB_FEED_SCHEMA } from "../../core/src/job-feed";
 import { backgroundCheck, parseScope, wantsBackground, type RunValues } from "../src/commands/run";
 
 const config = (yaml = "") =>
@@ -32,6 +33,36 @@ describe("the background check", () => {
     const http = new HttpClient({ fetchImpl: (async () => new Response("[]")) as unknown as typeof fetch });
     const r = await backgroundCheck(config(), { dataDir: dir, http, stopped: () => false }, Date.now());
     expect(r.stopped).toBe(false);
+  });
+
+  it("leaves out the companies a fresh job feed shows nothing for you at; checks them all once the feed is over 3 days old", async () => {
+    const NOW = Date.parse("2026-10-09T12:00:00Z");
+    const fetched = async (feedAgeDays: number) => {
+      const dir = mkdtempSync(join(tmpdir(), "jh-bg-"));
+      mkdirSync(join(dir, "catalog", "jobs"), { recursive: true });
+      const entry = (slug: string) => ({ key: `lever:${slug}`, name: slug, ats: "lever", slug, careers_url: "", open_jobs: 3, status: "live" });
+      writeFileSync(join(dir, "catalog", "directory.json"), JSON.stringify({ companies: [entry("match"), entry("nothing"), entry("uncovered")] }));
+      const at = new Date(NOW - feedAgeDays * 86_400_000).toISOString();
+      const companies = {
+        "lever:match": { fetched_at: at, jobs: [["1", "Product Manager", "Dubai", "onsite", null]] },
+        "lever:nothing": { fetched_at: at, jobs: [["2", "Engineer", "Dubai", "onsite", null]] },
+      };
+      writeFileSync(join(dir, "catalog", "jobs", "lever.json"), JSON.stringify({ schema: JOB_FEED_SCHEMA, ats: "lever", generated_at: at, companies }));
+      writeFileSync(join(dir, "catalog", "jobs", "manifest.json"), JSON.stringify({ schema: JOB_FEED_SCHEMA, generated_at: at, shards: { lever: {} } }));
+      const calls: string[] = [];
+      const http = new HttpClient({
+        hostDelayMs: 0,
+        sleep: async () => {},
+        fetchImpl: (async (url: string) => {
+          calls.push(String(url));
+          return new Response("[]");
+        }) as unknown as typeof fetch,
+      });
+      await backgroundCheck(config(), { dataDir: dir, http, now: new Date(NOW), stopped: () => false }, NOW);
+      return ["match", "nothing", "uncovered"].filter((slug) => calls.some((u) => u.includes(`/${slug}`)));
+    };
+    expect(await fetched(0)).toEqual(["match", "uncovered"]);
+    expect(await fetched(4)).toEqual(["match", "nothing", "uncovered"]);
   });
 
   it("--scope still takes mine and all, and now yours", () => {

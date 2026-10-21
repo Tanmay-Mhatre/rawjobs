@@ -242,9 +242,12 @@ export type RunSummary = {
   /** Matches seen for the first time in this run. */
   newMatches: number;
   closed: number;
-  /** Companies beyond yours checked live this run (their health is in `health` too). */
+  /** Companies beyond yours checked live this run. */
   checked?: number;
+  /** Your companies' health in this run (runs saved before `counts` existed hold more). */
   health: CompanyHealth[];
+  /** Every board this run checked, and how many failed (health keeps only yours). */
+  counts?: { checked: number; failed: number };
   /** Your companies whose board was gone, and the directory board with the same name: suggestions to review, never applied. */
   moves?: BoardMove[];
   /** Every company in the directory was checked by this run (a background check or full scan that finished). */

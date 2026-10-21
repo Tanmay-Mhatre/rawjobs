@@ -1,4 +1,4 @@
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, utimesSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
@@ -210,11 +210,10 @@ describe("scan", () => {
     expect(r.checks.map((c) => c.slug).sort()).toEqual(["leverco", "mutedco", "quiet"]);
     expect(calls.some((u) => u.includes("quiet"))).toBe(true);
     expect(Object.keys(readLedger(dir).companies)).toEqual(["lever:leverco"]);
-    // Run history keeps yours, matches and failures, not every board.
-    const health = read<{ runs: { health: { slug: string }[] }[] }>(dir, "meta.json")
-      .runs[0]!.health.map((h) => h.slug)
-      .sort();
-    expect(health).toEqual(["ghco", "leverco", "mutedco", "quiet"]);
+    // Run history keeps your companies' health and counts every board checked.
+    const last = read<{ runs: { health: { slug: string }[]; counts: { checked: number } }[] }>(dir, "meta.json").runs[0]!;
+    expect(last.health.map((h) => h.slug)).toEqual(["ghco"]);
+    expect(last.counts.checked).toBe(4);
   });
 
   it("can stop and then resume where it stopped, without fetching done companies again", async () => {
@@ -243,6 +242,19 @@ describe("scan", () => {
     expect(calls.some((u) => [...done].some((slug) => u.includes(`/${slug}`)))).toBe(false);
     expect(second.result.health.length).toBe(4);
     expect(existsSync(join(dir, "scan-progress-all.json"))).toBe(false);
+  });
+
+  it("removes progress files too old to resume, of any scan type", () => {
+    const dir = mkdtempSync(join(tmpdir(), "jh-progress-"));
+    const head = (scope: string) => `${JSON.stringify({ version: 2, scope, startedAt: new Date().toISOString() })}
+`;
+    writeFileSync(join(dir, "scan-progress-all.json"), head("all"));
+    writeFileSync(join(dir, "scan-progress-mine.json"), head("mine"));
+    const dayAgo = (Date.now() - 25 * 3_600_000) / 1000;
+    utimesSync(join(dir, "scan-progress-mine.json"), dayAgo, dayAgo);
+    expect(resumable(dir, "all")).toBeDefined();
+    expect(existsSync(join(dir, "scan-progress-mine.json"))).toBe(false);
+    rmSync(dir, { recursive: true, force: true });
   });
 
   it("appends progress line by line, and still resumes a progress file from before", async () => {

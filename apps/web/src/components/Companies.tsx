@@ -6,7 +6,7 @@ import type { BoardMove } from "@rawjobs/core/schema";
 import { careersUrl } from "@rawjobs/core/detect";
 import { keyOf, type CompanyRef } from "../lib/companies";
 import { nameRank } from "../lib/companySearch";
-import type { DataMeta } from "../lib/data";
+import type { CompanyHealth, DataMeta } from "../lib/data";
 import { atsLabel, radarCompanyHash } from "../lib/filters";
 import { formatDateTime, timeAgo } from "../lib/format";
 import { useMedia } from "../lib/useMedia";
@@ -55,11 +55,23 @@ export type HiddenCompany = { key?: string; name?: string };
 
 type Sort = "attention" | "name" | "recent";
 
+const healthByKey = new WeakMap<readonly CompanyHealth[], Map<string, CompanyHealth>>();
+/** A company's health in one scan: each scan's list is indexed once, not searched once per company. */
+function healthIn(health: readonly CompanyHealth[], key: string): CompanyHealth | undefined {
+  let byKey = healthByKey.get(health);
+  if (!byKey) {
+    byKey = new Map();
+    for (const h of health) if (!byKey.has(keyOf(h))) byKey.set(keyOf(h), h);
+    healthByKey.set(health, byKey);
+  }
+  return byKey.get(key);
+}
+
 /** Newest first: the company's health in each scan that included it. */
 function healthOf(meta: DataMeta | undefined, key: string): Seen[] {
   const out: Seen[] = [];
   for (const run of meta?.runs ?? []) {
-    const h = run.health.find((x) => keyOf(x) === key);
+    const h = healthIn(run.health, key);
     if (h) out.push({ h, at: run.startedAt });
   }
   return out;
@@ -208,7 +220,7 @@ export function MyCompanies({
         index,
         isNew: !savedKeys.has(key),
         radar,
-        bars: barsOf(meta?.runs ?? [], (health) => health.find((x) => keyOf(x) === key)),
+        bars: barsOf(meta?.runs ?? [], (health) => healthIn(health, key)),
         problem,
         moved: needsAttention(problem) ? moves.find((m) => keyOf(m.from) === key && !keys.has(keyOf(m.to)) && !dismissedMoves?.has(moveKey(m))) : undefined,
         quiet,
@@ -641,13 +653,14 @@ export function RecentRuns({ meta, id }: { meta: DataMeta; id?: string }) {
       <h3 className="px-4 pt-3 pb-2 type-small font-semibold">Recent scans</h3>
       <ul className="divide-y divide-line border-t border-line type-small">
         {meta.runs.slice(0, 10).map((r) => {
-          const failed = r.health.filter((h) => !h.ok && !h.unsupported).length;
+          const checked = r.counts?.checked ?? r.health.length;
+          const failed = r.counts?.failed ?? r.health.filter((h) => !h.ok && !h.unsupported).length;
           const secs = (Date.parse(r.finishedAt) - Date.parse(r.startedAt)) / 1000;
           return (
             <li key={r.startedAt} className="flex flex-wrap items-center gap-x-4 gap-y-1 px-4 py-2">
               <span className="w-32 text-muted">{formatDateTime(r.startedAt)}</span>
               <span className="tabular min-w-0 flex-1">
-                {r.health.length.toLocaleString()} compan{r.health.length === 1 ? "y" : "ies"} checked
+                {checked.toLocaleString()} compan{checked === 1 ? "y" : "ies"} checked
                 {failed > 0 && <span className="text-danger-text">, {failed} failed</span>}.{r.partial && <span className="text-muted"> Stopped before the end.</span>}
               </span>
               <span className="tabular text-muted">{secs.toFixed(0)} s</span>

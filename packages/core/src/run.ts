@@ -2,6 +2,7 @@ import { companyOfJobId, getConnector, jobCompanyKey } from "./connectors";
 import { hashIds } from "./board-health";
 import { BoardClosedError } from "./connectors/parse";
 import { HostSkippedError, HttpClient, HttpError } from "./http";
+import { limiter } from "./limit";
 import type { BoardMove, CompanyHealth, CompanyRef, Config, Job, NormalizedJob, Profile } from "./schema";
 import { scoreJob } from "./score";
 import { safeUrl } from "./text";
@@ -29,6 +30,12 @@ const MAX_DESCRIBE_PER_COMPANY = 40;
 const MAX_DESCRIBE_PER_CHECK = 5;
 /** Description fetches in flight per company (each host still keeps its own pace). */
 const DESCRIBE_WORKERS = 4;
+
+/**
+ * The background check after Scan now goes easy on the computer: at most this many companies in
+ * flight across every lane, each with fewer description fetches at once. Scan now has no such cap.
+ */
+export const BACKGROUND_LIMITS = { maxCompaniesInFlight: 24, describeWorkers: 2 } as const;
 
 /** Where a job with a vague location ("3 Locations") really is, from its detail page (see LocationCache). */
 export type ResolvedLocation = Pick<NormalizedJob, "location"> & Partial<Pick<NormalizedJob, "country" | "workplace">>;
@@ -117,6 +124,10 @@ export type RunOptions = {
    * jobCompanyKey(). A board whose first page is the same is read no further: its jobs from then are kept.
    */
   firstPages?: ReadonlyMap<string, string>;
+  /** Companies in flight across every lane at once (BACKGROUND_LIMITS); no cap without it. */
+  maxCompaniesInFlight?: number;
+  /** Description fetches in flight per company (default DESCRIBE_WORKERS). */
+  describeWorkers?: number;
 };
 
 /**
@@ -294,7 +305,7 @@ export async function runRadar(config: Config, opts: RunOptions = {}): Promise<R
           ({ score: item.score, why: item.why } = scoreJob(base, config.profile, fit));
         }
       };
-      await Promise.all(Array.from({ length: Math.min(DESCRIBE_WORKERS, queue.length) }, describeWorker));
+      await Promise.all(Array.from({ length: Math.min(opts.describeWorkers ?? DESCRIBE_WORKERS, queue.length) }, describeWorker));
       for (const { base, prev, score, why } of items) {
         const firstSeen = prev?.firstSeen ?? nowIso;
         // Your companies keep every job (the Radar can show the rest); extra checks only matches, and
@@ -329,7 +340,9 @@ export async function runRadar(config: Config, opts: RunOptions = {}): Promise<R
     opts.onCompanyResult?.(h, kept);
   };
 
-  // One lane per hiring system (yours first within each), all lanes at once, LANE_WORKERS per lane.
+  // One lane per hiring system (yours first within each), all lanes at once, LANE_WORKERS per lane,
+  // and at most maxCompaniesInFlight companies across them all.
+  const slot = limiter(opts.maxCompaniesInFlight);
   const lanes = new Map<string, (readonly [CompanyRef, boolean])[]>();
   for (const item of todo) {
     const lane = laneOf(item[0]);
@@ -343,7 +356,7 @@ export async function runRadar(config: Config, opts: RunOptions = {}): Promise<R
       const worker = async () => {
         while (next < lane.length && !opts.stopped?.()) {
           const [company, extra] = lane[next++]!;
-          await fetchOne(company, extra);
+          await slot(() => (opts.stopped?.() ? Promise.resolve() : fetchOne(company, extra)));
         }
       };
       return Array.from({ length: Math.min(laneWorkers(lane[0]![0].ats), lane.length) }, worker);
