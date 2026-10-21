@@ -282,6 +282,7 @@ describe("updating an installed copy", () => {
     expect(record.error).toMatch(/didn't start RawJobs 0\.2\.0, so 0\.1\.0 is back\. Update tries it again/);
     expect(installedVersions(home)?.current).toBe("0.1.0");
     expect(readUpdateFile(home).skip ?? []).toEqual([]);
+    expect(record.skipped).toBe(false);
   });
 });
 

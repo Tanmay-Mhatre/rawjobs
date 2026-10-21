@@ -17,7 +17,7 @@ export type UpdateStatus = {
   tooOld: boolean;
   state: "idle" | "checking" | "downloading" | "waiting" | "updating";
   error?: string;
-  lastUpdate: { from: string; to: string; ok: boolean; at: string; error?: string; notes?: string } | null;
+  lastUpdate: { from: string; to: string; ok: boolean; at: string; error?: string; notes?: string; skipped?: boolean } | null;
   /** Missing from an older server: Settings → About shows what it has. */
   about?: {
     since?: { at: string; by: "update" | "install" };

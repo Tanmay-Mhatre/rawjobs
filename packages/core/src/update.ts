@@ -38,7 +38,8 @@ export type UpdateFile = UpdateSettings & {
   notified?: string;
 };
 /** app/last-update.json: how the last update went, for the dashboard's note. */
-export type UpdateRecord = { from: string; to: string; ok: boolean; at: string; error?: string; notes?: string; seen?: boolean };
+/** `skipped`: a failed update whose version is no longer offered by itself (it started and failed). */
+export type UpdateRecord = { from: string; to: string; ok: boolean; at: string; error?: string; notes?: string; seen?: boolean; skipped?: boolean };
 
 export const DEFAULT_UPDATE_SETTINGS: UpdateSettings = { mode: "ask", channel: "stable", telegram: true };
 const REPO = "Tanmay-Mhatre/rawjobs";
@@ -687,6 +688,7 @@ export async function finishUpdate(o: FinishOptions): Promise<UpdateRecord> {
       to: o.to,
       ok: false,
       at: new Date().toISOString(),
+      skipped: ran,
       error: back
         ? `${what}, so ${o.from} is back.${ran ? "" : " Update tries it again."} See ${log}.`
         : `${what}, so RawJobs went back to ${o.from}, which hasn't answered yet either. Open the RawJobs shortcut to start it, or see ${log}.`,
