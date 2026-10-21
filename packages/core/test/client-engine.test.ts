@@ -13,11 +13,12 @@ const DAY = 24 * HOUR;
 const T = Date.parse("2026-10-14T00:00:00Z");
 
 /** An adaptive client on a fake fetch: `status(n)` answers the nth request. Records every wait. */
-function paced(status: (n: number) => number = () => 200) {
+function paced(status: (n: number) => number = () => 200, climbHoldMs?: number) {
   let n = 0;
   const waits: number[] = [];
   const http = new HttpClient({
     adaptive: true,
+    climbHoldMs,
     retries: 1,
     backoffMs: 1,
     sleep: async (ms) => {
@@ -38,6 +39,25 @@ describe("adaptive pacing per API", () => {
     expect(paceOf("acme.wd5.myworkdayjobs.com")).toMatchObject({ key: "workday:wd5", hostGap: true });
     expect(paceOf("bank.wd3.myworkdayjobs.com")?.key).toBe("workday:wd3");
     expect(paceOf("acme.bamboohr.com")).toBeUndefined();
+  });
+
+  it("paces Paycom's API in every region as one, apart from its www pages", () => {
+    expect(paceOf("portal-applicant-tracking.us-cent.paycomonline.net")).toMatchObject({ key: "paycom-api", ceiling: 3, hostGap: false });
+    expect(paceOf("portal-applicant-tracking.us-east-2.paycomonline.net")?.key).toBe("paycom-api");
+    expect(paceOf("www.paycomonline.net")?.key).toBe("paycom");
+    expect(paceOf("portal-applicant-tracking.us-cent.paycomonline.net.evil.example")).toBeUndefined();
+  });
+
+  it("with climbHoldMs, a halved pace holds instead of climbing straight back", async () => {
+    const answer = (n: number) => (n === 40 ? 429 : 200);
+    const held = paced(answer, 60_000);
+    for (let i = 0; i < 60; i++) await held.http.getJson("https://api.smartrecruiters.com/v1/companies/a/postings");
+    expect(held.http.stats.paces?.smartrecruiters?.downs).toBe(1);
+    expect(held.http.stats.paces?.smartrecruiters?.rate).toBe(2.5);
+    // Without it (the app's scans) the same answers climb back to the ceiling.
+    const quick = paced(answer);
+    for (let i = 0; i < 60; i++) await quick.http.getJson("https://api.smartrecruiters.com/v1/companies/a/postings");
+    expect(quick.http.stats.paces?.smartrecruiters?.rate).toBe(5);
   });
 
   it("speeds up while the API keeps up, to its ceiling and no further", async () => {
