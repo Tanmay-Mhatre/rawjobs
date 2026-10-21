@@ -2,7 +2,19 @@ import { canInflateRaw } from "@rawjobs/core/network/zip-browser";
 import { ExternalLink, Upload, X } from "lucide-react";
 import { type DragEvent, type KeyboardEvent, useEffect, useRef, useState } from "react";
 import { LINK_REL } from "../../lib/contactLinks";
-import { IMPORT_ERROR, type ImportErrorCode, importNetworkFile, type NetworkStatus, startWatch, stopWatch, UNZIP_FIRST, useNetwork, type WatchState } from "../../lib/network";
+import {
+  cancelReminder,
+  IMPORT_ERROR,
+  type ImportErrorCode,
+  importNetworkFile,
+  type NetworkStatus,
+  setReminder,
+  startWatch,
+  stopWatch,
+  UNZIP_FIRST,
+  useNetwork,
+  type WatchState,
+} from "../../lib/network";
 import { Dialog } from "../Dialog";
 import { Button, Card, cx, IconButton } from "../ui";
 
@@ -18,6 +30,44 @@ export function watchUntil(iso: string, now = new Date()): string {
   const d = new Date(iso);
   const time = d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
   return d.toDateString() === now.toDateString() ? time : `${d.toLocaleDateString([], { weekday: "short" })} ${time}`;
+}
+
+/** "Fri 23 Oct, 09:00": the weekday, date and time a reminder comes, in local time. */
+export function remindWhen(iso: string): string {
+  const d = new Date(iso);
+  const part = (o: Intl.DateTimeFormatOptions) => d.toLocaleDateString([], o);
+  return `${part({ weekday: "short" })} ${part({ day: "numeric" })} ${part({ month: "short" })}, ${d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}`;
+}
+
+/** Under step 2, once LinkedIn's page was opened: "Remind me in 48 hours if I haven't added the file". */
+function RemindMe({ at }: { at: string | null }) {
+  const [failed, setFailed] = useState(false);
+  const toggle = async (on: boolean) => {
+    setFailed(false);
+    if (on) setFailed(!(await setReminder()));
+    else await cancelReminder();
+  };
+  return (
+    <div className="mt-2">
+      <label className="flex cursor-pointer items-start gap-2.5">
+        <input type="checkbox" checked={!!at} onChange={(e) => void toggle(e.target.checked)} className="mt-0.5 size-4 shrink-0 accent-ink" />
+        <span>Remind me in 48 hours if I haven't added the file</span>
+      </label>
+      {at && (
+        <p className="mt-1 pl-6.5 text-muted">
+          We'll remind you {remindWhen(at)}.{" "}
+          <button type="button" className="font-medium underline underline-offset-2 hover:text-ink" onClick={() => void toggle(false)}>
+            Cancel
+          </button>
+        </p>
+      )}
+      {failed && (
+        <p role="alert" className="mt-1 pl-6.5 text-danger-text">
+          Couldn't set the reminder. Check that RawJobs is running, then try again.
+        </p>
+      )}
+    </div>
+  );
 }
 
 /** "Watching Downloads until 14:30. Stop", for the panel and Settings while a watch runs. */
@@ -47,6 +97,10 @@ export function ConnectLinkedIn({ open, onClose }: { open: boolean; onClose: () 
   const status = network?.state === "ready" ? network.value.status : null;
   const watchable = network?.state === "ready" && !!network.value.watchable;
   const watch = status?.watch ?? null;
+  const reminder = network?.state === "ready" ? (network.value.reminder ?? null) : null;
+  // A reminder still to come; one that's due is over (ticking the box again sets a new one).
+  const remindAt = reminder && !reminder.due ? reminder.at : null;
+  const [opened, setOpened] = useState(false);
   const [pickUp, setPickUp] = useState(true);
   const [watchError, setWatchError] = useState<string | null>(null);
   // While the dialog waits on a watch: the import it started from, so a new one shows as done here.
@@ -67,10 +121,12 @@ export function ConnectLinkedIn({ open, onClose }: { open: boolean; onClose: () 
     setStep({ kind: "idle" });
     setWatchError(null);
     setWaitFrom(undefined);
+    setOpened(false);
     onClose();
   };
   /** Step 1 with the box ticked: start watching Downloads as LinkedIn's page opens. */
   const onOpenLinkedIn = async () => {
+    setOpened(true);
     if (!watchable || !pickUp || watch) return;
     setWatchError(null);
     setWatchError(await startWatch());
@@ -140,6 +196,7 @@ export function ConnectLinkedIn({ open, onClose }: { open: boolean; onClose: () 
               </li>
               <li>
                 Choose <b>Download larger data archive</b>, then Request archive. Only the larger archive has your connections.
+                {(opened || remindAt) && <RemindMe at={remindAt} />}
               </li>
               <li>LinkedIn emails you when the file is ready, usually within a day. Download it.</li>
               <li>

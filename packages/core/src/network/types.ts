@@ -48,6 +48,9 @@ export type NetworkFile = {
   friends: string[];
 };
 
+/** "Remind me in 48 hours" to add LinkedIn's file: when, and whether that time has come. */
+export type ReminderState = { at: string; due: boolean };
+
 export type WatchState = { since: string; until: string; folder: string; lastError?: string; found?: string };
 
 /** What the browser and the API exchange. Never the Email column. */

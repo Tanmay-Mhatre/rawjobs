@@ -6,6 +6,8 @@ import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { JobDetail } from "../src/components/JobDetail";
 import { BANNER_DISMISSED_KEY, ConnectBanner } from "../src/components/referral/ConnectBanner";
+import { remindWhen } from "../src/components/referral/ConnectLinkedIn";
+import { ReminderNotice } from "../src/components/referral/ReminderNotice";
 import { TalkToSomeone } from "../src/components/referral/TalkToSomeone";
 import { NetworkSection } from "../src/components/settings/NetworkSection";
 import { Toaster } from "../src/components/Toast";
@@ -330,7 +332,7 @@ describe("Downloads watch", () => {
     expect((await within(dialog).findByRole("status")).textContent).toBe("Watching Downloads for Basic_LinkedInDataExport_….zip");
     // The drop zone is still there, and the box is gone once watching.
     expect(within(dialog).getByRole("button", { name: /Choose the ZIP file|Choose Connections\.csv/ })).toBeTruthy();
-    expect(within(dialog).queryByRole("checkbox")).toBeNull();
+    expect(within(dialog).queryByRole("checkbox", { name: /Pick up the file/ })).toBeNull();
   });
 
   it("doesn't watch when the box is unticked, and hides it where it isn't offered", async () => {
@@ -388,6 +390,99 @@ describe("Downloads watch", () => {
     } finally {
       vi.useRealTimers();
     }
+  });
+});
+
+describe("Remind me in 48 hours", () => {
+  const AT = "2026-10-23T09:00:00.000Z";
+  const openDialog = async () => {
+    render(<NetworkSection />);
+    await userEvent.click(await screen.findByRole("button", { name: "Connect LinkedIn" }));
+    return screen.getByRole("dialog", { name: "Connect LinkedIn" });
+  };
+  const reminderCalls = (fetch: ReturnType<typeof stubApi>, method: string) => fetch.mock.calls.filter(([u, init]) => u === "/api/network/reminder" && init?.method === method);
+
+  it("shows the box under step 2 after LinkedIn's page opens, unticked, also where Downloads isn't watched", async () => {
+    const fetch = stubApi({
+      network: { ...notConnected, watchable: false, reminder: null },
+      other: (url, init) => (url === "/api/network/reminder" && init?.method === "POST" ? { reminder: { at: AT, due: false } } : undefined),
+    });
+    const dialog = await openDialog();
+    const name = /Remind me in 48 hours if I haven't added the file/;
+    expect(within(dialog).queryByRole("checkbox", { name })).toBeNull();
+    await userEvent.click(within(dialog).getByRole("link", { name: /Open LinkedIn's data page/ }));
+    const box = within(dialog).getByRole("checkbox", { name }) as HTMLInputElement;
+    expect(box.checked).toBe(false);
+    expect(box.closest("li")?.textContent).toContain("Download larger data archive");
+
+    await userEvent.click(box);
+    expect(reminderCalls(fetch, "POST")).toHaveLength(1);
+    expect(reminderCalls(fetch, "POST")[0]![1]!.body).toBe("{}");
+    expect(await within(dialog).findByText(`We'll remind you ${remindWhen(AT)}.`, { exact: false })).toBeTruthy();
+    expect(box.checked).toBe(true);
+
+    // Cancel takes it away, and so does unticking.
+    await userEvent.click(within(dialog).getByRole("button", { name: "Cancel" }));
+    expect(reminderCalls(fetch, "DELETE")).toHaveLength(1);
+    expect(box.checked).toBe(false);
+    expect(within(dialog).queryByText(/We'll remind you/)).toBeNull();
+    await userEvent.click(box);
+    await waitFor(() => expect(box.checked).toBe(true));
+    await userEvent.click(box);
+    expect(reminderCalls(fetch, "DELETE")).toHaveLength(2);
+    expect(box.checked).toBe(false);
+  });
+
+  it("shows a reminder that's set when the dialog opens again", async () => {
+    stubApi({ network: { ...notConnected, watchable: true, reminder: { at: AT, due: false } } });
+    const dialog = await openDialog();
+    expect((within(dialog).getByRole("checkbox", { name: /Remind me in 48 hours/ }) as HTMLInputElement).checked).toBe(true);
+  });
+
+  it("words the time as weekday, date and time", () => {
+    const d = new Date(AT);
+    expect(remindWhen(AT)).toBe(
+      `${d.toLocaleDateString([], { weekday: "short" })} ${d.getDate()} ${d.toLocaleDateString([], { month: "short" })}, ${d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}`,
+    );
+  });
+
+  it("shows the notice on the Radar once due: Add the file, Remind me tomorrow, Dismiss", async () => {
+    const fetch = stubApi({
+      network: { ...notConnected, watchable: true, reminder: { at: AT, due: true } },
+      other: (url, init) => (url === "/api/network/reminder" && init?.method === "POST" ? { reminder: { at: "2026-10-24T09:00:00.000Z", due: false } } : undefined),
+    });
+    render(<ReminderNotice />);
+    const notice = await screen.findByRole("complementary", { name: "Your LinkedIn file should be ready" });
+    expect(notice.textContent).toContain("Add it to see who you know at your jobs.");
+
+    await userEvent.click(within(notice).getByRole("button", { name: "Add the file" }));
+    const dialog = screen.getByRole("dialog", { name: "Connect LinkedIn" });
+    await userEvent.click(within(dialog).getAllByRole("button", { name: "Close" })[0]!);
+
+    await userEvent.click(within(notice).getByRole("button", { name: "Remind me tomorrow" }));
+    expect(reminderCalls(fetch, "POST")[0]![1]!.body).toBe(JSON.stringify({ hours: 24 }));
+    await waitFor(() => expect(screen.queryByRole("complementary", { name: "Your LinkedIn file should be ready" })).toBeNull());
+  });
+
+  it("Dismiss clears the reminder, and nothing shows before it's due", async () => {
+    const fetch = stubApi({ network: { ...notConnected, reminder: { at: AT, due: true } } });
+    render(<ReminderNotice />);
+    const notice = await screen.findByRole("complementary", { name: "Your LinkedIn file should be ready" });
+    await userEvent.click(within(notice).getByRole("button", { name: "Dismiss" }));
+    expect(reminderCalls(fetch, "DELETE")).toHaveLength(1);
+    expect(screen.queryByRole("complementary", { name: "Your LinkedIn file should be ready" })).toBeNull();
+    cleanup();
+    resetNetworkStore();
+    stubApi({ network: { ...notConnected, reminder: { at: AT, due: false } } });
+    render(<ReminderNotice />);
+    await waitFor(() => expect(fetch).toHaveBeenCalled());
+    expect(screen.queryByRole("complementary", { name: "Your LinkedIn file should be ready" })).toBeNull();
+  });
+
+  it("says the file should be ready in the job's people section", async () => {
+    stubApi({ network: { ...notConnected, reminder: { at: AT, due: true } } });
+    render(<TalkToSomeone job={makeJob({ company: "Acme" })} />);
+    expect(await screen.findByText(/Your LinkedIn file should be ready\. Add it to see who you already know at Acme\./)).toBeTruthy();
   });
 });
 
