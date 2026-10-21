@@ -25,6 +25,7 @@ import { AboutRawJobs, UpdatesSettings, UpdateTelegramSetting } from "./Updates"
 import { ShortcutList } from "./ShortcutList";
 import { DISMISS_KEY as CHECKLIST_DISMISSED_KEY } from "./Guidance";
 import { DISMISSED_KEY as GO_BACK_DISMISSED_KEY } from "./companies/ForYou";
+import { BANNER_DISMISSED_KEY } from "./referral/ConnectBanner";
 import { save } from "../lib/storage";
 import { ReleaseNotes } from "./WhatsNew";
 import { parseSettingsHash, SETTINGS_GROUPS, SETTINGS_PAGES, SETTINGS_SECTIONS, settingsHash, type SettingsPageId } from "./settings/registry";
@@ -641,6 +642,7 @@ function ShowTipsAgain() {
         onClick={() => {
           save(CHECKLIST_DISMISSED_KEY, false);
           save(GO_BACK_DISMISSED_KEY, []);
+          save(BANNER_DISMISSED_KEY, null);
           setDone(true);
         }}
       >

@@ -133,6 +133,7 @@ export const KEPT_ON_DISK: readonly string[] = [
   "rawjobs.notThisOne",
   "rawjobs.setupDraft.v1",
   "rawjobs.welcomeSeen",
+  "rawjobs.linkedinBanner.dismissed",
 ];
 
 /** This browser's copy of the kept keys (a cleared key, saved as null, is left out). */
