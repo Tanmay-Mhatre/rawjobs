@@ -1,5 +1,5 @@
 import { spawnSync } from "node:child_process";
-import { existsSync, lstatSync, mkdirSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import { existsSync, lstatSync, mkdirSync, readFileSync, renameSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { iconIcns, iconIco, iconPng } from "./icon";
@@ -78,31 +78,48 @@ function windows(home: string, launcher: string, icon: string, desktop: boolean)
 function mac(launcher: string, icon: string, desktop: boolean): ShortcutResult {
   const apps = join(homedir(), "Applications");
   const app = join(apps, "RawJobs.app");
-  mkdirSync(apps, { recursive: true });
-  rmSync(app, { recursive: true, force: true });
-  const quoted = launcher.replace(/\\/g, "\\\\").replace(/"/g, '\\"');
-  // Opened from Finder: open the dashboard. Opened by a rawjobs://open link (the dashboard's Start
-  // button, already open in the browser): only start RawJobs; that page reloads by itself.
-  const r = run("osacompile", [
-    "-o",
-    app,
-    ...["on run", `do shell script quoted form of "${quoted}" & " open >/dev/null 2>&1 &"`, "end run"].flatMap((l) => ["-e", l]),
-    ...["on open location this_url", `do shell script quoted form of "${quoted}" & " open --no-browser >/dev/null 2>&1 &"`, "end open location"].flatMap((l) => ["-e", l]),
-  ]);
-  if (r.status !== 0) return { ok: false, menu: null, desktop: null, error: (r.stderr || String(r.error ?? "")).trim() };
+  // Made in a folder of its own, then moved into place: the installer and the first start of a new
+  // version can make it at the same moment, and neither may delete the other's half-made app.
+  const work = join(apps, `.rawjobs-${process.pid}`);
+  const made = join(work, "RawJobs.app");
+  rmSync(work, { recursive: true, force: true });
+  mkdirSync(work, { recursive: true });
+  let linked: boolean;
   try {
-    writeFileSync(join(app, "Contents/Resources/applet.icns"), readFileSync(icon));
-    run("touch", [app]); // Finder reads the new icon
-  } catch {
-    // the default applet icon is fine too
+    const quoted = launcher.replace(/\\/g, "\\\\").replace(/"/g, '\\"');
+    // Opened from Finder: open the dashboard. Opened by a rawjobs://open link (the dashboard's Start
+    // button, already open in the browser): only start RawJobs; that page reloads by itself.
+    const r = run("osacompile", [
+      "-o",
+      made,
+      ...["on run", `do shell script quoted form of "${quoted}" & " open >/dev/null 2>&1 &"`, "end run"].flatMap((l) => ["-e", l]),
+      ...["on open location this_url", `do shell script quoted form of "${quoted}" & " open --no-browser >/dev/null 2>&1 &"`, "end open location"].flatMap((l) => ["-e", l]),
+    ]);
+    if (r.status !== 0) return { ok: false, menu: null, desktop: null, error: (r.stderr || String(r.error ?? "")).trim() };
+    try {
+      writeFileSync(join(made, "Contents/Resources/applet.icns"), readFileSync(icon));
+    } catch {
+      // the default applet icon is fine too
+    }
+    // The rawjobs: links it answers. Changing Info.plist breaks the applet's ad-hoc signature, so it's
+    // signed again (ad hoc, as osacompile does).
+    const plist = join(made, "Contents/Info.plist");
+    linked =
+      run("plutil", ["-insert", "CFBundleURLTypes", "-json", '[{"CFBundleURLName":"RawJobs","CFBundleURLSchemes":["rawjobs"]}]', plist]).status === 0 &&
+      run("plutil", ["-replace", "CFBundleIdentifier", "-string", "app.rawjobs.launcher", plist]).status === 0;
+    run("codesign", ["--force", "--sign", "-", made]);
+    rmSync(app, { recursive: true, force: true });
+    try {
+      renameSync(made, app);
+    } catch (err) {
+      // The other one moved its app in first: it's the same app.
+      if (!existsSync(app)) throw err;
+    }
+  } finally {
+    rmSync(work, { recursive: true, force: true });
   }
-  // The rawjobs: links it answers. Changing Info.plist breaks the applet's ad-hoc signature, so it's
-  // signed again (ad hoc, as osacompile does), then Launch Services learns about the link.
-  const plist = join(app, "Contents/Info.plist");
-  const linked =
-    run("plutil", ["-insert", "CFBundleURLTypes", "-json", '[{"CFBundleURLName":"RawJobs","CFBundleURLSchemes":["rawjobs"]}]', plist]).status === 0 &&
-    run("plutil", ["-replace", "CFBundleIdentifier", "-string", "app.rawjobs.launcher", plist]).status === 0;
-  run("codesign", ["--force", "--sign", "-", app]);
+  run("touch", [app]); // Finder reads the new icon
+  // Launch Services learns about the link.
   if (linked) run("/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister", ["-f", app]);
   let onDesktop: string | null = null;
   if (desktop) {
