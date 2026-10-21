@@ -147,8 +147,8 @@ describe("the Downloads watcher", () => {
   it("imports LinkedIn's export, stops, and logs only names and sizes", async () => {
     const s = setup();
     const r = await s.watcher.start();
-    expect(r).toEqual({ ok: true, watch: { since: "2026-10-20T10:00:00.000Z", until: "2026-10-21T10:00:00.000Z", folder: "Downloads" } });
-    expect(s.watcher.state()?.until).toBe("2026-10-21T10:00:00.000Z");
+    expect(r).toEqual({ ok: true, watch: { since: "2026-10-20T10:00:00.000Z", until: "2026-10-22T10:00:00.000Z", folder: "Downloads" } });
+    expect(s.watcher.state()?.until).toBe("2026-10-22T10:00:00.000Z");
     s.put("holiday.zip");
     s.put("Basic_LinkedInDataExport_10-20-2026.zip");
     await s.watcher.poll();
@@ -157,7 +157,7 @@ describe("the Downloads watcher", () => {
     expect(existsSync(s.statePath)).toBe(false);
     expect(s.watcher.state()).toBeNull();
     expect(s.logs).toEqual([
-      "Watching Downloads for LinkedIn's export until 2026-10-21T10:00:00.000Z.",
+      "Watching Downloads for LinkedIn's export until 2026-10-22T10:00:00.000Z.",
       `Found Basic_LinkedInDataExport_10-20-2026.zip (${EXPORT.length} bytes) in Downloads and imported it.`,
       "Stopped watching Downloads (found).",
     ]);

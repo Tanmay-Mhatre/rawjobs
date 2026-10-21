@@ -290,7 +290,7 @@ describe("Settings > LinkedIn connections", () => {
     render(<NetworkSection />);
     await userEvent.click(await screen.findByRole("button", { name: "Connect LinkedIn" }));
     await userEvent.upload(screen.getByLabelText(/LinkedIn export ZIP|Connections\.csv/), new File(["x"], "Connections.csv"));
-    expect((await screen.findByRole("alert")).textContent).toBe("That ZIP has no Connections.csv. Request the archive again with Connections ticked.");
+    expect((await screen.findByRole("alert")).textContent).toBe("That ZIP has no Connections.csv. Request the larger data archive instead.");
   });
 
   it("shows the count and date, and deletes only after the confirm", async () => {
