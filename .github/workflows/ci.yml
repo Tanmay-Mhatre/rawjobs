@@ -47,7 +47,7 @@ jobs:
   # The oldest Node the app supports (package.json engines; the data workflows run on it too).
   # A job of its own, not a matrix: branch protection requires the check above by name.
   node-22:
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-24.04-arm
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -64,7 +64,7 @@ jobs:
   # with releases), for the install test below. On a push to main its steps are skipped and the job
   # still succeeds: the same tree was tested on its pull request, and a release reruns the install test.
   release-files:
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-24.04-arm
     timeout-minutes: 10
     outputs:
       public-key: ${{ steps.key.outputs.public-key }}
