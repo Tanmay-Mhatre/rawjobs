@@ -212,23 +212,31 @@ export function companySeconds(ats: string, speeds: ScanSpeeds = {}): number {
 
 /**
  * About how long fetching these companies live takes: one lane per hiring system (and Workday shard,
- * as run.ts runs them), all lanes at once, so the slowest lane.
+ * as run.ts runs them), all lanes at once, so the slowest lane. With at most `maxInFlight` companies
+ * at once across lanes (the background check), also no less than all their fetch time over that many.
  */
-export function estimateSeconds(companies: readonly Pick<CompanyRef, "ats" | "region" | "shard">[], speeds: ScanSpeeds = {}): number {
+export function estimateSeconds(companies: readonly Pick<CompanyRef, "ats" | "region" | "shard">[], speeds: ScanSpeeds = {}, maxInFlight?: number): number {
   const lanes = new Map<string, number>();
+  let busy = 0;
   for (const c of companies) {
     const lane = laneOf(c);
-    lanes.set(lane, (lanes.get(lane) ?? 0) + companySeconds(c.ats, speeds));
+    const s = companySeconds(c.ats, speeds);
+    lanes.set(lane, (lanes.get(lane) ?? 0) + s);
+    // A lane's seconds per company are its fetch time over the companies it has in flight.
+    busy += s * laneWorkers(c.ats);
   }
-  return Math.ceil(Math.max(0, ...lanes.values()));
+  return Math.ceil(Math.max(0, ...lanes.values(), maxInFlight ? busy / maxInFlight : 0));
 }
 
 /** A scan's time in its two stages: the shared job feed (sync and match; 0 without it), then the live fetches. */
 export type ScanEstimate = { feed: number; live: number; seconds: number };
 
-export function estimateScan(companies: readonly Pick<CompanyRef, "ats" | "region" | "shard">[], o: { speeds?: ScanSpeeds; feed?: boolean; feedSeconds?: number } = {}): ScanEstimate {
+export function estimateScan(
+  companies: readonly Pick<CompanyRef, "ats" | "region" | "shard">[],
+  o: { speeds?: ScanSpeeds; feed?: boolean; feedSeconds?: number; maxInFlight?: number } = {},
+): ScanEstimate {
   const feed = o.feed ? Math.ceil(o.feedSeconds ?? FEED_SECONDS) : 0;
-  const live = estimateSeconds(companies, o.speeds);
+  const live = estimateSeconds(companies, o.speeds, o.maxInFlight);
   return { feed, live, seconds: feed + live };
 }
 

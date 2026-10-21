@@ -188,11 +188,11 @@ describe("feedMatches", () => {
     expect(quick.calls.some((u) => u.includes("/mine/"))).toBe(true);
     expect(quick.calls.some((u) => u.includes("unknown") || u.includes("nothing"))).toBe(false);
 
-    // The background check: every company Scan now didn't just fetch, live, without the feed choosing.
+    // The background check: every company Scan now didn't just fetch, except the ones the fresh feed shows nothing for you at.
     const rest = fakeHttp(routes);
-    const r = await scan(config, { dataDir: dir, scope: "all", feed: false, skipFetchedSince: NOW, http: rest.http, now: new Date(NOW) });
-    expect(r.checks.map((c) => c.slug).sort()).toEqual(["nothing", "unknown"]);
-    expect(rest.calls.some((u) => u.includes("/mine/") || u.includes("leverco") || u.includes("/past"))).toBe(false);
+    const r = await scan(config, { dataDir: dir, scope: "all", skipFetchedSince: NOW, http: rest.http, now: new Date(NOW) });
+    expect(r.checks.map((c) => c.slug)).toEqual(["unknown"]);
+    expect(rest.calls.some((u) => u.includes("/mine/") || u.includes("leverco") || u.includes("/past") || u.includes("nothing"))).toBe(false);
     expect(r.result.everyCompany).toBe(true);
   });
 

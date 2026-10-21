@@ -1,4 +1,4 @@
-import { appendFileSync, existsSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { appendFileSync, existsSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { isChronic, knownFirstPages, planBoards, pruneBoards, readBoardHealth, recordBoards, writeBoardHealth } from "./board-health";
 import { companyIndustries } from "./catalog/industries";
@@ -14,7 +14,7 @@ import { loadConcepts } from "./concepts-remote";
 import { readResume } from "./resume";
 import { resumeTopics } from "./resume-topics";
 import { alertJobs } from "./notify";
-import { runRadar, type RunResult } from "./run";
+import { runRadar, type RunOptions, type RunResult } from "./run";
 import type { BoardMove, CompanyHealth, CompanyRef, Config, Job, RunSummary } from "./schema";
 import { byMatchChance, estimateScan, findMoves, readDirectory, readDirectoryMoves, readSpeeds, recordSpeeds, refOfEntry, scopeCompanies, type ScanEstimate, type ScanScope } from "./scope";
 import { fetchedSince, quickPicks } from "./stages";
@@ -87,7 +87,7 @@ export type ScanOptions = {
   onCompanyResult?: (h: CompanyHealth, jobs: Job[]) => void;
   /** How long syncing the directory and job feed took before this scan, for its timings. */
   syncMs?: number;
-};
+} & Pick<RunOptions, "maxCompaniesInFlight" | "describeWorkers">;
 
 /** Where a scan's time went, and what its requests did (data/scan-stats.json keeps the last few). */
 export type ScanStats = {
@@ -233,8 +233,20 @@ export function readProgress(dataDir: string, scope: ScanScope): Progress | unde
   }
 }
 
+/** Progress files too old to resume (any scope): removed, so a stopped scan's results don't sit on disk for good. */
+function removeStaleProgress(dataDir: string): void {
+  // By the files' own times, so on the real clock (a scan's `now` can be set).
+  const now = Date.now();
+  try {
+    for (const f of readdirSync(dataDir)) if (/^scan-progress-.*\.json$/.test(f) && now - statSync(join(dataDir, f)).mtimeMs > RESUME_WITHIN_MS) rmSync(join(dataDir, f), { force: true });
+  } catch {
+    // No data folder yet, or a file another scan just removed.
+  }
+}
+
 /** The stopped scan a new one would resume, if any. */
 export function resumable(dataDir: string, scope: ScanScope, now = new Date()): { done: number; startedAt: string } | undefined {
+  removeStaleProgress(dataDir);
   const p = readProgress(dataDir, scope);
   if (!p || p.scope !== scope || now.getTime() - Date.parse(p.startedAt) > RESUME_WITHIN_MS) return undefined;
   return { done: p.health.length, startedAt: p.startedAt };
@@ -242,7 +254,8 @@ export function resumable(dataDir: string, scope: ScanScope, now = new Date()): 
 
 /**
  * Your companies and, by scope, the directory companies a scan would fetch. "all" (Check every company
- * now, the background check) fetches every company live, without the job feed choosing.
+ * now) fetches every company live, without the job feed choosing. (The background check after Scan now
+ * is "all" with the feed: its estimate comes when it starts, ScanStart.seconds.)
  */
 export function scanPlan(config: Config, dataDir: string, scope: ScanScope, directory = readDirectory(dataDir)) {
   const yours = config.companies.filter((c) => c.enabled);
@@ -300,6 +313,7 @@ export async function scan(config: Config, opts: ScanOptions): Promise<ScanResul
   const since = opts.skipFetchedSince;
   const unfed = (quick ? quick.picks : feed ? feedLeaves(inScope, feed, feedAgeHours!, hints) : inScope).filter((c) => since === undefined || !fetchedSince(boards.boards[jobCompanyKey(c)], since));
   // Carry on a stopped scan of the same scope: skip what it fetched, keep what it found.
+  if (fullScan && !opts.dryRun) removeStaleProgress(opts.dataDir);
   const progressPath = join(opts.dataDir, progressFile(scope));
   const prior = fullScan && opts.resume !== false && !opts.dryRun ? readProgress(opts.dataDir, scope) : undefined;
   const resumed = prior && prior.scope === scope && now.getTime() - Date.parse(prior.startedAt) <= RESUME_WITHIN_MS ? prior : undefined;
@@ -351,7 +365,7 @@ export async function scan(config: Config, opts: ScanOptions): Promise<ScanResul
   const yours = chosen;
   const resting = directoryPlan.resting;
   const left = [...yours, ...checks].filter((c) => !done.has(jobCompanyKey(c)));
-  const live = estimateScan(left, { speeds: readSpeeds(opts.dataDir) }).live;
+  const live = estimateScan(left, { speeds: readSpeeds(opts.dataDir), maxInFlight: opts.maxCompaniesInFlight }).live;
   const feedSeconds = feed ? Math.round((matchMs + (opts.syncMs ?? 0)) / 1000) : 0;
   const byAts: Record<string, number> = {};
   const resumedByAts: Record<string, number> = {};
@@ -392,6 +406,8 @@ export async function scan(config: Config, opts: ScanOptions): Promise<ScanResul
     locations,
     // Your companies' first pages too: theirs are only reused when every job is there (run.ts).
     firstPages: fullScan ? knownFirstPages(boards, now.getTime()) : undefined,
+    maxCompaniesInFlight: opts.maxCompaniesInFlight,
+    describeWorkers: opts.describeWorkers,
     onCompanyDone: opts.onCompanyDone,
     onCompanyResult: (h, jobs) => {
       pending.health.push(h);
@@ -426,6 +442,7 @@ export async function scan(config: Config, opts: ScanOptions): Promise<ScanResul
     .sort()
     .at(-1);
   const merged = mergeHistory(previous, result, [...config.companies, ...kept], undefined, { lastRunAt });
+  await cache?.flush();
   cache?.save({ prune: !stopped });
   if (!opts.dryRun) writeLocationCache(opts.dataDir, locations, knownLocations);
 
