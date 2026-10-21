@@ -3,7 +3,7 @@ import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-import { AUTOSTART, readServerState, serverRunning, writeServerState } from "../src/desktop";
+import { alreadyRunning, AUTOSTART, portTaken, readServerState, serverHolding, serverRunning, writeServerState } from "../src/desktop";
 import { iconIcns, iconIco, iconPng, markPixels } from "../src/icon";
 import { portOrder } from "../src/serve";
 import { markShortcutNoticeSeen, shortcutState } from "../src/shortcuts";
@@ -42,6 +42,37 @@ describe("an installed copy's server", () => {
     // Nothing there, and its process is gone: start a new one.
     expect(await serverRunning({ port: 1, pid: 999_999_99, version: "0.1.0", startedAt: "" }, { pauseMs: 10 })).toBe(false);
     expect(await serverRunning(null)).toBe(false);
+  }, 20_000);
+
+  it("doesn't start a second server next to one that holds its port but doesn't answer", async () => {
+    const home = mkdtempSync(join(tmpdir(), "rj-hung-"));
+    // Accepts connections and never answers the first `n` requests (a hung or very busy server).
+    const hung = (n: number) =>
+      spawn(process.execPath, ["-e", `let n=0;require("http").createServer((q,s)=>{if(n++>=${n})s.end('{"ok":true}')}).listen(0,"127.0.0.1",function(){console.log(this.address().port)})`], {
+        stdio: ["ignore", "pipe", "ignore"],
+      });
+    const fast = { tries: 1, waitTries: 2, timeoutMs: 300, pauseMs: 10 };
+    // Its command line, as the computer reports it: this folder's installed version.
+    const commandLine = () => `"${join(home, "runtime/node.exe")}" "${join(home, "app/versions/0.1.0/cli.mjs")}" serve`;
+    const holding = (s: Parameters<typeof serverHolding>[0], h: string) => serverHolding(s, h, { commandLine });
+    for (const [n, want] of [
+      [99, "stuck"],
+      [2, "running"],
+    ] as const) {
+      const child = hung(n);
+      try {
+        const port = await new Promise<number>((done) => child.stdout!.once("data", (d) => done(Number(String(d).trim()))));
+        const state = { port, pid: child.pid!, version: "0.1.0", startedAt: "" };
+        expect(await portTaken(port)).toBe(true);
+        expect(await alreadyRunning(state, home, { ...fast, holding })).toBe(want);
+        // A process of another program holding the port isn't this folder's server: start as before.
+        expect(await serverHolding(state, home, { commandLine: () => "C:\\Other\\app.exe" })).toBe(false);
+      } finally {
+        child.kill();
+      }
+    }
+    // Its process is gone: nothing holds the port, start a new one.
+    expect(await alreadyRunning({ port: 1, pid: 999_999_99, version: "0.1.0", startedAt: "" }, home, { ...fast, holding })).toBeNull();
   }, 20_000);
 
   it("is registered by the installers under the names uninstall removes", () => {

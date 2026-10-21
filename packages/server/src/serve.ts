@@ -5,7 +5,7 @@ import { defaultDataDir, rawjobsHome } from "@rawjobs/core";
 import { APP_VERSION, BUNDLED, migrateData, scanLockHeld, WEB_DIR } from "@rawjobs/core";
 import { createApi } from "./api";
 import { createUpdater } from "./updater";
-import { DEFAULT_PORT, logTo, openBrowser, readServerState, serverRunning, writeServerState } from "./desktop";
+import { alreadyRunning, DEFAULT_PORT, logTo, openBrowser, readServerState, writeServerState } from "./desktop";
 import { ensureShortcuts, startLinkInstalled } from "./shortcuts";
 import { servePages, serveStatic } from "./static";
 
@@ -33,11 +33,20 @@ export async function serve(args: string[]): Promise<number> {
 
   // One server per RawJobs folder: starting it again (at login, from the shortcut) finds the running one.
   const running = readServerState(home);
-  if (!values.port && (await serverRunning(running))) {
+  const found = values.port ? null : await alreadyRunning(running, home);
+  if (found === "running") {
     console.log(`RawJobs is already running at http://127.0.0.1:${running!.port}`);
     if (values.open) openBrowser(`http://127.0.0.1:${running!.port}`);
     return 0;
   }
+  if (found === "stuck") {
+    console.error(
+      `RawJobs (process ${running!.pid}) still holds port ${running!.port} but doesn't answer, so a second one isn't started next to it. Restart the computer, or end that process, to start RawJobs again.`,
+    );
+    return 1;
+  }
+  // From here on this version really starts: an update looks for this line to tell "it failed" from "it never ran".
+  console.log(`RawJobs ${APP_VERSION} is starting.`);
 
   const first = Number(values.port ?? process.env.RAWJOBS_PORT ?? DEFAULT_PORT);
   if (!Number.isInteger(first) || first < 1 || first > 65535) {
