@@ -1,7 +1,7 @@
 import { spawn, spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import { cpSync, existsSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync, statSync, writeFileSync } from "node:fs";
-import { join } from "node:path";
+import { join, resolve } from "node:path";
 import { compareVersions, nodeArchive, RELEASE_URL, type ReleaseChange, verifyRelease, type ReleaseManifest } from "./release";
 import { cliCommand } from "./runtime";
 import { writeFileAtomic } from "./atomic";
@@ -38,7 +38,8 @@ export type UpdateFile = UpdateSettings & {
   notified?: string;
 };
 /** app/last-update.json: how the last update went, for the dashboard's note. */
-export type UpdateRecord = { from: string; to: string; ok: boolean; at: string; error?: string; notes?: string; seen?: boolean };
+/** `skipped`: a failed update whose version is no longer offered by itself (it started and failed). */
+export type UpdateRecord = { from: string; to: string; ok: boolean; at: string; error?: string; notes?: string; seen?: boolean; skipped?: boolean };
 
 export const DEFAULT_UPDATE_SETTINGS: UpdateSettings = { mode: "ask", channel: "stable", telegram: true };
 const REPO = "Tanmay-Mhatre/rawjobs";
@@ -346,31 +347,218 @@ export function cleanUpVersions(home: string): void {
 /** How an installed copy's server starts at log in. packaging/install.sh and install.ps1 use the same names. */
 export const AUTOSTART = { windowsTask: "RawJobs Server", macLabel: "com.rawjobs.server", linuxUnit: "rawjobs.service" };
 
+/** The ports a server of an installed copy listens on: 4317, or the next free one of these. */
+export const SERVER_PORTS = Array.from({ length: 10 }, (_, i) => 4317 + i);
+/** Task Scheduler's LastTaskResult: an instance is running now / a start was refused (one already runs). */
+export const TASK_RUNNING = 0x41301;
+export const TASK_REFUSED = 0x800710e0;
+
+/** What restarting the server does to the computer; tests replace it. */
+export type UpdateSystem = {
+  platform: NodeJS.Platform;
+  fetch: typeof fetch;
+  /** Run a program and wait for it (quietly, with a time limit). */
+  run: (cmd: string, args: string[]) => { status: number | null; stdout: string; stderr: string };
+  /** Start a program that keeps running after this one exits. */
+  launch: (cmd: string, args: string[], cwd: string) => void;
+  alive: (pid: number) => boolean;
+  kill: (pid: number) => void;
+  sleep: (ms: number) => Promise<void>;
+};
+
+const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
+const alive = (pid: number) => {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch {
+    return false;
+  }
+};
+
+export const realSystem: UpdateSystem = {
+  platform: process.platform,
+  fetch: (...a) => fetch(...a),
+  // A scheduler that hangs (launchctl waiting on a job that keeps failing) mustn't stall the update.
+  run: (cmd, args) => {
+    const r = spawnSync(cmd, args, { windowsHide: true, timeout: 20_000, encoding: "utf8" });
+    return { status: r.status, stdout: r.stdout ?? "", stderr: (r.stderr ?? "") || String(r.error ?? r.signal ?? "") };
+  },
+  launch: (cmd, args, cwd) => {
+    const child = spawn(cmd, args, { cwd, detached: true, stdio: "ignore", windowsHide: true });
+    child.on("error", () => {});
+    child.unref();
+  },
+  alive,
+  kill: (pid) => {
+    try {
+      process.kill(pid);
+    } catch {
+      // gone
+    }
+  },
+  sleep,
+};
+
+const powershell = (sys: UpdateSystem, script: string) => sys.run("powershell.exe", ["-NoProfile", "-NonInteractive", "-Command", script]);
+
+/** A short id of this RawJobs folder, which /api/health reports: two servers of one folder report the same id. */
+export function folderId(home: string): string {
+  const p = resolve(home);
+  return createHash("sha256")
+    .update(process.platform === "win32" ? p.toLowerCase() : p)
+    .digest("hex")
+    .slice(0, 16);
+}
+
+/** Whether a process's command line runs one of this folder's installed versions (…/app/versions/…). */
+export function runsFromFolder(commandLine: string, home: string): boolean {
+  const norm = (s: string) => s.replace(/\\/g, "/").toLowerCase();
+  return norm(commandLine).includes(norm(join(resolve(home), "app/versions/")));
+}
+
+/** A process's command line, or null (gone, or it couldn't be read). */
+export function commandLineOf(pid: number, sys: UpdateSystem = realSystem): string | null {
+  const r =
+    sys.platform === "win32" ? powershell(sys, `(Get-CimInstance Win32_Process -Filter "ProcessId=${Math.trunc(pid)}").CommandLine`) : sys.run("ps", ["-o", "command=", "-p", String(Math.trunc(pid))]);
+  return r.status === 0 && r.stdout.trim() ? r.stdout.trim() : null;
+}
+
+/** Windows: the processes listening on these ports, with their command lines. */
+function windowsListeners(ports: number[], sys: UpdateSystem): { port: number; pid: number; command: string }[] {
+  const r = powershell(
+    sys,
+    `Get-NetTCPConnection -State Listen -LocalPort ${ports.join(",")} -ErrorAction SilentlyContinue | ForEach-Object { "$($_.LocalPort)\`t$($_.OwningProcess)\`t$((Get-CimInstance Win32_Process -Filter "ProcessId=$($_.OwningProcess)").CommandLine)" }`,
+  );
+  return r.stdout
+    .split(/\r?\n/)
+    .map((line) => line.split("\t"))
+    .filter((p) => p.length >= 3 && Number(p[1]) > 0)
+    .map(([port, pid, ...command]) => ({ port: Number(port), pid: Number(pid), command: command.join("\t") }));
+}
+
+/**
+ * Stop every server of this RawJobs folder that's still running, not only state.json's: each one
+ * whose /api/health says it's this folder's, state.json's, and (Windows) any process listening on
+ * these ports from this folder's app/versions/ that doesn't answer (a hung one). Waits until they've
+ * stopped; returns how many there were.
+ */
+export async function stopAllServers(home: string, o: { sys?: UpdateSystem; ports?: number[] } = {}): Promise<number> {
+  const sys = o.sys ?? realSystem;
+  const ports = o.ports ?? SERVER_PORTS;
+  const id = folderId(home);
+  const state = read<{ pid?: number; port?: number }>(join(home, "state.json"));
+  const found = new Map<number, number>(); // pid → port
+  const answered = new Map<number, { home?: string; pid?: number }>();
+  await Promise.all(
+    [...new Set([...ports, ...(state?.port ? [state.port] : [])])].map(async (port) => {
+      try {
+        const res = await sys.fetch(`http://127.0.0.1:${port}/api/health`, { signal: AbortSignal.timeout(1500) });
+        const h = (await res.json()) as { ok?: boolean; home?: string; pid?: number };
+        if (!h.ok) return;
+        answered.set(port, h);
+        if (h.home === id && h.pid) found.set(h.pid, port);
+      } catch {
+        // nothing there, or it doesn't answer
+      }
+    }),
+  );
+  // state.json's server: an older version doesn't say which folder it's from, but answers on its port.
+  if (state?.pid && state.port && !found.has(state.pid) && sys.alive(state.pid)) {
+    const h = answered.get(state.port);
+    if ((h && !h.home) || runsFromFolder(commandLineOf(state.pid, sys) ?? "", home)) found.set(state.pid, state.port);
+  }
+  if (sys.platform === "win32" && ports.length) {
+    for (const l of windowsListeners(ports, sys)) if (!found.has(l.pid) && runsFromFolder(l.command, home)) found.set(l.pid, l.port);
+  }
+  found.delete(process.pid);
+  for (const [pid, port] of found) {
+    console.log(`Stopping the RawJobs server on port ${port} (process ${pid}).`);
+    await stopServer(pid, 0, sys);
+  }
+  return found.size;
+}
+
+/**
+ * Windows: whether this process runs inside the RawJobs Server task (an ancestor is the task's
+ * conhost, started by Task Scheduler's svchost). An update started there must not end the task:
+ * that would end the update's helper too.
+ */
+export function insideServerTask(sys: UpdateSystem = realSystem): boolean {
+  if (sys.platform !== "win32") return false;
+  // Walk up from this process; a parent that started after its child is a reused id, not the parent.
+  const r = powershell(
+    sys,
+    `$w = Get-CimInstance Win32_Process -Filter "ProcessId=${process.pid}"; for ($i = 0; $i -lt 8 -and $w; $i++) { $p = Get-CimInstance Win32_Process -Filter "ProcessId=$($w.ParentProcessId)"; if (-not $p -or $p.CreationDate -gt $w.CreationDate) { break }; "$($p.Name)\`t$($p.CommandLine)"; $w = $p }`,
+  );
+  return inTaskTree(r.stdout.split(/\r?\n/).filter(Boolean));
+}
+
+/** The ancestors ("name<TAB>command line", nearest first) include the task's conhost running serve, started by svchost. */
+export function inTaskTree(ancestors: string[]): boolean {
+  const names = ancestors.map((a) => a.split("\t"));
+  return names.some(([name, cmd], i) => /^conhost\.exe$/i.test(name ?? "") && /\bserve\b/.test(cmd ?? "") && /^svchost\.exe$/i.test(names[i + 1]?.[0] ?? ""));
+}
+
 /**
  * Start the server again the way the computer does at log in (so it stays looked after: restarted
- * if it stops), or straight from the launcher when that isn't set up.
+ * if it stops), or straight from the launcher when that isn't set up or doesn't start it.
  */
-export function startServer(home: string): void {
-  // A scheduler that hangs (launchctl waiting on a job that keeps failing) mustn't stall the update.
+export async function startServer(home: string, o: { insideTask?: boolean; sys?: UpdateSystem } = {}): Promise<void> {
+  const sys = o.sys ?? realSystem;
   const run = (cmd: string, args: string[]) => {
-    const r = spawnSync(cmd, args, { windowsHide: true, timeout: 20_000, encoding: "utf8" });
-    console.log(`${cmd} ${args.join(" ")}: ${r.status === 0 ? "ok" : `failed (${r.status ?? r.signal ?? r.error}) ${(r.stderr ?? "").trim()}`}`);
+    const r = sys.run(cmd, args);
+    console.log(`${cmd} ${args.join(" ")}: ${r.status === 0 ? "ok" : `failed (${r.status}) ${r.stderr.trim()}`}`);
     return r.status === 0;
   };
   let started = false;
-  if (process.platform === "win32") started = run("powershell.exe", ["-NoProfile", "-NonInteractive", "-Command", `Start-ScheduledTask -TaskName '${AUTOSTART.windowsTask}'`]);
+  if (sys.platform === "win32") started = await startWindowsTask(sys, !!o.insideTask);
   // No -k: the old server has already stopped, and kickstart -k takes about 20 s to return.
-  else if (process.platform === "darwin") started = run("launchctl", ["kickstart", `gui/${process.getuid?.() ?? 501}/${AUTOSTART.macLabel}`]);
+  else if (sys.platform === "darwin") started = run("launchctl", ["kickstart", `gui/${process.getuid?.() ?? 501}/${AUTOSTART.macLabel}`]);
   else started = run("systemctl", ["--user", "restart", AUTOSTART.linuxUnit]);
   if (started) return;
-  console.log("Starting the server from the launcher instead.");
+  console.log("Starting the server directly instead, with the same command the computer uses at log in.");
   const log = join(home, "logs/server.log");
-  const child =
-    process.platform === "win32"
-      ? spawn("conhost.exe", ["--headless", join(home, "bin/rawjobs.cmd"), "serve", "--log", log], { cwd: home, detached: true, stdio: "ignore", windowsHide: true })
-      : spawn(join(home, "bin/rawjobs"), ["serve", "--log", log], { cwd: home, detached: true, stdio: "ignore" });
-  child.on("error", () => {});
-  child.unref();
+  if (sys.platform === "win32") sys.launch("conhost.exe", ["--headless", join(home, "bin/rawjobs.cmd"), "serve", "--log", log], home);
+  else sys.launch(join(home, "bin/rawjobs"), ["serve", "--log", log], home);
+}
+
+/**
+ * Windows: start the RawJobs Server task, ending a run Windows still counts as running first (the
+ * task starts no second one: MultipleInstances IgnoreNew). False when it didn't start.
+ */
+async function startWindowsTask(sys: UpdateSystem, insideTask: boolean): Promise<boolean> {
+  const task = `-TaskName '${AUTOSTART.windowsTask}'`;
+  const state = powershell(sys, `(Get-ScheduledTask ${task} -ErrorAction Stop).State`);
+  if (state.status !== 0) {
+    console.log("The RawJobs Server task isn't set up on this computer.");
+    return false;
+  }
+  if (state.stdout.trim() === "Running") {
+    if (insideTask) console.log("Windows still counts the RawJobs Server task as running. It isn't ended: this update runs inside it, and ending it would end the update too.");
+    else {
+      const stop = powershell(sys, `Stop-ScheduledTask ${task}`);
+      console.log(stop.status === 0 ? "Ended the RawJobs Server task's old run, which Windows still counted as running." : `Couldn't end the RawJobs Server task's old run: ${stop.stderr.trim()}`);
+    }
+  }
+  const start = powershell(sys, `Start-ScheduledTask ${task}`);
+  if (start.status !== 0) {
+    console.log(`Windows couldn't start the RawJobs Server task: ${start.stderr.trim()}`);
+    return false;
+  }
+  await sys.sleep(3000);
+  const info = powershell(sys, `(Get-ScheduledTaskInfo ${task}).LastTaskResult`);
+  const result = Number(info.stdout.trim());
+  if (result === TASK_RUNNING) {
+    console.log("Started the RawJobs Server task.");
+    return true;
+  }
+  console.log(
+    result === TASK_REFUSED
+      ? "Windows refused to start the RawJobs Server task: it says the task is already running."
+      : `The RawJobs Server task isn't running a few seconds after starting it (result ${info.stdout.trim() || info.stderr.trim() || "unknown"}).`,
+  );
+  return false;
 }
 
 /** The version answering at this folder's server, or null. */
@@ -385,26 +573,33 @@ export async function runningVersion(home: string): Promise<string | null> {
   }
 }
 
-const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
-const alive = (pid: number) => {
+/** Give a server up to `graceMs` to stop by itself, then stop it, and wait (up to 5 s) until it has. */
+async function stopServer(pid: number, graceMs = 10_000, sys: UpdateSystem = realSystem): Promise<void> {
+  for (let waited = 0; waited < graceMs && sys.alive(pid); waited += 250) await sys.sleep(250);
+  if (!sys.alive(pid)) return;
+  sys.kill(pid);
+  for (let i = 0; i < 20 && sys.alive(pid); i++) await sys.sleep(250);
+}
+
+/** The size of a file now (0 when there's none), to read what's written to it after this. */
+const sizeOf = (file: string) => {
   try {
-    process.kill(pid, 0);
-    return true;
+    return statSync(file).size;
   } catch {
-    return false;
+    return 0;
   }
 };
 
-/** Give a server up to `graceMs` to stop by itself, then stop it, and wait (up to 5 s) until it has. */
-async function stopServer(pid: number, graceMs = 10_000): Promise<void> {
-  for (let waited = 0; waited < graceMs && alive(pid); waited += 250) await sleep(250);
-  if (!alive(pid)) return;
+/** Whether `version`'s server got as far as starting (serve's "RawJobs X is starting." line) in logs/server.log after `offset`. */
+export function startedSince(home: string, offset: number, version: string): boolean {
   try {
-    process.kill(pid);
+    const log = readFileSync(join(home, "logs/server.log"));
+    // A log over 5 MB moves to server.log.1 when the server starts: then it's all new.
+    const text = (log.length >= offset ? log.subarray(offset) : log).toString("utf8");
+    return text.includes(`RawJobs ${version} is starting.`);
   } catch {
-    // gone
+    return false;
   }
-  for (let i = 0; i < 20 && alive(pid); i++) await sleep(250);
 }
 
 /** Wait until this folder's server answers as `version`; false when it hasn't within `ms`. */
@@ -429,29 +624,40 @@ export type FinishOptions = {
   /** How often to ask whether the new server answers (tests ask more often, to finish sooner). */
   pollMs?: number;
   /** Tests replace how the server is started. */
-  start?: (home: string) => void;
+  start?: (home: string) => void | Promise<void>;
+  /** Windows: the update was started inside the RawJobs Server task (insideServerTask), so it isn't ended. */
+  insideTask?: boolean;
+  /** The ports to look for more servers of this folder on. Default: SERVER_PORTS. */
+  ports?: number[];
+  /** Tests replace how processes are found, stopped and started. */
+  sys?: Partial<UpdateSystem>;
 };
 
 /**
- * Run by the *old* version, in its own process, after the switch: wait for the old server to stop,
- * start the new one, and give it a minute to answer. If it doesn't, go back to the old version (and
- * to its data, if the new one had converted it), start that, and don't offer the failed version again.
+ * Run by the *old* version, in its own process, after the switch: wait for the old server to stop
+ * (and stop any other one of this folder), start the new one, and give it a minute to answer. If it
+ * doesn't, go back to the old version (and to its data, if the new one had converted it) and start
+ * that. A version that started and failed isn't offered again; one that never started at all (the
+ * computer didn't run it) stays on offer, so Update tries it again.
  */
 export async function finishUpdate(o: FinishOptions): Promise<UpdateRecord> {
-  const start = o.start ?? startServer;
+  const sys: UpdateSystem = { ...realSystem, ...o.sys };
+  const start = o.start ?? ((home: string) => startServer(home, { insideTask: o.insideTask, sys }));
   console.log(`Finishing the update from ${o.from} to ${o.to}.`);
-  if (o.pid) await stopServer(o.pid);
-  // Another server for this folder (one that started next to it, on the next port) would keep the
-  // computer's scheduler busy and answer for the new version: it stops too.
-  const other = read<{ pid?: number }>(join(o.home, "state.json"))?.pid;
-  if (other && other !== o.pid && other !== process.pid && alive(other) && (await runningVersion(o.home)) !== null) {
-    console.log(`Another RawJobs server (process ${other}) is running here too; stopping it.`);
-    await stopServer(other, 0);
-    // Windows' scheduler counts its task as running until the window around the server closes too.
-    await sleep(1000);
-  }
+  if (o.pid) await stopServer(o.pid, 10_000, sys);
+  // Any other server of this folder (one that started next to it on the next port, or a hung one
+  // the computer's scheduler still runs) would keep the scheduler from starting the new version.
+  const others = await stopAllServers(o.home, { sys, ports: o.ports });
+  console.log(
+    others
+      ? `Stopped ${others} more RawJobs server${others === 1 ? "" : "s"} of this folder that ${others === 1 ? "was" : "were"} still running.`
+      : "No other RawJobs server of this folder is running.",
+  );
+  // Windows' scheduler counts its task as running until the window around the server closes too.
+  if (others && sys.platform === "win32") await sys.sleep(1000);
   console.log("The old server has stopped; starting the new version.");
-  start(o.home);
+  const logFrom = sizeOf(join(o.home, "logs/server.log"));
+  await start(o.home);
   const running = (await waitFor(o.home, o.to, o.timeoutMs ?? START_TIMEOUT_MS, o.pollMs)) ? o.to : await runningVersion(o.home);
   console.log(running === o.to ? `${o.to} answers.` : `${o.to} didn't answer (last seen: ${running ?? "nothing"}); going back to ${o.from}.`);
   let record: UpdateRecord;
@@ -461,30 +667,31 @@ export async function finishUpdate(o: FinishOptions): Promise<UpdateRecord> {
   } else {
     // Stop whatever the new version left running, then go back.
     const state = read<{ pid?: number; version?: string }>(join(o.home, "state.json"));
-    if (state?.pid && state.version === o.to && alive(state.pid)) {
-      try {
-        process.kill(state.pid);
-      } catch {
-        // gone
-      }
-    }
+    if (state?.pid && state.version === o.to && sys.alive(state.pid)) sys.kill(state.pid);
+    // No line from the new version in its log: the computer never ran it, which says nothing about it.
+    const ran = startedSince(o.home, logFrom, o.to);
     switchBack(o.home, o.from, o.to);
     if (o.backup && existsSync(o.backup) && needsRestore(o.home, o.backup)) restoreBackup(o.home, o.backup);
-    const f = readUpdateFile(o.home);
-    writeUpdateFile(o.home, { skip: [...new Set([...(f.skip ?? []), o.to])] });
-    start(o.home);
+    if (ran) {
+      const f = readUpdateFile(o.home);
+      writeUpdateFile(o.home, { skip: [...new Set([...(f.skip ?? []), o.to])] });
+    } else console.log(`${o.to} never started (there's no line from it in logs/server.log), so it stays on offer: Update tries it again.`);
+    await start(o.home);
     // Only say it's back once it answers (macOS spaces out restarts by a few seconds).
     const back = await waitFor(o.home, o.from, o.timeoutMs ?? START_TIMEOUT_MS, o.pollMs);
     console.log(back ? `${o.from} answers again.` : `${o.from} didn't answer yet either.`);
     const secs = Math.round((o.timeoutMs ?? START_TIMEOUT_MS) / 1000);
+    const what = ran ? `RawJobs ${o.to} didn't start within ${secs} seconds` : `The computer didn't start RawJobs ${o.to}`;
+    const log = ran ? "logs/server.log" : "logs/update.log";
     record = {
       from: o.from,
       to: o.to,
       ok: false,
       at: new Date().toISOString(),
+      skipped: ran,
       error: back
-        ? `RawJobs ${o.to} didn't start within ${secs} seconds, so ${o.from} is back. See logs/server.log.`
-        : `RawJobs ${o.to} didn't start within ${secs} seconds, so RawJobs went back to ${o.from}, which hasn't answered yet either. Open the RawJobs shortcut to start it, or see logs/server.log.`,
+        ? `${what}, so ${o.from} is back.${ran ? "" : " Update tries it again."} See ${log}.`
+        : `${what}, so RawJobs went back to ${o.from}, which hasn't answered yet either. Open the RawJobs shortcut to start it, or see ${log}.`,
     };
   }
   writeJson(join(o.home, "app/last-update.json"), record);
@@ -492,7 +699,7 @@ export async function finishUpdate(o: FinishOptions): Promise<UpdateRecord> {
 }
 
 /** What the old version needs to finish an update it started (app/pending-update.json). */
-type Pending = { from: string; to: string; backup: string; notes: string; pid?: number };
+type Pending = { from: string; to: string; backup: string; notes: string; pid?: number; insideTask?: boolean };
 
 /**
  * Update this installed copy to the release `m` (found at `base`): put it next to the running
@@ -505,7 +712,9 @@ export async function startUpdate(o: { home: string; base: string; manifest: Rel
   if (!now) throw new Error("This isn't an installed copy of RawJobs.");
   const { version, node } = takeReady(o.home, o.manifest) ?? (await prepareVersion(o.home, o.base, o.manifest, o.fetchImpl));
   const backup = backupData(o.home, `before-${version}`);
-  const pending: Pending = { from: now.current, to: version, backup, notes: o.manifest.notes, pid: o.serverPid };
+  // Node can't start the helper below outside a Windows task's job, so when this runs inside the
+  // RawJobs Server task, ending that task could end the helper too: it mustn't.
+  const pending: Pending = { from: now.current, to: version, backup, notes: o.manifest.notes, pid: o.serverPid, insideTask: insideServerTask() };
   writeJson(join(o.home, "app/pending-update.json"), pending);
   switchTo(o.home, version, node);
   // This very version's CLI, on the Node it runs on: both stay in place until the update is done.
@@ -534,17 +743,17 @@ export async function downloadAhead(home: string, base: string, m: ReleaseManife
 }
 
 /** `rawjobs update --finish`: the second half of startUpdate. */
-export async function finishPendingUpdate(home: string, start?: (home: string) => void): Promise<UpdateRecord | null> {
+export async function finishPendingUpdate(home: string, start?: (home: string) => void | Promise<void>): Promise<UpdateRecord | null> {
   const p = read<Pending>(join(home, "app/pending-update.json"));
   if (!p) return null;
   rmSync(join(home, "app/pending-update.json"), { force: true });
   try {
-    return await finishUpdate({ home, from: p.from, to: p.to, pid: p.pid, backup: p.backup, notes: p.notes, start });
+    return await finishUpdate({ home, from: p.from, to: p.to, pid: p.pid, backup: p.backup, notes: p.notes, start, insideTask: p.insideTask });
   } catch (err) {
     // Whatever went wrong, don't leave the computer on a version nobody checked.
     console.error(`The update failed: ${(err as Error).stack ?? err}`);
     if (installedVersions(home)?.current === p.to) switchBack(home, p.from, p.to);
-    (start ?? startServer)(home);
+    await (start ?? ((h: string) => startServer(h, { insideTask: p.insideTask })))(home);
     const record: UpdateRecord = {
       from: p.from,
       to: p.to,

@@ -4,6 +4,7 @@ import type { AddressInfo } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
+import { folderId } from "@rawjobs/core/update";
 import { createApi } from "../src/api";
 import { refuse } from "../src/guard";
 import { findFile } from "../src/static";
@@ -118,7 +119,7 @@ console.log(JSON.stringify({ type: "done", scope: args[args.indexOf("--scope") +
   }
 
   it("answers health with the version", async () => {
-    const { port } = await start();
+    const { port, home } = await start();
     const r = await call(port, "GET", "/api/health");
     expect(JSON.parse(r.text)).toEqual({
       ok: true,
@@ -129,6 +130,8 @@ console.log(JSON.stringify({ type: "done", scope: args[args.indexOf("--scope") +
       update: null,
       startLink: false,
       platform: process.platform,
+      home: folderId(home),
+      pid: process.pid,
     });
   });
 

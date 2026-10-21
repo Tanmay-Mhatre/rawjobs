@@ -24,6 +24,7 @@ import {
 } from "@rawjobs/core";
 import { readTracking, saveTracking, suggestPoolSize, type ScanScope } from "@rawjobs/core";
 import { CONNECTION_ID, createNetworkStore, createWatcher, nodeWatchDeps, type WatchDeps } from "@rawjobs/core";
+import { folderId } from "@rawjobs/core/update";
 import { refuse } from "./guard";
 import type { Updater } from "./updater";
 
@@ -52,7 +53,7 @@ type Line = string;
 
 /**
  * The dashboard's API: everything it needs to set up and run RawJobs on this computer.
- *   GET  /api/health          { ok, version, scanning, background, dataVersion, update, startLink, platform }: is the server up,
+ *   GET  /api/health          { ok, version, scanning, background, dataVersion, update, startLink, platform, home, pid }: is the server up,
  *                             which version, one waiting to install, and (for the page to remember while it's down) how to
  *                             start it again. background: a scan this server didn't start (a scheduled one) is running.
  *                             dataVersion: meta.json's generatedAt, so an open page sees when a scan wrote new results
@@ -373,6 +374,10 @@ Stopped after ${Math.round(timeoutMs / 1000)} s without finishing.`.trim(),
         update: opts.updater?.updateHint() ?? null,
         startLink: opts.startLink?.() ?? false,
         platform: process.platform,
+        // Which RawJobs folder this server is for (an id, not the path) and its process: an update
+        // stops every server of its folder before it starts the new version.
+        home: folderId(opts.home),
+        pid: process.pid,
       });
     }
     if (url === "/api/update" || url.startsWith("/api/update/")) {

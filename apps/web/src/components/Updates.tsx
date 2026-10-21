@@ -153,7 +153,10 @@ export function ServerNotices({ onRadar = false }: { onRadar?: boolean }) {
           className="mt-3"
           items={[
             [ShieldCheck, "Nothing changed. Your data is as it was."],
-            [Info, `RawJobs won't offer ${last.to} by itself again. You can try it again in Settings, or wait for the next version.`],
+            // An older record has no `skipped`: it was skipped then, as every failed update was.
+            last.skipped === false
+              ? [Info, `Your computer didn't start ${last.to}. Update tries it again.`]
+              : [Info, `RawJobs won't offer ${last.to} by itself again. You can try it again in Settings, or wait for the next version.`],
           ]}
         />
         <div className="mt-3 flex flex-wrap items-center gap-2">

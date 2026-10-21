@@ -72,6 +72,13 @@ describe("ServerNotices", () => {
     expect(screen.getByRole("link", { name: "Try 0.3.0 again" }).getAttribute("href")).toMatch(/^#settings\/updates/);
   });
 
+  it("says Update tries it again when the computer never started the new version", async () => {
+    api({ ...base, current: "0.2.0", lastUpdate: { from: "0.2.0", to: "0.3.0", ok: false, at: "", skipped: false } });
+    render(<ServerNotices />);
+    expect(await screen.findByText("Your computer didn't start 0.3.0. Update tries it again.")).toBeTruthy();
+    expect(screen.queryByText(/won't offer/)).toBeNull();
+  });
+
   it("offers to try a version that went back again, in Settings → About", async () => {
     const skipped = { ...base, current: "0.2.0", lastCheck: new Date().toISOString(), skipped: { version: "0.3.0", date: "2026-10-13" } };
     const calls: string[] = [];

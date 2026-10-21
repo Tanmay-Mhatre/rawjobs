@@ -1,5 +1,6 @@
 import { spawn, spawnSync } from "node:child_process";
 import { appendFileSync, mkdirSync, readFileSync, renameSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { connect } from "node:net";
 import { homedir } from "node:os";
 import { join, resolve } from "node:path";
 import { createInterface } from "node:readline/promises";
@@ -9,7 +10,20 @@ import { APP_VERSION, BUNDLED, CODE_ROOT, cliCommand } from "@rawjobs/core";
 import { removeDailySummary, removeSchedule } from "@rawjobs/core";
 import { scanLockHeld } from "@rawjobs/core";
 import { compareVersions } from "@rawjobs/core/release";
-import { AUTOSTART, fetchManifest, finishPendingUpdate, installedVersions, judge, readLastUpdate, readUpdateFile, releaseBase, releaseBaseFor, startUpdate } from "@rawjobs/core/update";
+import {
+  AUTOSTART,
+  commandLineOf,
+  fetchManifest,
+  finishPendingUpdate,
+  installedVersions,
+  judge,
+  readLastUpdate,
+  readUpdateFile,
+  releaseBase,
+  releaseBaseFor,
+  runsFromFolder,
+  startUpdate,
+} from "@rawjobs/core/update";
 import { makeShortcuts, removeShortcuts } from "./shortcuts";
 
 /**
@@ -102,6 +116,51 @@ export async function serverRunning(state: ServerState | null, o: { tries?: numb
     if (!processAlive(state.pid)) return false;
   }
   return false;
+}
+
+/** Whether something accepts connections on this port (a hung server still does). */
+export function portTaken(port: number, timeoutMs = 1500): Promise<boolean> {
+  return new Promise((done) => {
+    const s = connect({ port, host: "127.0.0.1" });
+    const end = (taken: boolean) => {
+      s.destroy();
+      done(taken);
+    };
+    s.setTimeout(timeoutMs, () => end(false));
+    s.once("connect", () => end(true));
+    s.once("error", () => end(false));
+  });
+}
+
+/**
+ * state.json's server didn't answer, but it's still there: its process runs from this folder's
+ * app/versions/ and still holds its port (a hung or very busy one). Starting another server would
+ * put it on the next port, next to it.
+ */
+export async function serverHolding(
+  state: ServerState | null,
+  home: string,
+  o: { alive?: (pid: number) => boolean; taken?: (port: number) => Promise<boolean>; commandLine?: (pid: number) => string | null } = {},
+): Promise<boolean> {
+  if (!state?.pid || !state.port || state.pid === process.pid || !(o.alive ?? processAlive)(state.pid)) return false;
+  if (!(await (o.taken ?? portTaken)(state.port))) return false;
+  return runsFromFolder((o.commandLine ?? commandLineOf)(state.pid) ?? "", home);
+}
+
+/**
+ * Whether this folder's server (state.json) is already running: "running" when it answers (a busy
+ * one gets about 20 seconds), "stuck" when it still holds its port but hasn't answered after about
+ * another minute either. In both cases no second server should start next to it.
+ */
+export async function alreadyRunning(
+  state: ServerState | null,
+  home: string,
+  o: { tries?: number; waitTries?: number; timeoutMs?: number; pauseMs?: number; holding?: typeof serverHolding } = {},
+): Promise<"running" | "stuck" | null> {
+  if (await serverRunning(state, o)) return "running";
+  if (!state || !(await (o.holding ?? serverHolding)(state, home))) return null;
+  console.log(`RawJobs (process ${state.pid}) still holds port ${state.port} but doesn't answer; waiting for it, so a second server doesn't start next to it.`);
+  return (await serverRunning(state, { ...o, tries: o.waitTries ?? 10 })) ? "running" : "stuck";
 }
 
 /**

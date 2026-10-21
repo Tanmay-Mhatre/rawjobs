@@ -1,6 +1,6 @@
 import { spawn, spawnSync } from "node:child_process";
 import { createHash, generateKeyPairSync, sign } from "node:crypto";
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import { appendFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { createServer, type Server } from "node:http";
 import type { AddressInfo } from "node:net";
 import { tmpdir } from "node:os";
@@ -14,14 +14,21 @@ import {
   downloadAhead,
   fetchManifest,
   finishUpdate,
+  folderId,
+  inTaskTree,
   installedVersions,
   judge,
   platformKey,
   prepareVersion,
   readLastUpdate,
   readUpdateFile,
+  startServer,
+  stopAllServers,
   switchTo,
   takeReady,
+  TASK_REFUSED,
+  TASK_RUNNING,
+  type UpdateSystem,
   writeUpdateFile,
 } from "../src/update";
 
@@ -36,6 +43,15 @@ function serve(handler: Parameters<typeof createServer>[1]): Promise<number> {
   servers.push(s);
   return new Promise((done) => s.listen(0, "127.0.0.1", () => done((s.address() as AddressInfo).port)));
 }
+
+const appendLog = (home: string, line: string) => {
+  mkdirSync(join(home, "logs"), { recursive: true });
+  appendFileSync(
+    join(home, "logs/server.log"),
+    `${new Date().toISOString()} ${line}
+`,
+  );
+};
 
 /** An installed copy on 0.1.0, with its Node already there (so no Node download). */
 function installedCopy(nodeVersion = "v24.0.0") {
@@ -137,6 +153,7 @@ describe("updating an installed copy", () => {
       notes: "Faster scans.",
       timeoutMs: 5000,
       pollMs: 50,
+      ports: [],
       // "Starting the server": one that answers as the new version.
       start: () => void serve((_q, res) => res.end(JSON.stringify({ ok: true, version: "0.2.0" }))).then((port) => writeFileSync(join(home, "state.json"), JSON.stringify({ port }))),
     });
@@ -167,6 +184,7 @@ describe("updating an installed copy", () => {
       to: "0.2.0",
       timeoutMs: 5000,
       pollMs: 50,
+      ports: [],
       // The computer's scheduler starts nothing while it still runs the other server.
       start: () => {
         startedWhileOtherRan = other.exitCode === null && other.signalCode === null;
@@ -180,7 +198,7 @@ describe("updating an installed copy", () => {
   }, 15_000);
 
   /** Finish an update to 0.2.0 that never answers; 0.1.0 answers once it's started again. */
-  async function failedUpdate(home: string, backup: string, starts: string[] = []) {
+  async function failedUpdate(home: string, backup: string, starts: string[] = [], ran = true) {
     return finishUpdate({
       home,
       from: "0.1.0",
@@ -188,9 +206,12 @@ describe("updating an installed copy", () => {
       backup,
       timeoutMs: 800,
       pollMs: 50,
+      ports: [],
       start: () => {
         const v = installedVersions(home)!.current;
         starts.push(v);
+        // The new version starts (its first line is in the log), then never answers.
+        if (v === "0.2.0" && ran) appendLog(home, "RawJobs 0.2.0 is starting.");
         if (v === "0.1.0") void serve((_q, res) => res.end(JSON.stringify({ ok: true, version: "0.1.0" }))).then((port) => writeFileSync(join(home, "state.json"), JSON.stringify({ port })));
       },
     });
@@ -246,6 +267,127 @@ describe("updating an installed copy", () => {
     expect(takeReady(home, r.manifest)).toMatchObject({ version: "0.2.0" });
     expect(existsSync(join(home, "app/versions/0.2.0/cli.mjs"))).toBe(true);
     expect(readUpdateFile(home).ready).toBeUndefined();
+  });
+
+  it("keeps offering a new version the computer never started, and says so", async () => {
+    const home = installedCopy();
+    const r = await release("0.2.0");
+    const v = await prepareVersion(home, r.base, r.manifest);
+    const backup = backupData(home, "before-0.2.0");
+    switchTo(home, v.version, v.node);
+    // An old line from 0.2.0 (an earlier try) doesn't count: only what's written after the start.
+    appendLog(home, "RawJobs 0.2.0 is starting.");
+    const record = await failedUpdate(home, backup, [], false);
+    expect(record.ok).toBe(false);
+    expect(record.error).toMatch(/didn't start RawJobs 0\.2\.0, so 0\.1\.0 is back\. Update tries it again/);
+    expect(installedVersions(home)?.current).toBe("0.1.0");
+    expect(readUpdateFile(home).skip ?? []).toEqual([]);
+    expect(record.skipped).toBe(false);
+  });
+});
+
+/** A computer for the update helper: servers by port and process, programs it runs, what it starts. */
+function fakeComputer(o: { servers?: Record<number, { pid: number; home?: string }>; listeners?: string; task?: { state: string; result: number } }) {
+  const running = new Set(Object.values(o.servers ?? {}).map((s) => s.pid));
+  const scripts: string[] = [];
+  const launched: string[][] = [];
+  const sys: UpdateSystem = {
+    platform: "win32",
+    fetch: (async (url: string) => {
+      const s = o.servers?.[Number(new URL(url).port)];
+      if (!s || !running.has(s.pid)) throw new Error("ECONNREFUSED");
+      return new Response(JSON.stringify({ ok: true, version: "0.1.0", home: s.home, pid: s.pid }));
+    }) as typeof fetch,
+    run: (_cmd, args) => {
+      const script = args.at(-1)!;
+      scripts.push(script);
+      const out = (stdout: string, status = 0) => ({ status, stdout, stderr: "" });
+      if (script.includes("Get-NetTCPConnection")) return out(o.listeners ?? "");
+      if (script.includes("Get-ScheduledTaskInfo")) return out(String(o.task?.result ?? 0));
+      if (script.includes("Get-ScheduledTask ")) return o.task ? out(o.task.state) : out("", 1);
+      if (script.includes("Win32_Process")) return out("");
+      return out("");
+    },
+    launch: (cmd, args) => void launched.push([cmd, ...args]),
+    alive: (pid) => running.has(pid),
+    kill: (pid) => void running.delete(pid),
+    sleep: async () => {},
+  };
+  return { sys, running, scripts, launched };
+}
+
+describe("restarting the server for an update", () => {
+  it("stops every server of this folder (4317 and 4318, and a hung one), and nothing else", async () => {
+    const home = installedCopy();
+    const id = folderId(home);
+    // 4317: the task's server; 4318: one started next to it (state.json's); 4319: another folder's.
+    // 4320 doesn't answer, but its process runs from this folder; 4321 is another program.
+    const pc = fakeComputer({
+      servers: { 4317: { pid: 101, home: id }, 4318: { pid: 102, home: id }, 4319: { pid: 103, home: "someone-else" } },
+      listeners: `4319\t103\tnode other\\cli.mjs serve\r\n4320\t104\t"${join(home, "runtime\\node.exe")}" "${join(home, "app\\versions\\0.1.0\\cli.mjs")}" serve\r\n4321\t105\tC:\\Program Files\\Other\\other.exe\r\n`,
+    });
+    pc.running.add(104).add(105);
+    writeFileSync(join(home, "state.json"), JSON.stringify({ port: 4318, pid: 102, version: "0.1.0" }));
+    expect(await stopAllServers(home, { sys: pc.sys, ports: [4317, 4318, 4319, 4320, 4321] })).toBe(3);
+    expect([...pc.running].sort()).toEqual([103, 105]);
+  });
+
+  it("finishes an update with both servers stopped before the new version starts", async () => {
+    const home = installedCopy();
+    const id = folderId(home);
+    const pc = fakeComputer({ servers: { 4317: { pid: 201, home: id }, 4318: { pid: 202, home: id } } });
+    writeFileSync(join(home, "state.json"), JSON.stringify({ port: 4318, pid: 202, version: "0.1.0" }));
+    let stillRunning: number[] | null = null;
+    const record = await finishUpdate({
+      home,
+      from: "0.1.0",
+      to: "0.2.0",
+      pid: 202,
+      timeoutMs: 5000,
+      pollMs: 50,
+      ports: [4317, 4318],
+      sys: pc.sys,
+      start: () => {
+        stillRunning = [...pc.running];
+        void serve((_q, res) => res.end(JSON.stringify({ ok: true, version: "0.2.0" }))).then((port) => writeFileSync(join(home, "state.json"), JSON.stringify({ port })));
+      },
+    });
+    expect(stillRunning).toEqual([]);
+    expect(record.ok).toBe(true);
+  });
+
+  it("ends the task's old run, then starts the task (Windows)", async () => {
+    const pc = fakeComputer({ task: { state: "Running", result: TASK_RUNNING } });
+    await startServer(installedCopy(), { sys: pc.sys });
+    const stop = pc.scripts.findIndex((s) => s.startsWith("Stop-ScheduledTask"));
+    const start = pc.scripts.findIndex((s) => s.startsWith("Start-ScheduledTask"));
+    expect(stop).toBeGreaterThanOrEqual(0);
+    expect(start).toBeGreaterThan(stop);
+    expect(pc.launched).toEqual([]);
+  });
+
+  it("doesn't end the task it runs in, and starts the server directly when Windows refuses the task", async () => {
+    const home = installedCopy();
+    const pc = fakeComputer({ task: { state: "Running", result: TASK_REFUSED } });
+    await startServer(home, { sys: pc.sys, insideTask: true });
+    expect(pc.scripts.some((s) => s.startsWith("Stop-ScheduledTask"))).toBe(false);
+    expect(pc.scripts.some((s) => s.startsWith("Start-ScheduledTask"))).toBe(true);
+    expect(pc.launched).toEqual([["conhost.exe", "--headless", join(home, "bin/rawjobs.cmd"), "serve", "--log", join(home, "logs/server.log")]]);
+  });
+
+  it("starts the server directly when the task starts nothing", async () => {
+    const pc = fakeComputer({ task: { state: "Ready", result: 0 } });
+    await startServer(installedCopy(), { sys: pc.sys });
+    expect(pc.scripts.some((s) => s.startsWith("Stop-ScheduledTask"))).toBe(false);
+    expect(pc.launched).toHaveLength(1);
+  });
+
+  it("knows when it runs inside the RawJobs Server task", () => {
+    const task = ["cmd.exe\tC:\\WINDOWS\\system32\\cmd.exe /c rawjobs.cmd serve --log x", 'conhost.exe\t"conhost.exe" --headless "rawjobs.cmd" serve --log x', "svchost.exe\t"];
+    expect(inTaskTree(["node.exe\tnode cli.mjs serve", ...task])).toBe(true);
+    // Started from the shortcut, or from a terminal.
+    expect(inTaskTree(["cmd.exe\tcmd /c rawjobs.cmd serve", 'conhost.exe\t"conhost.exe" --headless "rawjobs.cmd" open', "explorer.exe\t"])).toBe(false);
+    expect(inTaskTree(["powershell.exe\tpowershell", "WindowsTerminal.exe\t"])).toBe(false);
   });
 });
 
