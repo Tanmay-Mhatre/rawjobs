@@ -10,7 +10,7 @@ import {
   telegramBotName,
   findTelegramChat,
   looksLikeToken,
-  maskToken,
+  telegramStatus,
   personalConfigPath,
 } from "@rawjobs/core";
 import { readStdin } from "../util";
@@ -31,13 +31,7 @@ export async function cmdAlerts(args: string[]): Promise<number> {
   try {
     const secrets = telegramSecrets();
     if (action === "status") {
-      let enabled = false;
-      try {
-        enabled = loadConfig().config.alerts.telegram;
-      } catch {
-        // no config yet
-      }
-      out({ ok: true, token: maskToken(secrets.token) ?? null, bot: secrets.bot ?? null, connected: !!secrets.chatId, enabled, fromEnv: !!process.env.TELEGRAM_BOT_TOKEN });
+      out(telegramStatus());
       return 0;
     }
     if (action === "token") {

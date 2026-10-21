@@ -181,9 +181,8 @@ h3 {
 .rj-drawer__section {
   grid-template-columns: minmax(0, 1fr);
 }
-/* The job's footer is one 60px row beside the list: Apply (a long company name ends in "…"), then Save
-   and Not interested as icons with tooltips, and More at the far end. On phones Apply takes its own row
-   and Save and Not interested keep their words, as there is no hover to show a tooltip. */
+/* The job's footer is one 60px row beside the list: Apply (a long company name ends in "…"), then a
+   labelled Save, and More (Not interested, Hide company…) at the far end. On phones Apply takes its own row. */
 .rj-drawer__foot {
   align-items: center;
 }
@@ -196,21 +195,8 @@ h3 {
   .rj-foot__apply {
     min-width: 0;
   }
-  .rj-foot__act {
-    position: relative;
-    flex: none;
-    width: var(--control-md, 36px);
-    padding: 0;
-  }
-  .rj-foot__act > .rj-foot__text,
-  .rj-foot__act > .rj-kbd {
-    display: none;
-  }
 }
 @media (max-width: 720px) {
-  .rj-foot__act > .rj-tip {
-    display: none;
-  }
   .rj-drawer__foot {
     display: flex;
     flex-wrap: wrap;
@@ -254,38 +240,7 @@ h3 {
   max-width: calc(100vw - 2rem);
 }
 
-/* The job's decision facts (salary, work mode, seniority, who can apply, company hiring, type): a grid of
-   small boxes, each with where its value came from underneath. */
-.rj-facts {
-  display: grid;
-  /* At most three across (two rows of three), two on a phone. */
-  grid-template-columns: repeat(auto-fill, minmax(max(9rem, calc((100% - 2 * var(--space-2)) / 3)), 1fr));
-  gap: var(--space-2);
-  margin: 0;
-}
-.rj-fact {
-  display: grid;
-  align-content: start;
-  gap: 2px;
-  padding: var(--space-3);
-  border: 1px solid var(--border-subtle);
-  border-radius: var(--radius-md);
-}
-.rj-fact dt {
-  font: var(--text-meta, 400 12px/16px var(--font-sans));
-  color: var(--text-secondary);
-}
-.rj-fact dd {
-  margin: 0;
-  font: var(--text-body-strong, 500 15px/22px var(--font-sans));
-  color: var(--text-primary);
-}
-.rj-fact dd.rj-fact__note {
-  font: var(--text-meta, 400 12px/16px var(--font-sans));
-  color: var(--text-secondary);
-}
-
-/* "Why it matched" as a card: score, verdict, then a pill per part and one per miss. */
+/* "Why it matched" as a card: score and verdict, then a pill per miss or unknown (the points unfold). */
 .rj-fit {
   padding: var(--space-4);
   border: 1px solid var(--border-subtle);

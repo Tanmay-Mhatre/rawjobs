@@ -2,7 +2,7 @@ import { EMPLOYMENT_LABEL } from "@rawjobs/core/catalog/employment";
 import { INDUSTRY_BY_ID } from "@rawjobs/core/catalog/industries";
 import { SENIORITY_LEVELS } from "@rawjobs/core/catalog/seniority";
 import { fromJobBoard } from "@rawjobs/core/dashboard";
-import { sponsorOf, sponsorSentence, sponsorTitle, VISA_REGISTERS } from "@rawjobs/core/catalog/visa";
+import { sponsorOf, sponsorSentence, VISA_REGISTERS } from "@rawjobs/core/catalog/visa";
 import { matchesTitle, safeUrl } from "@rawjobs/core/text";
 import {
   ArrowLeft,
@@ -16,6 +16,7 @@ import {
   Copy,
   Ellipsis,
   ExternalLink,
+  EyeOff,
   FileText,
   Info,
   LoaderCircle,
@@ -42,6 +43,7 @@ import { ReasonPicker, useNotForMe } from "./NotForMe";
 import { Button, buttonClass, IconButton, Menu, ScoreBadge, scoreBandOf, ScoreBreakdown, scoreParts, Tooltip } from "./primitives";
 import { toast } from "./Toast";
 import { JobTracking } from "./pipeline/JobTracking";
+import { ConnectBanner } from "./referral/ConnectBanner";
 import { TalkToSomeone } from "./referral/TalkToSomeone";
 import { OfferFields } from "./TrackedJob";
 import { cx, Select } from "./ui";
@@ -100,23 +102,6 @@ function MetaLine({ parts, className }: { parts: ReactNode[]; className?: string
         </Fragment>
       ))}
     </p>
-  );
-}
-
-type Fact = { label: string; value: ReactNode; note?: string; muted?: boolean; tone?: "warn" | "good" };
-
-/** The decision facts as a grid of small boxes: label, value, and where the value came from. */
-function KeyFacts({ facts }: { facts: Fact[] }) {
-  return (
-    <dl className="rj-facts">
-      {facts.map((f) => (
-        <div key={f.label} className="rj-fact">
-          <dt>{f.label}</dt>
-          <dd className={cx(f.muted && "!text-muted", f.tone === "warn" && "!text-warning-text", f.tone === "good" && "!text-success-text")}>{f.value}</dd>
-          {f.note && <dd className="rj-fact__note">{f.note}</dd>}
-        </div>
-      ))}
-    </dl>
   );
 }
 
@@ -195,9 +180,18 @@ export function JobDetail(p: JobDetailProps) {
   const stale = isRoleStale(postings ?? [job], (j) => (j.id === job.id ? staleCtx : undefined)) ? staleReasons(job, staleCtx) : null;
   // A register listing ("Sponsors visas") already says it: the posting's own "we sponsor" would repeat it.
   const eligibility = eligibilityNotes(job.eligibility).filter((n) => !(sponsor && n.text === "Sponsors a visa"));
-  // Under the title: where and what the job is, then how fresh it is.
-  const factsLine: ReactNode[] = [places, ...(workplace ? [workplace] : []), ...(job.employmentType ? [EMPLOYMENT_LABEL[job.employmentType]] : []), SENIORITY_LABEL[job.seniority]];
-  const freshLine: ReactNode[] = [
+  // Under the title, one line: where the job is, then how fresh it is (seniority and type are pills below).
+  const metaLine: ReactNode[] = [
+    <span key="places" className="text-ink">
+      {places}
+    </span>,
+    ...(workplace
+      ? [
+          <span key="workplace" className="text-ink">
+            {workplace}
+          </span>,
+        ]
+      : []),
     // The stale callout says how old it is: this line keeps the plain age then.
     isOlder(job) && job.status === "open" && !stale ? (
       <span key="older" className="text-warning-text" title="Most roles are filled within two months. It's still listed, but may no longer be hiring.">
@@ -212,12 +206,12 @@ export function JobDetail(p: JobDetailProps) {
     ...(job.status === "closed"
       ? [
           <span key="closed" className="text-danger-text">
-            Closed
+            Closed{job.closedAt ? ` ${formatDate(job.closedAt)}` : ""}
           </span>,
         ]
       : job.estimated
         ? []
-        : [`still listed, checked ${timeAgo(job.lastSeen)}`]),
+        : [`listed on ${source}, checked ${timeAgo(job.lastSeen)}`]),
     ...(evergreen === "pool"
       ? [
           <span key="pool" className="text-warning-text" title="A talent pool or open application: it collects applications rather than filling one role">
@@ -241,32 +235,40 @@ export function JobDetail(p: JobDetailProps) {
     : job.eligibility?.nationalsOnly && limits.some((n) => n.text.endsWith("nationals only"))
       ? "From the posting"
       : "From the description";
-  const pluses = [...(sponsor ? ["Sponsors visas"] : []), ...eligibility.filter((n) => !n.limit).map((n) => n.text)];
   const last30 = hiring?.last30 ?? job.surge?.n;
   const usual = hiring?.usual ?? job.surge?.usual;
   const surge = hiring ? hiring.surge : !!job.surge;
-  // The decisions a job seeker makes first, each saying where its answer came from (or that there's none).
-  const facts: Fact[] = [
-    salary
-      ? { label: "Salary", value: salary, note: job.salaryFrom === "description" ? "Read from the description" : "From the posting" }
-      : { label: "Salary", value: "Not listed", muted: true, note: job.hasDescription ? "Not in the posting or description" : "Not in the posting" },
-    WORKPLACE_LABEL[job.workplace] ? { label: "Work mode", value: WORKPLACE_LABEL[job.workplace] } : { label: "Work mode", value: "Not stated", muted: true, note: "No on-site or remote wording" },
-    { label: "Seniority", value: SENIORITY_LABEL[job.seniority], note: "Read from the title" },
-    limits.length
-      ? { label: "Who can apply", value: limits.map((n) => n.text).join(", "), tone: "warn", note: pluses.join(", ") || limitsFrom }
-      : pluses.length
-        ? { label: "Who can apply", value: pluses.join(", "), tone: "good", note: sponsor ? sponsorTitle(sponsor) : "From the description" }
-        : { label: "Who can apply", value: "No limits stated", muted: true, note: "Visa, residency, relocation not mentioned" },
-    last30 !== undefined
-      ? {
-          label: "Company hiring",
-          value: `${last30} ${last30 === 1 ? "role" : "roles"} in 30 days`,
-          tone: surge ? "good" : undefined,
-          note: surge ? "Hiring surge: far more than usual" : usual !== undefined ? `Usually about ${Math.round(usual)}` : undefined,
-        }
-      : { label: "Company hiring", value: "Not known yet", muted: true },
-    job.employmentType ? { label: "Type", value: EMPLOYMENT_LABEL[job.employmentType], note: `Via ${source}` } : { label: "Type", value: "Not stated", muted: true, note: `Via ${source}` },
+  // The decision facts the posting gives, as pills (where each came from on hover); what it doesn't say folds into one line.
+  const facts: { text: string; title: string; tone?: "warn" | "good" }[] = [
+    ...(salary ? [{ text: salary, title: job.salaryFrom === "description" ? "Salary, read from the description" : "Salary, from the posting" }] : []),
+    { text: SENIORITY_LABEL[job.seniority] ?? job.seniority, title: "Seniority, read from the title" },
+    ...(job.employmentType ? [{ text: EMPLOYMENT_LABEL[job.employmentType], title: `Job type, via ${source}` }] : []),
+    ...limits.map((n) => ({ text: n.text, tone: "warn" as const, title: `Who can apply: ${limitsFrom.toLowerCase()}` })),
+    ...(sponsor
+      ? [
+          {
+            text: "Sponsors visas",
+            tone: "good" as const,
+            title: `${sponsorSentence(companyName(job.company), sponsor)} That means it can sponsor, not that this role will. Source: ${VISA_REGISTERS[sponsor.country].source}.`,
+          },
+        ]
+      : []),
+    ...eligibility.filter((n) => !n.limit).map((n) => ({ text: n.text, tone: "good" as const, title: "Who can apply: from the description" })),
+    ...(last30 !== undefined
+      ? [
+          {
+            text: `${last30} ${last30 === 1 ? "role" : "roles"} in 30 days`,
+            tone: surge ? ("good" as const) : undefined,
+            title: surge ? "Company hiring: a surge, far more than usual" : usual !== undefined ? `Company hiring: usually about ${Math.round(usual)}` : "Company hiring",
+          },
+        ]
+      : []),
+    ...(job.department ? [{ text: job.department, title: "Department" }] : []),
+    ...(p.industries ?? []).map((i) => ({ text: INDUSTRY_BY_ID.get(i)?.label ?? i, title: "Industry" })),
   ];
+  // A pay floor already says "Pay not listed" in the verdict.
+  const payChecked = job.why.checks?.some((c) => c.id === "pay");
+  const notStated = [...(salary || payChecked ? [] : ["salary"]), ...(WORKPLACE_LABEL[job.workplace] ? [] : ["work mode"])];
   const saved = status === "saved";
   // Further along than Saved (Applied, Interviewing…): Save shows where it is and doesn't move it back.
   const further = !!status && quickStatus(status, "saved") === null;
@@ -289,15 +291,25 @@ export function JobDetail(p: JobDetailProps) {
   };
 
   const preview = !p.expanded && !fullText && (description?.length ?? 0) > PREVIEW_CHARS;
-  const descriptionSection = (
-    <section className="rj-drawer__section">
-      <h3 className="rj-h">About the role</h3>
-      {description === undefined ? (
-        <p className="flex items-center gap-2 type-small text-muted">
-          <LoaderCircle className="size-4 animate-spin" /> Loading…
-        </p>
-      ) : description ? (
-        // A long description starts as a preview beside the list; the reader (F) always shows it all.
+  // No description: one quiet line with the way to read it, not a whole section.
+  const descriptionSection =
+    description === null || description === "" ? (
+      <p className="flex flex-wrap items-baseline gap-x-2 rounded-md border border-dashed border-line px-3 py-2 type-small text-muted">
+        <span>
+          {job.estimated ? "Not scanned yet, so no description." : job.why.gate ? "Description not stored for jobs that fail your filters." : "The hiring system didn't include a description."}
+        </span>
+        <a href={safeUrl(job.url)} target="_blank" rel="noreferrer" className="font-medium text-ink underline underline-offset-2 hover:text-muted">
+          Open the job page
+        </a>
+      </p>
+    ) : (
+      <section className="rj-drawer__section">
+        <h3 className="rj-h">About the role</h3>
+        {description === undefined ? (
+          <p className="flex items-center gap-2 type-small text-muted">
+            <LoaderCircle className="size-4 animate-spin" /> Loading…
+          </p>
+        ) : // A long description starts as a preview beside the list; the reader (F) always shows it all.
         preview ? (
           <>
             <div className="rj-preview">
@@ -309,15 +321,9 @@ export function JobDetail(p: JobDetailProps) {
           </>
         ) : (
           <Highlighted text={description} terms={job.why.keywords} wide={p.expanded} />
-        )
-      ) : (
-        <p className="type-small text-muted">
-          {job.estimated ? "Not scanned yet, so no description." : job.why.gate ? "Not stored for jobs that fail your filters." : "The hiring system didn't include a description."} Open the job page
-          to read it.
-        </p>
-      )}
-    </section>
-  );
+        )}
+      </section>
+    );
 
   return (
     <section ref={rootRef} aria-label="Job details" className="flex h-full min-h-0 flex-col">
@@ -364,14 +370,15 @@ export function JobDetail(p: JobDetailProps) {
           {p.yours && <Star className="rj-star" role="img" aria-label="My company" />}
           <span className="min-w-0">{jobTitle(job.title)}</span>
         </h2>
-        <MetaLine className="rj-drawer__meta !text-ink" parts={factsLine} />
-        <MetaLine className="rj-drawer__meta" parts={freshLine} />
+        <MetaLine className="rj-drawer__meta" parts={metaLine} />
       </header>
 
       <div ref={scrollRef} className={cx("rj-drawer__body min-h-0 flex-1", p.expanded && "md:grid-cols-[minmax(0,1fr)_20rem] md:gap-x-10")}>
         {/* Expanded: the description gets the wide column, everything else sits beside it. */}
         {p.expanded && descriptionSection}
         <div className={cx("grid min-w-0 grid-cols-1 content-start gap-6", p.expanded && "md:col-start-2 md:row-start-1")}>
+          <ConnectBanner job={job} notInterested={status === "dismissed"} />
+
           {stale && (
             <section className="rj-drawer__section">
               <h3 className="rj-h text-warning-text">May be stale</h3>
@@ -384,9 +391,20 @@ export function JobDetail(p: JobDetailProps) {
             </section>
           )}
 
-          {!job.estimated && <KeyFacts facts={facts} />}
-
           <WhyItMatches job={job} profile={profile} yours={!!p.yours} />
+
+          {!job.estimated && (
+            <div className="grid gap-2">
+              <ul className="rj-pills" aria-label="Key facts">
+                {facts.map((f) => (
+                  <li key={`${f.title}:${f.text}`} title={f.title} className={cx("rj-pill", f.tone === "warn" && "text-warning-text", f.tone === "good" && "text-success-text")}>
+                    {f.text}
+                  </li>
+                ))}
+              </ul>
+              {notStated.length > 0 && <p className="type-small text-muted">Not stated: {notStated.join(", ")}.</p>}
+            </div>
+          )}
 
           <TalkToSomeone job={job} entry={entry} profile={profile} onUpdate={p.onUpdate} onOpenPeople={() => setPeopleAsk((x) => ({ jobId: job.id, n: (x?.n ?? 0) + 1 }))} />
 
@@ -394,43 +412,41 @@ export function JobDetail(p: JobDetailProps) {
 
           {!p.expanded && descriptionSection}
 
-          <section className="rj-drawer__section border-t border-line pt-4">
-            {/* The one place to set any status; Save and Not interested in the foot are shortcuts. */}
-            <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
-              <label htmlFor={`status-${job.id}`} className="font-medium text-ink">
-                Your progress
-              </label>
-              <Select id={`status-${job.id}`} value={progressValue(entry)} onChange={(e) => setProgress(e.target.value)}>
-                <option value="">Not tracked</option>
-                {PIPELINE.filter((s) => s !== "rejected").map((s) => (
-                  <option key={s} value={s}>
-                    {STATUS_LABEL[s]}
-                  </option>
-                ))}
-                {(Object.keys(CLOSED_AS) as ClosedAs[]).map((c) => (
-                  <option key={c} value={`rejected:${c}`}>
-                    Closed: {CLOSED_AS[c].toLowerCase()}
-                  </option>
-                ))}
-                <option value="dismissed">{STATUS_LABEL.dismissed}</option>
-              </Select>
-              {/* Tracked: notes are logged in Activity (an older note shows there too). */}
-              {!tracked && <NotesField key={job.id} id={`notes-${job.id}`} note={entry?.note ?? ""} onSave={(note) => p.onUpdate({ note: note || undefined })} />}
-              <CvField key={`cv:${job.id}`} id={`cv-${job.id}`} cv={entry?.cv ?? ""} onSave={(cv) => p.onUpdate({ cv: cv || undefined })} />
-            </div>
-            {entry && <ProgressLine entry={entry} onUpdate={p.onUpdate} id={`follow-${job.id}`} />}
-            {tracked && entry && (entry.status === "offer" || entry.offer) && <OfferFields key={`offer:${job.id}`} offer={entry.offer ?? {}} onSave={(offer) => p.onUpdate({ offer })} />}
-            {tracked && entry && (
-              <JobTracking key={openPeople} jobId={job.id} entry={entry} title={job.title} foundAt={job.firstSeen} onUpdate={p.onUpdate} initialTab={openPeople ? "people" : undefined} />
-            )}
-            {status === "dismissed" && <ReasonPicker key={`why:${job.id}`} job={job} label="Why not? Optional." live />}
-          </section>
+          {/* Not tracked yet: just a note. Save (S) in the foot puts it on the board, and the progress row shows. */}
+          {!tracked && status !== "dismissed" && <NotesField key={job.id} id={`notes-${job.id}`} note={entry?.note ?? ""} onSave={(note) => p.onUpdate({ note: note || undefined })} />}
 
-          {sponsor && (
-            <section className="rj-drawer__section">
-              <h3 className="rj-h text-success-text">Sponsors visas</h3>
-              <p className="type-small">{sponsorSentence(companyName(job.company), sponsor)}</p>
-              <p className="type-small text-muted">That means it can sponsor, not that this role will. Source: {VISA_REGISTERS[sponsor.country].source}.</p>
+          {(tracked || status === "dismissed") && (
+            <section className="rj-drawer__section border-t border-line pt-4">
+              {/* The one place to set any status; Save and Not interested (More) in the foot are shortcuts. */}
+              <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+                <label htmlFor={`status-${job.id}`} className="font-medium text-ink">
+                  Your progress
+                </label>
+                <Select id={`status-${job.id}`} value={progressValue(entry)} onChange={(e) => setProgress(e.target.value)}>
+                  <option value="">Not tracked</option>
+                  {PIPELINE.filter((s) => s !== "rejected").map((s) => (
+                    <option key={s} value={s}>
+                      {STATUS_LABEL[s]}
+                    </option>
+                  ))}
+                  {(Object.keys(CLOSED_AS) as ClosedAs[]).map((c) => (
+                    <option key={c} value={`rejected:${c}`}>
+                      Closed: {CLOSED_AS[c].toLowerCase()}
+                    </option>
+                  ))}
+                  <option value="dismissed">{STATUS_LABEL.dismissed}</option>
+                </Select>
+                {/* Tracked: notes are logged in Activity (an older note shows there too). */}
+                {!tracked && <NotesField key={job.id} id={`notes-${job.id}`} note={entry?.note ?? ""} onSave={(note) => p.onUpdate({ note: note || undefined })} />}
+                {/* Which CV went out only matters once you've applied. */}
+                {((tracked && status !== "saved") || entry?.cv) && <CvField key={`cv:${job.id}`} id={`cv-${job.id}`} cv={entry?.cv ?? ""} onSave={(cv) => p.onUpdate({ cv: cv || undefined })} />}
+              </div>
+              {entry && <ProgressLine entry={entry} onUpdate={p.onUpdate} id={`follow-${job.id}`} />}
+              {tracked && entry && (entry.status === "offer" || entry.offer) && <OfferFields key={`offer:${job.id}`} offer={entry.offer ?? {}} onSave={(offer) => p.onUpdate({ offer })} />}
+              {tracked && entry && (
+                <JobTracking key={openPeople} jobId={job.id} entry={entry} title={job.title} foundAt={job.firstSeen} onUpdate={p.onUpdate} initialTab={openPeople ? "people" : undefined} />
+              )}
+              {status === "dismissed" && <ReasonPicker key={`why:${job.id}`} job={job} label="Why not? Optional." live />}
             </section>
           )}
 
@@ -463,67 +479,25 @@ export function JobDetail(p: JobDetailProps) {
             </section>
           )}
 
-          <section className="rj-drawer__section">
-            <h3 className="rj-h">Details</h3>
-            <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1 type-small">
-              <dt className="text-muted">Posted</dt>
-              <dd className="text-muted">{job.postedAt ? `${formatDate(job.postedAt)} (${timeAgo(job.postedAt)})` : "Not given by the hiring system"}</dd>
-              <dt className="text-muted">First seen</dt>
-              <dd className="text-muted">{formatDate(job.firstSeen)}</dd>
-              <dt className="text-muted">Last seen</dt>
-              <dd className="text-muted">{timeAgo(job.lastSeen)}</dd>
-              {job.status === "closed" && job.closedAt && (
-                <>
-                  <dt className="text-muted">Closed</dt>
-                  <dd className="text-muted">{formatDate(job.closedAt)}</dd>
-                </>
-              )}
-              {job.department && (
-                <>
-                  <dt className="text-muted">Department</dt>
-                  <dd>{job.department}</dd>
-                </>
-              )}
-              {p.industries?.length ? (
-                <>
-                  <dt className="text-muted">Industry</dt>
-                  <dd>{p.industries.map((i) => INDUSTRY_BY_ID.get(i)?.label ?? i).join(", ")}</dd>
-                </>
-              ) : null}
-              <dt className="text-muted">Hiring system</dt>
-              <dd>{source}</dd>
-            </dl>
-          </section>
-
           {hiring && <HiringActivity company={companyName(job.company)} summary={hiring} />}
 
-          {(p.moreFromCompany?.length || p.onHideCompany) && (
+          {/* Only when there's something to show; hiding the company is in More. */}
+          {!!p.moreFromCompany?.length && (
             <section className="rj-drawer__section">
-              <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
-                <h3 className="rj-h">More from {companyName(job.company)}</h3>
-                {p.onHideCompany && (
-                  <button type="button" className="type-small text-muted hover:text-danger-text" onClick={() => p.onHideCompany!(!p.companyHidden)}>
-                    {p.companyHidden ? "Show this company again" : "Hide this company"}
-                  </button>
-                )}
-              </div>
-              {p.moreFromCompany?.length ? (
-                <ul className="divide-y divide-line rounded-md border border-line">
-                  {p.moreFromCompany.map((j) => (
-                    <li key={j.id}>
-                      <button type="button" onClick={() => p.onOpenJob?.(j)} className="flex w-full items-center gap-3 px-3 py-2 text-left type-small hover:bg-hover">
-                        <span className="tabular w-7 shrink-0 font-semibold text-muted">{j.score}</span>
-                        <span className="min-w-0 flex-1">
-                          <span className="block truncate font-medium">{j.title}</span>
-                          <span className="block truncate text-muted">{j.location}</span>
-                        </span>
-                      </button>
-                    </li>
-                  ))}
-                </ul>
-              ) : (
-                <p className="type-small text-muted">No other matching jobs here right now.</p>
-              )}
+              <h3 className="rj-h">More from {companyName(job.company)}</h3>
+              <ul className="divide-y divide-line rounded-md border border-line">
+                {p.moreFromCompany.map((j) => (
+                  <li key={j.id}>
+                    <button type="button" onClick={() => p.onOpenJob?.(j)} className="flex w-full items-center gap-3 px-3 py-2 text-left type-small hover:bg-hover">
+                      <span className="tabular w-7 shrink-0 font-semibold text-muted">{j.score}</span>
+                      <span className="min-w-0 flex-1">
+                        <span className="block truncate font-medium">{j.title}</span>
+                        <span className="block truncate text-muted">{j.location}</span>
+                      </span>
+                    </button>
+                  </li>
+                ))}
+              </ul>
             </section>
           )}
         </div>
@@ -542,7 +516,7 @@ export function JobDetail(p: JobDetailProps) {
           {/* A long company name ends in "…" rather than pushing the other actions to a second row. */}
           <span className="truncate">{job.estimated ? "Open careers page" : `Apply at ${companyName(job.company)}`}</span>
         </a>
-        {/* Labelled on phones; on wider screens an icon with a tooltip (rj-foot__act), named by aria-label either way. */}
+        {/* Labelled everywhere: an icon alone beside Apply read as "close". */}
         <Button
           icon={saved || further ? <BookmarkCheck className="rj-icon" /> : <Bookmark className="rj-icon" />}
           shortcut="S"
@@ -551,49 +525,52 @@ export function JobDetail(p: JobDetailProps) {
             if (next !== null) p.onUpdate({ status: next });
           }}
           aria-pressed={saved || further}
-          aria-label={saveLabel}
-          className="rj-foot__act aria-pressed:border-ink aria-pressed:bg-active"
+          className="shrink-0 aria-pressed:border-ink aria-pressed:bg-active"
         >
-          <span className="rj-foot__text">{saveLabel}</span>
-          <Tooltip label={saveLabel} shortcut="S" side="above" />
+          {saveLabel}
         </Button>
-        <Button
-          icon={<X className="rj-icon" />}
-          shortcut="X"
-          onClick={() => setStatus(status === "dismissed" ? undefined : "dismissed")}
-          aria-pressed={status === "dismissed"}
-          aria-label="Not interested"
-          className="rj-foot__act aria-pressed:border-ink aria-pressed:bg-active"
-        >
-          <span className="rj-foot__text">Not interested</span>
-          <Tooltip label="Not interested" shortcut="X" side="above" />
-        </Button>
-        {(p.onTrack || job.hasDescription) && (
-          <Menu
-            label="More job actions"
-            side="above"
-            className="ml-auto shrink-0"
-            trigger={(t) => (
-              <button type="button" className={buttonClass("secondary", "md", "rj-btn--icon")} aria-label="More job actions" {...t}>
-                {copied ? <Check className="rj-icon text-success-text" aria-hidden /> : <Ellipsis className="rj-icon" aria-hidden />}
-                <Tooltip label="More" side="above" />
-              </button>
-            )}
-            items={[
-              ...(p.onTrack
-                ? [
-                    {
-                      id: "track",
-                      label: p.yours ? "Remove from My companies" : "Add company to My companies",
-                      icon: p.yours ? <Check className="rj-icon" aria-hidden /> : <Plus className="rj-icon" aria-hidden />,
-                      onSelect: () => void track(),
-                    },
-                  ]
-                : []),
-              ...(job.hasDescription && description ? [{ id: "copy", label: "Copy description", icon: <Copy className="rj-icon" aria-hidden />, shortcut: "C", onSelect: () => void copyJd() }] : []),
-            ]}
-          />
-        )}
+        <Menu
+          label="More job actions"
+          side="above"
+          className="ml-auto shrink-0"
+          trigger={(t) => (
+            <button type="button" className={buttonClass("secondary", "md", "rj-btn--icon")} aria-label="More job actions" {...t}>
+              {copied ? <Check className="rj-icon text-success-text" aria-hidden /> : <Ellipsis className="rj-icon" aria-hidden />}
+              <Tooltip label="More" side="above" />
+            </button>
+          )}
+          items={[
+            {
+              id: "dismiss",
+              label: status === "dismissed" ? "Interested after all" : "Not interested",
+              icon: <X className="rj-icon" aria-hidden />,
+              shortcut: "X",
+              onSelect: () => setStatus(status === "dismissed" ? undefined : "dismissed"),
+            },
+            ...(p.onHideCompany
+              ? [
+                  {
+                    id: "hide",
+                    label: p.companyHidden ? `Show ${companyName(job.company)} again` : `Hide ${companyName(job.company)}`,
+                    icon: <EyeOff className="rj-icon" aria-hidden />,
+                    danger: !p.companyHidden,
+                    onSelect: () => p.onHideCompany!(!p.companyHidden),
+                  },
+                ]
+              : []),
+            ...(p.onTrack
+              ? [
+                  {
+                    id: "track",
+                    label: p.yours ? "Remove from My companies" : "Add company to My companies",
+                    icon: p.yours ? <Check className="rj-icon" aria-hidden /> : <Plus className="rj-icon" aria-hidden />,
+                    onSelect: () => void track(),
+                  },
+                ]
+              : []),
+            ...(job.hasDescription && description ? [{ id: "copy", label: "Copy description", icon: <Copy className="rj-icon" aria-hidden />, shortcut: "C", onSelect: () => void copyJd() }] : []),
+          ]}
+        />
         {copied && (
           <span className="sr-only" role="status">
             Copied description
@@ -761,15 +738,18 @@ function WhyItMatches({ job, profile, yours }: { job: Job; profile: Profile; you
     ...(levelFix && w.title > 0 ? [{ text: w.checks?.find((c) => c.id === "level")?.note ?? "Not near your level", fix: levelFix }] : []),
   ];
   const unknowns = items.filter((it) => it.unknown);
+  // The verdict in a few words: which parts of the score it earned ("Matches on title, place and keywords").
+  const earned = parts.filter((x) => x.earned > 0).map((x) => (x.label === "Fresh" ? "posting date" : x.label.toLowerCase()));
+  const matchesOn = earned.length ? `Matches on ${earned.length > 1 ? `${earned.slice(0, -1).join(", ")} and ${earned.at(-1)}` : earned[0]}` : "Matches none of what you asked for";
   return (
-    <section className={cx("rj-drawer__section rj-fit", open && "gap-4")}>
+    <section aria-label="Why it matched" className={cx("rj-drawer__section rj-fit", open && "gap-4")}>
       {/* On a phone the toggle drops under the verdict rather than squeezing it. */}
       <div className="flex flex-wrap items-center gap-3">
         <ScoreBadge score={job.score} threshold={min} estimated={job.estimated} word />
         <div className="min-w-[11rem] flex-1">
-          <h3 className="rj-h">Why it matched</h3>
+          <h3 className="rj-h">{band} match</h3>
           <p className="type-small text-muted">
-            {band} match, {cutOff}. {job.estimated ? "Estimated from title, place and industry." : null}{" "}
+            {matchesOn}, {cutOff}. {job.estimated ? "Estimated from title, place and industry." : null}{" "}
             {!open && (
               <span className="sr-only">
                 {items.filter((it) => it.ok).length} of {items.length} checks pass.
@@ -778,20 +758,12 @@ function WhyItMatches({ job, profile, yours }: { job: Job; profile: Profile; you
           </p>
         </div>
         <Button size="sm" variant="quiet" onClick={toggle} aria-expanded={open} aria-controls={`why-${job.id}`} icon={open ? <ChevronUp className="rj-icon" /> : <ChevronDown className="rj-icon" />}>
-          {open ? "Hide breakdown" : "Show breakdown"}
+          {open ? "Hide why" : "Why"}
         </Button>
       </div>
-      {!open && (
+      {/* Folded: only what didn't fit or isn't known, each with its fix. The points are in the breakdown. */}
+      {!open && misses.length + unknowns.length > 0 && (
         <ul className="rj-pills">
-          {parts.map((p) => (
-            <li key={p.label} className="rj-pill">
-              {p.earned > 0 ? <CircleCheck className="size-4 text-success-text" aria-hidden /> : <X className="size-4 text-muted" aria-hidden />}
-              {p.label}{" "}
-              <span>
-                <b>{p.earned}</b>/{p.max}
-              </span>
-            </li>
-          ))}
           {misses.map((it, i) => (
             // biome-ignore lint/suspicious/noArrayIndexKey: a fixed list rebuilt from the same input, never reordered: the index is a stable key
             <li key={i} className="rj-pill rj-pill--miss">
@@ -969,15 +941,15 @@ function CvField({ id, cv, onSave }: { id: string; cv: string; onSave: (cv: stri
   if (!open)
     return (
       <Button size="sm" variant="quiet" icon={<FileText className="rj-icon" />} onClick={() => setOpen(true)}>
-        CV used
+        CV version sent
       </Button>
     );
   return (
     <label htmlFor={id} className="flex items-center gap-2 type-small text-muted">
-      CV used
+      CV version sent
       <input
         id={id}
-        // Opened from "CV used": straight into typing.
+        // Opened from "CV version sent": straight into typing.
         // biome-ignore lint/a11y/noAutofocus: focus moves into what was just opened, as the pattern expects
         autoFocus={!cv}
         defaultValue={cv}

@@ -1,9 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { canRunLocally, type DataMeta } from "./data";
-
-const POLL_MS = 5000;
-
-type Health = { scanning?: boolean; background?: boolean; dataVersion?: string | null };
+import { healthState, subscribeHealth } from "./health";
 
 /**
  * Scans the page didn't start (scheduled ones run as their own process): while one runs, `running`
@@ -33,14 +30,10 @@ export function useBackgroundScan({
     /** A background scan was seen running since the last reload: say so when its results arrive. */
     let sawScan = false;
     let reloading = false;
-    const poll = async () => {
-      let h: Health;
-      try {
-        h = (await (await fetch("/api/health", { cache: "no-store", signal: AbortSignal.timeout(3000) })).json()) as Health;
-      } catch {
-        return;
-      }
-      if (!live) return;
+    /** After each health poll (lib/health.ts). */
+    const check = async () => {
+      const { health: h, down } = healthState();
+      if (!live || down || !h) return;
       const background = !!h.background;
       setRunning(background);
       if (background) sawScan = true;
@@ -57,15 +50,10 @@ export function useBackgroundScan({
         reloading = false;
       }
     };
-    void poll();
-    const t = setInterval(() => void poll(), POLL_MS);
-    // A tab in the background is asked less often: ask as soon as it's back.
-    const onVisible = () => document.visibilityState === "visible" && void poll();
-    document.addEventListener("visibilitychange", onVisible);
+    const stop = subscribeHealth(() => void check());
     return () => {
       live = false;
-      clearInterval(t);
-      document.removeEventListener("visibilitychange", onVisible);
+      stop();
     };
   }, []);
 

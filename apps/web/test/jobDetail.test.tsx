@@ -43,18 +43,29 @@ describe("JobDetail", () => {
     expect(metaText(container)).toMatch(/Posted 2d ago/);
   });
 
-  it("leads with the decision facts, saying when one isn't known", () => {
-    const { container } = renderDetail(job());
-    const facts = [...container.querySelectorAll(".rj-fact dt")].map((d) => d.textContent);
-    expect(facts).toEqual(["Salary", "Work mode", "Seniority", "Who can apply", "Company hiring", "Type"]);
-    expect(container.querySelector(".rj-fact")!.textContent).toContain("Not listed");
+  it("shows the facts it knows as pills, and folds the unknown ones into one line", () => {
+    const { container } = renderDetail(job({ employmentType: "full-time", department: "Product" }));
+    const facts = [...container.querySelectorAll('[aria-label="Key facts"] li')].map((li) => li.textContent);
+    expect(facts).toEqual(["Senior", "Full-time", "Product"]);
+    expect(container.textContent).toContain("Not stated: salary.");
+    // Said once: no Details table repeating the dates.
+    expect(screen.queryByRole("heading", { name: "Details" })).toBeNull();
   });
 
-  it("sets your progress from one dropdown", () => {
+  it("sets your progress from one dropdown once the job is tracked, and asks for the CV only after applying", () => {
     const onUpdate = vi.fn();
+    const entry = (status: "saved" | "applied") => ({ status, updatedAt: "", snapshot: { title: "", company: "", url: "", location: "", score: 0 } });
+    // Not tracked: no dropdown, Save in the foot puts it on the board.
     render(<JobDetail job={job()} profile={profile} onUpdate={onUpdate} onClose={() => {}} />);
+    expect(screen.queryByLabelText("Your progress")).toBeNull();
+    cleanup();
+    render(<JobDetail job={job()} entry={entry("saved")} profile={profile} onUpdate={onUpdate} onClose={() => {}} />);
+    expect(screen.queryByRole("button", { name: "CV version sent" })).toBeNull();
     fireEvent.change(screen.getByLabelText("Your progress"), { target: { value: "applied" } });
     expect(onUpdate).toHaveBeenCalledWith({ status: "applied" });
+    cleanup();
+    render(<JobDetail job={job()} entry={entry("applied")} profile={profile} onUpdate={onUpdate} onClose={() => {}} />);
+    expect(screen.getByRole("button", { name: "CV version sent" })).toBeTruthy();
   });
 
   it("lists why a job may be stale near the top, and the meta keeps the plain date", () => {
@@ -130,36 +141,42 @@ describe("JobDetail", () => {
     expect((screen.getByLabelText("Notes") as HTMLTextAreaElement).value).toBe("Ask Sam for a referral");
   });
 
-  it("keeps Add company and Copy description in the More menu, and has no menu with nothing in it", () => {
-    renderDetail(job());
-    expect(screen.queryByRole("button", { name: "More job actions" })).toBeNull();
-    cleanup();
-    render(<JobDetail job={job()} profile={profile} onUpdate={() => {}} onTrack={async () => null} />);
+  it("keeps Not interested, Hide company and Add company in the More menu, with a labelled Save beside Apply", () => {
+    const onUpdate = vi.fn();
+    const onHideCompany = vi.fn();
+    render(<JobDetail job={job()} profile={profile} onUpdate={onUpdate} onClose={() => {}} onTrack={async () => null} onHideCompany={onHideCompany} />);
+    expect(screen.getByRole("button", { name: /^Save/ }).textContent).toContain("Save");
     fireEvent.click(screen.getByRole("button", { name: "More job actions" }));
     expect(screen.getByRole("menuitem", { name: /Add company to My companies/ })).toBeTruthy();
-  });
-
-  it("puts Not interested in the foot, next to Save", () => {
-    const onUpdate = vi.fn();
-    render(<JobDetail job={job()} profile={profile} onUpdate={onUpdate} onClose={() => {}} />);
-    fireEvent.click(screen.getByRole("button", { name: /Not interested/ }));
+    fireEvent.click(screen.getByRole("menuitem", { name: /Hide Acme/ }));
+    expect(onHideCompany).toHaveBeenCalledWith(true);
+    fireEvent.click(screen.getByRole("button", { name: "More job actions" }));
+    fireEvent.click(screen.getByRole("menuitem", { name: /Not interested/ }));
     expect(onUpdate).toHaveBeenCalledWith({ status: "dismissed" });
   });
 
-  it("puts where and what the job is on one plain line under the title", () => {
+  it("says no description in one line with the way to read it, and hides an empty More from", () => {
+    renderDetail(job({ hasDescription: false }));
+    expect(screen.queryByRole("heading", { name: "About the role" })).toBeNull();
+    expect(screen.getByRole("link", { name: "Open the job page" }).getAttribute("href")).toBe("https://acme.example/jobs/1");
+    expect(screen.queryByRole("heading", { name: /^More from/ })).toBeNull();
+  });
+
+  it("puts where the job is and how fresh it is on one line under the title", () => {
     const { container } = renderDetail(job());
-    const meta = container.querySelector(".rj-drawer__meta");
-    expect(meta?.textContent).toContain("Hybrid");
-    expect(meta?.querySelectorAll(".rj-sep").length).toBeGreaterThan(1);
+    const meta = container.querySelectorAll(".rj-drawer__meta");
+    expect(meta).toHaveLength(1);
+    expect(meta[0]!.textContent).toContain("Hybrid");
+    expect(meta[0]!.textContent).toMatch(/listed on Greenhouse, checked/);
   });
 });
 
 describe("Why it matched", () => {
   const scored = (over: Partial<Job> = {}) => job({ why: { title: 30, location: 20, keywords: ["payments"], keywordPoints: 14, industry: 10 }, ...over });
-  // The checklist sits behind Show breakdown (remembered once opened).
+  // The checklist sits behind Why (remembered once opened).
   const why = () => {
-    const section = screen.getByRole("heading", { name: "Why it matched" }).closest("section")!;
-    const details = screen.queryByRole("button", { name: "Show breakdown" });
+    const section = screen.getByRole("region", { name: "Why it matched" });
+    const details = screen.queryByRole("button", { name: "Why" });
     if (details) fireEvent.click(details);
     return section.textContent!;
   };

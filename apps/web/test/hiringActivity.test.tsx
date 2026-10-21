@@ -93,13 +93,13 @@ describe("in the drawer and the feed", () => {
     const { container } = render(<JobDetail job={job({ surge })} profile={profile} onUpdate={() => {}} />);
     expect(await screen.findByRole("heading", { name: "Hiring at Acme" })).toBeTruthy();
     expect(container.textContent).toContain("14 new roles in the last 30 days, about");
-    const fact = [...container.querySelectorAll(".rj-fact")].find((f) => f.textContent?.startsWith("Company hiring"))!;
-    expect(fact.textContent).toContain("14 roles in 30 days");
+    const fact = [...container.querySelectorAll('[aria-label="Key facts"] li')].find((f) => f.getAttribute("title")?.startsWith("Company hiring"))!;
+    expect(fact.textContent).toBe("14 roles in 30 days");
   });
 
   it("hides the block for a company without records", async () => {
     render(<JobDetail job={job({ companyKey: "lever:nobody" })} profile={profile} onUpdate={() => {}} />);
-    await screen.findByRole("heading", { name: "Details" });
+    await screen.findByRole("region", { name: "Why it matched" });
     await new Promise((r) => setTimeout(r, 0));
     expect(screen.queryByRole("heading", { name: /^Hiring at/ })).toBeNull();
   });
