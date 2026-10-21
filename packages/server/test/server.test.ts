@@ -165,6 +165,9 @@ console.log(JSON.stringify({ type: "done", scope: args[args.indexOf("--scope") +
     expect(await health()).toMatchObject({ background: false, dataVersion: "2026-10-13T06:00:00.000Z" });
     writeFileSync(join(dataDir, "meta.json"), JSON.stringify({ version: 1, generatedAt: "2026-10-13T18:00:00.000Z", runs: [] }));
     expect((await health()).dataVersion).toBe("2026-10-13T18:00:00.000Z");
+    // Read from the file's start; a generatedAt past the first 4 KB still counts (the whole file is read).
+    writeFileSync(join(dataDir, "meta.json"), JSON.stringify({ pad: "x".repeat(5000), generatedAt: "2026-10-14T06:00:00.000Z" }));
+    expect((await health()).dataVersion).toBe("2026-10-14T06:00:00.000Z");
   });
 
   it("runs the CLI in your RawJobs folder", async () => {

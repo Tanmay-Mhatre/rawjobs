@@ -3,6 +3,7 @@ import { constants, setPriority } from "node:os";
 import { dirname, resolve } from "node:path";
 import { parseArgs } from "node:util";
 import {
+  BACKGROUND_LIMITS,
   defaultDataDir,
   readDirectory,
   loadConfig,
@@ -86,9 +87,13 @@ export function wantsBackground(config: Config, values: RunValues, scope: ScanSc
   return scope === "mine" && config.scans.background && !values["no-background"] && !values["dry-run"] && !values.only?.length && !values.check?.length && !stage1.stopped && !stage1.fallback;
 }
 
-/** The background check: every company Scan now didn't just fetch (`since`: when it started), live, resumable. */
+/**
+ * The background check: every company Scan now didn't just fetch (`since`: when it started), resumable.
+ * The job feed leaves out the ones it shows nothing for you at (while it's fresh: scan.ts liveDespiteFeed),
+ * and it goes easy on the computer (BACKGROUND_LIMITS).
+ */
 export const backgroundCheck = (config: Config, base: ScanOptions & { stopped: () => boolean }, since: number): Promise<ScanResult> =>
-  scan(config, { ...base, scope: "all", feed: false, resume: true, skipFetchedSince: since });
+  scan(config, { ...base, scope: "all", resume: true, skipFetchedSince: since, ...BACKGROUND_LIMITS });
 
 /** The background check's alert: only jobs new to you (never ones already sent), whatever "only new" says. */
 const newOnly = (config: Config): Config => ({ ...config, alerts: { ...config.alerts, only_new: true } });
