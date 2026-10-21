@@ -1,6 +1,6 @@
 import { spawn, type ChildProcess } from "node:child_process";
 import { createHash } from "node:crypto";
-import { readFileSync, statSync, writeFileSync } from "node:fs";
+import { closeSync, openSync, readFileSync, readSync, statSync, writeFileSync } from "node:fs";
 import type { IncomingMessage, ServerResponse } from "node:http";
 import { resolve } from "node:path";
 import {
@@ -50,6 +50,17 @@ const LOCAL_ORIGIN = /^http:\/\/(127\.0\.0\.1|localhost|\[::1\]):\d{1,5}$/;
 
 /** One line of the scan's NDJSON progress. */
 type Line = string;
+
+/** The first `bytes` of a file, as text. */
+function readHead(path: string, bytes: number): string {
+  const fd = openSync(path, "r");
+  try {
+    const buf = Buffer.alloc(bytes);
+    return buf.toString("utf8", 0, readSync(fd, buf, 0, bytes, 0));
+  } finally {
+    closeSync(fd);
+  }
+}
 
 /**
  * The dashboard's API: everything it needs to set up and run RawJobs on this computer.
@@ -259,7 +270,8 @@ Stopped after ${Math.round(timeoutMs / 1000)} s without finishing.`.trim(),
   let checking = false;
   const busy = () => scan !== null || checking;
 
-  /** meta.json's generatedAt, read again only when the file changes (open pages ask every few seconds). */
+  /** meta.json's generatedAt, read again only when the file changes (open pages ask every few seconds). It's
+   *  the file's second key, so its first 4 KB are enough; the whole file is parsed only when it isn't there. */
   let meta: { stamp: string; generatedAt: string | null } | null = null;
   function dataVersion(): string | null {
     const path = resolve(dataDir, "meta.json");
@@ -267,7 +279,8 @@ Stopped after ${Math.round(timeoutMs / 1000)} s without finishing.`.trim(),
       const { mtimeMs, size } = statSync(path);
       const stamp = `${mtimeMs}:${size}`;
       if (meta?.stamp !== stamp) {
-        const { generatedAt } = JSON.parse(readFileSync(path, "utf8")) as { generatedAt?: unknown };
+        const head = /"generatedAt"\s*:\s*"([^"]+)"/.exec(readHead(path, 4096));
+        const generatedAt = head ? head[1] : (JSON.parse(readFileSync(path, "utf8")) as { generatedAt?: unknown }).generatedAt;
         meta = { stamp, generatedAt: typeof generatedAt === "string" ? generatedAt : null };
       }
       return meta.generatedAt;

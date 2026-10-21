@@ -210,11 +210,10 @@ describe("scan", () => {
     expect(r.checks.map((c) => c.slug).sort()).toEqual(["leverco", "mutedco", "quiet"]);
     expect(calls.some((u) => u.includes("quiet"))).toBe(true);
     expect(Object.keys(readLedger(dir).companies)).toEqual(["lever:leverco"]);
-    // Run history keeps yours, matches and failures, not every board.
-    const health = read<{ runs: { health: { slug: string }[] }[] }>(dir, "meta.json")
-      .runs[0]!.health.map((h) => h.slug)
-      .sort();
-    expect(health).toEqual(["ghco", "leverco", "mutedco", "quiet"]);
+    // Run history keeps your companies' health and counts every board checked.
+    const last = read<{ runs: { health: { slug: string }[]; counts: { checked: number } }[] }>(dir, "meta.json").runs[0]!;
+    expect(last.health.map((h) => h.slug)).toEqual(["ghco"]);
+    expect(last.counts.checked).toBe(4);
   });
 
   it("can stop and then resume where it stopped, without fetching done companies again", async () => {
