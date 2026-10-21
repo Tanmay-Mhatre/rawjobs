@@ -2,12 +2,13 @@ import { spawn, spawnSync } from "node:child_process";
 import { appendFileSync, mkdirSync, readFileSync, renameSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { connect } from "node:net";
 import { homedir } from "node:os";
+import { monitorEventLoopDelay } from "node:perf_hooks";
 import { join, resolve } from "node:path";
 import { createInterface } from "node:readline/promises";
 import { parseArgs } from "node:util";
 import { defaultDataDir, rawjobsHome } from "@rawjobs/core";
 import { APP_VERSION, BUNDLED, CODE_ROOT, cliCommand } from "@rawjobs/core";
-import { removeDailySummary, removeSchedule } from "@rawjobs/core";
+import { DAILY_SCHEDULER_NAMES, removeDailySummary, removeSchedule, SCHEDULER_NAMES } from "@rawjobs/core";
 import { scanLockHeld } from "@rawjobs/core";
 import { compareVersions } from "@rawjobs/core/release";
 import {
@@ -48,6 +49,64 @@ export function readServerState(home = rawjobsHome()): ServerState | null {
 export function writeServerState(port: number, home = rawjobsHome()): void {
   const state: ServerState = { port, pid: process.pid, version: APP_VERSION, startedAt: new Date().toISOString() };
   writeFileSync(statePath(home), `${JSON.stringify(state, null, 1)}\n`);
+}
+
+/**
+ * Bring the Windows tasks of a copy installed before this version up to date, on this version's first
+ * start (RAWJOBS_HOME/autostart.json): the RawJobs Server task runs at normal priority (Task
+ * Scheduler's default, 7, is below normal), and scheduled scans and the daily summary no longer wake
+ * a sleeping laptop. One PowerShell in the background; never throws, a failure is logged and tried
+ * again on the next start.
+ */
+export async function ensureAutostart(home: string, version: string, o: { platform?: NodeJS.Platform; run?: (script: string) => Promise<number> } = {}): Promise<void> {
+  if ((o.platform ?? process.platform) !== "win32") return;
+  const file = join(home, "autostart.json");
+  try {
+    if ((JSON.parse(readFileSync(file, "utf8")) as { version?: string }).version === version) return;
+  } catch {
+    // never done
+  }
+  const task = (name: string, edit: string) =>
+    `$t = Get-ScheduledTask -TaskName '${name}' -ErrorAction SilentlyContinue; if ($t) { ${edit}; Set-ScheduledTask -InputObject $t -ErrorAction Stop | Out-Null }`;
+  const script = [
+    "$ErrorActionPreference = 'Stop'",
+    task(AUTOSTART.windowsTask, "$t.Settings.Priority = 5"),
+    ...[SCHEDULER_NAMES.task, DAILY_SCHEDULER_NAMES.task].map((n) => task(n, "$t.Settings.WakeToRun = $false")),
+  ].join("; ");
+  try {
+    const code = await (o.run ?? powershellAsync)(script);
+    if (code !== 0) throw new Error(`PowerShell exited with ${code}`);
+    writeFileSync(file, `${JSON.stringify({ version })}\n`);
+  } catch (err) {
+    console.log(`Couldn't update the RawJobs scheduled tasks: ${(err as Error).message}`);
+  }
+}
+
+function powershellAsync(script: string): Promise<number> {
+  return new Promise((done, fail) => {
+    const child = spawn("powershell.exe", ["-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-Command", script], { stdio: "ignore", windowsHide: true });
+    child.once("error", fail);
+    child.once("exit", (code) => done(code ?? 1));
+  });
+}
+
+/**
+ * Log a line when the server stopped answering for over 5 s (checked every 30 s), with the memory it
+ * used then, so a slow dashboard can be traced. The timer doesn't keep the process alive.
+ */
+export function watchEventLoop(log: (line: string) => void = console.log): () => void {
+  const h = monitorEventLoopDelay({ resolution: 50 });
+  h.enable();
+  const timer = setInterval(() => {
+    const maxMs = h.max / 1e6;
+    if (maxMs > 5000) log(`The server was busy for ${(maxMs / 1000).toFixed(1)} s (memory in use: ${Math.round(process.memoryUsage().heapUsed / 1e6)} MB).`);
+    h.reset();
+  }, 30_000);
+  timer.unref();
+  return () => {
+    clearInterval(timer);
+    h.disable();
+  };
 }
 
 /** Send this process's output to a log file too (kept under 5 MB: the old one moves to .1). */

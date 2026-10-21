@@ -185,7 +185,8 @@
         (New-ScheduledTaskTrigger -AtLogOn -User $Me),
         (New-ScheduledTaskTrigger -Once -At (Get-Date) -RepetitionInterval (New-TimeSpan -Minutes 1))
       )
-      $s = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -StartWhenAvailable -MultipleInstances IgnoreNew -ExecutionTimeLimit ([TimeSpan]::Zero)
+      # Priority 5: normal, so the dashboard stays quick (Task Scheduler's default, 7, is below normal).
+      $s = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -StartWhenAvailable -MultipleInstances IgnoreNew -ExecutionTimeLimit ([TimeSpan]::Zero) -Priority 5
       $p = New-ScheduledTaskPrincipal -UserId $Me -LogonType Interactive -RunLevel Limited
       Register-ScheduledTask -TaskName $TaskName -Action $a -Trigger $t -Settings $s -Principal $p -Description 'RawJobs: the dashboard on http://127.0.0.1:4317, on this computer only.' -Force | Out-Null
       Start-ScheduledTask -TaskName $TaskName

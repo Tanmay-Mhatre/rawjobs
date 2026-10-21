@@ -8,8 +8,8 @@ import { writeFileAtomic } from "./atomic";
 /**
  * Scheduled scans on this computer: the operating system's own scheduler runs
  * `rawjobs scan --scope <type> --notify --scheduled` at the times you pick, even with the
- * dashboard closed. It only runs while the computer is on (or asleep: Windows wakes it); a scan
- * missed while it was off runs as soon as it's back on.
+ * dashboard closed. It only runs while the computer is on and awake (it never wakes it); a scan
+ * missed while it was off or asleep runs as soon as it's back on.
  */
 
 export type ScheduleSettings = { times: string[]; scope: ScanScope };
@@ -155,8 +155,8 @@ function installWindows(ctx: ScheduleContext, job: SchedulerJob): void {
   const script = [
     `$a = New-ScheduledTaskAction -Execute 'conhost.exe' -Argument ${psq(argument)} -WorkingDirectory ${psq(workDir(ctx))}`,
     `$t = @(${triggers})`,
-    // StartWhenAvailable: a scan missed while the PC was off runs once it's back on. WakeToRun: wake from sleep.
-    `$s = New-ScheduledTaskSettingsSet -StartWhenAvailable -WakeToRun -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -MultipleInstances IgnoreNew -ExecutionTimeLimit (New-TimeSpan -Hours ${job.hours})`,
+    // StartWhenAvailable: a scan missed while the PC was off runs once it's back on. It never wakes a sleeping PC.
+    `$s = New-ScheduledTaskSettingsSet -StartWhenAvailable -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -MultipleInstances IgnoreNew -ExecutionTimeLimit (New-TimeSpan -Hours ${job.hours})`,
     `Register-ScheduledTask -TaskName ${psq(n.task)} -Action $a -Trigger $t -Settings $s -Description ${psq(job.description)} -Force | Out-Null`,
   ].join("; ");
   const r = powershell(ctx, script);

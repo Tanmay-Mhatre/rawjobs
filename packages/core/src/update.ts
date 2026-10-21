@@ -265,7 +265,7 @@ const SCAN_FLAGS = new Set(["scan.lock", "scan-stop", "scan-notify"]);
 /**
  * Copy everything that's yours before an update or a reinstall: the config, profile/ (resume,
  * tracking, secrets), all of data/ (jobs, history, scan runs and progress, the data format) except
- * what downloads again, plus the companies you added to the directory. The last three backups are kept.
+ * what downloads again, plus the companies you added to the directory. The last two backups are kept.
  */
 export function backupData(home: string, label: string): string {
   const dir = join(home, "backups", `${new Date().toISOString().replace(/[:.]/g, "-")}-${label}`);
@@ -280,8 +280,24 @@ export function backupData(home: string, label: string): string {
     if (existsSync(additions)) cpSync(additions, join(dir, "data/catalog/additions.json"));
   }
   const all = readdirSync(join(home, "backups")).sort();
-  for (const old of all.slice(0, -3)) rmSync(join(home, "backups", old), { recursive: true, force: true });
+  for (const old of all.slice(0, -2)) rmSync(join(home, "backups", old), { recursive: true, force: true });
   return dir;
+}
+
+/** The newest `label` backup made in the last hour (an update tried again), so it isn't copied again; null when there's none. */
+export function recentBackup(home: string, label: string, maxAgeMs = 3_600_000): string | null {
+  let names: string[];
+  try {
+    names = readdirSync(join(home, "backups")).sort().reverse();
+  } catch {
+    return null;
+  }
+  for (const name of names) {
+    if (!name.endsWith(`-${label}`)) continue;
+    const dir = join(home, "backups", name);
+    return Date.now() - statSync(dir).mtimeMs < maxAgeMs ? dir : null;
+  }
+  return null;
 }
 
 /**
@@ -711,7 +727,7 @@ export async function startUpdate(o: { home: string; base: string; manifest: Rel
   const now = installedVersions(o.home);
   if (!now) throw new Error("This isn't an installed copy of RawJobs.");
   const { version, node } = takeReady(o.home, o.manifest) ?? (await prepareVersion(o.home, o.base, o.manifest, o.fetchImpl));
-  const backup = backupData(o.home, `before-${version}`);
+  const backup = recentBackup(o.home, `before-${version}`) ?? backupData(o.home, `before-${version}`);
   // Node can't start the helper below outside a Windows task's job, so when this runs inside the
   // RawJobs Server task, ending that task could end the helper too: it mustn't.
   const pending: Pending = { from: now.current, to: version, backup, notes: o.manifest.notes, pid: o.serverPid, insideTask: insideServerTask() };
