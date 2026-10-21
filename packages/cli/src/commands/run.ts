@@ -506,7 +506,7 @@ export function statsLine(s: ScanStats): string {
   const t = (ms: number) => (ms >= 90_000 ? `${(ms / 60_000).toFixed(1)} min` : `${Math.round(ms / 1000)}s`);
   const { sync, match, live, save } = s.stages;
   const h = s.http;
-  return `Took ${t(s.wallMs)}: sync ${t(sync)} · feed match ${t(match)} · live ${t(live)} · save ${t(save)}. ${h.requests.toLocaleString()} requests: ${h.notModified.toLocaleString()} unchanged, ${h.rateLimited} rate-limited, ${h.timeouts} timed out${h.brokenHosts.length ? `, ${h.brokenHosts.length} hosts skipped` : ""}.`;
+  return `Took ${t(s.wallMs)}: sync ${t(sync)} · feed match ${t(match)} · live ${t(live)} · save ${t(save)}. ${h.requests.toLocaleString()} requests: ${h.notModified.toLocaleString()} unchanged, ${h.rateLimited} rate-limited, ${h.timeouts} timed out${h.restedHosts?.length ? `, ${h.restedHosts.length} hosts rested` : ""}${h.brokenHosts.length ? `, ${h.brokenHosts.length} hosts skipped` : ""}.`;
 }
 
 export function healthLine(h: CompanyHealth): string {

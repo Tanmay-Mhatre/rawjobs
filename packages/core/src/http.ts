@@ -54,7 +54,7 @@ export class NotModifiedError extends HttpError {
   }
 }
 
-/** No request made: the host failed for other URLs too many times in a row this run. */
+/** No request made: the host kept failing for other URLs this run (with hostRests, through every rest). */
 export class HostSkippedError extends HttpError {
   override name = "HostSkippedError";
 }
@@ -82,8 +82,13 @@ export type HttpOptions = {
   hostDelays?: Record<string, number>;
   /** First backoff wait; doubles each retry. */
   backoffMs?: number;
-  /** After this many failed requests in a row to one host, later ones fail at once (the host is down). */
+  /** After this many failed requests in a row to one host, later ones fail at once (the host is down), or wait with hostRests. */
   breakAfter?: number;
+  /**
+   * For the app's scans: a host that failed breakAfter times in a row rests (HOST_RESTS_MS), then one request
+   * tries it again; it's skipped for the run only if it keeps failing while other hosts answer.
+   */
+  hostRests?: boolean;
   /** For getJson(): conditional requests against saved responses. */
   cache?: HttpCache;
   /**
@@ -99,6 +104,17 @@ export type HttpOptions = {
    */
   stopped?: () => boolean;
 };
+
+/**
+ * How long a host rests after failing breakAfter times in a row, then after each failed try. Past the last
+ * it's skipped for the run, unless nothing else answered either (the network was down): then the rest repeats.
+ */
+const HOST_RESTS_MS = [30_000, 60_000, 120_000, 300_000, 600_000];
+/** However it goes, a host is skipped for the run once it has been failing this long (a scan mustn't wait for good while offline). */
+const MAX_RESTING_MS = 3_600_000;
+
+/** A resting host: no request before `until`, then one (the probe) tries it while the others wait for it. */
+type Rest = { until: number; step: number; since: number; firstAt: number; probe?: Promise<void> };
 
 /** How often requests in flight check HttpOptions.stopped. */
 const STOP_POLL_MS = 250;
@@ -170,6 +186,9 @@ export type HttpStats = {
   /** Attempts that timed out (waiting for the headers or the body). */
   timeouts: number;
   slowedHosts: string[];
+  /** Hosts that rested after failing several times in a row. */
+  restedHosts: string[];
+  /** Hosts skipped for the rest of the run: they kept failing while other hosts answered. */
   brokenHosts: string[];
   /** With adaptive pacing: each API's pace at the end (requests a second) and how often it was halved. */
   paces?: Record<string, { rate: number; downs: number }>;
@@ -178,7 +197,7 @@ export type HttpStats = {
 /**
  * Polite HTTP for connectors: identifying User-Agent, 30s timeout, per-host spacing,
  * retries with exponential backoff on 429 and 5xx (honouring Retry-After). A 429 also slows the
- * whole host down; a host that keeps failing is skipped for the rest of the run.
+ * whole host down; a host that keeps failing rests, and is skipped for the run if it doesn't come back.
  */
 export class HttpClient {
   private readonly opts: Required<Omit<HttpOptions, "cache" | "stopped">> & Pick<HttpOptions, "cache" | "stopped">;
@@ -190,11 +209,15 @@ export class HttpClient {
   private readonly delays: Map<string, number>;
   /** Failed requests in a row per host. */
   private readonly failures = new Map<string, number>();
+  private readonly rests = new Map<string, Rest>();
+  private readonly givenUp = new Set<string>();
+  /** When any host last answered (any status): a rest with no answer anywhere says the network was down, not the host. */
+  private lastAnswerAt = 0;
   /** Aborted once `stopped` says so; every request in flight listens to it. */
   private readonly stop = new AbortController();
   private inFlight = 0;
   private stopPoll: ReturnType<typeof setInterval> | undefined;
-  readonly stats: HttpStats = { requests: 0, notModified: 0, failures: 0, rateLimited: 0, timeouts: 0, slowedHosts: [], brokenHosts: [] };
+  readonly stats: HttpStats = { requests: 0, notModified: 0, failures: 0, rateLimited: 0, timeouts: 0, slowedHosts: [], restedHosts: [], brokenHosts: [] };
 
   constructor(opts: HttpOptions = {}) {
     this.opts = {
@@ -207,6 +230,7 @@ export class HttpClient {
       hostDelays: opts.hostDelays ?? (opts.hostDelayMs === undefined ? HOST_DELAYS : {}),
       backoffMs: opts.backoffMs ?? 2_000,
       breakAfter: opts.breakAfter ?? Infinity,
+      hostRests: opts.hostRests ?? false,
       cache: opts.cache,
       adaptive: opts.adaptive ?? false,
       fetchImpl: opts.fetchImpl ?? fetch,
@@ -263,26 +287,81 @@ export class HttpClient {
   private async send(url: string, init: RequestInit, readBody: boolean): Promise<{ res: Response; body?: string }> {
     const host = new URL(url).host;
     if (this.isStopped()) throw new StoppedError(url);
-    if ((this.failures.get(host) ?? 0) >= this.opts.breakAfter) throw new HostSkippedError(`skipped: ${host} failed ${this.opts.breakAfter} times in a row (${url})`, url);
+    const probe = await this.waitOutRest(host, url);
     this.track(1);
     try {
       const out = await this.attempt(url, init, host, readBody);
+      this.lastAnswerAt = Date.now();
       this.failures.delete(host);
+      this.rests.delete(host);
       return out;
     } catch (err) {
       if (err instanceof StoppedError) throw err;
-      // A 4xx is about this URL, not the host.
       const status = (err as HttpError).status;
+      if (status !== undefined) this.lastAnswerAt = Date.now();
       if (status === undefined || status === 429 || status >= 500) {
         this.stats.failures++;
         const n = (this.failures.get(host) ?? 0) + 1;
         this.failures.set(host, n);
-        if (n === this.opts.breakAfter) this.stats.brokenHosts.push(host);
+        // Requests already in flight when the host began resting don't make it rest again.
+        if (probe || (n >= this.opts.breakAfter && !this.rests.has(host))) this.rest(host);
+      } else if (probe) {
+        // A 4xx is about this URL, not the host: it answered, so its rest is over.
+        this.failures.delete(host);
+        this.rests.delete(host);
       }
       throw err;
     } finally {
+      probe?.();
       this.track(-1);
     }
+  }
+
+  /**
+   * Wait while the host rests. Returns a release when this request is the one that tries it again (the
+   * others wait for its answer); throws HostSkippedError once the host is skipped for the run.
+   */
+  private async waitOutRest(host: string, url: string): Promise<(() => void) | undefined> {
+    for (;;) {
+      if (this.givenUp.has(host))
+        throw new HostSkippedError(this.opts.hostRests ? `skipped: ${host} kept failing (${url})` : `skipped: ${host} failed ${this.opts.breakAfter} times in a row (${url})`, url);
+      const rest = this.rests.get(host);
+      if (!rest) return undefined;
+      if (rest.until > Date.now()) {
+        await this.pause(rest.until - Date.now(), url);
+        if (this.rests.get(host) !== rest) continue;
+      }
+      if (rest.probe) {
+        await rest.probe;
+        if (this.isStopped()) throw new StoppedError(url);
+        continue;
+      }
+      let release = () => {};
+      rest.probe = new Promise<void>((done) => {
+        release = () => {
+          rest.probe = undefined;
+          done();
+        };
+      });
+      return release;
+    }
+  }
+
+  /** The host failed breakAfter times in a row, or failed its try after a rest: it rests (longer), or is skipped for the run (at once without hostRests). */
+  private rest(host: string): void {
+    const prev = this.rests.get(host);
+    const now = Date.now();
+    // Nothing anywhere answered since the last rest began: the network is down, not this host, so the rest doesn't grow.
+    const step = !prev ? 0 : this.lastAnswerAt < prev.since ? prev.step : prev.step + 1;
+    const firstAt = prev?.firstAt ?? now;
+    if (!this.opts.hostRests || step >= HOST_RESTS_MS.length || now - firstAt >= MAX_RESTING_MS) {
+      this.rests.delete(host);
+      this.givenUp.add(host);
+      this.stats.brokenHosts.push(host);
+      return;
+    }
+    this.rests.set(host, { until: now + HOST_RESTS_MS[step]!, step, since: now, firstAt });
+    if (!this.stats.restedHosts.includes(host)) this.stats.restedHosts.push(host);
   }
 
   /** True once `stopped` has said so (it's asked again only until then). */
