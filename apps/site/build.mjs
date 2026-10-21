@@ -263,7 +263,10 @@ mkdirSync(join(DIST, "images"));
 for (const f of ["radar-light.png", "radar-dark.png"]) copyFileSync(join(ROOT, "docs/images", f), join(DIST, "images", f));
 await writeBeacon();
 writeFileSync(join(DIST, "robots.txt"), `User-agent: *\nAllow: /\n\nSitemap: ${SITE_URL}/sitemap.xml\n`);
-writeFileSync(join(DIST, "sitemap.xml"), `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n  <url><loc>${SITE_URL}/</loc></url>\n  <url><loc>${SITE_URL}/features</loc></url>\n</urlset>\n`);
+writeFileSync(
+  join(DIST, "sitemap.xml"),
+  `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n  <url><loc>${SITE_URL}/</loc></url>\n  <url><loc>${SITE_URL}/features</loc></url>\n</urlset>\n`,
+);
 
 console.log(
   `Built ${DIST} for ${SITE_URL}${ANALYTICS_TOKEN ? " (with Web Analytics)" : ""}: ${Math.round(Buffer.byteLength(html) / 1024)} KB page, ` +
