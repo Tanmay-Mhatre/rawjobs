@@ -133,15 +133,15 @@ export function ConnectLinkedIn({ open, onClose }: { open: boolean; onClose: () 
                     <input type="checkbox" checked={pickUp} onChange={(e) => setPickUp(e.target.checked)} className="mt-0.5 size-4 shrink-0 accent-ink" />
                     <span>
                       Pick up the file from my Downloads folder by itself
-                      <span className="block text-muted">RawJobs looks only for LinkedIn's file name, for the next 24 hours.</span>
+                      <span className="block text-muted">RawJobs looks only for LinkedIn's file name, for the next 48 hours.</span>
                     </span>
                   </label>
                 )}
               </li>
               <li>
-                Choose <b>Want something in particular?</b> and tick Connections, Positions and Education. Then Request archive.
+                Choose <b>Download larger data archive</b>, then Request archive. Only the larger archive has your connections.
               </li>
-              <li>LinkedIn emails you when the file is ready, usually in about 10 minutes. Download it.</li>
+              <li>LinkedIn emails you when the file is ready, usually within a day. Download it.</li>
               <li>
                 {/* biome-ignore lint/a11y/noStaticElementInteractions: the drop target; the button inside is the keyboard way in */}
                 <div

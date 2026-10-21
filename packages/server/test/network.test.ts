@@ -210,7 +210,7 @@ describe("the network API", () => {
     expect(r.headers["cross-origin-resource-policy"]).toBe("same-origin");
     const watch = r.json().watch;
     expect(watch).toMatchObject({ folder: "Downloads" });
-    expect(Date.parse(watch.until) - Date.parse(watch.since)).toBe(24 * 3_600_000);
+    expect(Date.parse(watch.until) - Date.parse(watch.since)).toBe(48 * 3_600_000);
     expect((await call(port, "GET", "/api/network")).json().status.watch).toEqual(watch);
     expect(existsSync(join(home, "profile/network-watch.json"))).toBe(true);
 

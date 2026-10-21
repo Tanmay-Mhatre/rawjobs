@@ -23,7 +23,7 @@ import { fileZipSource, inflateRawNode } from "./zip-node";
 /** How often the folder is listed. */
 export const WATCH_POLL_MS = 10_000;
 /** The default watch, and the longest one. */
-export const WATCH_DEFAULT_HOURS = 24;
+export const WATCH_DEFAULT_HOURS = 48;
 export const WATCH_MAX_HOURS = 48;
 /** A file modified this long before the watch started still counts (it may have just finished). */
 const SINCE_SLACK_MS = 10 * 60_000;
