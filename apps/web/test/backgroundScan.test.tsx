@@ -3,6 +3,7 @@ import { act, cleanup, renderHook } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { useBackgroundScan } from "../src/lib/backgroundScan";
 import type { DataMeta } from "../src/lib/data";
+import { __resetHealthForTests } from "../src/lib/health";
 
 type Health = { scanning?: boolean; background?: boolean; dataVersion?: string | null };
 let health: Health;
@@ -12,11 +13,12 @@ beforeEach(() => {
   health = { scanning: false, background: false, dataVersion: "A" };
   vi.stubGlobal(
     "fetch",
-    vi.fn(async () => ({ json: async () => health })),
+    vi.fn(async () => ({ json: async () => ({ ok: true, ...health }) })),
   );
 });
 afterEach(() => {
   cleanup();
+  __resetHealthForTests();
   vi.useRealTimers();
   vi.unstubAllGlobals();
 });
