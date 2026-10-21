@@ -15,6 +15,7 @@ import { usePeople } from "../pipeline/PeopleContext";
 import { KnownPicker } from "../pipeline/PeopleTab";
 import { toast } from "../Toast";
 import { Button, cx } from "../ui";
+import { useBannerDismissed } from "./ConnectBanner";
 import { ConnectLinkedIn, WatchLine } from "./ConnectLinkedIn";
 import { FindFriends } from "./FindFriends";
 import { MessageDrafts } from "./MessageDrafts";
@@ -74,6 +75,7 @@ function Section({ job, entry, profile, onUpdate, onOpenPeople }: Props) {
   const connected = !!status?.connected;
   const people = usePeopleAt(job.company, connected && !agency);
   const [connecting, setConnecting] = useState(false);
+  const bannerClosed = useBannerDismissed();
   const [cardFailed, setCardFailed] = useState(false);
   const loading = useAfter(network?.state === "loading" || people?.state === "loading");
   const headingId = `talk-${job.id}`;
@@ -144,7 +146,8 @@ function Section({ job, entry, profile, onUpdate, onOpenPeople }: Props) {
   let body: ReactNode = null;
   if (agency) {
     body = <p className="type-small text-muted">A recruitment agency posted this and may not name the employer. Ask the agency's recruiter which company it is, then look for people there.</p>;
-  } else if (canRunLocally && status && !status.connected) {
+  } else if (canRunLocally && status && !status.connected && (status.newer || bannerClosed || job.estimated)) {
+    // The banner at the top of the job asks first; once you close it, the ask lives here.
     body = status.newer ? (
       <p className="type-small text-warning-text">Update RawJobs to read your connections.</p>
     ) : (

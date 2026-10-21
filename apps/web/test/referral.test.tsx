@@ -4,6 +4,7 @@ import { join } from "node:path";
 import { act, cleanup, render, renderHook, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { BANNER_DISMISSED_KEY, ConnectBanner } from "../src/components/referral/ConnectBanner";
 import { TalkToSomeone } from "../src/components/referral/TalkToSomeone";
 import { NetworkSection } from "../src/components/settings/NetworkSection";
 import { Toaster } from "../src/components/Toast";
@@ -40,10 +41,59 @@ function stubApi(routes: { network?: unknown; people?: unknown; other?: Route })
   return fetch;
 }
 
-beforeEach(() => resetNetworkStore());
+beforeEach(() => {
+  resetNetworkStore();
+  // These tests are about the section's own ask, shown once the banner above the job is closed.
+  localStorage.setItem(BANNER_DISMISSED_KEY, "true");
+});
 afterEach(() => {
   cleanup();
   vi.unstubAllGlobals();
+  localStorage.removeItem(BANNER_DISMISSED_KEY);
+});
+
+describe("The LinkedIn banner at the top of a job", () => {
+  const both = (job = makeJob({ company: "Acme" })) =>
+    render(
+      <>
+        <ConnectBanner job={job} />
+        <TalkToSomeone job={job} />
+        <Toaster />
+      </>,
+    );
+  beforeEach(() => localStorage.removeItem(BANNER_DISMISSED_KEY));
+
+  it("asks once at the top until closed, then the people section asks instead, everywhere", async () => {
+    stubApi({ network: notConnected });
+    both();
+    expect(await screen.findByRole("heading", { name: "See who you know at Acme" })).toBeTruthy();
+    expect(screen.getByText(/nothing is sent anywhere/)).toBeTruthy();
+    // Not both at once.
+    expect(screen.queryByRole("button", { name: "Connect LinkedIn" })).toBeNull();
+    await userEvent.click(screen.getByRole("button", { name: "Not now" }));
+    expect(screen.queryByRole("heading", { name: "See who you know at Acme" })).toBeNull();
+    expect(await screen.findByText(/Settings › LinkedIn connections/)).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Connect LinkedIn" })).toBeTruthy();
+    expect(localStorage.getItem(BANNER_DISMISSED_KEY)).toBe("true");
+    cleanup();
+    // Another job: still closed.
+    both(makeJob({ id: "lever:other:1", company: "Other" }));
+    expect(await screen.findByRole("button", { name: "Connect LinkedIn" })).toBeTruthy();
+    expect(screen.queryByRole("heading", { name: /See who you know/ })).toBeNull();
+  });
+
+  it("opens the import dialog, and never shows once connected or for an agency", async () => {
+    stubApi({ network: notConnected });
+    both();
+    await userEvent.click(await screen.findByRole("button", { name: "Import connections" }));
+    expect(screen.getByRole("dialog", { name: "Connect LinkedIn" })).toBeTruthy();
+    cleanup();
+    resetNetworkStore();
+    stubApi({ network: connected(), people: { how: "exact", people: [] } });
+    both();
+    await screen.findByText(/You don't know anyone at Acme/);
+    expect(screen.queryByRole("heading", { name: /See who you know/ })).toBeNull();
+  });
 });
 
 describe("Talk to someone who works here", () => {

@@ -43,6 +43,7 @@ import { ReasonPicker, useNotForMe } from "./NotForMe";
 import { Button, buttonClass, IconButton, Menu, ScoreBadge, scoreBandOf, ScoreBreakdown, scoreParts, Tooltip } from "./primitives";
 import { toast } from "./Toast";
 import { JobTracking } from "./pipeline/JobTracking";
+import { ConnectBanner } from "./referral/ConnectBanner";
 import { TalkToSomeone } from "./referral/TalkToSomeone";
 import { OfferFields } from "./TrackedJob";
 import { cx, Select } from "./ui";
@@ -376,6 +377,8 @@ export function JobDetail(p: JobDetailProps) {
         {/* Expanded: the description gets the wide column, everything else sits beside it. */}
         {p.expanded && descriptionSection}
         <div className={cx("grid min-w-0 grid-cols-1 content-start gap-6", p.expanded && "md:col-start-2 md:row-start-1")}>
+          <ConnectBanner job={job} notInterested={status === "dismissed"} />
+
           {stale && (
             <section className="rj-drawer__section">
               <h3 className="rj-h text-warning-text">May be stale</h3>
