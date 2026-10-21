@@ -17,6 +17,10 @@ on:
         description: The artifact also has next/ (a newer version) and broken/ (one that can't start); update to each
         type: boolean
         default: false
+      skip:
+        description: Report the install checks as passed without running them (pushes to main)
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -27,25 +31,32 @@ jobs:
       fail-fast: false
       matrix:
         os: [ubuntu-24.04, macos-15, windows-2025]
-    runs-on: ${{ matrix.os }}
+    # Skipping still runs one job per OS, so the required checks named after the matrix report success;
+    # on ubuntu, so a skip never waits for a macOS or Windows runner.
+    runs-on: ${{ inputs.skip && 'ubuntu-24.04' || matrix.os }}
     timeout-minutes: 15
     env:
       RAWJOBS_RELEASE_URL: http://127.0.0.1:8765
       RAWJOBS_PUBLIC_KEY: ${{ inputs.public-key }}
       RAWJOBS_NO_OPEN: "1"
     steps:
+      - name: Skipped
+        if: inputs.skip
+        run: echo "Skipped on a push to main; the pull request ran the install test."
       - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        if: ${{ !inputs.skip }}
         with:
           name: ${{ inputs.artifact }}
           path: release
       - name: Serve the release files
+        if: ${{ !inputs.skip }}
         shell: bash
         run: |
           (cd release && python3 -m http.server 8765 --bind 127.0.0.1 >/dev/null 2>&1 &)
           for i in $(seq 1 20); do curl -fs http://127.0.0.1:8765/latest.json >/dev/null && break; sleep 1; done
 
       - name: Install, repair, uninstall (macOS, Linux)
-        if: runner.os != 'Windows'
+        if: ${{ !inputs.skip && runner.os != 'Windows' }}
         shell: bash
         run: |
           set -eu
@@ -89,14 +100,14 @@ jobs:
           test ! -e "${XDG_DATA_HOME:-$HOME/.local/share}/applications/rawjobs.desktop"
 
       - name: The logs, when something failed (macOS, Linux)
-        if: failure() && runner.os != 'Windows'
+        if: ${{ !inputs.skip && failure() && runner.os != 'Windows' }}
         shell: bash
         run: |
           for f in "$RUNNER_TEMP/Raw Jobs/logs/"*; do echo "=== $f"; tail -n 80 "$f"; done || true
           [ "$RUNNER_OS" = macOS ] && launchctl print "gui/$(id -u)/com.rawjobs.server" | head -n 40 || true
 
       - name: Install, repair, uninstall (Windows PowerShell)
-        if: runner.os == 'Windows'
+        if: ${{ !inputs.skip && runner.os == 'Windows' }}
         shell: powershell
         run: |
           $ErrorActionPreference = 'Stop'
@@ -137,7 +148,7 @@ jobs:
           if (-not (Get-ChildItem (Join-Path $env:RAWJOBS_HOME 'backups\*\profile\resume.md'))) { throw 'reinstalling made no backup' }
 
       - name: The logs, when something failed (Windows)
-        if: failure() && runner.os == 'Windows'
+        if: ${{ !inputs.skip && failure() && runner.os == 'Windows' }}
         shell: powershell
         run: |
           Get-ChildItem (Join-Path $env:RUNNER_TEMP 'Raw Jobs\logs') -ErrorAction SilentlyContinue | ForEach-Object { "=== $($_.FullName)"; Get-Content $_.FullName -Tail 80 }
