@@ -52,12 +52,20 @@ jobs:
         if: ${{ !inputs.skip }}
         shell: bash
         run: |
-          python3 -c 'import socket,time; t=time.time(); socket.getfqdn("127.0.0.1"); print("getfqdn", round(time.time()-t,1), "s")'
-          date +%T
-          (cd release && python3 -m http.server 8765 --bind 127.0.0.1 >"$RUNNER_TEMP/serve.log" 2>&1 &)
-          for i in $(seq 1 20); do echo "try $i $(date +%T)"; curl -fs http://127.0.0.1:8765/latest.json >/dev/null && break; sleep 1; done
-          date +%T
-          cat "$RUNNER_TEMP/serve.log"
+          # http.server's server_bind() looks up the host's name (socket.getfqdn) before it listens, which
+          # takes about 35 s on macOS runners. Bind without it.
+          cat > "$RUNNER_TEMP/serve.py" <<'EOF'
+          import functools, http.server, socketserver
+          class Server(http.server.ThreadingHTTPServer):
+              def server_bind(self):
+                  socketserver.TCPServer.server_bind(self)
+                  self.server_name, self.server_port = "127.0.0.1", self.server_address[1]
+          handler = functools.partial(http.server.SimpleHTTPRequestHandler, directory="release")
+          Server(("127.0.0.1", 8765), handler).serve_forever()
+          EOF
+          (python3 "$RUNNER_TEMP/serve.py" >"$RUNNER_TEMP/serve.log" 2>&1 &)
+          for i in $(seq 1 30); do curl -fs http://127.0.0.1:8765/latest.json >/dev/null && break; sleep 0.5; done
+          curl -fsS http://127.0.0.1:8765/latest.json >/dev/null || { echo "::error::the release file server didn't start"; cat "$RUNNER_TEMP/serve.log"; exit 1; }
 
       - name: Install, repair, uninstall (macOS, Linux)
         if: ${{ !inputs.skip && runner.os != 'Windows' }}
