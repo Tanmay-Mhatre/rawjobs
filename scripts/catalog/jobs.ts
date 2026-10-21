@@ -3,15 +3,16 @@
  * rows, rebuilt every 6 hours by the "Jobs · feed" workflow. Scans use it to skip companies with nothing
  * for a user; they still fetch the rest live.
  *
- *   pnpm exec tsx scripts/catalog/jobs.ts crawl --group sr|payroll|enterprise|rest [--generated ISO]
+ *   pnpm exec tsx scripts/catalog/jobs.ts crawl --group sr|payroll|enterprise|join|rest [--generated ISO]
  *     [--directory out/directory.json] [--out out/jobs] [--max-minutes 240]
  *   pnpm exec tsx scripts/catalog/jobs.ts merge [--generated ISO] [--out out/jobs]
  *   pnpm exec tsx scripts/catalog/jobs.ts [--ats greenhouse,lever]   every group, then merge (local runs)
  *
  * crawl: one group of hiring systems (GROUPS), in parallel with the others on CI. Writes
- *   <out>/groups/<group>/: jobs-<ats>-<stamp>.json.gz (one shard per system), group.json, etags.json.
- *   Unchanged boards cost an empty 304 (ETags, for the one-request feeds). A board that fails, or that
- *   the time limit leaves out, keeps its previous rows and time: clients fetch stale ones live.
+ *   <out>/groups/<group>/: jobs-<ats>-<stamp>.json.gz (one shard per system), group.json, etags.json,
+ *   board-ids.json. Unchanged boards cost an empty 304 (ETags: the one-request feeds, and JOIN's first
+ *   page). A board that fails, or that the time limit leaves out, keeps its previous rows and time:
+ *   clients fetch stale ones live.
  * merge: every group's shards (a group that failed: its previous saved copy) into the published files:
  *   the first format (jobs-manifest.json + shards, the five original systems only), the second
  *   (jobs-v2-*, the same five) and the third (jobs-v3-*, every system); see lib/feed-v2.ts. Plus stats.json
@@ -24,6 +25,7 @@ import { fileURLToPath } from "node:url";
 import { gunzipSync, gzipSync } from "node:zlib";
 import {
   connectors,
+  FileBoardIds,
   HOST_DELAYS,
   HttpClient,
   JOB_BOARDS,
@@ -57,6 +59,8 @@ export const GROUPS: Record<string, string[]> = {
   sr: ["smartrecruiters"],
   payroll: ["paylocity", "paycom", "hireology", "workable"],
   enterprise: ["workday", "icims", "oracle", "successfactors", "taleo", "phenom", "eightfold", "avature", "radancy"],
+  // ~13,000 small boards on one host: alone in "rest" it used the whole time limit and left half unread.
+  join: ["join"],
   rest: [],
 };
 export const atsOfGroup = (group: string): string[] => {
@@ -68,7 +72,7 @@ export const atsOfGroup = (group: string): string[] => {
  * Companies in flight per hiring system: shared API hosts just queue (HttpClient paces each host).
  * Eightfold one at a time: its CDN refuses a CI runner's whole IP past about a request a second overall.
  */
-const WORKERS: Record<string, number> = { workday: 20, icims: 10, successfactors: 8, eightfold: 1 };
+const WORKERS: Record<string, number> = { workday: 20, icims: 10, successfactors: 8, join: 6, eightfold: 1 };
 /**
  * The feed's pace per shared API host, faster than the app's own (HOST_DELAYS): one read per board per
  * run, from CI only. Any 429 still slows a host down for the rest of the run.
@@ -78,6 +82,7 @@ const CI_HOST_DELAYS: Record<string, number> = {
   "api.smartrecruiters.com": 500,
   "recruiting.paylocity.com": 550,
   "www.paycomonline.net": 667,
+  "join.com": 300,
 };
 /**
  * Hiring systems whose every board is its own host, with the gap the feed keeps on each. Eightfold's CDN
@@ -97,6 +102,14 @@ export function slowHosts(directory: { ats: string; slug: string }[]): Record<st
 }
 /** Feeds that are one request per board, so a 304 means nothing changed. */
 const ETAG_HOSTS = new Set(["boards-api.greenhouse.io", "api.lever.co", "api.eu.lever.co", "api.ashbyhq.com"]);
+/**
+ * JOIN's first page carries the board's total and its newest jobs: the same page means the same board.
+ * Later pages aren't sent an ETag (a 304 there would stand for the whole board).
+ */
+const etagFor = (url: string) => {
+  const u = new URL(url);
+  return ETAG_HOSTS.has(u.host) || (u.host === "join.com" && u.pathname.endsWith("/jobs") && u.searchParams.get("page") === "1");
+};
 /** Entries not refreshed for this long are dropped. */
 const DROP_AFTER_DAYS = 7;
 /** A run-over-run change this large in the jobs of the same companies (or a fall this large in companies) is flagged. */
@@ -141,10 +154,10 @@ class EtagStore implements HttpCache {
   }
   get(url: string) {
     const etag = this.etags[url];
-    return etag && ETAG_HOSTS.has(new URL(url).host) ? { etag } : undefined;
+    return etag && etagFor(url) ? { etag } : undefined;
   }
   set(url: string, etag: string) {
-    if (ETAG_HOSTS.has(new URL(url).host)) this.etags[url] = etag;
+    if (etagFor(url)) this.etags[url] = etag;
   }
 }
 
@@ -188,6 +201,8 @@ async function crawl(out: string, group: string, generated: string, directoryFil
   const previousGroup = readJson<GroupFile>(join(dir, "group.json"));
   const legacy = previousGroup ? undefined : readJson<JobFeedManifest>(join(out, "jobs-manifest.json"));
   const etags = new EtagStore(join(dir, "etags.json"), join(out, "etags.json"));
+  // JOIN's company numbers, read off careers pages once (board-ids.ts).
+  const ids = new FileBoardIds(join(dir, "board-ids.json"));
   const http = new HttpClient({
     cache: etags,
     timeoutMs: 20_000,
@@ -239,7 +254,7 @@ async function crawl(out: string, group: string, generated: string, directoryFil
           const ref = refOfEntry(e);
           let partial = false;
           try {
-            const raws = await connector.fetch(ref, { http, now, partial: () => (partial = true) });
+            const raws = await connector.fetch(ref, { http, now, ids, partial: () => (partial = true) });
             const before = new Map((previous[key]?.jobs ?? []).map((r) => [r[0], r]));
             let describes = 0;
             const rows: FeedRow[] = [];
@@ -312,6 +327,7 @@ async function crawl(out: string, group: string, generated: string, directoryFil
   );
   result.seconds = Math.round((Date.now() - started) / 1000);
   writeFileSync(join(dir, "etags.json"), JSON.stringify(etags.etags));
+  ids.save();
   const current = new Set(Object.values(result.shards).map((x) => x.file));
   for (const f of readdirSync(dir)) if (/^jobs-.+\.json\.gz$/.test(f) && !current.has(f)) rmSync(join(dir, f));
   writeFileSync(join(dir, "group.json"), `${JSON.stringify(result, null, 2)}\n`);

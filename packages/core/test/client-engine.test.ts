@@ -33,6 +33,8 @@ describe("adaptive pacing per API", () => {
     expect(paceOf("api.smartrecruiters.com")).toMatchObject({ key: "smartrecruiters", ceiling: 5 });
     expect(paceOf("boards-api.greenhouse.io")).toMatchObject({ key: "greenhouse", ceiling: 8 });
     expect(paceOf("recruiting.paylocity.com")).toMatchObject({ key: "paylocity", ceiling: 3 });
+    expect(paceOf("join.com")).toMatchObject({ key: "join", start: 1, ceiling: 4, hostGap: false });
+    expect(paceOf("open.api.manatal.com")).toMatchObject({ key: "manatal", ceiling: 3 });
     expect(paceOf("acme.wd5.myworkdayjobs.com")).toMatchObject({ key: "workday:wd5", hostGap: true });
     expect(paceOf("bank.wd3.myworkdayjobs.com")?.key).toBe("workday:wd3");
     expect(paceOf("acme.bamboohr.com")).toBeUndefined();

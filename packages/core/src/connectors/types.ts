@@ -15,7 +15,12 @@ export type Ctx = {
    * just that page, and the run keeps the jobs from that read instead.
    */
   firstPage?: (fingerprint: string, total: number) => boolean;
+  /** Ids a board's API needs that the directory didn't give (JOIN's company number), kept between runs. */
+  ids?: BoardIds;
 };
+
+/** Ids by jobCompanyKey(), learned from a board once (its careers page) so later runs skip that request. */
+export type BoardIds = { get(key: string): string | undefined; set(key: string, id: string): void };
 
 /** A cheap fingerprint of a board's job ids (FNV-1a over the sorted ids): the same when the same jobs are listed. */
 export function hashIds(ids: readonly string[]): string {
