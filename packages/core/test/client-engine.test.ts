@@ -48,6 +48,16 @@ describe("adaptive pacing per API", () => {
     expect(paceOf("portal-applicant-tracking.us-cent.paycomonline.net.evil.example")).toBeUndefined();
   });
 
+  it("paceCeilings caps an API below its usual ceiling, leaving the others alone", async () => {
+    const http = new HttpClient({ adaptive: true, paceCeilings: { workable: 2 }, sleep: async () => {}, fetchImpl: (async () => json({ ok: true })) as unknown as typeof fetch });
+    for (let i = 0; i < 60; i++) {
+      await http.getJson("https://apply.workable.com/api/v1/widget/accounts/a");
+      await http.getJson("https://recruiting.paylocity.com/x");
+    }
+    expect(http.stats.paces?.workable?.rate).toBe(2);
+    expect(http.stats.paces?.paylocity?.rate).toBe(3);
+  });
+
   it("with climbHoldMs, a halved pace holds instead of climbing straight back", async () => {
     const answer = (n: number) => (n === 40 ? 429 : 200);
     const held = paced(answer, 60_000);

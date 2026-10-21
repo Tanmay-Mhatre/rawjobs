@@ -218,6 +218,9 @@ async function crawl(out: string, group: string, generated: string, directoryFil
     adaptive: ADAPTIVE_GROUPS.has(group),
     // After a halving, hold for a minute: an hour at the ceiling from one IP must not keep re-testing a limit.
     climbHoldMs: 60_000,
+    // Workable at the app's 3/s drew 104 × 429 and 67 slow-downs in an hour from CI (test run 39659100795);
+    // at a fixed 1/s it drew none.
+    paceCeilings: { workable: 2 },
     // A paced API that fails 8 times in a row rests and is tried again, instead of every one of its boards
     // keeping stale rows for the rest of the run.
     hostRests: ADAPTIVE_GROUPS.has(group),

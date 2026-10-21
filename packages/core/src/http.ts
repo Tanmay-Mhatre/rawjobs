@@ -102,6 +102,11 @@ export type HttpOptions = {
    * the feed's hour-long runs from one IP; the app's short scans keep 0.
    */
   climbHoldMs?: number;
+  /**
+   * With adaptive: a lower ceiling for some APIs, by pace key (paceOf). PACES' ceilings are the app's, for
+   * short scans from home connections; the feed holds an API for an hour from one CI IP.
+   */
+  paceCeilings?: Record<string, number>;
   fetchImpl?: typeof fetch;
   sleep?: (ms: number) => Promise<void>;
   /**
@@ -250,6 +255,7 @@ export class HttpClient {
       cache: opts.cache,
       adaptive: opts.adaptive ?? false,
       climbHoldMs: opts.climbHoldMs ?? 0,
+      paceCeilings: opts.paceCeilings ?? {},
       fetchImpl: opts.fetchImpl ?? fetch,
       sleep: opts.sleep ?? realSleep,
       stopped: opts.stopped,
@@ -498,10 +504,12 @@ export class HttpClient {
 
   private paceFor(host: string): Pace | undefined {
     if (!this.opts.adaptive) return undefined;
-    const spec = paceOf(host);
-    if (!spec) return undefined;
-    let pace = this.paces.get(spec.key);
+    const found = paceOf(host);
+    if (!found) return undefined;
+    let pace = this.paces.get(found.key);
     if (!pace) {
+      const cap = this.opts.paceCeilings[found.key];
+      const spec = cap === undefined ? found : { ...found, ceiling: Math.min(found.ceiling, cap), start: Math.min(found.start, cap) };
       pace = { spec, rate: spec.start, next: 0, samples: 0, downAt: 0, downs: 0 };
       this.paces.set(spec.key, pace);
     }
