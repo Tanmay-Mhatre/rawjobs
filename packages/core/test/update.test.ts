@@ -1,6 +1,6 @@
 import { spawn, spawnSync } from "node:child_process";
 import { createHash, generateKeyPairSync, sign } from "node:crypto";
-import { appendFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import { appendFileSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, utimesSync, writeFileSync } from "node:fs";
 import { createServer, type Server } from "node:http";
 import type { AddressInfo } from "node:net";
 import { tmpdir } from "node:os";
@@ -22,6 +22,7 @@ import {
   prepareVersion,
   readLastUpdate,
   readUpdateFile,
+  recentBackup,
   startServer,
   stopAllServers,
   switchTo,
@@ -420,6 +421,18 @@ describe("what an update keeps", () => {
     expect(existsSync(join(b, "data/cache"))).toBe(false);
     expect(existsSync(join(b, "data/catalog/index.json"))).toBe(false);
     expect(existsSync(join(b, "data/scan.lock"))).toBe(false);
+  });
+
+  it("keeps the last two backups, and reuses one from the last hour instead of copying again", () => {
+    const home = installedCopy();
+    const [, b2, b3] = ["before-0.2.0", "before-0.3.0", "before-0.4.0"].map((label) => backupData(home, label));
+    expect(readdirSync(join(home, "backups")).map((n) => join(home, "backups", n))).toEqual([b2, b3]);
+    expect(recentBackup(home, "before-0.4.0")).toBe(b3);
+    expect(recentBackup(home, "before-0.9.0")).toBeNull();
+    // Over an hour old: a new one is made.
+    const old = new Date(Date.now() - 2 * 3_600_000);
+    utimesSync(b3!, old, old);
+    expect(recentBackup(home, "before-0.4.0")).toBeNull();
   });
 
   it("reads the data format, the first one when none is recorded", () => {

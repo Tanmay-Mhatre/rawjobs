@@ -138,7 +138,9 @@ describe("schedule", () => {
     expect(script).toContain("Register-ScheduledTask -TaskName 'RawJobs Scan'");
     // The task from before the rename goes, so nothing scans twice.
     expect(scripts[1]).toContain("Unregister-ScheduledTask -TaskName 'JobHunter Scan'");
-    expect(script).toContain("-StartWhenAvailable -WakeToRun");
+    expect(script).toContain("-StartWhenAvailable");
+    // A scan never wakes a sleeping laptop.
+    expect(script).not.toContain("WakeToRun");
     expect(script).toContain("-ExecutionTimeLimit (New-TimeSpan -Hours 4)");
     expect(script).toContain("New-ScheduledTaskTrigger -Daily -At '08:00'");
     expect(script).toContain("New-ScheduledTaskTrigger -Daily -At '20:00'");

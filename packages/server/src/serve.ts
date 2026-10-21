@@ -1,11 +1,12 @@
 import { existsSync, mkdirSync } from "node:fs";
+import { constants, setPriority } from "node:os";
 import { createServer, type Server } from "node:http";
 import { parseArgs } from "node:util";
 import { defaultDataDir, rawjobsHome } from "@rawjobs/core";
 import { APP_VERSION, BUNDLED, migrateData, scanLockHeld, WEB_DIR } from "@rawjobs/core";
 import { createApi } from "./api";
 import { createUpdater } from "./updater";
-import { alreadyRunning, DEFAULT_PORT, logTo, openBrowser, readServerState, writeServerState } from "./desktop";
+import { alreadyRunning, DEFAULT_PORT, ensureAutostart, logTo, openBrowser, readServerState, watchEventLoop, writeServerState } from "./desktop";
 import { ensureShortcuts, startLinkInstalled } from "./shortcuts";
 import { servePages, serveStatic } from "./static";
 
@@ -19,6 +20,13 @@ const TRIES = 10;
 export async function serve(args: string[]): Promise<number> {
   const { values } = parseArgs({ args, options: { port: { type: "string" }, open: { type: "boolean", default: false }, log: { type: "string" } } });
   if (values.log) logTo(values.log);
+  // The dashboard answers at normal priority, also when a copy installed before started it lower
+  // (scans still lower their own).
+  try {
+    setPriority(constants.priority.PRIORITY_NORMAL);
+  } catch {
+    // not allowed here
+  }
   const home = rawjobsHome();
   const dataDir = defaultDataDir(home);
   mkdirSync(dataDir, { recursive: true });
@@ -96,6 +104,9 @@ export async function serve(args: string[]): Promise<number> {
   updater.start();
   // Copies installed before there was a Desktop shortcut (or an icon) get them on this version's first start.
   if (BUNDLED) ensureShortcuts(home, process.env.RAWJOBS_LAUNCHER, APP_VERSION);
+  // Copies installed before: the server task at normal priority, and no scheduled task waking the laptop.
+  if (BUNDLED) void ensureAutostart(home, APP_VERSION);
+  watchEventLoop();
   // Where the shortcut (rawjobs open) finds the dashboard, also when 4317 was taken.
   writeServerState(port, home);
   const url = `http://127.0.0.1:${port}`;

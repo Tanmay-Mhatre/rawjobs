@@ -3,7 +3,7 @@ import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-import { alreadyRunning, AUTOSTART, portTaken, readServerState, serverHolding, serverRunning, writeServerState } from "../src/desktop";
+import { alreadyRunning, AUTOSTART, ensureAutostart, portTaken, readServerState, serverHolding, serverRunning, writeServerState } from "../src/desktop";
 import { iconIcns, iconIco, iconPng, markPixels } from "../src/icon";
 import { portOrder } from "../src/serve";
 import { markShortcutNoticeSeen, shortcutState } from "../src/shortcuts";
@@ -81,6 +81,44 @@ describe("an installed copy's server", () => {
     expect(ps1).toContain(`$TaskName = '${AUTOSTART.windowsTask}'`);
     expect(sh).toContain(`LABEL='${AUTOSTART.macLabel}'`);
     expect(sh).toContain(`UNIT='${AUTOSTART.linuxUnit}'`);
+  });
+});
+
+describe("the scheduled tasks of a copy installed before", () => {
+  it("are brought up to date once per version: the server at normal priority, nothing waking the laptop", async () => {
+    const home = mkdtempSync(join(tmpdir(), "rj-autostart-"));
+    const scripts: string[] = [];
+    const run = async (script: string) => {
+      scripts.push(script);
+      return 0;
+    };
+    await ensureAutostart(home, "0.7.0", { platform: "win32", run });
+    await ensureAutostart(home, "0.7.0", { platform: "win32", run });
+    expect(scripts).toHaveLength(1);
+    expect(scripts[0]).toContain(`Get-ScheduledTask -TaskName '${AUTOSTART.windowsTask}'`);
+    expect(scripts[0]).toContain("$t.Settings.Priority = 5");
+    expect(scripts[0]).toContain("Get-ScheduledTask -TaskName 'RawJobs Scan'");
+    expect(scripts[0]).toContain("Get-ScheduledTask -TaskName 'RawJobs daily summary'");
+    expect(scripts[0]).toContain("$t.Settings.WakeToRun = $false");
+    await ensureAutostart(home, "0.7.1", { platform: "win32", run });
+    expect(scripts).toHaveLength(2);
+    // Only Windows has these tasks.
+    await ensureAutostart(mkdtempSync(join(tmpdir(), "rj-autostart-")), "0.7.0", { platform: "darwin", run });
+    expect(scripts).toHaveLength(2);
+  });
+
+  it("never throws when PowerShell fails, and tries again next start", async () => {
+    const home = mkdtempSync(join(tmpdir(), "rj-autostart-"));
+    let tries = 0;
+    const run = (code: number) => async () => {
+      tries++;
+      return code;
+    };
+    await ensureAutostart(home, "0.7.0", { platform: "win32", run: run(1) });
+    await ensureAutostart(home, "0.7.0", { platform: "win32", run: () => Promise.reject(new Error("no powershell")) });
+    expect(tries).toBe(1);
+    await ensureAutostart(home, "0.7.0", { platform: "win32", run: run(0) });
+    expect(tries).toBe(2);
   });
 });
 
