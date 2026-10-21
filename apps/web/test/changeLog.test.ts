@@ -33,7 +33,9 @@ describe("change log", () => {
 
     const round = { on: "2026-10-30", what: "Technical" };
     expect(texts(entry(), { interviews: [round] })).toEqual([`Interview added: Technical, ${d("2026-10-30")}`]);
-    expect(texts(entry({ interviews: [round] }), { interviews: [{ ...round, time: "14:00" }] })).toEqual([`Interview changed: Technical, ${d("2026-10-30")}, 14:00`]);
+    expect(texts(entry({ interviews: [round] }), { interviews: [{ ...round, time: "14:00" }] })).toEqual([
+      `Interview changed: Technical, ${d("2026-10-30")}, ${new Date("2000-01-01T14:00:00").toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" })}`,
+    ]);
     expect(texts(entry({ interviews: [round] }), { interviews: [] })).toEqual([`Interview removed: Technical, ${d("2026-10-30")}`]);
 
     expect(texts(entry(), { cv: "Fintech PM v3" })).toEqual(["CV set to Fintech PM v3"]);
@@ -65,6 +67,6 @@ describe("change log", () => {
     const items = timeline(e);
     expect(items[0]).toMatchObject({ kind: "change", text: "CV set to v2" });
     expect(filterTimeline(items, "changes").map((i) => i.kind)).toEqual(["change"]);
-    expect(filterTimeline(items, "stages").some((i) => i.kind === "change")).toBe(false);
+    expect(filterTimeline(items, "messages").some((i) => i.kind === "change")).toBe(false);
   });
 });

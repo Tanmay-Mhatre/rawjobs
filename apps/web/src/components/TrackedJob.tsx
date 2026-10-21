@@ -1,7 +1,8 @@
 import { displayName } from "@rawjobs/core/display-name";
 import { ExternalLink, X } from "lucide-react";
-import { type FormEvent, useState } from "react";
+import { type FormEvent, useId, useState } from "react";
 import { type Entry, type EntryPatch, type Interview, OFFER_FIELDS, type Offer, PIPELINE, STATUS_LABEL, type Status, today } from "../lib/userState";
+import { DateField } from "./DateField";
 import { Dialog } from "./Dialog";
 import { JobTracking } from "./pipeline/JobTracking";
 import { Button, Card, IconButton, Select } from "./ui";
@@ -27,27 +28,28 @@ const isDate = (k: keyof Offer) => k === "start" || k === "deadline";
 
 /** The offer's terms, each saved when you leave the field. */
 export function OfferFields({ offer, onSave }: { offer: Offer; onSave: (offer: Offer) => void }) {
+  const uid = useId();
   const save = (k: keyof Offer, v: string) => {
     if ((offer[k] ?? "") === v) return;
     onSave({ ...offer, [k]: v.trim() || undefined });
   };
   return (
-    <fieldset className="grid gap-2 rounded-md border border-line p-3">
+    <fieldset className="@container grid gap-2 rounded-md border border-line p-3">
       <legend className="px-1 type-label">The offer</legend>
-      <div className="grid gap-2 sm:grid-cols-2">
-        {OFFER_FIELDS.map((k) => (
-          <label key={k} className={`grid gap-1 type-meta text-muted ${k === "note" ? "sm:col-span-2" : ""}`}>
-            {OFFER_LABEL[k]}
-            <input
-              type={isDate(k) ? "date" : "text"}
-              defaultValue={offer[k] ?? ""}
-              placeholder={OFFER_HINT[k]}
-              onBlur={(e) => save(k, e.target.value)}
-              onChange={(e) => isDate(k) && save(k, e.target.value)}
-              className={input}
-            />
-          </label>
-        ))}
+      <div className="grid gap-2 @md:grid-cols-2">
+        {OFFER_FIELDS.map((k) =>
+          isDate(k) ? (
+            <div key={k} className="grid gap-1 type-meta text-muted">
+              <label htmlFor={`${uid}-${k}`}>{OFFER_LABEL[k]}</label>
+              <DateField id={`${uid}-${k}`} label={OFFER_LABEL[k]} value={offer[k] ?? ""} clearable placeholder="No date" onChange={(d) => save(k, d)} />
+            </div>
+          ) : (
+            <label key={k} className={`grid gap-1 type-meta text-muted ${k === "note" ? "@md:col-span-2" : ""}`}>
+              {OFFER_LABEL[k]}
+              <input type="text" defaultValue={offer[k] ?? ""} placeholder={OFFER_HINT[k]} onBlur={(e) => save(k, e.target.value)} className={input} />
+            </label>
+          ),
+        )}
       </div>
     </fieldset>
   );
@@ -114,8 +116,8 @@ function JobFields({ entry, onUpdate }: { entry: Entry; onUpdate: (patch: EntryP
     onUpdate({}, { title: s.title, company: s.company, url: s.url, [k]: v });
   };
   return (
-    <div className="grid gap-3">
-      <div className="grid gap-3 sm:grid-cols-2">
+    <div className="@container grid gap-3">
+      <div className="grid gap-3 @md:grid-cols-2">
         <label className="grid gap-1 type-label">
           Job title
           <input key={s.title} defaultValue={s.title} required onBlur={(e) => saveJob("title", e.target.value)} className={`${input} h-9`} />
@@ -156,9 +158,11 @@ export function TrackedJobDialog({ id, entry, onClose, onUpdate }: { id: string 
   const s = entry.snapshot;
   const manual = id.startsWith("manual:");
   return (
-    <Dialog open onClose={onClose} labelledBy="tracked-title" className="max-h-[calc(100dvh-2rem)] max-w-2xl overflow-y-auto">
-      <Card className="grid gap-4 p-5 shadow-l3 sm:p-6">
-        <div className="flex items-start gap-3">
+    // Wide and as tall as the window: on laptops Activity and the side panel scroll on their own, so the
+    // dialog itself never does. Phones get the whole screen.
+    <Dialog open onClose={onClose} labelledBy="tracked-title" className="h-[calc(100dvh-2rem)] max-w-[69rem]! max-sm:h-dvh max-sm:w-full! max-sm:max-h-dvh">
+      <div className="flex h-full flex-col overflow-hidden rounded-md border border-line bg-overlay shadow-l3 max-sm:rounded-none">
+        <div className="flex flex-wrap items-center gap-x-4 gap-y-2 border-b border-hairline px-5 py-3">
           <div className="min-w-0 flex-1">
             <h2 id="tracked-title" className="type-subheading font-semibold">
               {s.title}
@@ -175,24 +179,39 @@ export function TrackedJobDialog({ id, entry, onClose, onUpdate }: { id: string 
               )}
             </p>
           </div>
-          <IconButton label="Close" className="-mr-2 -mt-1" onClick={onClose}>
+          <label htmlFor="tracked-status" className="order-last flex basis-full items-center gap-2 type-small text-muted sm:order-none sm:basis-auto">
+            Stage
+            <Select id="tracked-status" value={entry.status ?? ""} onChange={(e) => onUpdate({ status: (e.target.value || undefined) as Status | undefined })}>
+              {PIPELINE.map((p) => (
+                <option key={p} value={p}>
+                  {STATUS_LABEL[p]}
+                </option>
+              ))}
+              <option value="">Remove from Pipeline</option>
+            </Select>
+          </label>
+          <IconButton label="Close" className="-mr-2" onClick={onClose}>
             <X className="size-4" />
           </IconButton>
         </div>
-        <label htmlFor="tracked-status" className="flex items-center gap-3 type-small font-medium">
-          Your progress
-          <Select id="tracked-status" value={entry.status ?? ""} onChange={(e) => onUpdate({ status: (e.target.value || undefined) as Status | undefined })}>
-            {PIPELINE.map((p) => (
-              <option key={p} value={p}>
-                {STATUS_LABEL[p]}
-              </option>
-            ))}
-            <option value="">Remove from Pipeline</option>
-          </Select>
-        </label>
-        {!manual && (entry.status === "offer" || entry.offer) && <OfferFields offer={entry.offer ?? {}} onSave={(offer) => onUpdate({ offer })} />}
-        <JobTracking key={id} jobId={id} entry={entry} title={s.title} onUpdate={onUpdate} jobTab={manual ? <JobFields entry={entry} onUpdate={onUpdate} /> : undefined} />
-      </Card>
+        <div className="flex min-h-0 flex-1 flex-col overflow-y-auto p-5 lg:overflow-hidden lg:p-0">
+          <JobTracking
+            key={id}
+            jobId={id}
+            entry={entry}
+            title={s.title}
+            onUpdate={onUpdate}
+            wide
+            jobTab={
+              manual ? (
+                <JobFields entry={entry} onUpdate={onUpdate} />
+              ) : entry.status === "offer" || entry.offer ? (
+                <OfferFields offer={entry.offer ?? {}} onSave={(offer) => onUpdate({ offer })} />
+              ) : undefined
+            }
+          />
+        </div>
+      </div>
     </Dialog>
   );
 }

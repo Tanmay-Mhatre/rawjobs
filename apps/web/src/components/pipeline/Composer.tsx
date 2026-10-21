@@ -1,6 +1,7 @@
 import { Handshake, type LucideIcon, Mail, MessageCircle, MessageSquare, Phone, StickyNote, Users } from "lucide-react";
 import { type KeyboardEvent, useId, useRef, useState } from "react";
 import { type Activity, activityAt, CAPS, CHANNEL_LABEL, CHANNELS, type Channel, type Contact, dayAfter, type Direction, newId, today } from "../../lib/userState";
+import { DateField } from "../DateField";
 import { Button, cx, Select } from "../ui";
 
 export const CHANNEL_ICON: Record<Channel, LucideIcon> = {
@@ -54,11 +55,13 @@ export type ComposerProps = {
   onAnnounce?: (message: string) => void;
   /** "Add a person" picked in the person picker. */
   onAddPerson?: () => void;
+  /** Shows Cancel, which calls this (the Activity's composer folds back to one line). */
+  onCancel?: () => void;
   now?: Date;
   className?: string;
 };
 
-/** A radio group of buttons with arrow keys (design: the channel picker and Sent / Received). */
+/** A radio group of buttons with arrow keys (design: Sent / Received). */
 function Radios<T extends string>({ label, value, options, onChange }: { label: string; value: T; options: { value: T; label: string; icon?: LucideIcon }[]; onChange: (v: T) => void }) {
   const refs = useRef<(HTMLButtonElement | null)[]>([]);
   const onKey = (ev: KeyboardEvent<HTMLButtonElement>, i: number) => {
@@ -104,7 +107,7 @@ const shortDay = (day: string) => new Date(`${day}T12:00:00`).toLocaleDateString
  * person, the day (today or earlier) and a line of text. A sent touch sets the next follow-up; a
  * received one clears it. Ctrl or Cmd + Enter logs. RawJobs sends nothing: this only records it.
  */
-export function Composer({ contacts, initial, hasFollowUp, followUps = true, onLog, onAnnounce, onAddPerson, now = new Date(), className }: ComposerProps) {
+export function Composer({ contacts, initial, hasFollowUp, followUps = true, onLog, onAnnounce, onAddPerson, onCancel, now = new Date(), className }: ComposerProps) {
   const id = useId();
   const day = today(now);
   const [channel, setChannel] = useState<Channel>(initial?.channel ?? "email");
@@ -143,8 +146,17 @@ export function Composer({ contacts, initial, hasFollowUp, followUps = true, onL
         log();
       }}
     >
-      <Radios label="Channel" value={channel} onChange={setChannel} options={CHANNELS.map((c) => ({ value: c, label: CHANNEL_LABEL[c], icon: CHANNEL_ICON[c] }))} />
       <div className="flex flex-wrap items-end gap-3">
+        <label htmlFor={`${id}-type`} className="grid gap-1 type-meta text-muted">
+          Type
+          <Select id={`${id}-type`} value={channel} onChange={(ev) => setChannel(ev.target.value as Channel)}>
+            {CHANNELS.map((c) => (
+              <option key={c} value={c}>
+                {CHANNEL_LABEL[c]}
+              </option>
+            ))}
+          </Select>
+        </label>
         {!note && (
           <Radios
             label="Sent or received"
@@ -175,10 +187,20 @@ export function Composer({ contacts, initial, hasFollowUp, followUps = true, onL
             {onAddPerson && <option value={ADD_PERSON}>Add a person</option>}
           </Select>
         </label>
-        <label className="grid gap-1 type-meta text-muted">
-          Date
-          <input type="date" value={on} max={day} onChange={(ev) => setOn(ev.target.value || day)} className="h-9 rounded-md border border-line bg-raised px-2.5 type-small text-ink" />
-        </label>
+        <div className="grid w-40 gap-1 type-meta text-muted">
+          <label htmlFor={`${id}-on`}>Date</label>
+          <DateField
+            id={`${id}-on`}
+            label="Date"
+            value={on}
+            max={day}
+            onChange={(d) => setOn(d || day)}
+            quick={[
+              { label: "Today", value: day },
+              { label: "Yesterday", value: dayAfter(`${day}T12:00:00`, -1) },
+            ]}
+          />
+        </div>
       </div>
       <div className="grid gap-1">
         <label htmlFor={`${id}-text`} className="type-label">
@@ -214,9 +236,16 @@ export function Composer({ contacts, initial, hasFollowUp, followUps = true, onL
           </label>
         )}
         {followUps && !note && dir === "received" && hasFollowUp && <p className="type-small text-muted">Logging a reply clears the follow-up date.</p>}
-        <Button type="submit" variant="primary" className="ml-auto">
-          {LOG_LABEL[channel]}
-        </Button>
+        <span className="ml-auto flex gap-2">
+          {onCancel && (
+            <Button variant="ghost" onClick={onCancel}>
+              Cancel
+            </Button>
+          )}
+          <Button type="submit" variant="primary">
+            {LOG_LABEL[channel]}
+          </Button>
+        </span>
       </div>
     </form>
   );

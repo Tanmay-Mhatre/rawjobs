@@ -31,18 +31,30 @@ describe("Composer", () => {
     expect(onLog.mock.calls[0]![0]).toMatchObject({ channel: "email", dir: "received" });
     expect(onLog.mock.calls[0]![1]).toEqual({ followUpDays: undefined });
 
-    fireEvent.click(screen.getByRole("radio", { name: "Note" }));
+    fireEvent.change(screen.getByLabelText("Type"), { target: { value: "note" } });
     expect(screen.queryByRole("radio", { name: "Sent" })).toBeNull();
     fireEvent.click(screen.getByRole("button", { name: "Add note" }));
     expect(onLog.mock.calls[1]![0].dir).toBeUndefined();
   });
 
-  it("moves through channels with arrow keys and logs with Ctrl+Enter", () => {
+  it("picks the channel from the Type menu and logs with Ctrl+Enter", () => {
     const onLog = vi.fn();
     render(<Composer contacts={contacts} onLog={onLog} now={now} />);
-    fireEvent.keyDown(screen.getByRole("radio", { name: "Email" }), { key: "ArrowRight" });
-    expect(screen.getByRole("radio", { name: "LinkedIn" }).getAttribute("aria-checked")).toBe("true");
+    fireEvent.change(screen.getByLabelText("Type"), { target: { value: "linkedin" } });
+    expect(screen.getByRole("button", { name: "Log LinkedIn message" })).toBeTruthy();
     fireEvent.keyDown(screen.getByLabelText("What was said"), { key: "Enter", ctrlKey: true });
     expect(onLog.mock.calls[0]![0]).toMatchObject({ channel: "linkedin" });
+  });
+
+  it("shows Cancel only when asked for, and picks an earlier day from the calendar", () => {
+    const onLog = vi.fn();
+    const onCancel = vi.fn();
+    render(<Composer contacts={contacts} onLog={onLog} onCancel={onCancel} now={now} />);
+    fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+    expect(onCancel).toHaveBeenCalled();
+    fireEvent.click(screen.getByLabelText("Date"));
+    fireEvent.click(screen.getByRole("button", { name: "Yesterday" }));
+    fireEvent.click(screen.getByRole("button", { name: "Log email" }));
+    expect(onLog.mock.calls[0]![0].at).toBe(new Date("2026-10-19T12:00:00").toISOString());
   });
 });

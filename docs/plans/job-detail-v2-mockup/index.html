@@ -1,0 +1,464 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Pipeline job detail mockup</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600&family=Geist+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+:root {
+  --font-sans: "Geist", system-ui, sans-serif;
+  --font-mono: "Geist Mono", ui-monospace, monospace;
+  --bg-canvas: #f5f1e8; --bg-raised: #fffbf5; --bg-overlay: #fffbf5;
+  --bg-hover: #ede9e2; --bg-active: #e5e1db; --bg-inset: #ede9e2;
+  --border-subtle: #d4d0c9; --border-default: #c4c0ba; --border-control: #888681;
+  --text-primary: #151412; --text-secondary: #605d59;
+  --accent-solid: #ff5a1f; --on-accent: #151412; --accent-text: #a33100; --accent-subtle: #ffe2da; --accent-mark: #dd4400;
+  --success-text: #007137; --success-subtle: #d3f3da;
+  --warning-text: #7f5300; --warning-subtle: #fde5c7;
+  --radius-sm: 2px; --radius-md: 4px;
+  --shadow-l3: 0 8px 24px rgba(21,20,18,.12), 0 1px 2px rgba(21,20,18,.08);
+  --scrim: rgba(21,20,18,.35);
+}
+[data-theme="dark"] {
+  --bg-canvas: #120f0b; --bg-raised: #181611; --bg-overlay: #201d18;
+  --bg-hover: #201d18; --bg-active: #27241f; --bg-inset: #120f0b;
+  --border-subtle: #37342e; --border-default: #45423b; --border-control: #6f6d66;
+  --text-primary: #ecebe8; --text-secondary: #cac7c2;
+  --accent-text: #ff9d7f; --accent-subtle: #3a1d10; --accent-mark: #ff6a33;
+  --success-text: #89dea1; --success-subtle: #12301c;
+  --warning-text: #f6bb6a; --warning-subtle: #36270e;
+  --shadow-l3: 0 8px 24px rgba(0,0,0,.5), 0 1px 2px rgba(0,0,0,.4);
+  --scrim: rgba(0,0,0,.55);
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; }
+body { background: var(--bg-canvas); color: var(--text-primary); font: 400 14px/21px var(--font-sans); -webkit-font-smoothing: antialiased; padding: 24px 16px 64px; }
+.ico { width: 16px; height: 16px; flex: none; stroke: currentColor; fill: none; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+.ico-sm { width: 14px; height: 14px; }
+.muted { color: var(--text-secondary); }
+.meta { font-size: 12px; line-height: 16px; color: var(--text-secondary); }
+.tabular { font-variant-numeric: tabular-nums; }
+
+/* Page chrome */
+.intro { max-width: 1160px; margin: 0 auto 20px; display: flex; gap: 16px; align-items: flex-start; justify-content: space-between; flex-wrap: wrap; }
+.intro h1 { font: 600 22px/28px var(--font-sans); margin: 0 0 4px; }
+.intro p { margin: 0; color: var(--text-secondary); max-width: 760px; }
+.states { max-width: 1160px; margin: 0 auto 16px; display: flex; flex-wrap: wrap; gap: 6px; }
+.chip { height: 30px; padding: 0 12px; border-radius: 999px; border: 1px solid var(--border-default); background: var(--bg-raised); color: var(--text-primary); font: 500 13px/1 var(--font-sans); cursor: pointer; }
+.chip[aria-pressed="true"] { background: var(--text-primary); color: var(--bg-canvas); border-color: var(--text-primary); }
+.notes { max-width: 1160px; margin: 16px auto 0; display: grid; gap: 6px; color: var(--text-secondary); }
+.notes b { color: var(--text-primary); font-weight: 500; }
+
+/* Buttons and fields */
+.btn { display: inline-flex; align-items: center; justify-content: center; gap: 6px; height: 32px; padding: 0 12px; border-radius: var(--radius-md); border: 1px solid var(--border-default); background: var(--bg-raised); color: var(--text-primary); font: 500 13px/20px var(--font-sans); cursor: pointer; white-space: nowrap; }
+.btn:hover { background: var(--bg-hover); }
+.btn-primary { background: var(--accent-solid); border-color: var(--accent-solid); color: var(--on-accent); }
+.btn-quiet { border-color: transparent; background: transparent; color: var(--text-secondary); }
+.btn-quiet:hover { color: var(--text-primary); }
+.btn-sm { height: 28px; padding: 0 10px; font-size: 13px; }
+.btn-block { width: 100%; justify-content: flex-start; }
+.iconbtn { display: inline-grid; place-items: center; width: 30px; height: 30px; border-radius: var(--radius-md); border: 1px solid transparent; background: transparent; color: var(--text-secondary); cursor: pointer; }
+.iconbtn:hover { background: var(--bg-hover); color: var(--text-primary); }
+.field { display: grid; gap: 4px; font-size: 12px; line-height: 16px; color: var(--text-secondary); }
+.input { height: 34px; border-radius: var(--radius-md); border: 1px solid var(--border-default); background: var(--bg-raised); color: var(--text-primary); font: 400 13px/20px var(--font-sans); padding: 0 10px; display: flex; align-items: center; gap: 8px; width: 100%; text-align: left; cursor: pointer; }
+.input .grow { flex: 1; }
+.input.open { border-color: var(--accent-solid); box-shadow: 0 0 0 1px var(--accent-solid); }
+textarea.input { height: 76px; padding: 8px 10px; resize: none; cursor: text; }
+.seg { display: inline-flex; border: 1px solid var(--border-default); border-radius: var(--radius-md); overflow: hidden; }
+.seg button { height: 28px; padding: 0 10px; border: 0; background: transparent; color: var(--text-secondary); font: 500 12px/1 var(--font-sans); cursor: pointer; display: inline-flex; align-items: center; gap: 6px; }
+.seg button + button { border-left: 1px solid var(--border-subtle); }
+.seg button[aria-pressed="true"] { background: var(--bg-active); color: var(--text-primary); }
+.pills { display: flex; flex-wrap: wrap; gap: 6px; }
+.pill { height: 28px; padding: 0 10px; border-radius: 999px; border: 1px solid var(--border-default); background: transparent; color: var(--text-primary); font: 500 12px/1 var(--font-sans); cursor: pointer; }
+.pill[aria-pressed="true"] { background: var(--accent-subtle); border-color: var(--accent-solid); color: var(--accent-text); }
+
+/* Stage: a fake board behind the dialog */
+.stage { position: relative; max-width: 1160px; height: 760px; margin: 0 auto; border: 1px solid var(--border-subtle); border-radius: 6px; overflow: hidden; background: var(--bg-canvas); }
+.stage .fakeboard { position: absolute; inset: 0; padding: 72px 16px 16px; display: grid; grid-template-columns: repeat(5, 1fr); gap: 12px; opacity: .6; }
+.stage .fakeboard div { border: 1px solid var(--border-subtle); border-radius: 4px; }
+.stage .scrim { position: absolute; inset: 0; background: var(--scrim); }
+
+/* The dialog: wide, fixed height, no outer scroll; two panes scroll on their own */
+.dlg { position: absolute; inset: 24px; max-width: 1104px; margin: 0 auto; display: flex; flex-direction: column; background: var(--bg-overlay); border: 1px solid var(--border-subtle); border-radius: 6px; box-shadow: var(--shadow-l3); overflow: hidden; }
+.dhead { display: flex; align-items: center; gap: 16px; padding: 14px 20px; border-bottom: 1px solid var(--border-subtle); }
+.dhead h2 { margin: 0; font: 600 18px/24px var(--font-sans); }
+.dhead .sub { font-size: 13px; color: var(--text-secondary); display: flex; gap: 6px; align-items: center; }
+.dhead .sub a { color: inherit; display: inline-flex; gap: 4px; align-items: center; }
+.status { margin-left: auto; display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--text-secondary); }
+.status .input { width: 150px; }
+.dbody { flex: 1; min-height: 0; display: grid; grid-template-columns: minmax(0, 1fr) 340px; }
+.main { min-height: 0; overflow: auto; padding: 16px 24px 24px; }
+.side { min-height: 0; overflow: auto; border-left: 1px solid var(--border-subtle); background: var(--bg-raised); padding: 16px; display: grid; align-content: start; gap: 18px; }
+
+/* Activity */
+.ahead { display: flex; align-items: center; gap: 12px; margin-bottom: 12px; }
+.ahead h3 { margin: 0; font: 600 15px/20px var(--font-sans); }
+.ahead .seg { margin-left: auto; }
+.composer { border: 1px solid var(--border-default); border-radius: 6px; background: var(--bg-raised); margin-bottom: 20px; }
+.composer .closed { display: flex; align-items: center; gap: 8px; padding: 6px 6px 6px 12px; }
+.composer .closed .ph { flex: 1; color: var(--text-secondary); cursor: text; }
+.composer .opened { padding: 12px; display: grid; gap: 10px; }
+.composer .row { display: flex; flex-wrap: wrap; gap: 8px; align-items: end; }
+.composer .foot { display: flex; align-items: center; gap: 8px; }
+.composer .foot .grow { flex: 1; }
+.check { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; }
+.check i { width: 14px; height: 14px; border-radius: 3px; background: var(--accent-solid); display: inline-block; }
+
+.day { margin: 0 0 6px; font: 500 12px/16px var(--font-sans); color: var(--text-secondary); text-transform: uppercase; letter-spacing: .04em; }
+.tl { list-style: none; margin: 0 0 18px; padding: 0 0 0 20px; position: relative; }
+.tl::before { content: ""; position: absolute; left: 6px; top: 6px; bottom: 6px; width: 1px; background: var(--border-subtle); }
+.tl li { position: relative; }
+.tl li::before { content: ""; position: absolute; left: -18px; top: 9px; width: 9px; height: 9px; border-radius: 99px; background: var(--bg-overlay); border: 1px solid var(--border-control); }
+.tl li.msg::before { background: var(--accent-mark); border-color: var(--accent-mark); }
+.tl .small { display: flex; gap: 8px; align-items: center; padding: 4px 0; font-size: 13px; color: var(--text-secondary); }
+.tl .small .t { margin-left: auto; font-size: 12px; }
+.tl .card { border: 1px solid var(--border-subtle); background: var(--bg-raised); border-radius: 6px; padding: 10px 12px; margin: 4px 0 8px; }
+.tl .card .top { display: flex; gap: 8px; align-items: baseline; }
+.tl .card .who { font-weight: 500; }
+.tl .card .t { margin-left: auto; }
+.tl .card p { margin: 4px 0 0; }
+.tl .group summary { list-style: none; cursor: pointer; display: flex; gap: 8px; align-items: center; padding: 4px 0; font-size: 13px; color: var(--text-secondary); }
+.tl .group summary::-webkit-details-marker { display: none; }
+.tl .group summary:hover { color: var(--text-primary); }
+.tl .group ul { list-style: none; margin: 0 0 4px; padding: 0 0 0 22px; }
+.tl .group ul li::before { display: none; }
+
+/* Side panel */
+.sec h4 { margin: 0 0 8px; display: flex; align-items: center; gap: 8px; font: 600 13px/18px var(--font-sans); }
+.sec h4 .count { color: var(--text-secondary); font-weight: 500; }
+.next { border: 1px solid var(--accent-solid); background: var(--accent-subtle); border-radius: 6px; padding: 12px; display: grid; gap: 8px; }
+.next .h { display: flex; justify-content: space-between; font-weight: 600; font-size: 13px; }
+.next .h span:last-child { color: var(--accent-text); font-weight: 500; }
+.next .btns { display: flex; gap: 6px; }
+.list { list-style: none; margin: 0 0 8px; padding: 0; border: 1px solid var(--border-subtle); border-radius: 6px; }
+.list li { display: flex; gap: 10px; align-items: center; padding: 8px 10px; font-size: 13px; }
+.list li + li { border-top: 1px solid var(--border-subtle); }
+.date-badge { width: 40px; flex: none; text-align: center; border: 1px solid var(--border-default); border-radius: 4px; line-height: 1; padding: 4px 0; }
+.date-badge b { display: block; font-size: 15px; margin-top: 2px; }
+.date-badge small { font-size: 10px; color: var(--text-secondary); text-transform: uppercase; }
+.avatar { width: 26px; height: 26px; border-radius: 99px; background: var(--bg-active); display: grid; place-items: center; font-size: 11px; font-weight: 600; flex: none; }
+.dl { display: grid; grid-template-columns: 96px 1fr; gap: 8px 10px; align-items: center; font-size: 13px; margin: 0; }
+.dl dt { color: var(--text-secondary); }
+.dl dd { margin: 0; }
+.addform { border: 1px solid var(--border-default); border-radius: 6px; padding: 12px; display: grid; gap: 10px; background: var(--bg-overlay); }
+.addform .two { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.addform .foot { display: flex; gap: 6px; justify-content: flex-end; }
+
+/* Date picker popover */
+.pop { position: absolute; z-index: 5; width: 288px; background: var(--bg-overlay); border: 1px solid var(--border-default); border-radius: 6px; box-shadow: var(--shadow-l3); padding: 12px; display: grid; gap: 10px; }
+.cal-head { display: flex; align-items: center; justify-content: space-between; font-weight: 600; }
+.cal { display: grid; grid-template-columns: repeat(7, 1fr); gap: 2px; text-align: center; font-size: 12px; }
+.cal .wd { color: var(--text-secondary); padding: 4px 0; }
+.cal button { height: 32px; border: 0; border-radius: 4px; background: transparent; color: var(--text-primary); font: 400 13px/1 var(--font-sans); cursor: pointer; }
+.cal button:hover { background: var(--bg-hover); }
+.cal button.out { color: var(--text-secondary); opacity: .5; }
+.cal button.today { box-shadow: inset 0 0 0 1px var(--border-control); }
+.cal button.sel { background: var(--accent-solid); color: var(--on-accent); font-weight: 600; }
+.cal button.past { color: var(--text-secondary); opacity: .4; cursor: default; }
+.times { max-height: 172px; overflow: auto; display: grid; gap: 2px; }
+.times button { height: 30px; border: 0; border-radius: 4px; background: transparent; color: var(--text-primary); text-align: left; padding: 0 10px; font: 400 13px/1 var(--font-sans); cursor: pointer; }
+.times button:hover { background: var(--bg-hover); }
+.times button.sel { background: var(--accent-subtle); color: var(--accent-text); font-weight: 500; }
+.pop .foot { display: flex; justify-content: space-between; }
+
+/* Phone */
+.phone-wrap { display: flex; gap: 24px; justify-content: center; flex-wrap: wrap; }
+.phone { width: 375px; height: 760px; border: 1px solid var(--border-subtle); border-radius: 12px; background: var(--bg-overlay); display: flex; flex-direction: column; overflow: hidden; position: relative; }
+.phone .dhead { padding: 12px 16px; flex-wrap: wrap; gap: 8px; }
+.phone .status { margin-left: 0; width: 100%; }
+.phone .status .input { width: auto; flex: 1; }
+.ptabs { display: flex; border-bottom: 1px solid var(--border-subtle); padding: 0 8px; }
+.ptabs button { flex: 1; height: 40px; border: 0; background: transparent; color: var(--text-secondary); font: 500 13px/1 var(--font-sans); border-bottom: 2px solid transparent; }
+.ptabs button[aria-selected="true"] { color: var(--text-primary); border-bottom-color: var(--text-primary); }
+.pbody { flex: 1; overflow: auto; padding: 14px 16px; }
+.sheet { position: absolute; left: 0; right: 0; bottom: 0; background: var(--bg-overlay); border-top: 1px solid var(--border-default); border-radius: 12px 12px 0 0; box-shadow: var(--shadow-l3); padding: 8px 16px 16px; display: grid; gap: 10px; }
+.sheet .grab { width: 36px; height: 4px; border-radius: 9px; background: var(--border-control); margin: 0 auto 4px; }
+
+[hidden] { display: none !important; }
+@media (max-width: 900px) { .dbody { grid-template-columns: 1fr; } .side { border-left: 0; border-top: 1px solid var(--border-subtle); } .stage { height: auto; min-height: 760px; } }
+</style>
+</head>
+<body>
+<svg width="0" height="0" style="position:absolute">
+  <symbol id="i-x" viewBox="0 0 24 24"><path d="M18 6 6 18M6 6l12 12"/></symbol>
+  <symbol id="i-ext" viewBox="0 0 24 24"><path d="M15 3h6v6M10 14 21 3M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/></symbol>
+  <symbol id="i-mail" viewBox="0 0 24 24"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="m22 7-10 6L2 7"/></symbol>
+  <symbol id="i-phone" viewBox="0 0 24 24"><path d="M22 16.9v3a2 2 0 0 1-2.2 2 19.8 19.8 0 0 1-8.6-3.1 19.5 19.5 0 0 1-6-6A19.8 19.8 0 0 1 2.1 4.2 2 2 0 0 1 4.1 2h3a2 2 0 0 1 2 1.7c.1 1 .4 1.9.7 2.8a2 2 0 0 1-.5 2.1L8 9.9a16 16 0 0 0 6 6l1.3-1.3a2 2 0 0 1 2.1-.4c.9.3 1.8.6 2.8.7a2 2 0 0 1 1.7 2z"/></symbol>
+  <symbol id="i-note" viewBox="0 0 24 24"><path d="M15.5 3H5a2 2 0 0 0-2 2v14c0 1.1.9 2 2 2h14a2 2 0 0 0 2-2V8.5L15.5 3z"/><path d="M15 3v6h6"/></symbol>
+  <symbol id="i-plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></symbol>
+  <symbol id="i-cal" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></symbol>
+  <symbol id="i-clock" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></symbol>
+  <symbol id="i-down" viewBox="0 0 24 24"><path d="m6 9 6 6 6-6"/></symbol>
+  <symbol id="i-left" viewBox="0 0 24 24"><path d="m15 18-6-6 6-6"/></symbol>
+  <symbol id="i-right" viewBox="0 0 24 24"><path d="m9 18 6-6-6-6"/></symbol>
+  <symbol id="i-pencil" viewBox="0 0 24 24"><path d="M17 3a2.8 2.8 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/></symbol>
+  <symbol id="i-hist" viewBox="0 0 24 24"><path d="M3 12a9 9 0 1 0 9-9 9.7 9.7 0 0 0-6.7 2.7L3 8"/><path d="M3 3v5h5M12 7v5l4 2"/></symbol>
+  <symbol id="i-alarm" viewBox="0 0 24 24"><circle cx="12" cy="13" r="8"/><path d="M12 9v4l2 2M5 3 2 6M22 6l-3-3"/></symbol>
+  <symbol id="i-chat" viewBox="0 0 24 24"><path d="M7.9 20A9 9 0 1 0 4 16.1L2 22Z"/></symbol>
+  <symbol id="i-radar" viewBox="0 0 24 24"><path d="M19.07 4.93A10 10 0 0 0 6.99 3.34M4 6h.01M2.29 9.62A10 10 0 1 0 21.31 8.35M16.24 7.76A6 6 0 1 0 8.23 16.67M12 18h.01M17.99 11.66A6 6 0 0 1 15.77 16.67"/><circle cx="12" cy="12" r="2"/><path d="m13.41 10.59 5.66-5.66"/></symbol>
+</svg>
+
+<div class="intro">
+  <div>
+    <h1>Pipeline job detail: proposal</h1>
+    <p>The dialog gets wide (up to 1104px) and fixed-height: Activity on the left, everything else in a side panel on the right. Each side scrolls on its own, so the dialog itself never does. Pick a state below.</p>
+  </div>
+  <div class="seg" role="group" aria-label="Theme">
+    <button aria-pressed="true" data-theme-btn="dark">Dark</button>
+    <button aria-pressed="false" data-theme-btn="light">Light</button>
+  </div>
+</div>
+
+<div class="states" role="group" aria-label="State">
+  <button class="chip" aria-pressed="true" data-state="desktop">1 · Desktop</button>
+  <button class="chip" aria-pressed="false" data-state="compose">2 · Logging a message</button>
+  <button class="chip" aria-pressed="false" data-state="date">3 · Date picker</button>
+  <button class="chip" aria-pressed="false" data-state="interview">4 · Add interview</button>
+  <button class="chip" aria-pressed="false" data-state="phone">5 · Phone</button>
+</div>
+
+<!-- DESKTOP -->
+<div class="stage" id="desktop">
+  <div class="fakeboard"><div></div><div></div><div></div><div></div><div></div></div>
+  <div class="scrim"></div>
+  <div class="dlg" role="dialog" aria-label="Product Manager">
+    <div class="dhead">
+      <div>
+        <h2>Product Manager</h2>
+        <div class="sub">Next ventures <span>·</span> <a href="#">Posting <svg class="ico ico-sm"><use href="#i-ext"/></svg></a> <span>·</span> Added by you</div>
+      </div>
+      <label class="status">Stage
+        <button class="input"><span class="grow">Applied</span><svg class="ico ico-sm"><use href="#i-down"/></svg></button>
+      </label>
+      <button class="iconbtn" aria-label="Close"><svg class="ico"><use href="#i-x"/></svg></button>
+    </div>
+
+    <div class="dbody">
+      <!-- LEFT: Activity -->
+      <section class="main">
+        <div class="ahead">
+          <h3>Activity</h3>
+          <div class="seg" role="group" aria-label="Show">
+            <button aria-pressed="true">All</button><button aria-pressed="false">Messages</button><button aria-pressed="false">Notes</button><button aria-pressed="false">Changes</button>
+          </div>
+        </div>
+
+        <!-- Composer: one line until you use it -->
+        <div class="composer">
+          <div class="closed" data-when="!compose">
+            <span class="ph" data-go="compose">Log a message, call or note…</span>
+            <button class="btn btn-sm btn-quiet" data-go="compose"><svg class="ico ico-sm"><use href="#i-mail"/></svg>Email</button>
+            <button class="btn btn-sm btn-quiet" data-go="compose"><svg class="ico ico-sm"><use href="#i-phone"/></svg>Call</button>
+            <button class="btn btn-sm btn-quiet" data-go="compose"><svg class="ico ico-sm"><use href="#i-note"/></svg>Note</button>
+          </div>
+          <div class="opened" data-when="compose" hidden>
+            <div class="row">
+              <label class="field">Type
+                <button class="input" style="width:150px"><svg class="ico ico-sm"><use href="#i-mail"/></svg><span class="grow">Email</span><svg class="ico ico-sm"><use href="#i-down"/></svg></button>
+              </label>
+              <div class="field">Direction
+                <div class="seg"><button aria-pressed="true">Sent</button><button aria-pressed="false">Received</button></div>
+              </div>
+              <label class="field">With
+                <button class="input" style="width:160px"><span class="grow">Priya Shah</span><svg class="ico ico-sm"><use href="#i-down"/></svg></button>
+              </label>
+              <label class="field">When
+                <button class="input" style="width:150px"><svg class="ico ico-sm"><use href="#i-cal"/></svg><span class="grow">Today</span></button>
+              </label>
+            </div>
+            <textarea class="input" placeholder="What was said">Thanks for the update, Priya. Happy to do the case study by Friday.</textarea>
+            <div class="foot">
+              <span class="check"><i></i> Remind me to follow up in</span>
+              <button class="input" style="width:96px"><span class="grow">7 days</span><svg class="ico ico-sm"><use href="#i-down"/></svg></button>
+              <span class="grow"></span>
+              <button class="btn btn-sm btn-quiet" data-go="desktop">Cancel</button>
+              <button class="btn btn-sm btn-primary">Log email</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Timeline grouped by day; small edits fold into one line -->
+        <p class="day">Today</p>
+        <ul class="tl">
+          <li><details class="group"><summary><svg class="ico ico-sm"><use href="#i-pencil"/></svg>2 edits: follow-up moved to Oct 28, CV changed <span class="meta" style="margin-left:auto">10:12</span></summary>
+            <ul><li class="small">Follow-up moved to Oct 28</li><li class="small">CV set to Fintech PM v3</li></ul></details></li>
+        </ul>
+        <p class="day">Yesterday</p>
+        <ul class="tl">
+          <li class="msg"><div class="card">
+            <div class="top"><svg class="ico ico-sm muted"><use href="#i-mail"/></svg><span class="who">Emailed Priya Shah</span><span class="meta">Recruiter</span><span class="meta t tabular">2:23 PM</span></div>
+            <p>Hi Priya, I just applied for the Product Manager role and wanted to share a short note on why I'm a fit.</p>
+          </div></li>
+          <li><div class="small"><svg class="ico ico-sm"><use href="#i-pencil"/></svg>Added Priya Shah (Recruiter)<span class="t tabular">11:05 AM</span></div></li>
+        </ul>
+        <p class="day">Oct 19</p>
+        <ul class="tl">
+          <li><div class="small"><svg class="ico ico-sm"><use href="#i-hist"/></svg>Moved to <b style="font-weight:500;color:var(--text-primary)">Applied</b><span class="t tabular">9:40 AM</span></div></li>
+        </ul>
+        <p class="day">Oct 18</p>
+        <ul class="tl">
+          <li><div class="small"><svg class="ico ico-sm"><use href="#i-hist"/></svg>Saved<span class="t tabular">6:02 PM</span></div></li>
+          <li><div class="small"><svg class="ico ico-sm"><use href="#i-radar"/></svg>Found on your Radar<span class="t tabular">8:00 AM</span></div></li>
+        </ul>
+      </section>
+
+      <!-- RIGHT: side panel -->
+      <aside class="side">
+        <div class="next">
+          <div class="h"><span>Next step: Follow up</span><span>Oct 28</span></div>
+          <div class="meta">You last wrote on Oct 20</div>
+          <div class="btns"><button class="btn btn-sm btn-primary">Log follow-up</button><button class="btn btn-sm"><svg class="ico ico-sm"><use href="#i-alarm"/></svg>Snooze</button></div>
+        </div>
+
+        <div class="sec">
+          <h4>Interviews <span class="count">1</span></h4>
+          <ul class="list">
+            <li><div class="date-badge"><small>Oct</small><b>30</b></div><div><div>Technical</div><div class="meta">Thu · 2:00 PM · with Priya Shah</div></div></li>
+          </ul>
+          <button class="btn btn-sm btn-block" data-when="!interview" data-go="interview"><svg class="ico ico-sm"><use href="#i-plus"/></svg>Add interview</button>
+          <div class="addform" data-when="interview" hidden>
+            <div class="field">Round
+              <div class="pills">
+                <button class="pill" aria-pressed="false">Screen</button><button class="pill" aria-pressed="true">Hiring manager</button><button class="pill" aria-pressed="false">Technical</button><button class="pill" aria-pressed="false">Case study</button><button class="pill" aria-pressed="false">Panel</button><button class="pill" aria-pressed="false">Final</button><button class="pill" aria-pressed="false">Other…</button>
+              </div>
+            </div>
+            <div class="two">
+              <label class="field">Date <button class="input"><svg class="ico ico-sm"><use href="#i-cal"/></svg><span class="grow">Mon, Nov 3</span></button></label>
+              <label class="field">Time <button class="input"><svg class="ico ico-sm"><use href="#i-clock"/></svg><span class="grow">11:00 AM</span></button></label>
+            </div>
+            <label class="field">With <button class="input"><span class="grow">Priya Shah</span><svg class="ico ico-sm"><use href="#i-down"/></svg></button></label>
+            <div class="foot"><button class="btn btn-sm btn-quiet" data-go="desktop">Cancel</button><button class="btn btn-sm btn-primary">Save interview</button></div>
+          </div>
+        </div>
+
+        <div class="sec">
+          <h4>People <span class="count">1</span></h4>
+          <ul class="list">
+            <li><span class="avatar">PS</span><div><div>Priya Shah</div><div class="meta">Recruiter · last emailed Oct 20</div></div></li>
+          </ul>
+          <button class="btn btn-sm btn-block"><svg class="ico ico-sm"><use href="#i-plus"/></svg>Add person</button>
+        </div>
+
+        <div class="sec" style="position:relative">
+          <h4>Details</h4>
+          <dl class="dl">
+            <dt>Applied on</dt><dd><button class="input"><svg class="ico ico-sm"><use href="#i-cal"/></svg><span class="grow">Sun, Oct 19</span></button></dd>
+            <dt>Follow up on</dt><dd><button class="input" id="fu" data-go="date"><svg class="ico ico-sm"><use href="#i-cal"/></svg><span class="grow">Tue, Oct 28</span></button></dd>
+            <dt>CV sent</dt><dd><button class="input"><span class="grow">Fintech PM v3</span></button></dd>
+          </dl>
+        </div>
+      </aside>
+    </div>
+          <!-- Date picker: opens from a click anywhere on the field, floating above the dialog's panels -->
+          <div class="pop" data-when="date" hidden style="right:16px; bottom:150px">
+            <div class="pills">
+              <button class="pill" aria-pressed="false">Tomorrow</button><button class="pill" aria-pressed="false">In 3 days</button><button class="pill" aria-pressed="true">Next week</button>
+            </div>
+            <div class="cal-head"><button class="iconbtn" aria-label="Previous month"><svg class="ico"><use href="#i-left"/></svg></button>October 2026<button class="iconbtn" aria-label="Next month"><svg class="ico"><use href="#i-right"/></svg></button></div>
+            <div class="cal" id="cal"></div>
+            <div class="pop foot" style="position:static;box-shadow:none;border:0;padding:0;width:auto"><button class="btn btn-sm btn-quiet">Clear</button><button class="btn btn-sm btn-primary" data-go="desktop">Done</button></div>
+          </div>
+  </div>
+</div>
+
+<!-- PHONE -->
+<div class="phone-wrap" id="phone" hidden>
+  <div class="phone">
+    <div class="dhead">
+      <div style="flex:1;min-width:0"><h2 style="font-size:17px">Product Manager</h2><div class="sub">Next ventures · <a href="#">Posting <svg class="ico ico-sm"><use href="#i-ext"/></svg></a></div></div>
+      <button class="iconbtn" aria-label="Close"><svg class="ico"><use href="#i-x"/></svg></button>
+      <label class="status">Stage <button class="input"><span class="grow">Applied</span><svg class="ico ico-sm"><use href="#i-down"/></svg></button></label>
+    </div>
+    <div class="ptabs" role="tablist"><button aria-selected="true">Activity</button><button aria-selected="false">Interviews 1</button><button aria-selected="false">People 1</button><button aria-selected="false">Details</button></div>
+    <div class="pbody">
+      <div class="next" style="margin-bottom:14px">
+        <div class="h"><span>Next step: Follow up</span><span>Oct 28</span></div>
+        <div class="btns"><button class="btn btn-sm btn-primary">Log follow-up</button><button class="btn btn-sm">Snooze</button></div>
+      </div>
+      <div class="composer"><div class="closed"><span class="ph">Log a message, call or note…</span><button class="iconbtn" aria-label="Email"><svg class="ico"><use href="#i-mail"/></svg></button><button class="iconbtn" aria-label="Note"><svg class="ico"><use href="#i-note"/></svg></button></div></div>
+      <p class="day">Yesterday</p>
+      <ul class="tl"><li class="msg"><div class="card"><div class="top"><span class="who">Emailed Priya Shah</span><span class="meta t">2:23 PM</span></div><p>Hi Priya, I just applied for the Product Manager role…</p></div></li></ul>
+      <p class="day">Oct 19</p>
+      <ul class="tl"><li><div class="small"><svg class="ico ico-sm"><use href="#i-hist"/></svg>Moved to Applied</div></li></ul>
+    </div>
+  </div>
+  <div class="phone">
+    <div class="dhead"><div style="flex:1"><h2 style="font-size:17px">Product Manager</h2><div class="sub">Next ventures</div></div><button class="iconbtn" aria-label="Close"><svg class="ico"><use href="#i-x"/></svg></button></div>
+    <div class="ptabs" role="tablist"><button aria-selected="false">Activity</button><button aria-selected="true">Interviews 1</button><button aria-selected="false">People 1</button><button aria-selected="false">Details</button></div>
+    <div class="pbody">
+      <ul class="list"><li><div class="date-badge"><small>Oct</small><b>30</b></div><div><div>Technical</div><div class="meta">Thu · 2:00 PM · Priya Shah</div></div></li></ul>
+      <button class="btn btn-sm btn-block"><svg class="ico ico-sm"><use href="#i-plus"/></svg>Add interview</button>
+    </div>
+    <!-- On phones the date picker is a bottom sheet -->
+    <div class="sheet">
+      <div class="grab"></div>
+      <div class="cal-head"><span>Interview date</span><button class="btn btn-sm btn-primary">Done</button></div>
+      <div class="pills"><button class="pill">Tomorrow</button><button class="pill">In 3 days</button><button class="pill" aria-pressed="true">Next week</button></div>
+      <div class="cal-head"><button class="iconbtn" aria-label="Previous month"><svg class="ico"><use href="#i-left"/></svg></button>October 2026<button class="iconbtn" aria-label="Next month"><svg class="ico"><use href="#i-right"/></svg></button></div>
+      <div class="cal" id="cal2"></div>
+    </div>
+  </div>
+</div>
+
+<div class="notes" id="notes"></div>
+
+<script>
+const NOTES = {
+  desktop: [
+    "<b>Wide, no dialog scroll.</b> Up to 1104px wide and the window's height. Activity scrolls on the left, the side panel on the right.",
+    "<b>Activity is calmer.</b> The composer is one line until you use it. The timeline is grouped by day on a thin rail. Only messages get a card; stage moves and edits are one grey line each, and edits in a row fold into one line (\"2 edits: …\") that opens.",
+    "<b>Filters</b> shrink to a small switch in the Activity header. Stages move into All only: they're one line each now.",
+    "<b>Side panel</b> keeps the next step, interviews, people and details in view, so the Interviews, People and Job tabs go away on desktop.",
+  ],
+  compose: [
+    "<b>Opens in place</b> when you click the line or Email / Call / Note. The 7 channel buttons become one Type menu (Email, LinkedIn, WhatsApp, Call, In person, Referral, Note).",
+    "Direction, person and date sit on one row. The follow-up reminder and Log stay on the footer row. Cancel closes it again.",
+  ],
+  date: [
+    "<b>Real date picker.</b> Clicking anywhere on a date field opens a calendar, not just the small icon. Quick picks on top (Tomorrow, In 3 days, Next week), past days greyed where they don't make sense, keyboard arrows to move.",
+    "Used for every date: follow-up, apply-by, applied on, the date of a message, interviews, offer dates. Time fields get the same treatment: a list of times every 15 minutes that you can also type into.",
+  ],
+  interview: [
+    "<b>Add interview</b> is a labelled button, not a bare +. It opens a small form: the round as one-tap choices (Screen, Hiring manager, Technical, Case study, Panel, Final, Other…), then date, time and who with.",
+    "<b>Save interview</b> adds it to the list above, sorted by date, with a date badge. Cancel closes the form.",
+  ],
+  phone: [
+    "<b>Phones keep tabs</b> (Activity, Interviews, People, Details): there's no room for a side panel. The dialog is full screen.",
+    "Date and time pickers open as a bottom sheet, with the same quick picks.",
+  ],
+};
+function cal(el, sel) {
+  const wd = ["Mo","Tu","We","Th","Fr","Sa","Su"].map((d) => `<span class="wd">${d}</span>`).join("");
+  let h = wd;
+  // October 2026 starts on a Thursday.
+  for (const d of [28, 29, 30]) h += `<button class="out">${d}</button>`;
+  for (let d = 1; d <= 31; d++) h += `<button class="${d < 21 ? "past" : ""}${d === 21 ? " today" : ""}${d === sel ? " sel" : ""}">${d}</button>`;
+  for (let d = 1; d <= 8; d++) h += `<button class="out">${d}</button>`;
+  el.innerHTML = h;
+}
+cal(document.getElementById("cal"), 28);
+cal(document.getElementById("cal2"), 30);
+
+function show(state) {
+  document.querySelectorAll("[data-state]").forEach((b) => b.setAttribute("aria-pressed", String(b.dataset.state === state)));
+  document.getElementById("desktop").hidden = state === "phone";
+  document.getElementById("phone").hidden = state !== "phone";
+  document.querySelectorAll("[data-when]").forEach((el) => {
+    const w = el.dataset.when;
+    el.hidden = w.startsWith("!") ? state === w.slice(1) : state !== w;
+  });
+  document.getElementById("fu").classList.toggle("open", state === "date");
+  document.getElementById("notes").innerHTML = NOTES[state].map((n) => `<div>${n}</div>`).join("");
+}
+document.querySelectorAll("[data-state]").forEach((b) => b.addEventListener("click", () => show(b.dataset.state)));
+document.querySelectorAll("[data-go]").forEach((b) => b.addEventListener("click", (e) => { e.preventDefault(); show(b.dataset.go); }));
+document.querySelectorAll("[data-theme-btn]").forEach((b) => b.addEventListener("click", () => {
+  document.documentElement.dataset.theme = b.dataset.themeBtn;
+  document.querySelectorAll("[data-theme-btn]").forEach((x) => x.setAttribute("aria-pressed", String(x === b)));
+}));
+show("desktop");
+</script>
+</body>
+</html>
