@@ -2,7 +2,8 @@
 # job feed's manifests against the app's public key, their age and the files they list
 # (scripts/catalog/data-health.ts). The publishing workflows report their own failures; this catches
 # what they can't: a schedule that silently didn't run, an upload cut off between a manifest and its
-# signature, a release changed by hand. A problem opens (or updates) one issue; once all is well
+# signature, a release changed by hand. It also reads the daily URL-index runs for a Wayback Machine
+# block, or no Wayback progress over two runs. A problem opens (or updates) one issue; once all is well
 # again it closes it.
 name: Data · health
 # Runs the scheduler Worker starts are named so; empty means GitHub's usual name.
@@ -23,6 +24,9 @@ on:
 permissions:
   contents: read
   issues: write
+  # The Wayback check: the URL-index runs' jobs and their annotations.
+  actions: read
+  checks: read
 
 env:
   DATA_REPO: ${{ vars.DATA_REPO || 'Tanmay-Mhatre/rawjobs-directory' }}
@@ -53,6 +57,8 @@ jobs:
 
       - name: Check the shared data
         id: check
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
           export DATA_PUBLIC_KEY="$(grep -o 'DATA_PUBLIC_KEY = "[^"]*"' packages/core/src/data-signing.ts | cut -d'"' -f2)"
           if node scripts/catalog/data-health.ts --report "$RUNNER_TEMP/report.md"; then echo "healthy=true" >> "$GITHUB_OUTPUT"; else echo "healthy=false" >> "$GITHUB_OUTPUT"; fi

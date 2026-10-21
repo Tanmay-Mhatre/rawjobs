@@ -4,7 +4,8 @@
  * old they are, and that the files they list are there. The Data health workflow runs it and opens
  * an issue when something's wrong. The publishing workflows report their own failures; this catches
  * what they can't see: a schedule that silently didn't run, an upload cut off between a manifest and
- * its signature, a release changed by hand.
+ * its signature, a release changed by hand. On GitHub Actions it also checks that the Wayback Machine
+ * still lets the daily URL-index run read its index (checkWayback).
  *
  *   DATA_PUBLIC_KEY=<base64> node scripts/catalog/data-health.ts [--report report.md]
  *
@@ -97,6 +98,52 @@ export async function checkSharedData(o: HealthOptions): Promise<HealthReport> {
   return { problems, checked };
 }
 
+export type WaybackOptions = {
+  /** This (code) repository, owner/name: its directory-commoncrawl.yml runs read the Wayback index. */
+  repo: string;
+  token?: string;
+  api?: string;
+  fetchImpl?: typeof fetch;
+};
+
+/**
+ * Is the Wayback Machine still letting us read its index? wayback.ts leaves an annotation on the
+ * daily URL-index run when web.archive.org was marked broken ("Wayback blocked") or no index page was
+ * read ("Wayback stalled"). A problem when the latest Wayback run was blocked, or the last two made
+ * no progress. Runs on main only, and only those where the Wayback step ran (Tue, Thu, Sat).
+ */
+export async function checkWayback(o: WaybackOptions): Promise<HealthReport> {
+  const get = o.fetchImpl ?? fetch;
+  const api = o.api ?? "https://api.github.com";
+  const json = async <T>(path: string): Promise<T> => {
+    const res = await get(`${api}/repos/${o.repo}/${path}`, { headers: { accept: "application/vnd.github+json", ...(o.token ? { authorization: `Bearer ${o.token}` } : {}) } });
+    if (!res.ok) throw new Error(`HTTP ${res.status} for ${path}`);
+    return (await res.json()) as T;
+  };
+  try {
+    const { workflow_runs: runs } = await json<{ workflow_runs: { id: number }[] }>("actions/workflows/directory-commoncrawl.yml/runs?branch=main&status=completed&per_page=30");
+    const seen: { titles: string[] }[] = [];
+    for (const run of runs) {
+      const { jobs } = await json<{ jobs: { id: number; steps?: { name: string; conclusion: string | null }[] }[] }>(`actions/runs/${run.id}/jobs`);
+      const job = jobs.find((j) => j.steps?.some((s) => s.name === "Wayback" && s.conclusion && s.conclusion !== "skipped"));
+      if (!job) continue;
+      const notes = await json<{ title: string | null }[]>(`check-runs/${job.id}/annotations`);
+      seen.push({ titles: notes.map((n) => n.title ?? "") });
+      if (seen.length === 2) break;
+    }
+    const blocked = (r: { titles: string[] } | undefined) => !!r?.titles.includes("Wayback blocked");
+    const stuck = (r: { titles: string[] } | undefined) => !!r && (blocked(r) || r.titles.includes("Wayback stalled"));
+    if (blocked(seen[0]))
+      return { problems: ["The Wayback Machine blocked the latest URL-index run (`web.archive.org` was marked broken). Check its log, and slow `wayback.ts` down before it runs again."], checked: [] };
+    if (seen.length === 2 && seen.every(stuck))
+      return { problems: ["The Wayback index made no progress in the last two URL-index runs (`raw/wayback/boards.json`): no index page was read. Check the runs' Wayback step."], checked: [] };
+    return { problems: [], checked: [`Wayback: ${seen.length ? `last ${seen.length} run${seen.length > 1 ? "s" : ""} not blocked or stalled` : "no run yet"}`] };
+  } catch (err) {
+    // Can't read the runs (no token, API down): say so, but it isn't a problem with the data.
+    return { problems: [], checked: [`Wayback: not checked (${(err as Error).message})`] };
+  }
+}
+
 /** The issue's body: what's wrong, what was fine, and where the fixes are. */
 export function reportMarkdown(r: HealthReport): string {
   const lines = r.problems.length ? ["The shared data that installed copies download has a problem:", "", ...r.problems.map((p) => `- ${p}`)] : ["The shared data is healthy."];
@@ -117,6 +164,11 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
     directoryUrl: `https://github.com/${repo}/releases/latest/download`,
     feedUrl: `https://github.com/${repo}/releases/download/jobs`,
   });
+  if (process.env.GITHUB_REPOSITORY) {
+    const wayback = await checkWayback({ repo: process.env.GITHUB_REPOSITORY, token: process.env.GH_TOKEN });
+    report.problems.push(...wayback.problems);
+    report.checked.push(...wayback.checked);
+  }
   const md = reportMarkdown(report);
   const at = process.argv.indexOf("--report");
   if (at > 0) writeFileSync(process.argv[at + 1]!, md);
