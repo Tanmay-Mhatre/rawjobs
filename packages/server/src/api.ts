@@ -25,7 +25,7 @@ import {
   writeCacheFile,
 } from "@rawjobs/core";
 import { readTracking, saveTracking, suggestPoolSize, type ScanScope } from "@rawjobs/core";
-import { CONNECTION_ID, createNetworkStore, createWatcher, nodeWatchDeps, type WatchDeps } from "@rawjobs/core";
+import { CONNECTION_ID, createNetworkStore, createReminder, createWatcher, nodeWatchDeps, type ReminderDeps, sendTelegram, telegramSecrets, type WatchDeps } from "@rawjobs/core";
 import { folderId } from "@rawjobs/core/update";
 import { refuse } from "./guard";
 import { createReaders } from "./readers";
@@ -46,6 +46,8 @@ export type ApiOptions = {
   startLink?: () => boolean;
   /** The Downloads watcher's view of the computer (tests point it at a temp folder). Default: the real one. */
   watchDeps?: Partial<WatchDeps>;
+  /** The LinkedIn file reminder's clock and Telegram (tests use a fake clock). Default: the real ones. */
+  reminderDeps?: Partial<ReminderDeps>;
 };
 
 const HOUR_MS = 60 * 60_000;
@@ -75,11 +77,14 @@ function readHead(path: string, bytes: number): string {
  *                             start it again. background: a scan this server didn't start (a scheduled one) is running.
  *                             dataVersion: meta.json's generatedAt, so an open page sees when a scan wrote new results
  *   GET/PUT /api/tracking     your statuses, notes and Radar preferences (profile/tracking.json)
- *   GET  /api/network         your LinkedIn connections: { status, me, watchable } (me: your own positions and schools, or
+ *   GET  /api/network         your LinkedIn connections: { status, me, watchable, reminder } (me: your own positions and schools, or
  *                             null; status.watch: a Downloads watch any server here is running; watchable: offered here)
  *   POST /api/network/watch   { hours? }: watch Downloads for LinkedIn's export. { watch: { since, until, folder } }, or
  *                             400 { watch: null, error: "NO_ACCESS" | "NO_FOLDER" | "UNSUPPORTED" }
  *   DELETE /api/network/watch stop watching Downloads
+ *   POST /api/network/reminder { hours? }: remind me to add LinkedIn's file (48 h; 24 h to snooze; at most 72 h).
+ *                             { reminder: { at, due } }. GET /api/network has it too (reminder: … | null)
+ *   DELETE /api/network/reminder cancel or dismiss the reminder
  *   POST /api/network/import  { fileName?, files: { connections?, positions?, education? } }: the three CSV texts the
  *                             page read from LinkedIn's export ZIP. { ok: true, status }, or { ok: false, errors: [{ code }] }
  *                             (400; 413 with TOO_BIG for a body over 12 MB)
@@ -124,6 +129,23 @@ export function createApi(opts: ApiOptions) {
   const version = opts.version ?? APP_VERSION;
   const network = createNetworkStore(home);
   const watcher = createWatcher(home, network, { ...nodeWatchDeps(), ...opts.watchDeps });
+  const reminder = createReminder(home, network, {
+    now: () => Date.now(),
+    schedule: (fn, ms) => {
+      const t = setTimeout(fn, ms);
+      t.unref?.();
+      return t;
+    },
+    cancel: (t) => clearTimeout(t as NodeJS.Timeout),
+    // Only when Telegram alerts are set up and on.
+    telegram: () => {
+      const secrets = telegramSecrets(home);
+      return secrets.token && secrets.chatId && telegramStatus(home).enabled ? secrets : null;
+    },
+    send: (text, secrets) => sendTelegram(text, secrets),
+    log: (line) => console.log(line),
+    ...opts.reminderDeps,
+  });
 
   /** Run `rawjobs <args>` from the repo root (no shell, so no quoting issues). */
   function cli(args: string[], stdin?: string): ChildProcess {
@@ -451,6 +473,7 @@ Stopped after ${Math.round(timeoutMs / 1000)} s without finishing.`.trim(),
       if (busy()) return json(res, { ok: false, errors: "A scan is running; try again when it's done." });
       // Starting over also deletes your LinkedIn connections.
       watcher.stop();
+      reminder.clear();
       await network.remove();
       return await respondJson(res, ["setup", "reset"]);
     }
@@ -582,6 +605,8 @@ Stopped after ${Math.round(timeoutMs / 1000)} s without finishing.`.trim(),
   function startBackground() {
     // A Downloads watch from before a restart carries on.
     watcher.resume();
+    // A LinkedIn file reminder whose time came while RawJobs was off fires now.
+    reminder.resume();
     const update = cli(["directory", "update", "--auto", "--if-older", "7", "--data", dataDir]);
     update.on("error", () => {});
     update.on("close", () => void oneSuggestRun(() => collect(["companies", "suggest", "--json", "--data", dataDir])));
@@ -592,7 +617,7 @@ Stopped after ${Math.round(timeoutMs / 1000)} s without finishing.`.trim(),
     const bad = (code: string, status = 400) => json(res, { ok: false, errors: [{ code }] }, status);
     if (url === "/api/network" && req.method === "GET") {
       const watchable = watcher.supported();
-      return json(res, { status: { ...network.status(), watch: watcher.state() }, me: network.me(), watchable });
+      return json(res, { status: { ...network.status(), watch: watcher.state() }, me: network.me(), watchable, reminder: reminder.state() });
     }
     if (url === "/api/network/watch" && req.method === "POST") {
       let body: { hours?: unknown };
@@ -608,8 +633,22 @@ Stopped after ${Math.round(timeoutMs / 1000)} s without finishing.`.trim(),
       watcher.stop();
       return json(res, { ok: true });
     }
+    if (url === "/api/network/reminder" && req.method === "POST") {
+      let body: { hours?: unknown };
+      try {
+        body = (JSON.parse((await readBody(req, 1_000)) || "{}") ?? {}) as typeof body;
+      } catch {
+        return bad("BAD_REQUEST");
+      }
+      return json(res, { reminder: reminder.set(typeof body.hours === "number" ? body.hours : undefined) });
+    }
+    if (url === "/api/network/reminder" && req.method === "DELETE") {
+      reminder.clear();
+      return json(res, { ok: true });
+    }
     if (url === "/api/network" && req.method === "DELETE") {
       watcher.stop();
+      reminder.clear();
       await network.remove();
       return json(res, { ok: true });
     }
@@ -646,8 +685,9 @@ Stopped after ${Math.round(timeoutMs / 1000)} s without finishing.`.trim(),
         { source: "file", fileName: typeof b.fileName === "string" ? b.fileName : undefined },
       );
       if (!r.ok) return bad(r.code);
-      // You chose the file yourself: no need to keep watching for it.
+      // You chose the file yourself: no need to keep watching for it, or to be reminded.
       watcher.stop();
+      reminder.clear();
       return json(res, { ...r, status: { ...r.status, watch: null } });
     }
     if (url === "/api/network/friends" && req.method === "PUT") {
@@ -670,6 +710,7 @@ Stopped after ${Math.round(timeoutMs / 1000)} s without finishing.`.trim(),
   async function stop(graceMs = 10_000): Promise<void> {
     // The watch itself stays in network-watch.json, so the next start carries on with it.
     watcher.close();
+    reminder.close();
     const current = scan;
     if (!current) return;
     const closed = new Promise<void>((done) => {

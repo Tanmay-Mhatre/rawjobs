@@ -6,16 +6,16 @@
  */
 import { networkKey } from "@rawjobs/core/network/company";
 import { type ExportFiles, exportFilesFromEntries, isAllowedEntry } from "@rawjobs/core/network/linkedin-export";
-import type { NetworkMe, NetworkPeople, NetworkPersonRow, NetworkStatus, WatchState } from "@rawjobs/core/network/types";
+import type { NetworkMe, NetworkPeople, NetworkPersonRow, NetworkStatus, ReminderState, WatchState } from "@rawjobs/core/network/types";
 import { readZipEntries, ZipError } from "@rawjobs/core/network/zip";
 import { blobZipSource, canInflateRaw, inflateRawStream } from "@rawjobs/core/network/zip-browser";
 import { useEffect, useSyncExternalStore } from "react";
 import { toast } from "../components/Toast";
 import { canRunLocally } from "./data";
 
-export type { NetworkMe, NetworkPeople, NetworkPersonRow, NetworkStatus, WatchState };
-/** watchable: this computer offers the Downloads watch (not macOS in this release). */
-export type NetworkInfo = { status: NetworkStatus; me: NetworkMe | null; watchable?: boolean };
+export type { NetworkMe, NetworkPeople, NetworkPersonRow, NetworkStatus, ReminderState, WatchState };
+/** watchable: this computer offers the Downloads watch (not macOS in this release). reminder: "Remind me in 48 hours". */
+export type NetworkInfo = { status: NetworkStatus; me: NetworkMe | null; watchable?: boolean; reminder?: ReminderState | null };
 export type Loadable<T> = { state: "loading" } | { state: "ready"; value: T } | { state: "error" };
 
 /** From this many days after an import, Settings and the job panel suggest a fresh copy. */
@@ -75,6 +75,7 @@ function loadInfo() {
       info = { state: "ready", value };
       emit();
       syncWatchPoll();
+      syncReminderTimer();
     },
     () => {
       if (g !== gen) return;
@@ -151,6 +152,64 @@ export async function stopWatch(): Promise<void> {
     // The next status read shows whether it stopped.
   }
   setWatch(null);
+}
+
+/** The longest wait for a reminder (a browser's timer can't count further than about 24 days). */
+const REMINDER_WAIT_MAX_MS = 24 * 3_600_000;
+let reminderTimer: ReturnType<typeof setTimeout> | undefined;
+
+/** An open page reads the status again just after a reminder's time, so its notice shows up. */
+function syncReminderTimer() {
+  clearTimeout(reminderTimer);
+  reminderTimer = undefined;
+  const r = info?.state === "ready" ? info.value.reminder : null;
+  if (!r || r.due) return;
+  const wait = Math.min(REMINDER_WAIT_MAX_MS, Math.max(0, Date.parse(r.at) - Date.now()) + 5_000);
+  reminderTimer = setTimeout(() => {
+    reminderTimer = undefined;
+    const g = gen;
+    getJson<NetworkInfo>("/api/network").then(
+      (value) => {
+        if (g !== gen) return;
+        info = { state: "ready", value };
+        emit();
+        syncWatchPoll();
+        syncReminderTimer();
+      },
+      () => {},
+    );
+  }, wait);
+}
+
+function setReminderState(reminder: ReminderState | null) {
+  if (info?.state !== "ready") return;
+  info = { state: "ready", value: { ...info.value, reminder } };
+  emit();
+  syncReminderTimer();
+}
+
+/** "Remind me in 48 hours if I haven't added the file" (24 to snooze). Returns false when it couldn't be saved. */
+export async function setReminder(hours?: number): Promise<boolean> {
+  if (!canRunLocally) return false;
+  try {
+    const r = await fetch("/api/network/reminder", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(hours ? { hours } : {}) });
+    if (!r.ok) throw new Error(String(r.status));
+    setReminderState(((await r.json()) as { reminder: ReminderState }).reminder);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/** Cancel or dismiss the reminder. */
+export async function cancelReminder(): Promise<void> {
+  if (!canRunLocally) return;
+  setReminderState(null);
+  try {
+    await fetch("/api/network/reminder", { method: "DELETE" });
+  } catch {
+    // The next status read shows whether it's gone.
+  }
 }
 
 function setWatch(watch: WatchState | null) {
@@ -322,6 +381,8 @@ export function resetNetworkStore(): void {
   gen++;
   clearTimeout(pollTimer);
   pollTimer = undefined;
+  clearTimeout(reminderTimer);
+  reminderTimer = undefined;
   info = undefined;
   summary = undefined;
   summaryAsked = false;

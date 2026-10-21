@@ -283,11 +283,6 @@ h1, h2, h3 { margin: 0; text-wrap: balance; }
 .shot { margin: 0; display: grid; gap: var(--space-2); }
 .shot img { display: block; width: 100%; height: auto; border: 1px solid var(--border-default); border-radius: var(--radius-md); box-shadow: var(--shadow-l1); }
 .shot figcaption { font: var(--text-meta); color: var(--text-secondary); }
-.features { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-4); }
-.feature { display: grid; gap: var(--space-2); align-content: start; padding: var(--space-6); }
-.feature h3 { font: var(--text-subheading); }
-.feature p { font: var(--text-small); color: var(--text-secondary); }
-@media (max-width: 760px) { .features { grid-template-columns: minmax(0, 1fr); } }
 
 /* ---------- how it works ---------- */
 .steps { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--space-4); position: relative; }
@@ -540,6 +535,12 @@ label.rj-chip:has(input:focus-visible) { outline: 2px solid var(--focus-ring); o
 .tbody .dim { color: var(--tw-dim); }
 .tbody .ok { color: var(--tw-ok); font-weight: 600; }
 .tbody .info { color: var(--tw-info); font-weight: 600; }
+/* the installer's own look: wordmark rows sit flush, the cursor and live progress in signal orange */
+.tbody .wm { display: block; line-height: 1.05; }
+.tbody b, .tbody .b { font-weight: 700; color: var(--tw-fg); }
+.tbody .sig { color: var(--brand-signal); }
+.tbody .u { text-decoration: underline; text-underline-offset: 0.2em; }
+.screen[data-scene="4"] .tbody, .screen[data-scene="5"] .tbody { font-size: calc(var(--u) * 1.22); white-space: pre; }
 .tbody .ln { display: block; animation: line-in var(--duration-base) var(--ease-enter) both; }
 @keyframes line-in { from { opacity: 0; transform: translateY(4px); } }
 .pill { position: absolute; z-index: 7; right: 4%; top: 6%; display: flex; align-items: center; gap: calc(var(--u) * 0.8); padding: calc(var(--u) * 0.9) calc(var(--u) * 1.6); border-radius: calc(var(--u) * 3); background: var(--bg-raised); color: var(--text-primary); border: 1px solid var(--border-default); box-shadow: var(--shadow-l2); font-size: calc(var(--u) * 1.6); opacity: 0; transform: translateY(-6px); transition: opacity var(--duration-base) var(--ease-enter), transform var(--duration-base) var(--ease-enter); }
@@ -596,6 +597,7 @@ label.rj-chip:has(input:focus-visible) { outline: 2px solid var(--focus-ring); o
   .twin { left: 4%; right: 4%; top: 8%; bottom: 15%; }
   .tbar { height: calc(var(--u) * 7); font-size: calc(var(--u) * 2.8); }
   .tbody { font-size: calc(var(--u) * 2.7); padding: calc(var(--u) * 2.4); }
+  .screen[data-scene="4"] .tbody, .screen[data-scene="5"] .tbody { font-size: calc(var(--u) * 2.2); white-space: pre-wrap; }
   .launcher--win, .launcher--mac { width: 84%; margin-left: -42%; }
   .launcher--win > *, .launcher--mac > * { font-size: calc(var(--u) * 3.2); }
   .l-hit small, .l-label { font-size: calc(var(--u) * 2.4); }
@@ -763,24 +765,35 @@ h1 .serif, h2 .serif { font-size: 1.08em; line-height: 0; }
 @keyframes marquee { to { transform: translateX(calc(-50% - var(--space-3) / 2)); } }
 
 /* ---------- sections: bigger type, more air, no rules between ---------- */
-.section { padding-block: clamp(80px, 11vw, 160px); }
+.section { padding-block: clamp(56px, 11vw, 160px); }
 .section + .section { border-top: 0; }
 .split { grid-template-columns: minmax(0, 5fr) minmax(0, 7fr); }
 .section h2 { font: var(--text-display-section); letter-spacing: -0.045em; }
-.section .eyebrow { font-family: var(--font-mono); font-weight: 500; letter-spacing: 0; }
-.section .eyebrow::before { content: "// "; color: var(--text-disabled); }
+.section .eyebrow, .hero .eyebrow { font-family: var(--font-mono); font-weight: 500; letter-spacing: 0; }
+.section .eyebrow::before, .hero .eyebrow::before { content: "// "; color: var(--text-secondary); }
 @media (max-width: 920px) { .split { grid-template-columns: minmax(0, 1fr); } }
 /* how it works gets the full width: three steps side by side, then the dashboard big */
 #how .split { grid-template-columns: minmax(0, 1fr); gap: var(--space-12); }
 #how .split__head { position: static; max-width: 40rem; }
 #how .split__body { gap: var(--space-12); }
-@media (min-width: 1100px) { #how .features { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
+.fmap__head { display: flex; flex-wrap: wrap; align-items: end; justify-content: space-between; gap: var(--space-4); margin-bottom: var(--space-8); }
+.fmap__head .rj-btn { border-radius: var(--radius-dot); }
+.fmap { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: var(--space-3); }
+.fmap a { display: grid; gap: var(--space-2); align-content: start; height: 100%; box-sizing: border-box; padding: var(--space-6) var(--space-4); border: 1px solid var(--glass-line); border-radius: var(--radius-card);
+  background: var(--glass); -webkit-backdrop-filter: blur(8px); backdrop-filter: blur(8px); text-decoration: none;
+  transition: transform var(--duration-base) var(--ease-enter), border-color var(--duration-base) var(--ease-standard); }
+@media (hover: hover) and (pointer: fine) { .fmap a:hover { transform: translateY(-3px); border-color: var(--border-control); } }
+.fmap a:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 2px; }
+.fmap i { font: var(--text-meta); font-family: var(--font-mono); font-style: normal; color: var(--text-secondary); }
+.fmap b { font: var(--text-heading); }
+.fmap span { font: var(--text-small); color: var(--text-secondary); }
+@media (max-width: 920px) { .fmap { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 
 /* floating cards: glass, softer corners */
 .panel, .rj-panel.routes, .rj-panel.lab, .more { border-radius: var(--radius-card); border-color: var(--glass-line); }
-.step, .feature { background: var(--glass); -webkit-backdrop-filter: blur(8px); backdrop-filter: blur(8px);
+.step { background: var(--glass); -webkit-backdrop-filter: blur(8px); backdrop-filter: blur(8px);
   transition: transform var(--duration-base) var(--ease-enter), border-color var(--duration-base) var(--ease-standard); }
-@media (hover: hover) and (pointer: fine) { .step:hover, .feature:hover { transform: translateY(-3px); border-color: var(--border-control); } }
+@media (hover: hover) and (pointer: fine) { .step:hover { transform: translateY(-3px); border-color: var(--border-control); } }
 .step__demo { border-radius: var(--radius-md); }
 
 
@@ -881,6 +894,29 @@ h1 .serif, h2 .serif { font-size: 1.08em; line-height: 0; }
   .link { flex: none; width: 3px; min-width: 0; height: 24px; margin-left: 33px; }
   .node[data-stamp]::after { right: var(--space-3); }
 }
+
+/* ---------- critique fixes ---------- */
+/* actions are pills, surfaces are 12px cards */
+.page .rj-btn, .stamp { border-radius: var(--radius-dot); }
+.stamp { padding-inline: var(--space-2) var(--space-3); }
+/* the hero's example matches: a 44px tap area on touch screens, without moving them */
+@media (pointer: coarse) { .stamp::after { content: ""; position: absolute; inset: -11px -4px; } }
+/* GitHub stars beside "Star on GitHub" */
+.stars { margin-left: var(--space-1); padding: 0 var(--space-2); border-radius: var(--radius-dot); background: var(--bg-inset); font: var(--text-meta); font-weight: 600; color: var(--text-primary); }
+.open-line { display: flex; align-items: center; justify-content: center; gap: var(--space-2); flex-wrap: wrap; padding-bottom: var(--space-6); font: var(--text-small); color: var(--text-secondary); text-align: center; }
+.open-line a { color: var(--text-primary); text-underline-offset: 3px; }
+.open-line .rj-icon { flex: none; }
+/* the score's "why" line: read out to screen readers on every change, not shown (the gauge and bar say it) */
+.lab .why-line { position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
+/* the floating "Get RawJobs": appears while the nav is tucked away */
+.fcta { position: fixed; z-index: var(--z-sticky); right: max(var(--gutter), env(safe-area-inset-right, 0px)); bottom: calc(var(--space-6) + env(safe-area-inset-bottom, 0px));
+  box-shadow: var(--shadow-l2), 0 12px 40px -8px var(--signal-glow); opacity: 0; transform: translateY(16px); pointer-events: none;
+  transition: opacity var(--duration-base) var(--ease-standard), transform var(--duration-slow) var(--ease-cinematic); }
+.fcta[data-show] { opacity: 1; transform: none; pointer-events: auto; }
+@media (max-width: 560px) { .fcta { left: var(--gutter); right: var(--gutter); justify-content: center; } }
+/* phones: sending the page to a computer is the action; the steps wait behind a button */
+.get[data-phone] .os-bar, .get[data-phone] .iprogress, .get[data-phone] .installer { display: none; }
+.show-steps { margin-bottom: var(--space-6); }
 
 /* ---------- privacy: three statements, big ---------- */
 .facts { grid-template-columns: minmax(0, 1fr); gap: 0; }
@@ -1308,6 +1344,7 @@ h1 .serif, h2 .serif { font-size: 1.08em; line-height: 0; }
   <div class="wrap nav__in">
     <a class="brand" href="#top" aria-label="RawJobs home">__WORDMARK__</a>
     <nav class="nav__links" aria-label="Sections">
+      <a href="/features">Features</a>
       <a href="#how">How it works</a>
       <a href="#scoring">Scoring</a>
       <a href="#get">Get it</a>
@@ -1316,12 +1353,14 @@ h1 .serif, h2 .serif { font-size: 1.08em; line-height: 0; }
     <div class="nav__cta">
       <a class="rj-btn" href="https://github.com/Tanmay-Mhatre/rawjobs" target="_blank" rel="noopener">
         <svg class="rj-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M15 22v-4a4.8 4.8 0 0 0-1-3.5c3 0 6-2 6-5.5.08-1.25-.27-2.48-1-3.5.28-1.15.28-2.35 0-3.5 0 0-1 0-3 1.5-2.64-.5-5.36-.5-8 0C6 2 5 2 5 2c-.3 1.15-.3 2.35 0 3.5A5.403 5.403 0 0 0 4 9c0 3.5 3 5.5 6 5.5-.39.49-.68 1.05-.85 1.65-.17.6-.22 1.23-.15 1.85v4"/><path d="M9 18c-4.51 2-5-2-7-2"/></svg>
-        Star on GitHub
+        Star on GitHub<!--__STARS__-->
       <span class="rj-sr"> (opens in a new tab)</span></a>
       <a class="rj-btn rj-btn--primary" href="#get">Get RawJobs</a>
     </div>
   </div>
 </header>
+<!-- Shown only while the nav is tucked away, so the way to install is always one tap away (script). -->
+<a class="rj-btn rj-btn--primary btn-lg fcta" id="fcta" href="#get" aria-hidden="true" tabindex="-1"><span data-cta>Get RawJobs</span><svg class="rj-icon rj-icon--nudge" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></svg></a>
 
 <main id="main">
 <!-- ================= HERO ================= -->
@@ -1339,13 +1378,13 @@ h1 .serif, h2 .serif { font-size: 1.08em; line-height: 0; }
         <div class="wall__tip" id="wall-tip" role="tooltip" hidden></div>
         <p class="wall__meter"><strong id="wall-count" class="num">__COMPANIES__</strong> <span id="wall-label">careers pages in the directory</span></p>
       </div>
-      <p class="hero__lede" data-step style="--i:3">RawJobs finds jobs on the careers pages of __COMPANIES_ROUND__ companies and ranks each one by how well it fits you. Free, and it runs on your computer.</p>
+      <p class="hero__lede" data-step style="--i:3">RawJobs reads companies' own careers pages, ranks every job by how well it fits you, and sends you straight to apply. Free, and it runs on your computer.</p>
       <div class="hero__ctas" data-step style="--i:4">
         <a class="rj-btn rj-btn--primary btn-lg" href="#get">
           <span data-cta>Get RawJobs</span>
           <svg class="rj-icon rj-icon--nudge" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></svg>
         </a>
-        <a class="rj-btn btn-lg" href="https://github.com/Tanmay-Mhatre/rawjobs" target="_blank" rel="noopener">View on GitHub<span class="rj-sr"> (opens in a new tab)</span></a>
+        <a class="rj-btn btn-lg" href="https://github.com/Tanmay-Mhatre/rawjobs" target="_blank" rel="noopener">Star on GitHub<!--__STARS__--><span class="rj-sr"> (opens in a new tab)</span></a>
       </div>
       <p class="hero__note" data-step style="--i:5">
         <span><i class="rj-glyph rj-glyph--full" style="color:var(--success-text)" aria-hidden="true"></i>Windows, Mac and Linux</span>
@@ -1375,6 +1414,7 @@ h1 .serif, h2 .serif { font-size: 1.08em; line-height: 0; }
       <div class="stat" title="Job feed of __FEED_DATE__"><span class="stat__n">__FEED_JOBS__</span><span class="stat__l">open jobs in today's feed</span></div>
       <div class="stat"><span class="stat__n">Daily</span><span class="stat__l">new jobs every day, more companies every week</span></div>
     </div>
+    <p class="open-line"><svg class="rj-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M15 22v-4a4.8 4.8 0 0 0-1-3.5c3 0 6-2 6-5.5.08-1.25-.27-2.48-1-3.5.28-1.15.28-2.35 0-3.5 0 0-1 0-3 1.5-2.64-.5-5.36-.5-8 0C6 2 5 2 5 2c-.3 1.15-.3 2.35 0 3.5A5.403 5.403 0 0 0 4 9c0 3.5 3 5.5 6 5.5-.39.49-.68 1.05-.85 1.65-.17.6-.22 1.23-.15 1.85v4"/><path d="M9 18c-4.51 2-5-2-7-2"/></svg><span><!--__OPEN_LINE__--></span></p>
   </div>
 </section>
 
@@ -1486,13 +1526,30 @@ h1 .serif, h2 .serif { font-size: 1.08em; line-height: 0; }
         </picture>
         <figcaption>The real dashboard, with demo data.</figcaption>
       </figure>
-      <ul class="features" aria-label="What else it does">
-        <li class="panel feature"><h3>Track every application</h3><p>Saved, applied, interviewing, offer. Drag cards along as things move.</p></li>
-        <li class="panel feature"><h3>Spots dead careers pages</h3><p>Flags broken links, and companies with nothing for you after a week.</p></li>
-        <li class="panel feature"><h3>Saved views and alerts</h3><p>Save the filters you use. Get new matches on Telegram, one message per scan.</p></li>
-        <li class="panel feature"><h3>Any role, any city</h3><p>33 role families, anywhere in the world. When a scan finds nothing, it tells you why.</p></li>
-      </ul>
     </div>
+  </div>
+</section>
+
+<!-- ================= FEATURES (headers; the details are on /features) ================= -->
+<section class="section" id="features" aria-labelledby="features-title">
+  <div class="wrap">
+    <div class="fmap__head">
+      <div style="display:grid;gap:var(--space-4)">
+        <p class="eyebrow">Features</p>
+        <h2 id="features-title">Everything it does, at a <em class="serif">glance</em></h2>
+      </div>
+      <a class="rj-btn btn-lg" href="/features">See all features<svg class="rj-icon rj-icon--nudge" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></svg></a>
+    </div>
+    <ul class="fmap">
+      <li><a href="/features#find"><i>01</i><b>Find</b><span>__SYSTEMS_N__ hiring systems, read directly</span></a></li>
+      <li><a href="/features#score"><i>02</i><b>Score</b><span>0 to 100, with the reason written out</span></a></li>
+      <li><a href="/features#radar"><i>03</i><b>Radar</b><span>Best match first, filters, saved views</span></a></li>
+      <li><a href="/features#track"><i>04</i><b>Track</b><span>Pipeline, notes, company health</span></a></li>
+      <li><a href="/features#automate"><i>05</i><b>Automate</b><span>Scheduled scans, Telegram alerts</span></a></li>
+      <li><a href="/features#setup"><i>06</i><b>Set up</b><span>3 minutes, from your resume</span></a></li>
+      <li><a href="/features#yours"><i>07</i><b>Yours</b><span>Private, local, self-updating</span></a></li>
+      <li><a href="/features#next"><i>08</i><b>Coming next</b><span>What's on the roadmap</span></a></li>
+    </ul>
   </div>
 </section>
 
@@ -1608,6 +1665,8 @@ h1 .serif, h2 .serif { font-size: 1.08em; line-height: 0; }
         <button class="rj-btn" type="button" data-copy="__SITE_URL__/#get"><span class="ic" aria-hidden="true"><svg class="rj-icon ic-copy" viewBox="0 0 24 24"><rect width="14" height="14" x="8" y="8" rx="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></svg><svg class="rj-icon ic-check" viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5"/></svg></span><span>Copy link</span></button>
       </div>
     </div>
+
+    <button class="rj-btn btn-lg show-steps" type="button" id="show-steps" hidden>Show the steps anyway</button>
 
     <div class="os-bar">
       <div class="rj-tabs os-tabs" role="tablist" aria-label="Your computer">
@@ -1838,7 +1897,7 @@ h1 .serif, h2 .serif { font-size: 1.08em; line-height: 0; }
       <p class="prose">Schedule a scan for 08:00 and read new matches with your coffee.</p>
       <div class="hero__ctas">
         <a class="rj-btn rj-btn--primary btn-lg" href="#get"><span data-cta>Get RawJobs</span><svg class="rj-icon rj-icon--nudge" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></svg></a>
-        <a class="rj-btn btn-lg" href="https://github.com/Tanmay-Mhatre/rawjobs" target="_blank" rel="noopener">Star on GitHub<span class="rj-sr"> (opens in a new tab)</span></a>
+        <a class="rj-btn btn-lg" href="https://github.com/Tanmay-Mhatre/rawjobs" target="_blank" rel="noopener">Star on GitHub<!--__STARS__--><span class="rj-sr"> (opens in a new tab)</span></a>
       </div>
     </div>
   </div>
@@ -1880,11 +1939,18 @@ h1 .serif, h2 .serif { font-size: 1.08em; line-height: 0; }
 
   /* ---------- nav border once scrolled ---------- */
   /* it steps aside while you read down the page and comes back as soon as you scroll up */
-  var nav = $('#nav'), lastY = window.scrollY;
+  var nav = $('#nav'), lastY = window.scrollY, fcta = $('#fcta'), getSection = $('#get');
   var onScroll = function () {
     var y = window.scrollY;
     nav.setAttribute('data-stuck', y > 8 ? 'true' : 'false');
     if (Math.abs(y - lastY) > 6) { nav.setAttribute('data-away', y > lastY && y > 240 && !nav.contains(document.activeElement) ? 'true' : 'false'); lastY = y; }
+    /* the floating Get RawJobs shows while the nav is away, except over Get it itself */
+    var g = getSection.getBoundingClientRect(), over = g.top < innerHeight * 0.8 && g.bottom > 0;
+    var show = nav.getAttribute('data-away') === 'true' && !over;
+    if (show !== fcta.hasAttribute('data-show')) {
+      if (show) { fcta.setAttribute('data-show', ''); fcta.removeAttribute('aria-hidden'); fcta.removeAttribute('tabindex'); }
+      else { fcta.removeAttribute('data-show'); fcta.setAttribute('aria-hidden', 'true'); fcta.setAttribute('tabindex', '-1'); }
+    }
   };
   addEventListener('scroll', onScroll, { passive: true }); onScroll();
 
@@ -2211,25 +2277,80 @@ h1 .serif, h2 .serif { font-size: 1.08em; line-height: 0; }
   var isPhone = /android|iphone|ipod|mobile/i.test(navigator.userAgent) || (matchMedia('(pointer: coarse)').matches && matchMedia('(max-width: 760px)').matches);
   var os = detectOS(), copied = false;
 
-  var VERSION = '__VERSION__';
+  var VERSION = '__SHOWN_VERSION__';
   var TERM = {
-    win: { prompt: 'PS C:\\Users\\you> ', cmd: 'irm https://github.com/Tanmay-Mhatre/rawjobs/releases/latest/download/install.ps1 | iex', platform: 'win-x64', dir: 'C:\\Users\\you\\AppData\\Local\\RawJobs', open: 'It starts by itself when you log in. Open it any time from the Start menu: RawJobs.' },
-    mac: { prompt: 'you@MacBook ~ % ', cmd: 'curl -fsSL https://github.com/Tanmay-Mhatre/rawjobs/releases/latest/download/install.sh | sh', platform: 'darwin-arm64', dir: '/Users/you/Library/Application Support/RawJobs', open: 'It starts by itself when you log in. Open it any time: RawJobs in ~/Applications.' },
-    linux: { prompt: 'you@laptop:~$ ', cmd: 'curl -fsSL https://github.com/Tanmay-Mhatre/rawjobs/releases/latest/download/install.sh | sh', platform: 'linux-x64', dir: '/home/you/.local/share/rawjobs', open: 'It starts by itself when you log in. Open it any time: RawJobs in your app menu.' }
+    win: { prompt: 'PS C:\\Users\\you> ', cmd: 'irm https://github.com/Tanmay-Mhatre/rawjobs/releases/latest/download/install.ps1 | iex', platform: 'win-x64', dir: 'C:\\Users\\you\\AppData\\Local\\RawJobs', added: 'Added RawJobs to the Start menu and the Desktop', where: 'RawJobs, on the Desktop or in the Start menu.', uninstall: 'To uninstall: & "C:\\Users\\you\\AppData\\Local\\RawJobs\\bin\\rawjobs.cmd" uninstall' },
+    mac: { prompt: 'you@MacBook ~ % ', cmd: 'curl -fsSL https://github.com/Tanmay-Mhatre/rawjobs/releases/latest/download/install.sh | sh', platform: 'darwin-arm64', dir: '/Users/you/Library/Application Support/RawJobs', added: 'Added RawJobs to ~/Applications and the Desktop', where: 'RawJobs, on the Desktop or in ~/Applications.', uninstall: 'To uninstall: "/Users/you/Library/Application Support/RawJobs/bin/rawjobs" uninstall' },
+    linux: { prompt: 'you@laptop:~$ ', cmd: 'curl -fsSL https://github.com/Tanmay-Mhatre/rawjobs/releases/latest/download/install.sh | sh', platform: 'linux-x64', dir: '/home/you/.local/share/rawjobs', added: 'Added RawJobs to your app menu and the Desktop', where: 'RawJobs, on the Desktop or in your app menu.', uninstall: 'To uninstall: "/home/you/.local/share/rawjobs/bin/rawjobs" uninstall' }
   };
-  function output(t) {
-    return [
-      ['', ''],
-      ['info', 'Installing RawJobs'],
-      ['', '  Version ' + VERSION + ', for ' + t.platform],
-      ['', '  Downloading Node'],
-      ['', '  Downloading RawJobs'],
-      ['', '  Starting RawJobs (and at every log in)'],
-      ['', ''],
-      ['ok', 'RawJobs ' + VERSION + ' is running at http://127.0.0.1:4317'],
-      ['dim', '  Installed in ' + t.dir],
-      ['dim', '  ' + t.open]
+  /* What the one-line installer prints (packaging/install.ps1 and install.sh): the rawjobs wordmark with
+     the signal cursor, each step with a spinner (a bar while downloading) that turns into a tick, then a
+     box with the link and next steps. Like the real one, a narrow terminal gets the short wordmark and
+     the same lines without the box. Node's exact version comes from the release, so it's left as v24. */
+  var WORDMARK = [
+    '                         ^^        ##',
+    '##_#^ _####_ ##    ##    ## _####_ ##_##_ _#^^^^',
+    '##^   ____## ## ## ##    ## ##  ## ##  ## ^####_',
+    '##    ##  ## ## ## ##    ## ##  ## ##  ##     ##',
+    '##    ^###^# ^##^^##^    ## ^####^ ##__#^ ^####^',
+    '                      ^###^'
+  ].map(function (r) { return r.replace(/#/g, '\u2588').replace(/\^/g, '\u2580').replace(/_/g, '\u2584'); });
+  var SPIN = ['\u280b', '\u2819', '\u2839', '\u2838', '\u283c', '\u2834', '\u2826', '\u2827', '\u2807', '\u280f'];
+  var NODE = 'v24';
+  var termNarrow = function () { return screen.getBoundingClientRect().width < 560; };
+  function bannerHTML(t) {
+    var out = '\n';
+    if (termNarrow()) out += '  <b>rawjobs</b><span class="sig">\u2588</span>\n';
+    else WORDMARK.forEach(function (r, i) { out += '<span class="wm">  <b>' + esc(r) + '</b>' + (i >= 1 && i <= 4 ? ' <span class="sig">\u2588\u2588\u2588</span>' : '') + '</span>'; });
+    return out + '  Jobs, straight from the source.\n<span class="dim">  Version ' + esc(VERSION) + ', for ' + t.platform + '</span>\n\n';
+  }
+  /* .ln is a block (it fades in), so it carries its own line break */
+  function tickLine(text) { return '<span class="ln">  <span class="ok">\u2713</span> ' + esc(text) + '</span>'; }
+  function spinLine(text, frame, pct) {
+    var s = '  <span class="sig">' + SPIN[frame % SPIN.length] + '</span> ' + esc(text);
+    if (pct != null) { var n = Math.floor(pct / 5); s += '  <span class="sig">' + '\u2588'.repeat(n) + '</span><span class="dim">' + '\u2591'.repeat(20 - n) + '</span> ' + pct + '%'; }
+    return s + '\n';
+  }
+  function summaryHTML(t) {
+    var rows = [['<span class="ok">\u25cf</span>', 'b', 'RawJobs ' + VERSION + ' is running'], [' ', 'u', 'http://127.0.0.1:4317'], [' ', '', ''],
+      [' ', '', 'Installed in ' + t.dir], [' ', '', 'It starts by itself when you log in. Open it any time:'], [' ', '', t.where],
+      [' ', '', 'To update or repair it, run the same line again.'], [' ', '', t.uninstall]];
+    var cell = function (r) { return r[1] ? '<span class="' + r[1] + '">' + esc(r[2]) + '</span>' : esc(r[2]); };
+    if (termNarrow()) return rows.map(function (r) { return '  ' + r[0] + ' ' + cell(r) + '\n'; }).join('');
+    var w = Math.max.apply(null, rows.map(function (r) { return r[2].length; })), bar = '\u2500'.repeat(w + 6);
+    return '<span class="dim">  \u256d' + bar + '\u256e</span>\n' + rows.map(function (r) {
+      return '<span class="dim">  \u2502</span>  ' + r[0] + ' ' + cell(r) + ' '.repeat(w - r[2].length) + '  <span class="dim">\u2502</span>\n';
+    }).join('') + '<span class="dim">  \u2570' + bar + '\u256f</span>\n';
+  }
+  /* The whole run: animated in step 4, its last frame in step 5 and with motion off. */
+  async function installRun(t, id, animate) {
+    var head = promptHTML(t, t.cmd, false) + '\n' + bannerHTML(t), done = '', frame = 0;
+    var paint = function (live) { tbody.innerHTML = head + done + (live || ''); tbody.scrollTop = tbody.scrollHeight; };
+    var steps = [
+      { doing: 'Downloading Node ' + NODE, did: 'Downloaded Node ' + NODE, bar: true },
+      { did: "Checked the release's signature" },
+      { doing: 'Downloading RawJobs', did: 'Downloaded RawJobs ' + VERSION, bar: true },
+      { doing: 'Starting RawJobs (and at every log in)', mid: t.added, did: 'Started RawJobs (and at every log in)' }
     ];
+    if (!animate) {
+      steps.forEach(function (st) { if (st.mid) done += tickLine(st.mid); done += tickLine(st.did); });
+      paint('\n' + summaryHTML(t)); return;
+    }
+    paint(); await sleep(250);
+    for (var k = 0; k < steps.length; k++) {
+      var st = steps[k];
+      if (!st.doing) { done += tickLine(st.did); paint(); await sleep(220); if (id !== scene) return; continue; }
+      var ticks = st.bar ? 12 : 9;
+      for (var f = 0; f <= ticks; f++) {
+        if (id !== scene) return;
+        if (st.mid && f === 5) done += tickLine(st.mid);
+        paint(spinLine(st.doing, frame++, st.bar ? Math.round(100 * f / ticks) : null));
+        await sleep(80);
+      }
+      done += tickLine(st.did); paint();
+    }
+    await sleep(300); if (id !== scene) return;
+    paint('\n<span class="ln">' + summaryHTML(t).replace(/\n$/, '') + '</span>');
   }
 
   function setOS(next, focus) {
@@ -2260,6 +2381,9 @@ h1 .serif, h2 .serif { font-size: 1.08em; line-height: 0; }
   /* phones: RawJobs installs on a computer, so offer to send the page there */
   if (isPhone) {
     $('#handoff').setAttribute('data-show', '');
+    var showSteps = $('#show-steps');
+    get.setAttribute('data-phone', ''); showSteps.hidden = false;
+    showSteps.addEventListener('click', function () { get.removeAttribute('data-phone'); showSteps.hidden = true; $('.istep__head').focus(); });
     var share = $('#share-link');
     if (navigator.share) {
       share.hidden = false;
@@ -2302,7 +2426,6 @@ h1 .serif, h2 .serif { font-size: 1.08em; line-height: 0; }
   /* ---------- the mock screen: each step plays a short scene, or shows its last frame when motion is off ---------- */
   var scene = 0;
   function esc(s) { return s.replace(/&/g, '&amp;').replace(/</g, '&lt;'); }
-  function line(cls, text, animate) { return '<span class="' + (animate ? 'ln ' : '') + (cls || '') + '">' + (text ? esc(text) : ' ') + '</span>\n'; }
   function promptHTML(t, typed, caret) { return '<span class="dim">' + esc(t.prompt) + '</span>' + esc(typed) + (caret ? '<span class="caret"></span>' : ''); }
   function typeInto(el, text, every, id) {
     if (reduce) { el.textContent = text; return Promise.resolve(); }
@@ -2357,16 +2480,7 @@ h1 .serif, h2 .serif { font-size: 1.08em; line-height: 0; }
       $('#tenter').setAttribute('data-on', '');
       return;
     }
-    if (n === 4 || n === 5) {
-      var lines = output(t), html = promptHTML(t, t.cmd, false) + '\n';
-      if (reduce || n === 5) { tbody.innerHTML = html + lines.map(function (l) { return line(l[0], l[1], false); }).join(''); tbody.scrollTop = tbody.scrollHeight; return; }
-      tbody.innerHTML = html;
-      for (var j = 0; j < lines.length; j++) {
-        await sleep(j < 2 ? 200 : 420); if (id !== scene) return;
-        tbody.insertAdjacentHTML('beforeend', line(lines[j][0], lines[j][1], true));
-        tbody.scrollTop = tbody.scrollHeight;
-      }
-    }
+    if (n === 4 || n === 5) await installRun(t, id, !reduce && n === 4);
   }
 
   /* the screen's clock shows the visitor's own time */

@@ -156,7 +156,41 @@ const int = (x) => x.toLocaleString("en-US");
 const day = (iso) => new Date(iso).toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric", timeZone: "UTC" });
 /** 21,485 -> "21,000+"; 1,338,418 -> "1.3M+": numbers in prose round down, so they stay true for a while. */
 const atLeast = (x) => (x >= 1e6 ? `${Math.floor(x / 1e5) / 10}M+` : `${int(Math.floor(x / 1000) * 1000)}+`);
+
+// ---------- the project in the open: GitHub stars and the latest release ----------
+// Shown next to "Star on GitHub" and under the numbers. With GitHub out of reach (or rate-limited)
+// the page says neither, rather than showing a stale or made-up figure.
+async function projectNumbers() {
+  const headers = { accept: "application/vnd.github+json", ...(process.env.GITHUB_TOKEN ? { authorization: `Bearer ${process.env.GITHUB_TOKEN}` } : {}) };
+  const get = async (path) => {
+    const res = await fetch(`https://api.github.com/repos/${APP_REPO}${path}`, { headers, signal: AbortSignal.timeout(15_000) });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    return res.json();
+  };
+  const [repo, release] = await Promise.allSettled([get(""), get("/releases/latest")]);
+  if (repo.status === "rejected") console.warn(`GitHub stars: ${repo.reason.message}. Leaving the count out.`);
+  if (release.status === "rejected") console.warn(`Latest release: ${release.reason.message}. Leaving it out.`);
+  return {
+    stars: repo.status === "fulfilled" && Number.isInteger(repo.value.stargazers_count) ? repo.value.stargazers_count : null,
+    release: release.status === "fulfilled" && release.value.tag_name ? { tag: release.value.tag_name, at: release.value.published_at } : null,
+  };
+}
+const proj = await projectNumbers();
+/** 1234 -> "1.2k" */
+const compact = (x) => (x >= 1000 ? `${Math.floor(x / 100) / 10}k` : String(x));
+const STARS = proj.stars === null ? "" : `<span class="stars num" aria-label="${int(proj.stars)} ${proj.stars === 1 ? "star" : "stars"}">${compact(proj.stars)}</span>`;
+const escAttr = (x) => String(x).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);
+const releaseBits = [
+  proj.release
+    ? `Latest release <a href="https://github.com/${APP_REPO}/releases/latest" target="_blank" rel="noopener">${escAttr(proj.release.tag)}<span class="rj-sr"> (opens in a new tab)</span></a>, ${day(proj.release.at)}`
+    : "",
+  proj.stars === null ? "" : `${int(proj.stars)} ${proj.stars === 1 ? "star" : "stars"} on GitHub`,
+  "MIT licensed, built in the open",
+].filter(Boolean);
+const OPEN_LINE = releaseBits.join(" · ");
 const VERSION = JSON.parse(read(join(ROOT, "package.json"))).version;
+// The install mock prints the version people will get: the latest release, or package.json without GitHub.
+const SHOWN_VERSION = proj.release ? proj.release.tag.replace(/^v/, "") : VERSION;
 const NUMBERS = {
   __VERSION__: VERSION,
   __SYSTEMS_N__: String(SYSTEMS.length),
@@ -221,6 +255,9 @@ const page = (name) => {
     .replaceAll("__ATS__", () => ats)
     .replace("<!--__WALL__-->", () => wallMarkup)
     .replace("<!--__ANALYTICS__-->", () => analytics)
+    .replaceAll("<!--__STARS__-->", () => STARS)
+    .replaceAll("<!--__OPEN_LINE__-->", () => OPEN_LINE)
+    .replaceAll("__SHOWN_VERSION__", () => SHOWN_VERSION)
     .replaceAll("__SITE_URL__", () => SITE_URL);
   for (const [key, value] of Object.entries(NUMBERS)) out = out.replaceAll(key, () => value);
   const left = out.match(/__[A-Z_]+__/);
@@ -243,7 +280,8 @@ const externalize = (pageHtml) =>
 const html = externalize(page("index.html"));
 // Same tokens and theme script as the home page, so it follows all four themes.
 const notFound = externalize(page("404.html"));
-if (/<script>/.test(html + notFound)) throw new Error("An inline script was left in a page: the CSP would block it.");
+const features = externalize(page("features.html"));
+if (/<script>/.test(html + notFound + features)) throw new Error("An inline script was left in a page: the CSP would block it.");
 
 rmSync(DIST, { recursive: true, force: true });
 mkdirSync(join(DIST, "fonts"), { recursive: true });
@@ -251,6 +289,7 @@ mkdirSync(join(DIST, "js"), { recursive: true });
 for (const [name, code] of scripts) writeFileSync(join(DIST, "js", name), code);
 writeFileSync(join(DIST, "index.html"), html);
 writeFileSync(join(DIST, "404.html"), notFound);
+writeFileSync(join(DIST, "features.html"), features);
 // The share image's template, only when asked (pnpm site:og renders it to public/og.png).
 if (process.argv.includes("--og")) writeFileSync(join(DIST, "og.html"), page("og.html"));
 for (const f of readdirSync(join(DS, "fonts"))) copyFileSync(join(DS, "fonts", f), join(DIST, "fonts", f));
@@ -261,7 +300,10 @@ mkdirSync(join(DIST, "images"));
 for (const f of ["radar-light.png", "radar-dark.png"]) copyFileSync(join(ROOT, "docs/images", f), join(DIST, "images", f));
 await writeBeacon();
 writeFileSync(join(DIST, "robots.txt"), `User-agent: *\nAllow: /\n\nSitemap: ${SITE_URL}/sitemap.xml\n`);
-writeFileSync(join(DIST, "sitemap.xml"), `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n  <url><loc>${SITE_URL}/</loc></url>\n</urlset>\n`);
+writeFileSync(
+  join(DIST, "sitemap.xml"),
+  `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n  <url><loc>${SITE_URL}/</loc></url>\n  <url><loc>${SITE_URL}/features</loc></url>\n</urlset>\n`,
+);
 
 console.log(
   `Built ${DIST} for ${SITE_URL}${ANALYTICS_TOKEN ? " (with Web Analytics)" : ""}: ${Math.round(Buffer.byteLength(html) / 1024)} KB page, ` +

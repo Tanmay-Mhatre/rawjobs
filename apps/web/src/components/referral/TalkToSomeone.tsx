@@ -152,7 +152,9 @@ function Section({ job, entry, profile, onUpdate, onOpenPeople }: Props) {
       <p className="type-small text-warning-text">Update RawJobs to read your connections.</p>
     ) : (
       <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
-        <p className="min-w-0 flex-1 type-small text-muted">Connect LinkedIn to see who you already know at {company}. Your connections stay on this computer.</p>
+        <p className="min-w-0 flex-1 type-small text-muted">
+          {info?.reminder?.due ? "Your LinkedIn file should be ready. Add it" : "Connect LinkedIn"} to see who you already know at {company}. Your connections stay on this computer.
+        </p>
         <Button size="sm" onClick={() => setConnecting(true)}>
           <Users className="size-4" aria-hidden /> Connect LinkedIn
         </Button>

@@ -4,7 +4,7 @@ The marketing page at <https://www.rawjobs.workers.dev>. One static HTML page bu
 
 - tokens, fonts and logos from `apps/web/src/design`
 - components (`rj-*` classes) from `design/components/bundle.css`
-- page content in `src/index.html`, the 404 page in `src/404.html` (both get the tokens and the theme script at build time), static files (the share image) in `public/`
+- page content in `src/index.html`, the features page in `src/features.html` (served at `/features`; every claim on it comes from the main README, and the examples inside its small mocks say so), the 404 page in `src/404.html` (all three get the tokens and the theme script at build time), static files (the share image) in `public/`
 - the install steps in Get it pick the visitor's computer (Windows, Mac, Linux) and show a mock of their screen at each step; its colors imitate those systems, so they are fixed values marked `design-lint-ignore`
 - `/install` redirects to the install steps (`public/_redirects`)
 - the share image, `public/og.png`, is rendered from `src/og.html`: run `pnpm site:og` after changing it
@@ -44,5 +44,7 @@ One-time setup, in the repo's **Settings → Secrets and variables → Actions**
 To deploy without pushing, run the workflow from the Actions tab with **Run workflow**.
 
 Jobs in the scoring demo and the dashboard screenshots are made-up examples. The hero's stamped matches are real postings from the 11 Oct 2026 feed with example scores for a sample resume, and the page says so. The scoring demo's rules are in `src/score.js`, and `packages/core/test/site-demo.test.ts` checks them against `packages/core/src/score.ts` for every choice the demo offers: change the scorer and that test tells you to update the demo.
+
+Next to every "Star on GitHub" the build shows the repo's star count, and under the numbers a line with the latest release (tag and date) and the star count, all read from the GitHub API at build time (with `GITHUB_TOKEN` when set). When GitHub can't be reached, each is left out rather than shown stale.
 
 The page's numbers (companies in the directory, companies hiring, jobs in the daily feed, build dates) are read from the directory repo's latest release at build time. The Site workflow also runs every Monday after the directory rebuild, so they stay current. Without network access the build uses the last known numbers and says so.

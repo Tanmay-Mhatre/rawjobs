@@ -45,6 +45,10 @@ While it runs, the watch is kept in `profile/network-watch.json`, so it carries 
 restarts. The server log notes when it starts, finds a file and stops, with the file's name and
 size only.
 
+"Remind me in 48 hours if I haven't added the file" (only if you tick it) keeps just the reminder's
+time in `profile/network-reminder.json` on this computer; the Telegram message it sends only if you
+set up Telegram alerts says nothing about your connections.
+
 ### Find friends at a company (the paste box)
 "Find friends at {Company}" opens LinkedIn's own people search in your browser. If you copy that
 results page and paste it into RawJobs, it is read on this computer and kept only until you reload
