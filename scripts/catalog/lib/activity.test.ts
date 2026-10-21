@@ -190,17 +190,17 @@ describe("writeActivity", () => {
   });
   const day = (d: number) => `2026-10-${String(d).padStart(2, "0")}T04:30:00.000Z`;
 
-  it("publishes the file, lists it with its checksum in the manifest and carries the state", () => {
+  it("publishes the file, lists it with its checksum in the manifest and carries the state", async () => {
     const out = mkdtempSync(join(tmpdir(), "jh-activity-"));
     dirs.push(out);
     const unbrotli = <T>(f: string) => JSON.parse(brotliDecompressSync(readFileSync(join(out, f))).toString("utf8")) as T;
 
-    writeFeedV2(out, stateOf({ "lever:acme": { fetched_at: day(1), jobs: [row("1", "Engineer", "2026-09-30")] } }), day(1));
+    await writeFeedV2(out, stateOf({ "lever:acme": { fetched_at: day(1), jobs: [row("1", "Engineer", "2026-09-30")] } }), day(1));
     const first = writeActivity(out);
     expect(first.notes).toEqual(["no change file today; today's new roles go uncounted"]);
     expect(first.file.since).toBeNull();
 
-    writeFeedV2(out, stateOf({ "lever:acme": { fetched_at: day(2), jobs: [row("1", "Engineer", "2026-09-30"), row("2", "Designer", "2026-10-02")] } }), day(2));
+    await writeFeedV2(out, stateOf({ "lever:acme": { fetched_at: day(2), jobs: [row("1", "Engineer", "2026-09-30"), row("2", "Designer", "2026-10-02")] } }), day(2));
     const second = writeActivity(out);
     expect(second.notes).toEqual([]);
 
