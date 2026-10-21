@@ -159,3 +159,60 @@ describe("moving to Closed", () => {
     expect(onPatch).toHaveBeenCalledWith("a", e, { status: "rejected", closedAs: "withdrew" });
   });
 });
+
+describe("a Radar job opened from the board", () => {
+  it("opens the wide dialog with the job's summary, Apply while saved, and Open full job", () => {
+    const job: Job = makeJob({ id: "greenhouse:acme:9", salary: { min: 40000, max: 50000, currency: "AED", period: "month" } });
+    const onOpen = vi.fn();
+    const onApply = vi.fn();
+    render(
+      <Pipeline
+        user={{ [job.id]: entry("saved", "2026-10-18", { snapshot: { title: job.title, company: "Acme", url: job.url, location: "Dubai", score: 75 } }) }}
+        jobsById={new Map([[job.id, job]])}
+        onOpen={onOpen}
+        onApply={onApply}
+        minScore={60}
+        onPatch={vi.fn()}
+        onAdd={() => {}}
+        onWeeklyPlan={() => {}}
+        goRadar={() => {}}
+        now={now}
+      />,
+    );
+    fireEvent.click(screen.getByRole("button", { name: job.title }));
+    expect(onOpen).not.toHaveBeenCalled();
+    const dialog = within(screen.getByRole("dialog", { name: job.title }));
+    expect(dialog.getByText(/^AED 40K/)).toBeTruthy();
+    expect(dialog.getByText("Found on your Radar")).toBeTruthy();
+    fireEvent.click(dialog.getByRole("link", { name: "Apply at Acme" }));
+    expect(onApply).toHaveBeenCalledWith(job);
+    fireEvent.click(dialog.getByRole("button", { name: "Open full job" }));
+    expect(onOpen).toHaveBeenCalledWith(job);
+    expect(screen.queryByRole("dialog", { name: job.title })).toBeNull();
+  });
+
+  it("leaves out Apply once you've applied, and a hand-added job gets no summary", () => {
+    const job = makeJob({ id: "greenhouse:acme:10" });
+    render(
+      <Pipeline
+        user={{
+          [job.id]: entry("applied", "2026-10-18", { snapshot: { title: job.title, company: "Acme", url: job.url, location: "Dubai", score: 75 } }),
+          "manual:x": entry("saved", "2026-10-18", { snapshot: { title: "By hand", company: "Initech", url: "", location: "", score: 0 } }),
+        }}
+        jobsById={new Map([[job.id, job]])}
+        onOpen={() => {}}
+        onPatch={vi.fn()}
+        onAdd={() => {}}
+        onWeeklyPlan={() => {}}
+        goRadar={() => {}}
+        now={now}
+      />,
+    );
+    fireEvent.click(screen.getByRole("button", { name: job.title }));
+    expect(screen.queryByRole("link", { name: /^Apply at/ })).toBeNull();
+    expect(screen.getByRole("button", { name: "Open full job" })).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Close" }));
+    fireEvent.click(screen.getByRole("button", { name: "By hand" }));
+    expect(screen.queryByRole("button", { name: "Open full job" })).toBeNull();
+  });
+});

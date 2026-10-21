@@ -468,6 +468,8 @@ export function App() {
                   user={user.state}
                   jobsById={jobsById}
                   onOpen={onOpen}
+                  onApply={onApply}
+                  minScore={meta?.profile.min_score}
                   onPatch={(id, entry, patch) => user.update({ id, ...entry.snapshot, ...pick(jobsById.get(id)) }, patch)}
                   weeklyPlan={prefs.prefs.weeklyPlan}
                   onWeeklyPlan={prefs.setWeeklyPlan}

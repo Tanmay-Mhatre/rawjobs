@@ -1,10 +1,14 @@
 import { displayName } from "@rawjobs/core/display-name";
-import { ExternalLink, X } from "lucide-react";
+import { safeUrl } from "@rawjobs/core/text";
+import { ArrowRight, ExternalLink, X } from "lucide-react";
 import { type FormEvent, useId, useState } from "react";
+import type { Job } from "../lib/data";
+import { cleanLocation, companyName, formatSalary, postedOrSeen, timeAgo } from "../lib/format";
 import { type Entry, type EntryPatch, type Interview, OFFER_FIELDS, type Offer, PIPELINE, STATUS_LABEL, type Status, today } from "../lib/userState";
 import { DateField } from "./DateField";
 import { Dialog } from "./Dialog";
 import { JobTracking } from "./pipeline/JobTracking";
+import { buttonClass, ScoreBadge } from "./primitives";
 import { Button, Card, IconButton, Select } from "./ui";
 
 const input = "h-8 min-w-0 rounded-md border border-line bg-raised px-2 type-small text-ink placeholder:text-muted";
@@ -149,13 +153,71 @@ function JobFields({ entry, onUpdate }: { entry: Entry; onUpdate: (patch: EntryP
 type JobFieldsValue = { title: string; company: string; url: string };
 
 /**
- * A tracked job that isn't on the Radar (added by hand, or no longer listed): its progress, with the
- * same Activity, People and Interviews tabs as the job detail, and a Job tab for one added by hand.
+ * The job itself, for one still on the Radar: its score, place, pay and age, Apply while you haven't
+ * yet, and the way to the Radar's full view (description, why it matched, referrals).
+ */
+function JobSummary({ job, entry, minScore, onApply, onOpenFull }: { job: Job; entry: Entry; minScore?: number; onApply?: (job: Job) => void; onOpenFull?: () => void }) {
+  const closed = job.status === "closed";
+  const facts = [cleanLocation(job.location), formatSalary(job.salary), `Posted ${timeAgo(postedOrSeen(job))}`].filter(Boolean);
+  return (
+    <div className="grid gap-3">
+      <div className="flex items-start gap-3">
+        <ScoreBadge score={job.score} threshold={minScore} estimated={job.estimated} />
+        <ul className="grid min-w-0 flex-1 type-small">
+          {facts.map((f) => (
+            <li key={f} className="truncate">
+              {f}
+            </li>
+          ))}
+          {closed && <li className="text-muted">No longer taking applications</li>}
+        </ul>
+      </div>
+      <div className="flex flex-wrap gap-2">
+        {/* Apply only until you have: after that it's the posting link in the header. */}
+        {!closed && (!entry.status || entry.status === "saved") && (
+          <a href={safeUrl(job.url)} target="_blank" rel="noreferrer" onClick={() => onApply?.(job)} className={buttonClass("primary", "sm")}>
+            <ExternalLink className="rj-icon" aria-hidden />
+            {job.estimated ? "Open careers page" : `Apply at ${companyName(job.company)}`}
+          </a>
+        )}
+        {onOpenFull && (
+          <Button size="sm" variant="ghost" onClick={onOpenFull}>
+            Open full job <ArrowRight className="rj-icon" aria-hidden />
+          </Button>
+        )}
+      </div>
+    </div>
+  );
+}
+
+/**
+ * A tracked job's progress, opened from the Pipeline: Activity with a side panel of the next step,
+ * interviews, people and details (tabs on narrow screens). `job` is set for one still on the Radar,
+ * which adds its summary, Apply and Open full job; one added by hand gets its own fields to edit.
  * `onUpdate`'s `job` renames it (title, company, link).
  */
-export function TrackedJobDialog({ id, entry, onClose, onUpdate }: { id: string | null; entry: Entry | undefined; onClose: () => void; onUpdate: (patch: EntryPatch, job?: JobFieldsValue) => void }) {
+export function TrackedJobDialog({
+  id,
+  entry,
+  job,
+  minScore,
+  onClose,
+  onUpdate,
+  onApply,
+  onOpenFull,
+}: {
+  id: string | null;
+  entry: Entry | undefined;
+  job?: Job;
+  minScore?: number;
+  onClose: () => void;
+  onUpdate: (patch: EntryPatch, job?: JobFieldsValue) => void;
+  onApply?: (job: Job) => void;
+  /** Close this and open the Radar's view of `job`. */
+  onOpenFull?: (job: Job) => void;
+}) {
   if (!entry || !id) return null;
-  const s = entry.snapshot;
+  const s = job ? { ...entry.snapshot, title: job.title, company: job.company, url: job.url } : entry.snapshot;
   const manual = id.startsWith("manual:");
   return (
     // Wide and as tall as the window: on laptops Activity and the side panel scroll on their own, so the
@@ -172,7 +234,7 @@ export function TrackedJobDialog({ id, entry, onClose, onUpdate }: { id: string 
               {s.url && (
                 <>
                   {" · "}
-                  <a href={s.url} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 hover:underline">
+                  <a href={safeUrl(s.url)} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 hover:underline">
                     Posting <ExternalLink className="size-3" aria-hidden />
                   </a>
                 </>
@@ -200,8 +262,10 @@ export function TrackedJobDialog({ id, entry, onClose, onUpdate }: { id: string 
             jobId={id}
             entry={entry}
             title={s.title}
+            foundAt={job?.firstSeen}
             onUpdate={onUpdate}
             wide
+            summary={job && <JobSummary job={job} entry={entry} minScore={minScore} onApply={onApply} onOpenFull={onOpenFull && (() => onOpenFull(job))} />}
             jobTab={
               manual ? (
                 <JobFields entry={entry} onUpdate={onUpdate} />
