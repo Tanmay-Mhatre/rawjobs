@@ -224,6 +224,8 @@ export type CompanyHealth = {
    * read the answer (not the board's fault). Absent when no request was made.
    */
   failure?: "gone" | "timeout" | "server" | "network" | "parse" | "other";
+  /** No request was made: the board's site had stopped answering for other boards this run (http.ts HostSkippedError). Neither worked nor failed. */
+  notReached?: boolean;
   /** A hash of the board's job ids, when its whole list was read: board-health.ts notes when it changes. */
   idsHash?: string;
   /** A paged board's first page (Ctx.firstPage), with the profile it was read for: the next scan compares against it. */
@@ -246,8 +248,8 @@ export type RunSummary = {
   checked?: number;
   /** Your companies' health in this run (runs saved before `counts` existed hold more). */
   health: CompanyHealth[];
-  /** Every board this run checked, and how many failed (health keeps only yours). */
-  counts?: { checked: number; failed: number };
+  /** Every board this run checked, how many failed, and how many were never reached (health keeps only yours). */
+  counts?: { checked: number; failed: number; notReached?: number };
   /** Your companies whose board was gone, and the directory board with the same name: suggestions to review, never applied. */
   moves?: BoardMove[];
   /** Every company in the directory was checked by this run (a background check or full scan that finished). */

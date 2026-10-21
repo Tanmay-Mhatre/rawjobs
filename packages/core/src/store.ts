@@ -9,7 +9,8 @@ import { fromJobBoard, toDashboardJob } from "./dashboard";
 import type { MergeResult } from "./diff";
 import { readFeedActivity } from "./job-feed";
 import type { RunResult } from "./run";
-import type { CompanyHealth, Config, DashboardJob, DashboardJobsFile, DataMeta, Job, JobsFile, RunSummary } from "./schema";
+import { failedHealth, notReached } from "./health";
+import type { Config, DashboardJob, DashboardJobsFile, DataMeta, Job, JobsFile, RunSummary } from "./schema";
 import { readJsonOrSetAside, writeFileAtomic } from "./atomic";
 import { readJsonOnce } from "./json-once";
 
@@ -50,16 +51,19 @@ function yourFailingBoards(config: Config, boards: BoardHealth): NonNullable<Dat
   return out;
 }
 
-const failed = (h: CompanyHealth) => !h.ok && !h.unsupported;
-
 /**
  * A run as meta.json keeps it: health for your companies only (all the Companies page shows), with totals
  * for every board the run checked. An "All companies" run checks about 200,000 boards, which made meta.json
  * hundreds of MB that every scan rewrote and every page load read. A run that's already slim stays as it is.
+ * `whole`: the run's health has every board it checked. Runs saved before kept only the directory boards that
+ * matched or failed, so their total is your companies plus `checked` (the directory boards asked), when finished.
  */
-export function slimRun(run: RunSummary, yours: ReadonlySet<string>): RunSummary {
+export function slimRun(run: RunSummary, yours: ReadonlySet<string>, whole = false): RunSummary {
   if (run.counts) return run;
-  return { ...run, health: run.health.filter((h) => yours.has(companyKey(h))), counts: { checked: run.health.length, failed: run.health.filter(failed).length } };
+  const health = run.health.filter((h) => yours.has(companyKey(h)));
+  const checked = whole || run.partial || run.checked === undefined ? run.health.length : Math.max(run.health.length, health.length + run.checked);
+  const unreached = run.health.filter(notReached).length;
+  return { ...run, health, counts: { checked, failed: run.health.filter(failedHealth).length, ...(unreached ? { notReached: unreached } : {}) } };
 }
 
 const yourKeys = (config: Config) => new Set(config.companies.map(companyKey));
@@ -184,7 +188,7 @@ export function saveRun(
 ): RunSummary {
   mkdirSync(join(dir, "runs"), { recursive: true });
   const yours = yourKeys(config);
-  const summary = slimRun(summarize(run, merged), yours);
+  const summary = slimRun(summarize(run, merged), yours, true);
   const generatedAt = run.finishedAt;
 
   const jobs = merged.jobs.map((j) => (j.why.gate ? { ...j, description: undefined } : j));

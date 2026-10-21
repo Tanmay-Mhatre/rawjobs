@@ -307,6 +307,13 @@ companies:
     expect(last.counts).toEqual({ checked: 4, failed: 1 });
   });
 
+  it("counts boards never reached apart from failed ones", () => {
+    dir = mkdtempSync(join(tmpdir(), "rawjobs-"));
+    const r = { ...run(T0, [job("1")]), health: [...health(true), other("a", false), { ...other("b", false), notReached: true }] };
+    saveRun(dir, parseConfig(acme), r, mergeHistory([], r, companies));
+    expect(readMeta(dir)!.runs[0]!.counts).toEqual({ checked: 3, failed: 1, notReached: 1 });
+  });
+
   it("format 2 slims an old run history and runs/, once", () => {
     dir = mkdtempSync(join(tmpdir(), "rawjobs-"));
     const data = join(dir, "data");
@@ -335,5 +342,30 @@ companies:
     expect(readdirSync(join(data, "runs"))).toEqual(["2026-10-02T03-00-00Z.json"]);
     expect(JSON.parse(readFileSync(join(data, "runs", "2026-10-02T03-00-00Z.json"), "utf8")).counts.checked).toBe(3);
     expect(migrateData(dir, data)).toBe(2);
+  });
+
+  it("format 2 counts an old run's boards from what it checked, not the matched-or-failed ones it kept", () => {
+    dir = mkdtempSync(join(tmpdir(), "rawjobs-"));
+    const data = join(dir, "data");
+    mkdirSync(data, { recursive: true });
+    writeFileSync(join(dir, "rawjobs.config.yaml"), acme);
+    const skipped = { ...other("c", false), error: "skipped: api.lever.co failed 3 times in a row (https://api.lever.co/v0/postings/c)" };
+    const old = (partial: boolean) => ({
+      startedAt: T1,
+      finishedAt: T1,
+      partial,
+      jobsFound: 0,
+      matches: 0,
+      newMatches: 0,
+      closed: 0,
+      checked: 10,
+      health: [...health(true), other("a", false), skipped],
+    });
+    writeFileSync(join(data, "meta.json"), JSON.stringify({ version: 1, generatedAt: T1, profile: {}, companies: [], runs: [old(false), old(true)] }));
+    migrateData(dir, data);
+    expect(readMeta(data)!.runs.map((r) => r.counts)).toEqual([
+      { checked: 11, failed: 1, notReached: 1 },
+      { checked: 3, failed: 1, notReached: 1 },
+    ]);
   });
 });

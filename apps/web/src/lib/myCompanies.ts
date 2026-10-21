@@ -1,3 +1,4 @@
+import { failedHealth, notReached } from "@rawjobs/core/health";
 import type { CompanyHealth } from "./data";
 
 /** A company with nothing for you in at least this many scans in a row, over at least QUIET_DAYS, gets a "remove?" flag. */
@@ -46,7 +47,7 @@ export type Problem =
 /** Failing this long with no scan that worked: "for over a month" (board-health.ts in core counts the same). */
 export const CHRONIC_DAYS = 30;
 
-const failed = (h: CompanyHealth) => !h.ok && !h.unsupported;
+const failed = failedHealth;
 
 /**
  * `failingSince`: when the board's failures started, from board-health (meta.json's boardHealth).
@@ -102,7 +103,7 @@ export function barsOf(runs: readonly { startedAt: string; health: readonly Comp
     .slice(0, n)
     .map((run): Bar => {
       const h = find(run.health);
-      return { state: !h || h.unsupported ? "none" : h.ok ? "worked" : "failed", at: run.startedAt };
+      return { state: !h || h.unsupported || notReached(h) ? "none" : h.ok ? "worked" : "failed", at: run.startedAt };
     })
     .reverse();
 }

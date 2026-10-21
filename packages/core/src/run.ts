@@ -327,7 +327,8 @@ export async function runRadar(config: Config, opts: RunOptions = {}): Promise<R
       h.ok = true;
     } catch (err) {
       h.error = err instanceof HttpError && err.status === 404 ? `board not found (404): check the slug "${company.slug}" against the careers URL` : (err as Error).message;
-      if (!h.unsupported) h.failure = failureOf(err);
+      if (err instanceof HostSkippedError) h.notReached = true;
+      else if (!h.unsupported) h.failure = failureOf(err);
     }
     // Stopped while in flight: the company may have been cut short anywhere (StoppedError, or a
     // connector that caught it and kept what it had), so it's neither done nor failed. Left out of

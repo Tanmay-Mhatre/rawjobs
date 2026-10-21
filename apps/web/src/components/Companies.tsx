@@ -4,6 +4,7 @@ import { Clock, ExternalLink, EyeOff, RefreshCw, Undo2, X } from "lucide-react";
 import { Fragment, useEffect, useId, useMemo, useRef, useState, type ReactNode } from "react";
 import type { BoardMove } from "@rawjobs/core/schema";
 import { careersUrl } from "@rawjobs/core/detect";
+import { failedHealth, notReached } from "@rawjobs/core/health";
 import { keyOf, type CompanyRef } from "../lib/companies";
 import { nameRank } from "../lib/companySearch";
 import type { CompanyHealth, DataMeta } from "../lib/data";
@@ -654,14 +655,16 @@ export function RecentRuns({ meta, id }: { meta: DataMeta; id?: string }) {
       <ul className="divide-y divide-line border-t border-line type-small">
         {meta.runs.slice(0, 10).map((r) => {
           const checked = r.counts?.checked ?? r.health.length;
-          const failed = r.counts?.failed ?? r.health.filter((h) => !h.ok && !h.unsupported).length;
+          const failed = r.counts?.failed ?? r.health.filter(failedHealth).length;
+          const unreached = r.counts?.notReached ?? r.health.filter(notReached).length;
           const secs = (Date.parse(r.finishedAt) - Date.parse(r.startedAt)) / 1000;
           return (
             <li key={r.startedAt} className="flex flex-wrap items-center gap-x-4 gap-y-1 px-4 py-2">
               <span className="w-32 text-muted">{formatDateTime(r.startedAt)}</span>
               <span className="tabular min-w-0 flex-1">
                 {checked.toLocaleString()} compan{checked === 1 ? "y" : "ies"} checked
-                {failed > 0 && <span className="text-danger-text">, {failed} failed</span>}.{r.partial && <span className="text-muted"> Stopped before the end.</span>}
+                {failed > 0 && <span className="text-danger-text">, {failed.toLocaleString()} failed</span>}
+                {unreached > 0 && <span className="text-muted">, {unreached.toLocaleString()} not reached</span>}.{r.partial && <span className="text-muted"> Stopped before the end.</span>}
               </span>
               <span className="tabular text-muted">{secs.toFixed(0)} s</span>
             </li>
