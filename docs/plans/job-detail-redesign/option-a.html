@@ -1,0 +1,502 @@
+<!doctype html>
+<html lang="en" data-theme="light">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Job detail — Option A</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600&family=Geist+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+:root {
+  --font-sans: "Geist", system-ui, sans-serif;
+  --font-mono: "Geist Mono", ui-monospace, monospace;
+  --bg-canvas: #f5f1e8; --bg-raised: #fffbf5; --bg-overlay: #fffbf5;
+  --bg-hover: #ede9e2; --bg-active: #e5e1db; --bg-inset: #ede9e2;
+  --border-subtle: #d4d0c9; --border-default: #c4c0ba; --border-control: #888681;
+  --text-primary: #151412; --text-secondary: #605d59;
+  --accent-solid: #ff5a1f; --on-accent: #151412; --accent-text: #a33100; --accent-subtle: #ffe2da; --accent-mark: #dd4400;
+  --success-text: #007137; --success-solid: #007d3e; --success-subtle: #d3f3da;
+  --warning-text: #7f5300; --warning-solid: #f3aa36; --warning-subtle: #fde5c7;
+  --danger-text: #a12b46; --danger-subtle: #ffe1e4;
+  --radius-sm: 2px; --radius-md: 4px;
+  --shadow-l3: 0 8px 24px rgba(21,20,18,.12), 0 1px 2px rgba(21,20,18,.08);
+}
+[data-theme="dark"] {
+  --bg-canvas: #120f0b; --bg-raised: #181611; --bg-overlay: #201d18;
+  --bg-hover: #201d18; --bg-active: #27241f; --bg-inset: #120f0b;
+  --border-subtle: #37342e; --border-default: #45423b; --border-control: #6f6d66;
+  --text-primary: #ecebe8; --text-secondary: #cac7c2;
+  --accent-text: #ff9d7f; --accent-subtle: #3a1d10; --accent-mark: #ff6a33;
+  --success-text: #89dea1; --success-subtle: #12301c;
+  --warning-text: #f6bb6a; --warning-subtle: #36270e;
+  --danger-text: #ffaeb7; --danger-subtle: #3b1520;
+  --shadow-l3: 0 8px 24px rgba(0,0,0,.5), 0 1px 2px rgba(0,0,0,.4);
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; }
+body {
+  background: var(--bg-canvas); color: var(--text-primary);
+  font: 400 14px/21px var(--font-sans); -webkit-font-smoothing: antialiased;
+  padding: 32px 24px 64px;
+}
+.ico { width: 16px; height: 16px; flex: none; stroke: currentColor; fill: none; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+.ico-sm { width: 14px; height: 14px; }
+
+/* Page chrome */
+.page-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; max-width: 2200px; margin-bottom: 32px; }
+.page-head h1 { font: 600 24px/30px var(--font-sans); margin: 0 0 4px; }
+.page-head p { margin: 0; color: var(--text-secondary); max-width: 720px; }
+.board { display: flex; flex-wrap: wrap; gap: 32px; align-items: flex-start; }
+.col { display: flex; flex-direction: column; gap: 8px; }
+.col-label { font: 500 14px/20px var(--font-sans); }
+.col-label small { display: block; font: 400 12px/16px var(--font-sans); color: var(--text-secondary); }
+
+/* Buttons */
+.btn { display: inline-flex; align-items: center; justify-content: center; gap: 8px; height: 32px; padding: 0 12px;
+  border-radius: var(--radius-md); border: 1px solid var(--border-default); background: var(--bg-raised);
+  color: var(--text-primary); font: 500 14px/20px var(--font-sans); cursor: pointer; white-space: nowrap; }
+.btn:hover { background: var(--bg-hover); }
+.btn:focus-visible, .iconbtn:focus-visible, .row:focus-visible { outline: 2px solid var(--accent-solid); outline-offset: 1px; }
+.btn-primary { background: var(--accent-solid); border-color: var(--accent-solid); color: var(--on-accent); }
+.btn-primary:hover { background: #f04d12; }
+.btn-quiet { border-color: transparent; background: transparent; color: var(--text-secondary); }
+.btn-sm { height: 28px; padding: 0 8px; font-size: 13px; }
+.iconbtn { display: inline-grid; place-items: center; width: 28px; height: 28px; border-radius: var(--radius-md);
+  border: 1px solid transparent; background: transparent; color: var(--text-secondary); cursor: pointer; }
+.iconbtn:hover { background: var(--bg-hover); color: var(--text-primary); }
+.iconbtn.boxed { border-color: var(--border-default); width: 32px; height: 32px; }
+.kbd { font: 500 11px/16px var(--font-mono); color: var(--text-secondary); border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm); padding: 0 4px; background: var(--bg-canvas); }
+
+/* Pane */
+.pane { width: 520px; height: 984px; display: flex; flex-direction: column; background: var(--bg-raised);
+  border: 1px solid var(--border-subtle); border-radius: var(--radius-md); overflow: hidden; position: relative; }
+.pane.auto { height: auto; }
+.pane.phone { width: 375px; height: 812px; border-radius: 8px; }
+.body { flex: 1; overflow: auto; }
+
+.head { padding: 16px 24px 16px; border-bottom: 1px solid var(--border-subtle); }
+.phone .head { padding: 12px 16px 16px; }
+.topbar { display: flex; align-items: center; gap: 8px; height: 28px; }
+.company { display: flex; align-items: center; gap: 8px; font: 500 14px/20px var(--font-sans); min-width: 0; }
+.dot { width: 8px; height: 8px; border-radius: 999px; background: var(--accent-mark); flex: none; }
+.hiring { font: 400 12px/16px var(--font-sans); color: var(--success-text); white-space: nowrap; }
+.nav { margin-left: auto; display: flex; gap: 2px; }
+.title { display: flex; align-items: flex-start; gap: 8px; margin: 8px 0 4px; font: 600 20px/24px var(--font-sans); }
+.phone .title { font-size: 18px; }
+.star { color: var(--accent-mark); fill: var(--accent-mark); margin-top: 4px; }
+.meta { color: var(--text-secondary); font: 400 14px/20px var(--font-sans); }
+.meta .live { color: var(--success-text); }
+.sep::before { content: " · "; }
+
+.verdict { display: flex; gap: 12px; align-items: flex-start; margin-top: 16px; padding: 12px; background: var(--bg-canvas);
+  border: 1px solid var(--border-subtle); border-radius: var(--radius-md); }
+.score { flex: none; display: grid; place-items: center; width: 44px; height: 44px; border-radius: var(--radius-md);
+  background: var(--success-subtle); color: var(--success-text); font: 600 20px/24px var(--font-sans); font-variant-numeric: tabular-nums; }
+.score.none { background: var(--bg-hover); color: var(--text-secondary); font-size: 16px; }
+.verdict b { font-weight: 600; display: block; font-size: 14px; line-height: 20px; }
+.verdict .why { color: var(--text-secondary); font-size: 13px; line-height: 20px; }
+.miss { color: var(--warning-text); }
+
+.chips { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
+.chip { display: inline-flex; align-items: center; gap: 4px; height: 24px; padding: 0 8px; border-radius: var(--radius-sm);
+  border: 1px solid var(--border-subtle); background: var(--bg-raised); font: 500 12px/16px var(--font-sans); color: var(--text-primary); white-space: nowrap; }
+.chip.soft { color: var(--text-secondary); font-weight: 400; }
+.chip.accent { background: var(--accent-subtle); border-color: transparent; color: var(--accent-text); }
+.chip.ok { background: var(--success-subtle); border-color: transparent; color: var(--success-text); }
+a.chip { text-decoration: none; cursor: pointer; }
+.unknown { margin-top: 8px; font: 400 12px/16px var(--font-sans); color: var(--text-secondary); }
+
+/* Banner */
+.banner { margin: 16px 24px 0; padding: 12px 12px 12px 16px; border: 1px solid var(--border-subtle); border-left: 3px solid var(--accent-solid);
+  border-radius: var(--radius-md); background: var(--bg-raised); display: grid; grid-template-columns: 1fr auto; gap: 4px 8px; }
+.phone .banner { margin: 16px 16px 0; }
+.banner h3 { margin: 0; font: 600 14px/20px var(--font-sans); display: flex; gap: 8px; align-items: center; }
+.banner h3 .ico { color: var(--accent-text); }
+.banner p { grid-column: 1 / -1; margin: 0; color: var(--text-secondary); font-size: 13px; line-height: 20px; }
+.banner .priv { display: flex; gap: 6px; align-items: flex-start; color: var(--text-secondary); font-size: 12px; line-height: 16px; margin-top: 4px; }
+.banner .acts { grid-column: 1 / -1; display: flex; gap: 8px; margin-top: 8px; }
+.banner .iconbtn { margin: -4px -4px 0 0; }
+
+/* People block */
+.people { margin: 16px 24px 0; border: 1px solid var(--border-subtle); border-radius: var(--radius-md); }
+.people-head { display: flex; justify-content: space-between; align-items: center; padding: 12px 16px 8px; }
+.people-head h3 { margin: 0; font: 600 14px/20px var(--font-sans); display: flex; gap: 8px; align-items: center; }
+.person { display: flex; gap: 12px; align-items: center; padding: 8px 16px; border-top: 1px solid var(--border-subtle); }
+.avatar { width: 32px; height: 32px; border-radius: 999px; display: grid; place-items: center; flex: none;
+  background: var(--bg-active); font: 500 12px/16px var(--font-sans); color: var(--text-primary); }
+.person .who { flex: 1; min-width: 0; }
+.person .who b { font-weight: 500; display: block; line-height: 20px; }
+.person .who span { color: var(--text-secondary); font-size: 12px; line-height: 16px; display: block; }
+.people-foot { display: flex; justify-content: space-between; align-items: center; padding: 8px 16px; border-top: 1px solid var(--border-subtle); font-size: 12px; color: var(--text-secondary); }
+.link { color: var(--accent-text); text-decoration: underline; text-underline-offset: 2px; font-weight: 500; cursor: pointer; }
+
+/* Collapsed rows */
+.rows { margin: 16px 0 24px; }
+.row { display: flex; align-items: center; gap: 8px; width: 100%; min-height: 44px; padding: 0 24px; border: 0; border-top: 1px solid var(--border-subtle);
+  background: transparent; color: var(--text-primary); font: 500 14px/20px var(--font-sans); text-align: left; cursor: pointer; }
+.phone .row { padding: 0 16px; }
+.row:hover { background: var(--bg-hover); }
+.row:last-child { border-bottom: 1px solid var(--border-subtle); }
+.row .count { margin-left: auto; color: var(--text-secondary); font-weight: 400; font-size: 13px; }
+.row .chev { color: var(--text-secondary); }
+.row.open .chev { transform: rotate(90deg); }
+.row.muted { color: var(--text-secondary); font-weight: 400; cursor: default; }
+.row.muted:hover { background: transparent; }
+.section-body { padding: 0 24px 16px; color: var(--text-primary); }
+.phone .section-body { padding: 0 16px 16px; }
+.section-body p { margin: 0 0 8px; }
+mark { background: var(--accent-subtle); color: var(--accent-text); padding: 0 2px; border-radius: var(--radius-sm); }
+.fade { color: var(--text-secondary); }
+.checks { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; }
+.checks li { display: flex; gap: 8px; align-items: center; font-size: 13px; }
+.checks .y { color: var(--success-text); } .checks .n { color: var(--warning-text); }
+
+/* Footer */
+.foot { display: flex; gap: 8px; align-items: center; padding: 12px 24px; border-top: 1px solid var(--border-subtle); background: var(--bg-raised); position: relative; }
+.phone .foot { padding: 12px 16px; flex-wrap: wrap; }
+.foot .grow { flex: 1; }
+.phone .foot .btn-primary { flex: 1 0 100%; height: 40px; }
+.phone .foot .save { flex: 1; height: 40px; }
+.phone .foot .iconbtn.boxed { width: 40px; height: 40px; }
+.status-pill { display: inline-flex; align-items: center; gap: 6px; height: 32px; padding: 0 8px 0 12px; border-radius: var(--radius-md);
+  border: 1px solid transparent; background: var(--success-subtle); color: var(--success-text); font: 500 14px/20px var(--font-sans); cursor: pointer; }
+.ats-note { font-size: 12px; color: var(--text-secondary); }
+
+.menu { position: absolute; right: 24px; bottom: 52px; width: 248px; padding: 4px; background: var(--bg-overlay); border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md); box-shadow: var(--shadow-l3); z-index: 2; }
+.mi { display: flex; align-items: center; gap: 8px; height: 32px; padding: 0 8px; border-radius: var(--radius-sm); font-size: 14px; cursor: pointer; }
+.mi:hover, .mi.hl { background: var(--bg-hover); }
+.mi .kbd { margin-left: auto; }
+.mi .ico { color: var(--text-secondary); }
+.mi.danger { color: var(--danger-text); } .mi.danger .ico { color: var(--danger-text); }
+.msep { height: 1px; background: var(--border-subtle); margin: 4px 0; }
+.mlabel { padding: 4px 8px 0; font: 500 12px/16px var(--font-sans); color: var(--text-secondary); }
+
+/* Notes */
+.notes { margin-top: 48px; max-width: 760px; }
+.notes h2 { font: 600 20px/24px var(--font-sans); margin: 0 0 16px; }
+.notes ol { margin: 0; padding-left: 20px; display: grid; gap: 8px; }
+.notes li::marker { color: var(--text-secondary); }
+.notes b { font-weight: 600; }
+
+@media (max-width: 600px) { body { padding: 16px; } .pane { width: 100%; } }
+</style>
+</head>
+<body>
+
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <symbol id="i-left" viewBox="0 0 24 24"><path d="m12 19-7-7 7-7"/><path d="M19 12H5"/></symbol>
+  <symbol id="i-up" viewBox="0 0 24 24"><path d="m18 15-6-6-6 6"/></symbol>
+  <symbol id="i-down" viewBox="0 0 24 24"><path d="m6 9 6 6 6-6"/></symbol>
+  <symbol id="i-right" viewBox="0 0 24 24"><path d="m9 18 6-6-6-6"/></symbol>
+  <symbol id="i-max" viewBox="0 0 24 24"><path d="M15 3h6v6"/><path d="M9 21H3v-6"/><path d="m21 3-7 7"/><path d="m3 21 7-7"/></symbol>
+  <symbol id="i-x" viewBox="0 0 24 24"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></symbol>
+  <symbol id="i-star" viewBox="0 0 24 24"><path d="M11.5 2.3a.5.5 0 0 1 1 0l2.3 4.7a2 2 0 0 0 1.5 1.1l5.2.8a.5.5 0 0 1 .3.9l-3.8 3.6a2 2 0 0 0-.6 1.8l.9 5.2a.5.5 0 0 1-.8.6l-4.6-2.5a2 2 0 0 0-1.9 0l-4.6 2.5a.5.5 0 0 1-.8-.6l.9-5.2a2 2 0 0 0-.6-1.8L1.2 9.8a.5.5 0 0 1 .3-.9l5.2-.8a2 2 0 0 0 1.5-1.1z"/></symbol>
+  <symbol id="i-ext" viewBox="0 0 24 24"><path d="M15 3h6v6"/><path d="M10 14 21 3"/><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/></symbol>
+  <symbol id="i-bm" viewBox="0 0 24 24"><path d="m19 21-7-4-7 4V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2v16z"/></symbol>
+  <symbol id="i-bmc" viewBox="0 0 24 24"><path d="m19 21-7-4-7 4V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2Z"/><path d="m9 10 2 2 4-4"/></symbol>
+  <symbol id="i-more" viewBox="0 0 24 24"><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/><circle cx="5" cy="12" r="1"/></symbol>
+  <symbol id="i-users" viewBox="0 0 24 24"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></symbol>
+  <symbol id="i-lock" viewBox="0 0 24 24"><rect width="18" height="11" x="3" y="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></symbol>
+  <symbol id="i-check" viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5"/></symbol>
+  <symbol id="i-help" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><path d="M12 17h.01"/></symbol>
+  <symbol id="i-ban" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="m4.9 4.9 14.2 14.2"/></symbol>
+  <symbol id="i-eyeoff" viewBox="0 0 24 24"><path d="M10.7 5.1A10.7 10.7 0 0 1 22 12a13 13 0 0 1-1.7 2.7"/><path d="M14.1 14.2a3 3 0 0 1-4.2-4.2"/><path d="M17.5 17.5A10.7 10.7 0 0 1 2 12a13 13 0 0 1 4.4-5.6"/><path d="m2 2 20 20"/></symbol>
+  <symbol id="i-plus" viewBox="0 0 24 24"><path d="M5 12h14"/><path d="M12 5v14"/></symbol>
+  <symbol id="i-copy" viewBox="0 0 24 24"><rect width="14" height="14" x="8" y="8" rx="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></symbol>
+  <symbol id="i-link" viewBox="0 0 24 24"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></symbol>
+  <symbol id="i-msg" viewBox="0 0 24 24"><path d="M7.9 20A9 9 0 1 0 4 16.1L2 22Z"/></symbol>
+  <symbol id="i-moon" viewBox="0 0 24 24"><path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z"/></symbol>
+  <symbol id="i-file" viewBox="0 0 24 24"><path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/><path d="M14 2v4a2 2 0 0 0 2 2h4"/></symbol>
+</svg>
+
+<header class="page-head">
+  <div>
+    <h1>Job detail pane — Option A: Decision-first compact</h1>
+    <p>Mockup only. The top 200px answers "should I bother?": who, what, where, how fresh, how well it fits, who I know. Everything else is a quiet row that opens on demand.</p>
+  </div>
+  <button class="btn" id="theme" type="button" aria-pressed="false"><svg class="ico"><use href="#i-moon"/></svg>Dark mode</button>
+</header>
+
+<main class="board">
+
+<!-- 1. NOT CONNECTED -->
+<section class="col">
+  <div class="col-label">1. Not connected, full data<small>LinkedIn banner on top · ⋯ menu shown open</small></div>
+  <article class="pane" aria-label="Job detail, not connected">
+    <div class="body">
+      <div class="head">
+        <div class="topbar">
+          <div class="company"><span class="dot" title="New this scan"></span>SplitMetrics <span class="hiring">· 12 roles in 30 days</span></div>
+          <div class="nav">
+            <button class="iconbtn" aria-label="Previous job (K)" title="Previous (K)"><svg class="ico"><use href="#i-up"/></svg></button>
+            <button class="iconbtn" aria-label="Next job (J)" title="Next (J)"><svg class="ico"><use href="#i-down"/></svg></button>
+            <button class="iconbtn" aria-label="Expand (F)" title="Expand (F)"><svg class="ico"><use href="#i-max"/></svg></button>
+            <button class="iconbtn" aria-label="Close" title="Close (Esc)"><svg class="ico"><use href="#i-x"/></svg></button>
+          </div>
+        </div>
+        <h2 class="title"><svg class="ico star" aria-label="My company"><use href="#i-star"/></svg>Senior Product Manager - Core</h2>
+        <div class="meta">Remote - Europe Time Zones +3<span class="sep"></span>Remote<span class="sep"></span>Posted 2h ago<span class="sep"></span><span class="live">live on Ashby 6m ago</span></div>
+
+        <div class="verdict">
+          <div class="score" aria-label="Match score 86">86</div>
+          <div><b>Strong match</b><span class="why">Title, seniority, remote and topics fit<span class="sep"></span><span class="miss">salary not listed</span></span></div>
+        </div>
+        <div class="chips">
+          <span class="chip">Senior</span><span class="chip">Full-time</span>
+          <span class="chip soft">Product</span><span class="chip soft">AI &amp; machine learning</span>
+          <a class="chip ok">Sponsors visas</a>
+        </div>
+        <div class="unknown">Not stated: salary</div>
+      </div>
+
+      <aside class="banner" aria-label="Connect LinkedIn">
+        <h3><svg class="ico"><use href="#i-users"/></svg>See who you know at SplitMetrics</h3>
+        <button class="iconbtn" aria-label="Dismiss" title="Dismiss"><svg class="ico"><use href="#i-x"/></svg></button>
+        <p>Import your LinkedIn connections and we'll show friends who work here.</p>
+        <p class="priv"><svg class="ico ico-sm"><use href="#i-lock"/></svg>RawJobs reads LinkedIn's own export on this computer. No LinkedIn login, nothing is sent anywhere.</p>
+        <div class="acts">
+          <button class="btn btn-sm btn-primary"><svg class="ico ico-sm"><use href="#i-users"/></svg>Import connections</button>
+          <button class="btn btn-sm btn-quiet">Not now</button>
+        </div>
+      </aside>
+
+      <div class="rows">
+        <button class="row"><svg class="ico chev"><use href="#i-right"/></svg>Why it matched<span class="count">5 of 6 checks</span></button>
+        <button class="row open" aria-expanded="true"><svg class="ico chev"><use href="#i-right"/></svg>About the role<span class="count">2,140 chars</span></button>
+        <div class="section-body">
+          <p>SplitMetrics helps app teams grow with <mark>App Store</mark> experimentation and <mark>Apple Search Ads</mark> automation. As Senior PM for Core you own the platform that every product squad builds on: accounts, billing, permissions and the <mark>data pipeline</mark>.</p>
+          <p class="fade">You'll work with two engineering teams and design to ship the <mark>AI</mark>-assisted campaign builder, set the quarterly roadmap and talk to customers weekly…</p>
+          <a class="link">Read full description</a>
+        </div>
+        <button class="row"><svg class="ico chev"><use href="#i-right"/></svg>Notes<span class="count">None yet</span></button>
+        <button class="row"><svg class="ico chev"><use href="#i-right"/></svg>More at SplitMetrics<span class="count">4 open roles</span></button>
+      </div>
+    </div>
+    <div class="foot">
+      <button class="btn btn-primary" title="Opens SplitMetrics's Ashby page"><svg class="ico"><use href="#i-ext"/></svg>Apply at SplitMetrics</button>
+      <button class="btn save"><svg class="ico"><use href="#i-bm"/></svg>Save <span class="kbd">S</span></button>
+      <span class="grow"></span>
+      <button class="iconbtn boxed" aria-label="More actions" aria-expanded="true" aria-haspopup="menu" style="background:var(--bg-active)"><svg class="ico"><use href="#i-more"/></svg></button>
+      <div class="menu" role="menu">
+        <div class="mi hl" role="menuitem"><svg class="ico"><use href="#i-ban"/></svg>Not interested<span class="kbd">X</span></div>
+        <div class="mi" role="menuitem"><svg class="ico"><use href="#i-eyeoff"/></svg>Hide SplitMetrics</div>
+        <div class="msep"></div>
+        <div class="mi" role="menuitem"><svg class="ico"><use href="#i-plus"/></svg>Add to My companies</div>
+        <div class="mi" role="menuitem"><svg class="ico"><use href="#i-link"/></svg>Copy link</div>
+        <div class="mi" role="menuitem"><svg class="ico"><use href="#i-copy"/></svg>Copy description<span class="kbd">C</span></div>
+        <div class="mi" role="menuitem"><svg class="ico"><use href="#i-ext"/></svg>Open in new tab</div>
+      </div>
+    </div>
+  </article>
+</section>
+
+<!-- 2. CONNECTED -->
+<section class="col">
+  <div class="col-label">2. Connected, saved<small>Banner gone · people block + header chip · status pill in footer</small></div>
+  <article class="pane" aria-label="Job detail, connected">
+    <div class="body">
+      <div class="head">
+        <div class="topbar">
+          <div class="company"><span class="dot"></span>SplitMetrics <span class="hiring">· 12 roles in 30 days</span></div>
+          <div class="nav">
+            <button class="iconbtn" aria-label="Previous job (K)"><svg class="ico"><use href="#i-up"/></svg></button>
+            <button class="iconbtn" aria-label="Next job (J)"><svg class="ico"><use href="#i-down"/></svg></button>
+            <button class="iconbtn" aria-label="Expand (F)"><svg class="ico"><use href="#i-max"/></svg></button>
+            <button class="iconbtn" aria-label="Close"><svg class="ico"><use href="#i-x"/></svg></button>
+          </div>
+        </div>
+        <h2 class="title"><svg class="ico star"><use href="#i-star"/></svg>Senior Product Manager - Core</h2>
+        <div class="meta">Remote - Europe Time Zones +3<span class="sep"></span>Remote<span class="sep"></span>Posted 2h ago<span class="sep"></span><span class="live">live on Ashby 6m ago</span></div>
+        <div class="verdict">
+          <div class="score">86</div>
+          <div><b>Strong match</b><span class="why">Title, seniority, remote and topics fit<span class="sep"></span><span class="miss">salary not listed</span></span></div>
+        </div>
+        <div class="chips">
+          <a class="chip accent" href="#people"><svg class="ico ico-sm"><use href="#i-users"/></svg>3 you know</a>
+          <span class="chip">Senior</span><span class="chip">Full-time</span>
+          <span class="chip soft">Product</span><span class="chip soft">AI &amp; machine learning</span>
+          <a class="chip ok">Sponsors visas</a>
+        </div>
+        <div class="unknown">Not stated: salary</div>
+      </div>
+
+      <section class="people" id="people" aria-label="People at SplitMetrics">
+        <div class="people-head">
+          <h3><svg class="ico"><use href="#i-users"/></svg>3 you know at SplitMetrics</h3>
+          <a class="link" style="font-size:13px">Show all</a>
+        </div>
+        <div class="person">
+          <span class="avatar">AK</span>
+          <div class="who"><b>Anna Kowalska</b><span>1st · Head of Product</span></div>
+          <button class="btn btn-sm"><svg class="ico ico-sm"><use href="#i-msg"/></svg>Draft message</button>
+        </div>
+        <div class="person">
+          <span class="avatar">DS</span>
+          <div class="who"><b>Dmytro Shevchenko</b><span>1st · Engineering Manager, Core</span></div>
+          <button class="btn btn-sm"><svg class="ico ico-sm"><use href="#i-msg"/></svg>Draft message</button>
+        </div>
+        <div class="people-foot">
+          <a class="link">See people at SplitMetrics</a>
+          <span>Imported 12 days ago</span>
+        </div>
+      </section>
+
+      <div class="rows">
+        <button class="row open" aria-expanded="true"><svg class="ico chev"><use href="#i-right"/></svg>Why it matched<span class="count">5 of 6 checks</span></button>
+        <div class="section-body">
+          <ul class="checks">
+            <li><svg class="ico ico-sm y"><use href="#i-check"/></svg>Title: Product Manager</li>
+            <li><svg class="ico ico-sm y"><use href="#i-check"/></svg>Seniority: Senior</li>
+            <li><svg class="ico ico-sm y"><use href="#i-check"/></svg>Place: Remote, Europe</li>
+            <li><svg class="ico ico-sm y"><use href="#i-check"/></svg>Topics: AI, data pipeline, B2B SaaS</li>
+            <li><svg class="ico ico-sm y"><use href="#i-check"/></svg>Must-haves: 5+ years PM (you have 7)</li>
+            <li><svg class="ico ico-sm n"><use href="#i-help"/></svg>Salary: not listed</li>
+          </ul>
+        </div>
+        <button class="row"><svg class="ico chev"><use href="#i-right"/></svg>About the role<span class="count">2,140 chars</span></button>
+        <button class="row"><svg class="ico chev"><use href="#i-right"/></svg>Notes<span class="count">1 note</span></button>
+        <button class="row"><svg class="ico chev"><use href="#i-right"/></svg>More at SplitMetrics<span class="count">4 open roles</span></button>
+      </div>
+    </div>
+    <div class="foot">
+      <button class="btn btn-primary"><svg class="ico"><use href="#i-ext"/></svg>Apply at SplitMetrics</button>
+      <button class="status-pill" aria-label="Status: Saved. Change status"><svg class="ico"><use href="#i-bmc"/></svg>Saved<svg class="ico ico-sm"><use href="#i-down"/></svg></button>
+      <span class="grow"></span>
+      <button class="iconbtn boxed" aria-label="More actions"><svg class="ico"><use href="#i-more"/></svg></button>
+    </div>
+  </article>
+</section>
+
+<!-- 3. SPARSE -->
+<section class="col">
+  <div class="col-label">3. Sparse job<small>No description, no score detail · empty states collapse to rows</small></div>
+  <article class="pane auto" aria-label="Job detail, sparse">
+    <div class="body">
+      <div class="head">
+        <div class="topbar">
+          <div class="company">SplitMetrics</div>
+          <div class="nav">
+            <button class="iconbtn" aria-label="Previous job (K)"><svg class="ico"><use href="#i-up"/></svg></button>
+            <button class="iconbtn" aria-label="Next job (J)"><svg class="ico"><use href="#i-down"/></svg></button>
+            <button class="iconbtn" aria-label="Expand (F)"><svg class="ico"><use href="#i-max"/></svg></button>
+            <button class="iconbtn" aria-label="Close"><svg class="ico"><use href="#i-x"/></svg></button>
+          </div>
+        </div>
+        <h2 class="title">Product Operations Lead</h2>
+        <div class="meta">Limassol, Cyprus<span class="sep"></span>First seen 3d ago<span class="sep"></span><span class="live">live on Ashby 6m ago</span></div>
+        <div class="verdict">
+          <div class="score none" aria-label="Not scored">–</div>
+          <div><b>Not enough to score</b><span class="why">Only the title and place were listed. Open the job page to judge it.</span></div>
+        </div>
+        <div class="unknown">Not stated: salary, work mode, seniority, type</div>
+      </div>
+
+      <aside class="banner" aria-label="Connect LinkedIn">
+        <h3><svg class="ico"><use href="#i-users"/></svg>See who you know at SplitMetrics</h3>
+        <button class="iconbtn" aria-label="Dismiss"><svg class="ico"><use href="#i-x"/></svg></button>
+        <p>Import your LinkedIn connections and we'll show friends who work here.</p>
+        <p class="priv"><svg class="ico ico-sm"><use href="#i-lock"/></svg>RawJobs reads LinkedIn's own export on this computer. No LinkedIn login, nothing is sent anywhere.</p>
+        <div class="acts">
+          <button class="btn btn-sm btn-primary"><svg class="ico ico-sm"><use href="#i-users"/></svg>Import connections</button>
+          <button class="btn btn-sm btn-quiet">Not now</button>
+        </div>
+      </aside>
+
+      <div class="rows">
+        <div class="row muted"><svg class="ico"><use href="#i-file"/></svg>No description captured<a class="link count" style="color:var(--accent-text);font-weight:500">Open job page</a></div>
+        <button class="row"><svg class="ico chev"><use href="#i-right"/></svg>Notes<span class="count">None yet</span></button>
+      </div>
+    </div>
+    <div class="foot">
+      <button class="btn btn-primary"><svg class="ico"><use href="#i-ext"/></svg>Apply at SplitMetrics</button>
+      <button class="btn save"><svg class="ico"><use href="#i-bm"/></svg>Save <span class="kbd">S</span></button>
+      <span class="grow"></span>
+      <button class="iconbtn boxed" aria-label="More actions"><svg class="ico"><use href="#i-more"/></svg></button>
+    </div>
+  </article>
+  <div class="col-label"><small>No "Why it matched", no "More at" row, no Details table: the pane ends where the data ends.</small></div>
+</section>
+
+<!-- 4. PHONE -->
+<section class="col">
+  <div class="col-label">4. Phone, 375px<small>State 1 as a full-screen sheet</small></div>
+  <article class="pane phone" aria-label="Job detail on phone">
+    <div class="body">
+      <div class="head">
+        <div class="topbar">
+          <button class="iconbtn" aria-label="Back" style="margin-left:-6px"><svg class="ico"><use href="#i-left"/></svg></button>
+          <div class="company"><span class="dot"></span>SplitMetrics</div>
+          <div class="nav">
+            <button class="iconbtn" aria-label="Previous job"><svg class="ico"><use href="#i-up"/></svg></button>
+            <button class="iconbtn" aria-label="Next job"><svg class="ico"><use href="#i-down"/></svg></button>
+          </div>
+        </div>
+        <h2 class="title"><svg class="ico star"><use href="#i-star"/></svg>Senior Product Manager - Core</h2>
+        <div class="meta">Remote - Europe Time Zones +3<span class="sep"></span>Remote<br>Posted 2h ago<span class="sep"></span><span class="live">live on Ashby 6m ago</span></div>
+        <div class="verdict">
+          <div class="score">86</div>
+          <div><b>Strong match</b><span class="why">Title, seniority, remote and topics fit<span class="sep"></span><span class="miss">salary not listed</span></span></div>
+        </div>
+        <div class="chips">
+          <span class="chip">Senior</span><span class="chip">Full-time</span>
+          <span class="chip soft">Product</span><a class="chip ok">Sponsors visas</a>
+        </div>
+      </div>
+
+      <aside class="banner" aria-label="Connect LinkedIn">
+        <h3><svg class="ico"><use href="#i-users"/></svg>See who you know at SplitMetrics</h3>
+        <button class="iconbtn" aria-label="Dismiss"><svg class="ico"><use href="#i-x"/></svg></button>
+        <p>Import your LinkedIn connections and we'll show friends who work here.</p>
+        <p class="priv"><svg class="ico ico-sm"><use href="#i-lock"/></svg>RawJobs reads LinkedIn's own export on your computer. No LinkedIn login, nothing is sent anywhere.</p>
+        <div class="acts">
+          <button class="btn btn-sm btn-primary"><svg class="ico ico-sm"><use href="#i-users"/></svg>Import connections</button>
+          <button class="btn btn-sm btn-quiet">Not now</button>
+        </div>
+      </aside>
+
+      <div class="rows">
+        <button class="row"><svg class="ico chev"><use href="#i-right"/></svg>Why it matched<span class="count">5 of 6</span></button>
+        <button class="row"><svg class="ico chev"><use href="#i-right"/></svg>About the role<span class="count">2,140 chars</span></button>
+        <button class="row"><svg class="ico chev"><use href="#i-right"/></svg>Notes<span class="count">None yet</span></button>
+        <button class="row"><svg class="ico chev"><use href="#i-right"/></svg>More at SplitMetrics<span class="count">4 roles</span></button>
+      </div>
+    </div>
+    <div class="foot">
+      <button class="btn btn-primary"><svg class="ico"><use href="#i-ext"/></svg>Apply at SplitMetrics</button>
+      <button class="btn save"><svg class="ico"><use href="#i-bm"/></svg>Save</button>
+      <button class="iconbtn boxed" aria-label="More actions"><svg class="ico"><use href="#i-more"/></svg></button>
+    </div>
+  </article>
+</section>
+
+</main>
+
+<section class="notes">
+  <h2>What changed and why</h2>
+  <ol>
+    <li><b>Verdict in the header.</b> Score plus one sentence ("Strong match … salary not listed") sits under the title, so the pane answers "is this worth my time?" before any scrolling.</li>
+    <li><b>One freshness phrase.</b> "Posted 2h ago · live on Ashby 6m ago" replaces the fresh line, the Details table rows and the repeat inside Why it matched.</li>
+    <li><b>Facts as chips, unknowns as one line.</b> The six-box Key facts grid is gone. Known facts become chips; anything missing collapses into "Not stated: salary".</li>
+    <li><b>Details table dropped.</b> Department and Industry are chips under the title, Hiring system lives in the freshness phrase and the Apply tooltip.</li>
+    <li><b>Company signal next to the name.</b> "12 roles in 30 days" merges Company hiring and Hiring activity into one place.</li>
+    <li><b>LinkedIn as a one-time banner.</b> A dismissible ask at the top with the privacy promise up front, instead of a paragraph mid-pane. Once connected it turns into a people block and a "3 you know" chip.</li>
+    <li><b>Everything else is a quiet row.</b> Why it matched, About the role, Notes and More at SplitMetrics fold into rows with a count on the right; open on demand.</li>
+    <li><b>Empty states collapse.</b> No description becomes one row with "Open job page"; sections with nothing in them don't render, so a thin job is a short pane.</li>
+    <li><b>Clear footer.</b> Apply is primary; Save is labelled (and becomes a status pill once tracked). Not interested and Hide company move into the ⋯ menu, so no X sits beside Apply.</li>
+    <li><b>Same product.</b> Sand/orange tokens, Geist, 2–4px radius, 4/8px spacing, borders before shadows; dark mode flips the same tokens.</li>
+  </ol>
+</section>
+
+<script>
+  const b = document.getElementById('theme');
+  b.addEventListener('click', () => {
+    const dark = document.documentElement.dataset.theme !== 'dark';
+    document.documentElement.dataset.theme = dark ? 'dark' : 'light';
+    b.setAttribute('aria-pressed', String(dark));
+    b.lastChild.textContent = dark ? 'Light mode' : 'Dark mode';
+  });
+</script>
+</body>
+</html>
