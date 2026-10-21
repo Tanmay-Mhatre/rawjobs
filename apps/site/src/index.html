@@ -775,6 +775,7 @@ h1 .serif, h2 .serif { font-size: 1.08em; line-height: 0; }
 #how .split__head { position: static; max-width: 40rem; }
 #how .split__body { gap: var(--space-12); }
 @media (min-width: 1100px) { #how .features { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
+.all-features { justify-self: start; border-radius: var(--radius-dot); }
 
 /* floating cards: glass, softer corners */
 .panel, .rj-panel.routes, .rj-panel.lab, .more { border-radius: var(--radius-card); border-color: var(--glass-line); }
@@ -1308,6 +1309,7 @@ h1 .serif, h2 .serif { font-size: 1.08em; line-height: 0; }
   <div class="wrap nav__in">
     <a class="brand" href="#top" aria-label="RawJobs home">__WORDMARK__</a>
     <nav class="nav__links" aria-label="Sections">
+      <a href="/features">Features</a>
       <a href="#how">How it works</a>
       <a href="#scoring">Scoring</a>
       <a href="#get">Get it</a>
@@ -1492,6 +1494,7 @@ h1 .serif, h2 .serif { font-size: 1.08em; line-height: 0; }
         <li class="panel feature"><h3>Saved views and alerts</h3><p>Save the filters you use. Get new matches on Telegram, one message per scan.</p></li>
         <li class="panel feature"><h3>Any role, any city</h3><p>33 role families, anywhere in the world. When a scan finds nothing, it tells you why.</p></li>
       </ul>
+      <a class="rj-btn btn-lg all-features" href="/features">See every feature<svg class="rj-icon rj-icon--nudge" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></svg></a>
     </div>
   </div>
 </section>

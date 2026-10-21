@@ -243,7 +243,8 @@ const externalize = (pageHtml) =>
 const html = externalize(page("index.html"));
 // Same tokens and theme script as the home page, so it follows all four themes.
 const notFound = externalize(page("404.html"));
-if (/<script>/.test(html + notFound)) throw new Error("An inline script was left in a page: the CSP would block it.");
+const features = externalize(page("features.html"));
+if (/<script>/.test(html + notFound + features)) throw new Error("An inline script was left in a page: the CSP would block it.");
 
 rmSync(DIST, { recursive: true, force: true });
 mkdirSync(join(DIST, "fonts"), { recursive: true });
@@ -251,6 +252,7 @@ mkdirSync(join(DIST, "js"), { recursive: true });
 for (const [name, code] of scripts) writeFileSync(join(DIST, "js", name), code);
 writeFileSync(join(DIST, "index.html"), html);
 writeFileSync(join(DIST, "404.html"), notFound);
+writeFileSync(join(DIST, "features.html"), features);
 // The share image's template, only when asked (pnpm site:og renders it to public/og.png).
 if (process.argv.includes("--og")) writeFileSync(join(DIST, "og.html"), page("og.html"));
 for (const f of readdirSync(join(DS, "fonts"))) copyFileSync(join(DS, "fonts", f), join(DIST, "fonts", f));
@@ -261,7 +263,7 @@ mkdirSync(join(DIST, "images"));
 for (const f of ["radar-light.png", "radar-dark.png"]) copyFileSync(join(ROOT, "docs/images", f), join(DIST, "images", f));
 await writeBeacon();
 writeFileSync(join(DIST, "robots.txt"), `User-agent: *\nAllow: /\n\nSitemap: ${SITE_URL}/sitemap.xml\n`);
-writeFileSync(join(DIST, "sitemap.xml"), `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n  <url><loc>${SITE_URL}/</loc></url>\n</urlset>\n`);
+writeFileSync(join(DIST, "sitemap.xml"), `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n  <url><loc>${SITE_URL}/</loc></url>\n  <url><loc>${SITE_URL}/features</loc></url>\n</urlset>\n`);
 
 console.log(
   `Built ${DIST} for ${SITE_URL}${ANALYTICS_TOKEN ? " (with Web Analytics)" : ""}: ${Math.round(Buffer.byteLength(html) / 1024)} KB page, ` +

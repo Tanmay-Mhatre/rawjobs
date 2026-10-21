@@ -1,0 +1,613 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Features · RawJobs</title>
+<meta name="description" content="Everything RawJobs does: finds jobs on __COMPANIES_ROUND__ companies' careers pages, scores each one with rules you can read, tracks your applications and alerts you on Telegram. Free, open source, on your computer.">
+<link rel="canonical" href="__SITE_URL__/features">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="RawJobs">
+<meta property="og:title" content="Features · RawJobs">
+<meta property="og:description" content="Find, score, track and get alerted. Everything RawJobs does, in one place.">
+<meta property="og:url" content="__SITE_URL__/features">
+<meta property="og:image" content="__SITE_URL__/og.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="theme-color" content="#f5f1e8" media="(prefers-color-scheme: light)"><!-- design-lint-ignore: bg-canvas, light (metas can't read tokens) -->
+<meta name="theme-color" content="#120f0b" media="(prefers-color-scheme: dark)"><!-- design-lint-ignore: bg-canvas, dark -->
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<link rel="preload" href="/fonts/Geist-400.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="preload" href="/fonts/Geist-600.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="preload" href="/fonts/InstrumentSerif-Italic.woff2" as="font" type="font/woff2" crossorigin>
+<script>
+/* Theme: keep a host-set data-theme, otherwise follow the OS. Add -hc for increased contrast. */
+(function () {
+  var r = document.documentElement, t = r.getAttribute('data-theme');
+  var dark = t ? t.indexOf('dark') === 0 : matchMedia('(prefers-color-scheme: dark)').matches;
+  var more = matchMedia('(prefers-contrast: more)').matches;
+  r.setAttribute('data-theme', (dark ? 'dark' : 'light') + (more ? '-hc' : ''));
+  r.classList.add('js');
+})();
+</script>
+<style>
+/*__TOKENS__*/
+/*__BUNDLE__*/
+
+/* ===== Features page =====
+   Same tokens and cinematic layer as the home page (display type, one serif accent, glass, glow), laid out as a
+   reference: a sticky table of contents on the left, seven groups of feature cards on the right. Every claim here
+   comes from the README; examples inside the small mocks are made up and say so. */
+@font-face { font-family: 'Instrument Serif'; src: url('/fonts/InstrumentSerif-Italic.woff2') format('woff2'); font-weight: 400; font-style: italic; font-display: swap; }
+:root {
+  --page-max: 1200px;
+  --gutter: clamp(16px, 4vw, 32px);
+  --font-serif: "Instrument Serif", ui-serif, Georgia, serif;
+  --text-display-hero: 600 clamp(2.75rem, 6.4vw, 5.75rem)/0.98 var(--font-sans);
+  --text-display-section: 600 clamp(1.875rem, 3.2vw, 2.75rem)/1.05 var(--font-sans);
+  --duration-cinematic: 700ms;
+  --ease-cinematic: cubic-bezier(0.22, 1, 0.36, 1);
+  --radius-card: 12px;
+  --glass: color-mix(in srgb, var(--bg-raised) 72%, transparent);
+  --glass-line: color-mix(in srgb, var(--text-primary) 10%, transparent);
+  --signal-glow: color-mix(in srgb, var(--accent-mark) 16%, transparent);
+  --grain: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='3' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 .06 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+}
+:root[data-theme^="dark"] { color-scheme: dark; --glass: color-mix(in srgb, var(--bg-raised) 58%, transparent); --signal-glow: color-mix(in srgb, var(--accent-mark) 22%, transparent); }
+html { scroll-behavior: smooth; scroll-padding-top: 96px; }
+body { margin: 0; background: var(--bg-canvas) var(--grain); color: var(--text-primary); font: var(--text-body); -webkit-font-smoothing: antialiased; overflow-x: hidden; }
+.page.rj-root { font: var(--text-body); background: transparent; }
+.wrap { max-width: var(--page-max); margin: 0 auto; padding-inline: var(--gutter); box-sizing: border-box; }
+a { color: inherit; }
+p { margin: 0; }
+h1, h2, h3 { margin: 0; text-wrap: balance; }
+.serif { font-family: var(--font-serif); font-style: italic; font-weight: 400; letter-spacing: -0.01em; font-size: 1.08em; line-height: 0; }
+.eyebrow { font: var(--text-label); font-family: var(--font-mono); color: var(--text-secondary); }
+.eyebrow::before { content: "// "; color: var(--text-disabled); }
+.skip { position: absolute; left: var(--space-4); top: -100px; z-index: 50; }
+.skip:focus-visible { top: var(--space-4); }
+.btn-lg { height: var(--control-lg); padding: 0 var(--space-6); font: var(--text-body-strong); }
+
+/* nav: the home page's glass pill */
+.nav { position: sticky; top: 0; z-index: var(--z-sticky); padding-top: var(--space-3); pointer-events: none; }
+.nav__in { pointer-events: auto; box-sizing: border-box; margin: 0 auto; display: flex; align-items: center; gap: var(--space-6); width: calc(100% - 2 * var(--gutter)); max-width: calc(var(--page-max) - 2 * var(--gutter));
+  height: 56px; padding: 0 var(--space-2) 0 var(--space-6); border-radius: var(--radius-dot); background: var(--glass); border: 1px solid var(--glass-line);
+  -webkit-backdrop-filter: blur(16px) saturate(1.4); backdrop-filter: blur(16px) saturate(1.4); }
+.brand { display: inline-flex; align-items: center; color: var(--text-primary); text-decoration: none; min-height: 44px; }
+.brand svg { height: 22px; width: auto; display: block; }
+.nav__links { display: flex; gap: var(--space-1); margin-left: auto; }
+.nav__links a { font: var(--text-label); color: var(--text-secondary); text-decoration: none; padding: var(--space-2) var(--space-3); border-radius: var(--radius-dot); }
+.nav__links a:hover, .nav__links a[aria-current="page"] { color: var(--text-primary); background: var(--bg-hover); }
+.nav__cta { display: flex; gap: var(--space-2); }
+.nav__cta .rj-btn { border-radius: var(--radius-dot); }
+@media (max-width: 860px) {
+  .nav__in { flex-wrap: wrap; height: auto; border-radius: var(--radius-card); padding: var(--space-2) var(--space-2) 0 var(--space-4); column-gap: var(--space-4); }
+  .nav__cta { margin-left: auto; }
+  .nav__links { order: 3; width: 100%; overflow-x: auto; scrollbar-width: none; }
+  .nav__links a { white-space: nowrap; padding-block: var(--space-3); }
+}
+@media (max-width: 480px) { .nav__cta .rj-btn:not(.rj-btn--primary) { display: none; } }
+
+/* hero */
+.hero { position: relative; padding-block: clamp(56px, 9vw, 120px) clamp(40px, 6vw, 72px); isolation: isolate; }
+.hero::before { content: ""; position: absolute; z-index: -1; width: 900px; height: 900px; right: -320px; top: -360px; border-radius: 50%;
+  background: repeating-radial-gradient(circle, transparent 0 89px, var(--glass-line) 89px 90px), radial-gradient(closest-side, var(--signal-glow), transparent); }
+.hero h1 { font: var(--text-display-hero); letter-spacing: -0.05em; margin-top: var(--space-4); max-width: 14ch; }
+.hero__lede { font: var(--text-lede); color: var(--text-secondary); max-width: 46ch; margin-top: var(--space-6); text-wrap: pretty; }
+.hero__ctas { display: flex; flex-wrap: wrap; gap: var(--space-3); margin-top: var(--space-8); }
+
+/* overview: one tile per group, each a jump link */
+.map { list-style: none; margin: clamp(40px, 6vw, 72px) 0 0; padding: 0; display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: var(--space-3); }
+.map a { display: grid; gap: var(--space-2); align-content: start; height: 100%; box-sizing: border-box; padding: var(--space-4); border: 1px solid var(--glass-line); border-radius: var(--radius-card); background: var(--glass);
+  -webkit-backdrop-filter: blur(8px); backdrop-filter: blur(8px); text-decoration: none; transition: transform var(--duration-base) var(--ease-enter), border-color var(--duration-base) var(--ease-standard); }
+.map a:hover { transform: translateY(-3px); border-color: var(--border-control); }
+.map b { font: var(--text-subheading); }
+.map span { font: var(--text-small); color: var(--text-secondary); }
+.map i { font: var(--text-meta); font-family: var(--font-mono); font-style: normal; color: var(--text-disabled); }
+@media (max-width: 920px) { .map { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+
+/* body: sticky contents + groups */
+.fx { display: grid; grid-template-columns: 200px minmax(0, 1fr); gap: clamp(32px, 5vw, 72px); padding-bottom: clamp(64px, 9vw, 120px); }
+.toc { position: sticky; top: 96px; align-self: start; display: grid; gap: 2px; padding-top: var(--space-2); }
+.toc p { font: var(--text-meta); color: var(--text-disabled); margin-bottom: var(--space-2); font-family: var(--font-mono); }
+.toc a { font: var(--text-label); color: var(--text-secondary); text-decoration: none; padding: var(--space-2) var(--space-3); border-left: 2px solid var(--border-subtle); transition: color var(--duration-quick) var(--ease-standard), border-color var(--duration-quick) var(--ease-standard); }
+.toc a:hover { color: var(--text-primary); }
+.toc a[aria-current="true"] { color: var(--text-primary); border-left-color: var(--text-primary); }
+@media (max-width: 920px) { .fx { grid-template-columns: minmax(0, 1fr); } .toc { display: none; } }
+
+.grp { padding-top: clamp(48px, 7vw, 96px); scroll-margin-top: 80px; }
+.grp__head { display: grid; gap: var(--space-3); max-width: 44rem; margin-bottom: var(--space-8); }
+.grp__n { font: var(--text-label); font-family: var(--font-mono); color: var(--text-disabled); }
+.grp h2 { font: var(--text-display-section); letter-spacing: -0.045em; }
+.grp__lede { font: var(--text-lede); color: var(--text-secondary); text-wrap: pretty; }
+
+.cards { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-4); }
+.card { position: relative; display: grid; gap: var(--space-3); align-content: start; padding: var(--space-6); border: 1px solid var(--glass-line); border-radius: var(--radius-card);
+  background: var(--glass); -webkit-backdrop-filter: blur(8px); backdrop-filter: blur(8px); }
+.card--wide { grid-column: 1 / -1; }
+.card__ic { width: 40px; height: 40px; display: grid; place-items: center; border-radius: 10px; background: var(--bg-inset); color: var(--text-primary); }
+.card__ic .rj-icon { width: 20px; height: 20px; }
+.card h3 { font: var(--text-heading); }
+.card p { font: var(--text-small); color: var(--text-secondary); text-wrap: pretty; }
+.card p b, .card li b { color: var(--text-primary); font-weight: 500; }
+.card ul { margin: 0; padding-left: var(--space-4); display: grid; gap: var(--space-1); font: var(--text-small); color: var(--text-secondary); }
+.card code, .card kbd { font: var(--text-code); color: var(--text-primary); }
+@media (max-width: 760px) { .cards { grid-template-columns: minmax(0, 1fr); } }
+
+/* small mocks inside cards (examples) */
+.mock { margin-top: var(--space-2); padding: var(--space-4); border: 1px solid var(--border-subtle); border-radius: var(--radius-md); background: var(--bg-inset); display: grid; gap: var(--space-2); }
+.mock__note { font: var(--text-meta); color: var(--text-disabled); }
+.log { font: var(--text-meta); font-family: var(--font-mono); color: var(--text-secondary); display: grid; gap: var(--space-1); }
+.log .ok { color: var(--success-text); }
+.log b { color: var(--text-primary); font-weight: 500; }
+.rows { display: grid; gap: var(--space-2); }
+.row { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: var(--space-3); align-items: center; padding: var(--space-2) var(--space-3); border-radius: var(--radius-md); background: var(--bg-raised); border: 1px solid var(--border-subtle); }
+.row__t { font: var(--text-label); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.row__t small { display: block; font: var(--text-meta); color: var(--text-secondary); }
+.row__star { color: var(--accent-mark); }
+.cols { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: var(--space-2); }
+.col { display: grid; gap: var(--space-2); align-content: start; min-height: 96px; padding: var(--space-2); border-radius: var(--radius-md); background: var(--bg-raised); border: 1px solid var(--border-subtle); }
+.col > span { font: var(--text-meta); color: var(--text-secondary); }
+.col i { display: block; height: 24px; border-radius: var(--radius-sm); background: var(--bg-inset); border: 1px solid var(--border-subtle); }
+.col i.on { border-color: var(--text-primary); }
+@media (max-width: 560px) { .cols { grid-template-columns: repeat(3, minmax(0, 1fr)); } .col:nth-child(n+4) { display: none; } }
+.msg { justify-self: start; max-width: 32rem; padding: var(--space-3) var(--space-4); border-radius: 14px 14px 14px 4px; background: var(--bg-raised); border: 1px solid var(--border-subtle); font: var(--text-small); display: grid; gap: var(--space-1); }
+.msg b { font-weight: 600; }
+.msg span { color: var(--text-secondary); }
+.keys { display: flex; flex-wrap: wrap; gap: var(--space-2) var(--space-4); font: var(--text-small); color: var(--text-secondary); }
+.keys span { display: inline-flex; align-items: center; gap: var(--space-2); }
+
+/* the scoring bar: four parts out of 100 */
+.bar { display: grid; grid-template-columns: 30fr 20fr 40fr 10fr; gap: 3px; height: 10px; }
+.bar > span { position: relative; border-radius: var(--radius-sm); background: var(--border-subtle); overflow: hidden; }
+.bar > span > i { position: absolute; inset: 0; background: var(--text-primary); transform-origin: left; transform: scaleX(var(--f)); transition: transform var(--duration-cinematic) var(--ease-cinematic); }
+.legend { display: flex; flex-wrap: wrap; gap: var(--space-1) var(--space-4); font: var(--text-meta); color: var(--text-secondary); font-variant-numeric: tabular-nums; }
+.legend b { color: var(--text-primary); }
+
+/* coming next */
+.next { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: var(--space-3); }
+.next li { padding: var(--space-4); border: 1px dashed var(--border-control); border-radius: var(--radius-card); font: var(--text-label); display: grid; gap: var(--space-1); }
+.next small { font: var(--text-meta); color: var(--text-secondary); }
+@media (max-width: 920px) { .next { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+
+/* final call + footer */
+.final { position: relative; overflow: hidden; isolation: isolate; display: grid; gap: var(--space-6); justify-items: start; padding: clamp(40px, 7vw, 96px); border: 1px solid var(--glass-line); border-radius: var(--radius-card); background: var(--bg-raised); }
+.final::before { content: ""; position: absolute; z-index: -1; width: 800px; height: 800px; right: -280px; top: 50%; margin-top: -400px; border-radius: 50%;
+  background: repeating-radial-gradient(circle, transparent 0 79px, var(--glass-line) 79px 80px), radial-gradient(closest-side, var(--signal-glow), transparent); }
+.final h2 { font: var(--text-display-section); letter-spacing: -0.045em; max-width: 18ch; }
+.final p { color: var(--text-secondary); }
+.foot { padding-top: var(--space-12); overflow: hidden; }
+.foot__grid { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: var(--space-8); align-items: start; }
+.foot__links { display: flex; flex-wrap: wrap; gap: var(--space-1) var(--space-4); }
+.foot__links a { font: var(--text-small); color: var(--text-secondary); text-decoration: none; padding: var(--space-3) 0; }
+.foot__links a:hover { color: var(--text-primary); text-decoration: underline; text-underline-offset: 3px; }
+.foot__small { font: var(--text-meta); color: var(--text-secondary); max-width: var(--prose-max); margin-top: var(--space-4); }
+@media (max-width: 760px) { .foot__grid { grid-template-columns: minmax(0, 1fr); } }
+.mark { margin: clamp(32px, 6vw, 72px) 0 0; display: flex; justify-content: center; align-items: baseline; font: 500 clamp(4rem, 21vw, 19rem)/0.78 var(--font-mono); letter-spacing: -0.06em; user-select: none; }
+.mark span { display: inline-block; color: transparent; background: linear-gradient(180deg, var(--text-primary) 10%, color-mix(in srgb, var(--text-primary) 0%, transparent) 95%); -webkit-background-clip: text; background-clip: text; }
+.mark i { display: inline-block; width: 0.5em; height: 0.62em; margin-left: 0.1em; background: var(--brand-signal); }
+
+/* cards rise in as they scroll into view (only those below the fold at load) */
+@keyframes rise { from { opacity: 0; transform: translateY(12px); } }
+.rv-wait { opacity: 0; }
+.rv-in { animation: rise var(--duration-cinematic) var(--ease-cinematic) both; animation-delay: calc(var(--i, 0) * 60ms); }
+@media (prefers-reduced-motion: reduce) {
+  html { scroll-behavior: auto; }
+  .page *, .page *::before, .page *::after { animation: none !important; transition: none !important; }
+  .rv-wait { opacity: 1; }
+}
+@media (forced-colors: active) { .mark span { color: CanvasText; background: none; } .mark i, .bar > span > i { background: CanvasText; forced-color-adjust: none; } }
+</style>
+<!--__ANALYTICS__-->
+</head>
+<body>
+<div class="page rj-root">
+<a class="rj-btn rj-btn--primary skip" href="#main">Skip to content</a>
+
+<header class="nav">
+  <div class="nav__in">
+    <a class="brand" href="/" aria-label="RawJobs home">__WORDMARK__</a>
+    <nav class="nav__links" aria-label="Site">
+      <a href="/features" aria-current="page">Features</a>
+      <a href="/#how">How it works</a>
+      <a href="/#scoring">Scoring</a>
+      <a href="/#faq">FAQ</a>
+    </nav>
+    <div class="nav__cta">
+      <a class="rj-btn" href="https://github.com/Tanmay-Mhatre/rawjobs" target="_blank" rel="noopener">Star on GitHub<span class="rj-sr"> (opens in a new tab)</span></a>
+      <a class="rj-btn rj-btn--primary" href="/#get">Get RawJobs</a>
+    </div>
+  </div>
+</header>
+
+<main id="main">
+<section class="hero" aria-labelledby="hero-title">
+  <div class="wrap">
+    <p class="eyebrow">Features</p>
+    <h1 id="hero-title">Everything it does, in <em class="serif">one</em> place</h1>
+    <p class="hero__lede">RawJobs finds jobs on the careers pages of __COMPANIES_ROUND__ companies, scores each one with rules you can read, and keeps track of what you apply to. Free, open source, and it all runs on your computer.</p>
+    <div class="hero__ctas">
+      <a class="rj-btn rj-btn--primary btn-lg" href="/#get">Get RawJobs</a>
+      <a class="rj-btn btn-lg" href="https://github.com/Tanmay-Mhatre/rawjobs" target="_blank" rel="noopener">View on GitHub<span class="rj-sr"> (opens in a new tab)</span></a>
+    </div>
+    <ul class="map" aria-label="Features at a glance">
+      <li><a href="#find"><i>01</i><b>Find</b><span>__COMPANIES_ROUND__ companies, __SYSTEMS_N__ hiring systems</span></a></li>
+      <li><a href="#score"><i>02</i><b>Score</b><span>0 to 100, with the reason written out</span></a></li>
+      <li><a href="#radar"><i>03</i><b>Radar</b><span>Best match first, filters, saved views</span></a></li>
+      <li><a href="#track"><i>04</i><b>Track</b><span>Pipeline, notes, company health</span></a></li>
+      <li><a href="#automate"><i>05</i><b>Automate</b><span>Scheduled scans, Telegram alerts</span></a></li>
+      <li><a href="#setup"><i>06</i><b>Set up</b><span>3 minutes, from your resume</span></a></li>
+      <li><a href="#yours"><i>07</i><b>Yours</b><span>Private, local, self-updating</span></a></li>
+      <li><a href="#next"><i>08</i><b>Coming next</b><span>What's on the roadmap</span></a></li>
+    </ul>
+  </div>
+</section>
+
+<div class="wrap fx">
+  <nav class="toc" aria-label="On this page">
+    <p>On this page</p>
+    <a href="#find">Find</a>
+    <a href="#score">Score</a>
+    <a href="#radar">Radar</a>
+    <a href="#track">Track</a>
+    <a href="#automate">Automate</a>
+    <a href="#setup">Set up</a>
+    <a href="#yours">Yours</a>
+    <a href="#next">Coming next</a>
+  </nav>
+  <div>
+
+  <!-- 01 FIND -->
+  <section class="grp" id="find" aria-labelledby="find-title">
+    <div class="grp__head">
+      <span class="grp__n">01</span>
+      <h2 id="find-title">Find jobs <em class="serif">straight</em> from the source</h2>
+      <p class="grp__lede">It reads companies' own careers pages, not reposts, so when you apply, your resume lands in their hiring system.</p>
+    </div>
+    <ul class="cards">
+      <li class="card">
+        <span class="card__ic" aria-hidden="true"><svg class="rj-icon" viewBox="0 0 24 24"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M3 5v14a9 3 0 0 0 18 0V5"/><path d="M3 12a9 3 0 0 0 18 0"/></svg></span>
+        <h3>A shared directory of __COMPANIES_ROUND__ companies</h3>
+        <p>Which hiring system and board each company uses, whether it's live, and its industries. Rebuilt every week from public sources, with no AI, and downloaded by your copy when yours is more than a week old.</p>
+      </li>
+      <li class="card">
+        <span class="card__ic" aria-hidden="true"><svg class="rj-icon" viewBox="0 0 24 24"><rect width="20" height="14" x="2" y="3" rx="2"/><path d="M8 21h8"/><path d="M12 17v4"/></svg></span>
+        <h3>__SYSTEMS_N__ hiring systems, __BOARDS_N__ job boards</h3>
+        <p>Greenhouse, Lever, Ashby, Workday, SmartRecruiters and many more, plus public boards such as Hacker News "Who is hiring", Remotive and We Work Remotely.</p>
+      </li>
+      <li class="card">
+        <span class="card__ic" aria-hidden="true"><svg class="rj-icon" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg></span>
+        <h3>Two scan scopes</h3>
+        <ul>
+          <li><b>My companies + my industries</b>: your companies plus every live company tagged with your industries. A minute or two.</li>
+          <li><b>All companies</b>: every live board in the directory. Longer, and you can stop and resume it.</li>
+        </ul>
+      </li>
+      <li class="card">
+        <span class="card__ic" aria-hidden="true"><svg class="rj-icon" viewBox="0 0 24 24"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg></span>
+        <h3>Add any company by link</h3>
+        <p>Paste a careers page and RawJobs works out its hiring system. Or browse the directory and get suggestions that fit your profile.</p>
+      </li>
+      <li class="card card--wide">
+        <span class="card__ic" aria-hidden="true"><svg class="rj-icon" viewBox="0 0 24 24"><path d="M13 2 3 14h9l-1 8 10-12h-9l1-8z"/></svg></span>
+        <h3>Fast scans that skip the empty ones</h3>
+        <p>A shared job feed tells each scan which companies have nothing passing your title and place rules, so it can skip them. Everything else is fetched live by your own scan: every job you see came from the company's page.</p>
+        <div class="mock" aria-hidden="true">
+          <div class="log">
+            <div><span class="ok">✓</span> Syncing the directory: <b>up to date</b></div>
+            <div><span class="ok">✓</span> Job feed: skipping companies with nothing for you</div>
+            <div><span class="ok">✓</span> Fetching live: Greenhouse, Lever, Ashby, Workday…</div>
+            <div><span class="ok">✓</span> Scoring every job against your profile</div>
+          </div>
+        </div>
+      </li>
+    </ul>
+  </section>
+
+  <!-- 02 SCORE -->
+  <section class="grp" id="score" aria-labelledby="score-title">
+    <div class="grp__head">
+      <span class="grp__n">02</span>
+      <h2 id="score-title">A score you can <em class="serif">read</em></h2>
+      <p class="grp__lede">No AI and no black box. Every job gets 0 to 100 from rules you set, and the reason is written out on every job.</p>
+    </div>
+    <ul class="cards">
+      <li class="card card--wide">
+        <span class="card__ic" aria-hidden="true"><svg class="rj-icon" viewBox="0 0 24 24"><path d="M3 3v18h18"/><path d="M7 16v-3"/><path d="M11 16V9"/><path d="M15 16v-5"/><path d="M19 16V6"/></svg></span>
+        <h3>Four parts, out of 100</h3>
+        <p>Up to <b>30</b> for the title (and how close its level is to yours), <b>20</b> for the place, <b>40</b> for your topics in the posting, and <b>10</b> for the company's industry.</p>
+        <div class="mock" aria-hidden="true">
+          <div class="bar"><span><i style="--f:1"></i></span><span><i style="--f:1"></i></span><span><i style="--f:.675"></i></span><span><i style="--f:1"></i></span></div>
+          <div class="legend"><span>Title <b>30</b></span><span>Place <b>20</b></span><span>Topics <b>27</b>/40</span><span>Industry <b>10</b></span><span>= <b>87</b></span></div>
+          <span class="mock__note">Example</span>
+        </div>
+      </li>
+      <li class="card">
+        <span class="card__ic" aria-hidden="true"><svg class="rj-icon" viewBox="0 0 24 24"><path d="M22 3H2l8 9.46V19l4 2v-8.54L22 3z"/></svg></span>
+        <h3>Gates first</h3>
+        <p>The title must have one of your titles and none you excluded, and the place must be yours or an accepted remote region. Anything else scores 0 and is hidden by default.</p>
+      </li>
+      <li class="card">
+        <span class="card__ic" aria-hidden="true"><svg class="rj-icon" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="m4.9 4.9 14.2 14.2"/></svg></span>
+        <h3>Dealbreakers</h3>
+        <ul>
+          <li><b>Salary floor</b>: the posted range tops out more than 5% under it</li>
+          <li><b>Work authorization</b>: it won't sponsor where you'd need it</li>
+          <li><b>Avoid</b>: work you won't do</li>
+          <li>Residents-only postings for another country</li>
+        </ul>
+        <p>The job still shows, with the reason, but it's never a strong match.</p>
+      </li>
+      <li class="card">
+        <span class="card__ic" aria-hidden="true"><svg class="rj-icon" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg></span>
+        <h3>Fresh, but fair</h3>
+        <p>Best match adds a freshness boost that halves every 3 days, so a strong job posted today beats an equal one from last week, and a weak new job never leaps a strong one.</p>
+      </li>
+      <li class="card">
+        <span class="card__ic" aria-hidden="true"><svg class="rj-icon" viewBox="0 0 24 24"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg></span>
+        <h3>Your rules, your threshold</h3>
+        <p>Choose what counts as a strong match. Change titles, places, topics and dealbreakers any time in Settings, or edit the config file by hand.</p>
+      </li>
+    </ul>
+  </section>
+
+  <!-- 03 RADAR -->
+  <section class="grp" id="radar" aria-labelledby="radar-title">
+    <div class="grp__head">
+      <span class="grp__n">03</span>
+      <h2 id="radar-title">Your Radar, best match <em class="serif">first</em></h2>
+      <p class="grp__lede">One list of every job for you, with the companies you'd love to join starred and their newest roles up top.</p>
+    </div>
+    <ul class="cards">
+      <li class="card card--wide">
+        <span class="card__ic" aria-hidden="true"><svg class="rj-icon" viewBox="0 0 24 24"><path d="M19.07 4.93A10 10 0 0 0 6.99 3.34"/><path d="M4 6h.01"/><path d="M2.29 9.62A10 10 0 1 0 21.31 8.35"/><path d="M16.24 7.76A6 6 0 1 0 8.23 16.67"/><path d="M12 18h.01"/><path d="M17.99 11.66A6 6 0 0 1 15.77 16.67"/><circle cx="12" cy="12" r="2"/><path d="m13.41 10.59 5.66-5.66"/></svg></span>
+        <h3>Starred companies, nudged up</h3>
+        <p>Your companies get a ★, +10 in Best match, and their three newest jobs in a strip on top. One company shows two roles before the rest fold into "+N more".</p>
+        <div class="mock" aria-hidden="true">
+          <div class="rows">
+            <div class="row"><span class="rj-score rj-score--strong"><i class="rj-glyph rj-glyph--full"></i>92</span><span class="row__t">Head of Product, Exchange<small>Acme Exchange · Dubai · Hybrid</small></span><span class="row__star">★</span></div>
+            <div class="row"><span class="rj-score rj-score--strong"><i class="rj-glyph rj-glyph--full"></i>81</span><span class="row__t">Senior Product Manager, Payments<small>Halcyon Labs · Remote (EMEA)</small></span><span></span></div>
+            <div class="row"><span class="rj-score rj-score--fair"><i class="rj-glyph rj-glyph--half"></i>58</span><span class="row__t">Product Manager, Growth<small>Meridian Bank · London</small></span><span></span></div>
+          </div>
+          <span class="mock__note">Example data</span>
+        </div>
+      </li>
+      <li class="card">
+        <span class="card__ic" aria-hidden="true"><svg class="rj-icon" viewBox="0 0 24 24"><path d="M3 6h18"/><path d="M7 12h10"/><path d="M10 18h4"/></svg></span>
+        <h3>Views, sorts and filters</h3>
+        <p>All, My companies, New, Strong, Saved and Applied, plus views you save. Sort by best match, newest, highest salary or company. Filter by date, country, workplace, seniority, industry, company, keywords, match and hiring system.</p>
+      </li>
+      <li class="card">
+        <span class="card__ic" aria-hidden="true"><svg class="rj-icon" viewBox="0 0 24 24"><path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/><path d="M14 2v4a2 2 0 0 0 2 2h4"/><path d="M10 13H8"/><path d="M16 17H8"/></svg></span>
+        <h3>Job detail, ready for your CV</h3>
+        <p>Why it matched, the description, salary, your notes and status. Copy the description in one click to tailor your CV.</p>
+      </li>
+      <li class="card card--wide">
+        <span class="card__ic" aria-hidden="true"><svg class="rj-icon" viewBox="0 0 24 24"><rect width="20" height="16" x="2" y="4" rx="2"/><path d="M6 8h.01"/><path d="M10 8h.01"/><path d="M14 8h.01"/><path d="M18 8h.01"/><path d="M8 12h.01"/><path d="M12 12h.01"/><path d="M16 12h.01"/><path d="M7 16h10"/></svg></span>
+        <h3>Fast from the keyboard</h3>
+        <div class="keys">
+          <span><kbd class="rj-kbd">j</kbd><kbd class="rj-kbd">k</kbd> move</span>
+          <span><kbd class="rj-kbd">Enter</kbd> open</span>
+          <span><kbd class="rj-kbd">s</kbd> save</span>
+          <span><kbd class="rj-kbd">a</kbd> applied</span>
+          <span><kbd class="rj-kbd">x</kbd> not interested</span>
+          <span><kbd class="rj-kbd">c</kbd> copy description</span>
+          <span><kbd class="rj-kbd">r</kbd> scan now</span>
+          <span><kbd class="rj-kbd">/</kbd> search</span>
+          <span><kbd class="rj-kbd">?</kbd> all shortcuts</span>
+        </div>
+      </li>
+    </ul>
+  </section>
+
+  <!-- 04 TRACK -->
+  <section class="grp" id="track" aria-labelledby="track-title">
+    <div class="grp__head">
+      <span class="grp__n">04</span>
+      <h2 id="track-title">Track every <em class="serif">application</em></h2>
+      <p class="grp__lede">From saved to offer, and which companies are still worth watching.</p>
+    </div>
+    <ul class="cards">
+      <li class="card card--wide">
+        <span class="card__ic" aria-hidden="true"><svg class="rj-icon" viewBox="0 0 24 24"><rect width="6" height="16" x="3" y="4" rx="1"/><rect width="6" height="10" x="10" y="4" rx="1"/><rect width="5" height="13" x="17" y="4" rx="1"/></svg></span>
+        <h3>A pipeline you drag along</h3>
+        <p>Saved, applied, interviewing, offer, rejected. Drag cards between columns, or move the focused one with <kbd class="rj-kbd">[</kbd> and <kbd class="rj-kbd">]</kbd>. On a phone it shows one column at a time.</p>
+        <div class="mock" aria-hidden="true">
+          <div class="cols">
+            <div class="col"><span>Saved</span><i></i><i></i></div>
+            <div class="col"><span>Applied</span><i class="on"></i><i></i></div>
+            <div class="col"><span>Interviewing</span><i></i></div>
+            <div class="col"><span>Offer</span></div>
+            <div class="col"><span>Rejected</span><i></i></div>
+          </div>
+        </div>
+      </li>
+      <li class="card">
+        <span class="card__ic" aria-hidden="true"><svg class="rj-icon" viewBox="0 0 24 24"><path d="M6 22V4a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v18Z"/><path d="M6 12H4a2 2 0 0 0-2 2v6a2 2 0 0 0 2 2h2"/><path d="M18 9h2a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2h-2"/><path d="M10 6h4"/><path d="M10 10h4"/><path d="M10 14h4"/><path d="M10 18h4"/></svg></span>
+        <h3>Company health</h3>
+        <p>My companies shows what each has for you now, scan health and broken links. Companies with nothing for you in 10+ scans over a week are flagged for removal.</p>
+      </li>
+      <li class="card">
+        <span class="card__ic" aria-hidden="true"><svg class="rj-icon" viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="m7 10 5 5 5-5"/><path d="M12 15V3"/></svg></span>
+        <h3>Notes, statuses, backups</h3>
+        <p>Your notes and statuses are saved on your computer. Export them for a backup and import them back.</p>
+      </li>
+    </ul>
+  </section>
+
+  <!-- 05 AUTOMATE -->
+  <section class="grp" id="automate" aria-labelledby="automate-title">
+    <div class="grp__head">
+      <span class="grp__n">05</span>
+      <h2 id="automate-title">New matches with your <em class="serif">coffee</em></h2>
+      <p class="grp__lede">Set a time, and RawJobs scans and messages you. Nothing to remember.</p>
+    </div>
+    <ul class="cards">
+      <li class="card">
+        <span class="card__ic" aria-hidden="true"><svg class="rj-icon" viewBox="0 0 24 24"><path d="M8 2v4"/><path d="M16 2v4"/><rect width="18" height="18" x="3" y="4" rx="2"/><path d="M3 10h18"/><path d="m9 16 2 2 4-4"/></svg></span>
+        <h3>Scheduled scans</h3>
+        <p>Pick one or two times a day and a scope. It uses your computer's own scheduler (Task Scheduler, launchd or a systemd timer), runs while the computer is on, and catches up on a missed run.</p>
+      </li>
+      <li class="card">
+        <span class="card__ic" aria-hidden="true"><svg class="rj-icon" viewBox="0 0 24 24"><path d="m22 2-7 20-4-9-9-4Z"/><path d="M22 2 11 13"/></svg></span>
+        <h3>Telegram alerts</h3>
+        <p>A 2-minute guided setup with your own bot, then a test message. Each scheduled scan sends one digest of new matches, and nothing when nothing is new.</p>
+        <div class="mock" aria-hidden="true">
+          <div class="msg"><b>RawJobs: new matches</b><span>92 · Head of Product, Exchange · Acme Exchange</span><span>81 · Senior PM, Payments · Halcyon Labs</span></div>
+          <span class="mock__note">Example message</span>
+        </div>
+      </li>
+      <li class="card card--wide">
+        <span class="card__ic" aria-hidden="true"><svg class="rj-icon" viewBox="0 0 24 24"><path d="m4 17 6-6-6-6"/><path d="M12 19h8"/></svg></span>
+        <h3>A command line, too</h3>
+        <p>Everything the dashboard does, from the terminal: <code>rawjobs scan --notify</code>, <code>rawjobs schedule install --time 08:00</code>, <code>rawjobs detect &lt;careers-url&gt;</code>, <code>rawjobs companies suggest</code>.</p>
+      </li>
+    </ul>
+  </section>
+
+  <!-- 06 SET UP -->
+  <section class="grp" id="setup" aria-labelledby="setup-title">
+    <div class="grp__head">
+      <span class="grp__n">06</span>
+      <h2 id="setup-title">Set up in about <em class="serif">3</em> minutes</h2>
+      <p class="grp__lede">The dashboard walks you through it the first time. Skip any step and come back later.</p>
+    </div>
+    <ul class="cards">
+      <li class="card">
+        <span class="card__ic" aria-hidden="true"><svg class="rj-icon" viewBox="0 0 24 24"><path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/><path d="M14 2v4a2 2 0 0 0 2 2h4"/></svg></span>
+        <h3>Start from your resume</h3>
+        <p>Paste it and get suggested roles, places and topics. Keep several versions? A ready prompt for your own Claude or ChatGPT merges them into one master resume. It stays on your computer.</p>
+      </li>
+      <li class="card">
+        <span class="card__ic" aria-hidden="true"><svg class="rj-icon" viewBox="0 0 24 24"><path d="M16 20V4a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"/><rect width="20" height="14" x="2" y="6" rx="2"/></svg></span>
+        <h3>Roles from 33 job families</h3>
+        <p>Pick your family and its titles appear as chips. Add titles from any family with search.</p>
+      </li>
+      <li class="card">
+        <span class="card__ic" aria-hidden="true"><svg class="rj-icon" viewBox="0 0 24 24"><path d="M20 10c0 4.99-5.54 10.19-7.4 11.79a1 1 0 0 1-1.2 0C9.54 20.19 4 14.99 4 10a8 8 0 0 1 16 0"/><circle cx="12" cy="10" r="3"/></svg></span>
+        <h3>Any place in the world</h3>
+        <p>Search any country, city or region. A country brings its main cities with it; drop single cities in a click. Choose whether remote counts, and where.</p>
+      </li>
+      <li class="card">
+        <span class="card__ic" aria-hidden="true"><svg class="rj-icon" viewBox="0 0 24 24"><rect width="7" height="7" x="3" y="3" rx="1"/><rect width="7" height="7" x="14" y="3" rx="1"/><rect width="7" height="7" x="14" y="14" rx="1"/><rect width="7" height="7" x="3" y="14" rx="1"/></svg></span>
+        <h3>50 industries in 7 groups</h3>
+        <p>Crypto, Fintech, AI and more. Companies in your industries are scanned and suggested to you.</p>
+      </li>
+    </ul>
+  </section>
+
+  <!-- 07 YOURS -->
+  <section class="grp" id="yours" aria-labelledby="yours-title">
+    <div class="grp__head">
+      <span class="grp__n">07</span>
+      <h2 id="yours-title">On <em class="serif">your</em> computer</h2>
+      <p class="grp__lede">No account and no tracking. You own the app, the data and the code.</p>
+    </div>
+    <ul class="cards">
+      <li class="card">
+        <span class="card__ic" aria-hidden="true"><svg class="rj-icon" viewBox="0 0 24 24"><path d="M20 16V7a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v9m16 0H4m16 0 1.28 2.55a1 1 0 0 1-.9 1.45H3.62a1 1 0 0 1-.9-1.45L4 16"/></svg></span>
+        <h3>One-line install</h3>
+        <p>On Windows, Mac and Linux. No Node, git, account or admin rights. It starts when you log in and adds a RawJobs shortcut.</p>
+      </li>
+      <li class="card">
+        <span class="card__ic" aria-hidden="true"><svg class="rj-icon" viewBox="0 0 24 24"><path d="M21 12a9 9 0 1 1-9-9c2.52 0 4.93 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/></svg></span>
+        <h3>Updates itself, safely</h3>
+        <p>New versions download in the background. Install them automatically, ask first, or never. If a new version doesn't start, it goes back to the one that did.</p>
+      </li>
+      <li class="card">
+        <span class="card__ic" aria-hidden="true"><svg class="rj-icon" viewBox="0 0 24 24"><rect width="18" height="11" x="3" y="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg></span>
+        <h3>Private by design</h3>
+        <p>Your resume, settings, statuses and run history stay on your computer, and the app sends no usage data. It only talks to job boards, GitHub and, if you set it up, Telegram.</p>
+      </li>
+      <li class="card">
+        <span class="card__ic" aria-hidden="true"><svg class="rj-icon" viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/><path d="M12 2v2"/><path d="M12 20v2"/><path d="m4.93 4.93 1.41 1.41"/><path d="m17.66 17.66 1.41 1.41"/><path d="M2 12h2"/><path d="M20 12h2"/><path d="m6.34 17.66-1.41 1.41"/><path d="m19.07 4.93-1.41 1.41"/></svg></span>
+        <h3>Light, dark, high contrast</h3>
+        <p>Follow your system or pick a theme, each with an increased-contrast version, and choose how dense the job list is.</p>
+      </li>
+      <li class="card card--wide">
+        <span class="card__ic" aria-hidden="true"><svg class="rj-icon" viewBox="0 0 24 24"><path d="M15 22v-4a4.8 4.8 0 0 0-1-3.5c3 0 6-2 6-5.5.08-1.25-.27-2.48-1-3.5.28-1.15.28-2.35 0-3.5 0 0-1 0-3 1.5-2.64-.5-5.36-.5-8 0C6 2 5 2 5 2c-.3 1.15-.3 2.35 0 3.5A5.403 5.403 0 0 0 4 9c0 3.5 3 5.5 6 5.5-.39.49-.68 1.05-.85 1.65-.17.6-.22 1.23-.15 1.85v4"/><path d="M9 18c-4.51 2-5-2-7-2"/></svg></span>
+        <h3>Open source, and open to help</h3>
+        <p>The code is MIT licensed and the shared directory is CC BY 4.0. Suggest a company, add a hiring system (each one is a small file), or run your own copy of the directory.</p>
+      </li>
+    </ul>
+  </section>
+
+  <!-- 08 NEXT -->
+  <section class="grp" id="next" aria-labelledby="next-title">
+    <div class="grp__head">
+      <span class="grp__n">08</span>
+      <h2 id="next-title">Coming <em class="serif">next</em></h2>
+      <p class="grp__lede">On the roadmap, not in the app yet.</p>
+    </div>
+    <ul class="next">
+      <li>Scheduled scans in GitHub Actions<small>In your own GitHub account</small></li>
+      <li>Optional AI re-rank<small>With your own key</small></li>
+      <li>Email alerts<small>Alongside Telegram</small></li>
+      <li>GitHub status sync<small>Planned</small></li>
+    </ul>
+  </section>
+
+  <section class="grp" aria-labelledby="final-title">
+    <div class="final">
+      <p class="eyebrow">Get started</p>
+      <h2 id="final-title">Your next role may <em class="serif">already</em> be on a careers page</h2>
+      <p>Free, open source, and installed in about a minute.</p>
+      <div class="hero__ctas" style="margin-top:0">
+        <a class="rj-btn rj-btn--primary btn-lg" href="/#get">Get RawJobs</a>
+        <a class="rj-btn btn-lg" href="https://github.com/Tanmay-Mhatre/rawjobs" target="_blank" rel="noopener">Star on GitHub<span class="rj-sr"> (opens in a new tab)</span></a>
+      </div>
+    </div>
+  </section>
+  </div>
+</div>
+</main>
+
+<footer class="foot">
+  <div class="wrap">
+    <div class="foot__grid">
+      <div>
+        <a class="brand" href="/" aria-label="RawJobs home">__WORDMARK__</a>
+        <p class="foot__small">Built by Tanmay Mhatre. MIT licensed. Not affiliated with LinkedIn or any job site or hiring system named here; names and trademarks belong to their owners. Jobs on this page are made-up examples. This site uses cookieless Cloudflare Web Analytics; the app uses none.</p>
+      </div>
+      <nav class="foot__links" aria-label="Project links">
+        <a href="https://github.com/Tanmay-Mhatre/rawjobs" target="_blank" rel="noopener">GitHub<span class="rj-sr"> (opens in a new tab)</span></a>
+        <a href="https://github.com/Tanmay-Mhatre/rawjobs/blob/main/docs/install.md" target="_blank" rel="noopener">Install guide<span class="rj-sr"> (opens in a new tab)</span></a>
+        <a href="https://github.com/Tanmay-Mhatre/rawjobs/blob/main/PRIVACY.md" target="_blank" rel="noopener">Privacy<span class="rj-sr"> (opens in a new tab)</span></a>
+        <a href="https://github.com/Tanmay-Mhatre/rawjobs/blob/main/CONTRIBUTING.md" target="_blank" rel="noopener">Contributing<span class="rj-sr"> (opens in a new tab)</span></a>
+        <a href="https://github.com/Tanmay-Mhatre/rawjobs/blob/main/LICENSE" target="_blank" rel="noopener">License<span class="rj-sr"> (opens in a new tab)</span></a>
+      </nav>
+    </div>
+  </div>
+  <p class="mark" aria-hidden="true"><span>r</span><span>a</span><span>w</span><span>j</span><span>o</span><span>b</span><span>s</span><i></i></p>
+</footer>
+</div>
+
+<script>
+/* Features page: cards below the fold rise in once, and the contents highlights the group in view. */
+(function () {
+  var reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
+  if (!('IntersectionObserver' in window)) return;
+  if (!reduce) {
+    var vh = innerHeight;
+    var rio = new IntersectionObserver(function (es) {
+      es.forEach(function (e) { if (!e.isIntersecting) return; rio.unobserve(e.target); e.target.classList.remove('rv-wait'); e.target.classList.add('rv-in'); });
+    }, { rootMargin: '0px 0px -8% 0px', threshold: 0.1 });
+    Array.prototype.forEach.call(document.querySelectorAll('.cards > li, .next > li, .grp__head'), function (el) {
+      if (el.getBoundingClientRect().top < vh * 0.92) return;
+      var sibs = el.parentNode.children; el.style.setProperty('--i', Array.prototype.indexOf.call(sibs, el) % 4);
+      el.classList.add('rv-wait'); rio.observe(el);
+    });
+  }
+  var links = Array.prototype.slice.call(document.querySelectorAll('.toc a'));
+  var sio = new IntersectionObserver(function (es) {
+    es.forEach(function (e) {
+      if (!e.isIntersecting) return;
+      links.forEach(function (a) { a.setAttribute('aria-current', a.getAttribute('href') === '#' + e.target.id ? 'true' : 'false'); });
+    });
+  }, { rootMargin: '-40% 0px -55% 0px' });
+  Array.prototype.forEach.call(document.querySelectorAll('.grp[id]'), function (s) { sio.observe(s); });
+})();
+</script>
+</body>
+</html>
