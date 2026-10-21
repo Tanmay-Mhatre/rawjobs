@@ -35,7 +35,12 @@ import { Button, Card, cx, IconButton } from "./ui";
 type Props = {
   user: UserState;
   jobsById: Map<string, Job>;
+  /** The Radar's full view of a job ("Open full job" in the job's dialog). */
   onOpen: (job: Job) => void;
+  /** Apply pressed in the job's dialog: the same "Did you apply?" as on the Radar. */
+  onApply?: (job: Job) => void;
+  /** Your minimum score, so the dialog's score badge reads the same as on the Radar. */
+  minScore?: number;
   /** Change one card: a move (status undefined takes it off the board; its note, if any, stays), a follow-up date… */
   onPatch: (id: string, entry: Entry, patch: EntryPatch) => void;
   /** Track a job RawJobs didn't find. */
@@ -130,7 +135,7 @@ export function closedHint(items: Item[]): string {
   return [...counts].map(([label, n]) => `${n} ${label}`).join(", ");
 }
 
-export function Pipeline({ user, jobsById, onOpen, onPatch, onAdd, weeklyPlan, onWeeklyPlan, onSetup, goRadar, now: fixedNow }: Props) {
+export function Pipeline({ user, jobsById, onOpen, onApply, minScore, onPatch, onAdd, weeklyPlan, onWeeklyPlan, onSetup, goRadar, now: fixedNow }: Props) {
   const hourly = useHourlyNow();
   const nowMs = fixedNow?.getTime() ?? hourly;
   const now = useMemo(() => new Date(nowMs), [nowMs]);
@@ -231,11 +236,8 @@ export function Pipeline({ user, jobsById, onOpen, onPatch, onAdd, weeklyPlan, o
     setAnnounce(`Moved ${entry.snapshot.title} to ${STATUS_LABEL[to]}`);
     onMove(id, entry, to);
   };
-  const open = (id: string) => {
-    const job = jobsById.get(id);
-    if (job) onOpen(job);
-    else setEditing(id);
-  };
+  /** Every card opens the same wide dialog; a job still on the Radar adds its summary and Open full job. */
+  const open = (id: string) => setEditing(id);
   const loggingEntry = logging ? user[logging.id] : undefined;
 
   const dropTarget = (col: PipelineStatus) => ({
@@ -260,6 +262,13 @@ export function Pipeline({ user, jobsById, onOpen, onPatch, onAdd, weeklyPlan, o
       <TrackedJobDialog
         id={editing}
         entry={editing ? user[editing] : undefined}
+        job={editing ? jobsById.get(editing) : undefined}
+        minScore={minScore}
+        onApply={onApply}
+        onOpenFull={(job) => {
+          setEditing(null);
+          onOpen(job);
+        }}
         onClose={() => setEditing(null)}
         // A new title, company or link goes in through the entry's snapshot, which the patch is applied to.
         onUpdate={(patch, job) => editing && user[editing] && onPatch(editing, job ? { ...user[editing], snapshot: { ...user[editing].snapshot, ...job } } : user[editing], patch)}
