@@ -1,6 +1,7 @@
 import { companyOfJobId, getConnector, jobCompanyKey } from "./connectors";
 import { hashIds } from "./board-health";
 import { BoardClosedError } from "./connectors/parse";
+import type { BoardIds } from "./connectors/types";
 import { HostSkippedError, HttpClient, HttpError } from "./http";
 import { limiter } from "./limit";
 import type { BoardMove, CompanyHealth, CompanyRef, Config, Job, NormalizedJob, Profile } from "./schema";
@@ -124,6 +125,8 @@ export type RunOptions = {
    * jobCompanyKey(). A board whose first page is the same is read no further: its jobs from then are kept.
    */
   firstPages?: ReadonlyMap<string, string>;
+  /** Ids boards' APIs need, learned once and kept between scans (board-ids.ts). */
+  ids?: BoardIds;
   /** Companies in flight across every lane at once (BACKGROUND_LIMITS); no cap without it. */
   maxCompaniesInFlight?: number;
   /** Description fetches in flight per company (default DESCRIBE_WORKERS). */
@@ -138,7 +141,8 @@ export type RunOptions = {
 export const laneOf = (c: Pick<CompanyRef, "ats" | "region" | "shard">) => `${c.ats}:${c.region ?? ""}:${c.ats === "workday" ? c.shard : ""}`;
 /** Companies in flight per lane: more where the API's own pace (http.ts paceOf) is the limit, not the lane. */
 const LANE_WORKERS = 4;
-const LANE_WORKERS_BY_ATS: Partial<Record<CompanyRef["ats"], number>> = { greenhouse: 8, workday: 8, smartrecruiters: 6 };
+// Mostly an employer per host, and every host keeps its own 1 s gap: more at once asks no host faster.
+const LANE_WORKERS_BY_ATS: Partial<Record<CompanyRef["ats"], number>> = { greenhouse: 8, workday: 8, smartrecruiters: 6, icims: 8, oracle: 8, taleo: 8, successfactors: 8, phenom: 8 };
 /** Companies a lane of this hiring system fetches at once (scope.ts learns and estimates speeds with it). */
 export const laneWorkers = (ats: string): number => LANE_WORKERS_BY_ATS[ats as CompanyRef["ats"]] ?? LANE_WORKERS;
 
@@ -204,6 +208,7 @@ export async function runRadar(config: Config, opts: RunOptions = {}): Promise<R
         : await connector.fetch(company, {
             http,
             now,
+            ids: opts.ids,
             partial: () => {
               h.partial = true;
             },

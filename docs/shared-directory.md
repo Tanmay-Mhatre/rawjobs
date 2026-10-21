@@ -305,8 +305,8 @@ reads every live directory board on every hiring system with a connector once, f
 publishes slim rows (job id, title, location, workplace, posted date; for Workday's "3 Locations"
 jobs, where they are; no descriptions) on the `jobs` release of the directory repo.
 
-- **Four groups, one merge:** a crawl job per group of systems (`GROUPS` in `jobs.ts`: SmartRecruiters;
-  Paylocity, Paycom, Hireology, Workable; Workday and the other enterprise systems; everything else)
+- **Five groups, one merge:** a crawl job per group of systems (`GROUPS` in `jobs.ts`: SmartRecruiters;
+  Paylocity, Paycom, Hireology, Workable; Workday and the other enterprise systems; JOIN; everything else)
   runs side by side, each with its own saved state (`jobs-<group>-state.tar.gz` on the `state`
   release). The merge job alone writes, signs and publishes; a group that failed is replaced by its
   previous saved copy. CI paces the shared APIs faster than the app does (`CI_HOST_DELAYS`).
@@ -314,7 +314,8 @@ jobs, where they are; no descriptions) on the `jobs` release of the directory re
   (`services/feed-trigger`) also starts the workflow. The first job skips the run when this schedule
   slot's feed is already built (`scripts/catalog/slot-covered.mjs`; `force` overrides). `publish: false` runs everything but publishes,
   saves and opens nothing (and a run publishes only from `main`).
-- **Cheap to run:** Greenhouse, Lever and Ashby boards that haven't changed answer an empty 304.
+- **Cheap to run:** Greenhouse, Lever and Ashby boards that haven't changed answer an empty 304, and so
+  does JOIN's first page (its company numbers are read off careers pages once and kept in the group's state).
   A board that fails, or that the 4-hour limit leaves out, keeps its previous rows and time. A system
   with 100 failed boards in a row is stopped for the run (a blocked runner).
 - **How apps use it** (`packages/core/src/job-feed.ts`): every scan brings its copy up to date, then

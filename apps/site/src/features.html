@@ -199,6 +199,10 @@ h1, h2, h3 { margin: 0; text-wrap: balance; }
 .crop__frame img { display: block; width: 100%; height: 100%; object-fit: none; object-position: var(--at, 0 0); }
 .crop figcaption { font: var(--text-meta); color: var(--text-secondary); }
 
+/* the reading bar: how far down the page you are */
+.readbar { position: fixed; z-index: calc(var(--z-sticky) + 1); top: 0; left: 0; right: 0; height: 2px; background: var(--text-primary); opacity: 0.7;
+  transform-origin: left; transform: scaleX(var(--read, 0)); pointer-events: none; }
+
 /* cards rise in as they scroll into view (only those below the fold at load) */
 @keyframes rise { from { opacity: 0; transform: translateY(12px); } }
 .rv-wait { opacity: 0; }
@@ -215,6 +219,7 @@ h1, h2, h3 { margin: 0; text-wrap: balance; }
 <body>
 <div class="page rj-root">
 <a class="rj-btn rj-btn--primary skip" href="#main">Skip to content</a>
+<div class="readbar" aria-hidden="true"></div>
 
 <header class="nav">
   <div class="nav__in">
@@ -624,6 +629,10 @@ h1, h2, h3 { margin: 0; text-wrap: balance; }
 /* Features page: cards below the fold rise in once, and the contents highlights the group in view. */
 (function () {
   var reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
+  var root = document.documentElement, readTick = false;
+  function readPos() { readTick = false; var max = root.scrollHeight - innerHeight; root.style.setProperty('--read', max > 0 ? Math.min(1, scrollY / max).toFixed(4) : '0'); }
+  addEventListener('scroll', function () { if (!readTick) { readTick = true; requestAnimationFrame(readPos); } }, { passive: true });
+  addEventListener('resize', readPos); readPos();
   if (!('IntersectionObserver' in window)) return;
   if (!reduce) {
     var vh = innerHeight;
