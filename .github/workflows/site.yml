@@ -28,9 +28,11 @@ on:
 permissions:
   contents: read
 
+# Pull-request builds get their own group (a newer push cancels the older build), so they can never
+# replace a deploy that's waiting in site-deploy; PR builds don't deploy.
 concurrency:
-  group: site-deploy
-  cancel-in-progress: false
+  group: ${{ github.event_name == 'pull_request' && format('site-pr-{0}', github.event.pull_request.number) || 'site-deploy' }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   build:

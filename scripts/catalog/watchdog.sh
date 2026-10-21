@@ -45,7 +45,7 @@ rebuild() {
     echo "Weekly rebuild last published ${last}; not overdue."
     return 0
   fi
-  runs=$(gh run list -R "$GITHUB_REPOSITORY" --workflow "$REBUILD" --limit 20 --json status,createdAt)
+  runs=$(gh run list -R "$GITHUB_REPOSITORY" --workflow "$REBUILD" --limit 20 --json status,conclusion,createdAt)
   # Queued, waiting on the directory group, or running: it's on its way.
   if [ "$(jq '[.[] | select(.status != "completed")] | length' <<< "$runs")" != 0 ]; then
     echo "Weekly rebuild overdue (last: ${last:-none}), but one is already queued or running."
@@ -53,7 +53,8 @@ rebuild() {
   fi
   # At most one try a day: a rebuild that runs but can't publish (say the release gate refuses it)
   # would otherwise start again on every check and hold the directory group for hours each time.
-  recent=$(jq -r '[.[].createdAt] | max // ""' <<< "$runs")
+  # A run that never got going (cancelled, or failed to start) isn't a try; a failed one is.
+  recent=$(jq -r '[.[] | select(.conclusion != "cancelled" and .conclusion != "startup_failure") | .createdAt] | max // ""' <<< "$runs")
   if [ -n "$recent" ] && [ $(($(date -u +%s) - $(date -u -d "$recent" +%s))) -lt 86400 ]; then
     echo "Weekly rebuild overdue (last: ${last:-none}), but one started in the last 24 hours ($recent)."
     return 0
