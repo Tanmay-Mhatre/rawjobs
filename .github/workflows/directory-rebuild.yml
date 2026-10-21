@@ -383,4 +383,8 @@ jobs:
             live="${RUNNER_TEMP}/live-manifest.json"
             if [ -s "$live" ]; then echo "Live release: $(jq -r '"\(.companies) companies, \(.indexed) indexed"' "$live")."; fi
             if [ -f dist/manifest.json ]; then echo "This run's directory: $(jq -r '"\(.companies) companies, \(.indexed) indexed"' dist/manifest.json)."; fi
+            echo
+            # What the saved state holds and what this run added (collect's results, restored above).
+            since=$(gh run view "${{ github.run_id }}" -R "${{ github.repository }}" --json createdAt -q .createdAt) &&
+              pnpm exec tsx scripts/catalog/tally.ts --since "$since" || echo "(working state unavailable)"
           } >> "$GITHUB_STEP_SUMMARY"

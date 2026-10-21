@@ -380,6 +380,17 @@ export function sameSwing(same: { before: number; after: number } | undefined): 
   return `jobs at the same companies ${same.before} -> ${same.after}`;
 }
 
+/**
+ * How much of the feed this run read: companies in it against the previous feed, and how many were read
+ * (or confirmed unchanged) this run rather than kept from an earlier one. The proof that a speed-up
+ * dropped no company.
+ */
+export function feedCoverage(companies: JobFeedShard["companies"], previous: number | undefined, generated: string) {
+  const all = Object.values(companies);
+  const thisRun = all.filter((c) => c.fetched_at === generated).length;
+  return { companies: all.length, previous: previous ?? null, this_run: thisRun, kept: all.length - thisRun, jobs: all.reduce((n, c) => n + c.jobs.length, 0) };
+}
+
 /** Every group's shards into the published files. */
 function merge(out: string, generated: string) {
   const previousManifest = readJson<JobFeedManifest>(join(out, "jobs-manifest.json"));
@@ -469,7 +480,8 @@ function merge(out: string, generated: string) {
     console.error(
       `${name}: #${v.seq}, full copy ${mb(v.snapshotBytes)} MB${v.diffBytes !== undefined ? `, change file ${mb(v.diffBytes)} MB (${v.changedCompanies} companies)` : ""}${v.note ? ` (${v.note})` : ""}`,
     );
-  writeFileSync(join(out, "stats.json"), `${JSON.stringify({ generated_at: generated, groups, ats: stats, ats_jobs: atsJobs, alerts, v1: { previous: v1Previous }, v2, v3 }, null, 2)}\n`);
+  const coverage = feedCoverage(everyone, previousV3 ? Object.keys(previousV3.jobs).length : undefined, generated);
+  writeFileSync(join(out, "stats.json"), `${JSON.stringify({ generated_at: generated, groups, ats: stats, ats_jobs: atsJobs, alerts, coverage, v1: { previous: v1Previous }, v2, v3 }, null, 2)}\n`);
   console.error(`Feed: ${Object.keys(everyone).length} companies, ${Object.values(atsJobs).reduce((a, b) => a + b, 0)} jobs.`);
   for (const a of alerts) console.error(`Alert: ${a.text}`);
 }
