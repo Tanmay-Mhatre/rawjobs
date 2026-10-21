@@ -269,6 +269,7 @@ export function App() {
   const matched = jobs.filter((j) => !j.why.gate && j.status === "open").length;
   /** The Radar list is showing: on laptops and up the page then fits the window (no page scroll). */
   const radarFits = !inSetup && tab === "radar" && state.kind === "ready" && (matched > 0 || !lastRun);
+  const boardFills = !inSetup && tab === "pipeline";
   // "Why no matches?" needs the jobs that failed the filters too; fetched only then.
   const otherJobs = useOtherJobs(state.kind === "ready" && !!lastRun && matched === 0);
   const items = checklistItems(notSetUp ? draftToConfig(draft) : status?.config, meta, !!resume.text);
@@ -371,6 +372,8 @@ export function App() {
             // The Radar fits the window on laptops and up: the feed and the job scroll inside their panels,
             // the page itself never does, and Apply stays in view.
             radarFits && "lg:flex lg:h-[calc(100dvh-3.5rem)] lg:flex-col lg:pb-4",
+            // The Pipeline's columns reach the bottom of the window (below the header and its border).
+            boardFills && "flex min-h-[calc(100dvh-3.5rem-1px)] flex-col",
           )}
         >
           <ServerNotices onRadar={!inSetup && tab === "radar" && !openId && !showKeys && status !== undefined} />
@@ -412,7 +415,7 @@ export function App() {
               }}
             />
           ) : (
-            <div className={cx("flex flex-col gap-4", radarFits && "lg:min-h-0 lg:flex-1 lg:gap-3")}>
+            <div className={cx("flex flex-col gap-4", radarFits && "lg:min-h-0 lg:flex-1 lg:gap-3", boardFills && "flex-1")}>
               {viewLabel && (
                 <h1 ref={headingRef} tabIndex={-1} className="sr-only">
                   {viewLabel}

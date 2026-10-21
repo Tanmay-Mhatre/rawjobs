@@ -11,14 +11,16 @@ export type TimelineItem =
   | { kind: "touch"; key: string; at: string; activity: Activity; title: string }
   | { kind: "note"; key: string; at: string; text: string; legacy?: true }
   | { kind: "stage"; key: string; at: string; text: string }
+  | { kind: "change"; key: string; at: string; text: string }
   | { kind: "found"; key: string; at: string };
 
-export type TimelineFilter = "all" | "messages" | "stages" | "notes";
+export type TimelineFilter = "all" | "messages" | "stages" | "notes" | "changes";
 export const TIMELINE_FILTERS: { id: TimelineFilter; label: string }[] = [
   { id: "all", label: "All" },
   { id: "messages", label: "Messages" },
   { id: "stages", label: "Stages" },
   { id: "notes", label: "Notes" },
+  { id: "changes", label: "Changes" },
 ];
 
 const time = (iso: string) => {
@@ -27,7 +29,7 @@ const time = (iso: string) => {
 };
 
 /**
- * One job's history, newest first: touches, notes, stage changes, and "Found on your Radar" when you
+ * One job's history, newest first: touches, notes, stage changes, your other edits, and "Found on your Radar" when you
  * know when it was first seen. The v1 note, which has no date, comes first.
  */
 export function timeline(entry: Entry, foundAt?: string): TimelineItem[] {
@@ -43,6 +45,9 @@ export function timeline(entry: Entry, foundAt?: string): TimelineItem[] {
     const label = h.status ? (last && h.status === entry.status ? statusLabel(entry) : STATUS_LABEL[h.status]) : "";
     items.push({ kind: "stage", key: `stage:${i}:${h.at}`, at: h.at, text: h.status ? `Moved to ${label}` : "Taken off the board" });
   });
+  (entry.changes ?? []).forEach((c, i) => {
+    items.push({ kind: "change", key: `change:${i}:${c.at}`, at: c.at, text: c.text });
+  });
   if (foundAt && time(foundAt)) items.push({ kind: "found", key: "found", at: foundAt });
   // Newest first; on the same moment, keep the order they were added in reverse (a stage before its touch).
   const sorted = items
@@ -57,6 +62,7 @@ export function filterTimeline(items: readonly TimelineItem[], f: TimelineFilter
   if (f === "messages") return items.filter((i) => i.kind === "touch");
   if (f === "stages") return items.filter((i) => i.kind === "stage" || i.kind === "found");
   if (f === "notes") return items.filter((i) => i.kind === "note");
+  if (f === "changes") return items.filter((i) => i.kind === "change");
   return [...items];
 }
 
