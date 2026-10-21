@@ -27,6 +27,7 @@ export function JobTracking({
   jobTab,
   initialTab,
   wide: wideAsked,
+  summary,
   now,
 }: {
   jobId: string;
@@ -39,6 +40,8 @@ export function JobTracking({
   /** The tab to open on, focused ("On this job: Messaged" in the referral section opens People). */
   initialTab?: Tab;
   wide?: boolean;
+  /** The job itself (a Radar job opened from the Pipeline): first in the side panel, or the Details tab. */
+  summary?: ReactNode;
   now?: Date;
 }) {
   const id = useId();
@@ -95,6 +98,7 @@ export function JobTracking({
       <div className="grid min-h-0 flex-1 grid-cols-[minmax(0,1fr)_22rem]">
         <div className="min-h-0 overflow-y-auto px-6 py-4">{activity}</div>
         <aside aria-label="About this job" className="grid min-h-0 content-start gap-5 overflow-y-auto border-l border-hairline bg-raised p-4">
+          {summary && <Section title="Job">{summary}</Section>}
           {task && (
             <NextStep
               task={task}
@@ -144,6 +148,7 @@ export function JobTracking({
         {current === "job" &&
           (wideAsked ? (
             <div className="grid gap-4">
+              {summary}
               <StageDates entry={entry} onUpdate={onUpdate} now={now} />
               {jobTab}
             </div>
