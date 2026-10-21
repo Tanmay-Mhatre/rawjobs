@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { CompanyHealth, Job } from "./data";
 import { toast } from "../components/Toast";
+import { refreshHealth } from "./health";
 import { followScan, notifyWhenDone, runScan, stopScan, type RunEvent, type ScanScope, type ScanSource } from "./setup";
 import { load, save } from "./storage";
 
@@ -341,6 +342,7 @@ export function useScan(onFinished: () => void | Promise<void>) {
       busy.current = true;
       save(SCOPE_KEY, scope);
       setScan(running(scope));
+      refreshHealth();
       await watch((onEvent) => runScan(onEvent, { scope, fresh: opts.fresh }));
     },
     [watch],
@@ -366,6 +368,7 @@ export function useScan(onFinished: () => void | Promise<void>) {
     if (busy.current) return;
     busy.current = true;
     setScan((s) => ({ ...s, phase: "background", bg: newBackground(), summary: undefined }));
+    refreshHealth();
     // `following`: no "Scan done" toast, as no Scan now ran.
     await watch((onEvent) => runScan(onEvent, { background: true }), true);
   }, [watch]);

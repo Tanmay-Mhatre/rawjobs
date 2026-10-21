@@ -19,13 +19,16 @@ import {
   pruneCache,
   queueMove,
   scanLockHeld,
+  setupStatus,
   suggestCacheDir,
+  telegramStatus,
   writeCacheFile,
 } from "@rawjobs/core";
 import { readTracking, saveTracking, suggestPoolSize, type ScanScope } from "@rawjobs/core";
 import { CONNECTION_ID, createNetworkStore, createWatcher, nodeWatchDeps, type WatchDeps } from "@rawjobs/core";
 import { folderId } from "@rawjobs/core/update";
 import { refuse } from "./guard";
+import { createReaders } from "./readers";
 import type { Updater } from "./updater";
 
 export type ApiOptions = {
@@ -45,6 +48,9 @@ export type ApiOptions = {
   watchDeps?: Partial<WatchDeps>;
 };
 
+const HOUR_MS = 60 * 60_000;
+/** Requests that may change what the kept read-only answers show (any but GET). */
+const WRITES = /^\/api\/(setup|directory|alerts|schedule|run|check)(\/|$)/;
 /** A page served from this computer (any port): may read /api/health from another port. */
 const LOCAL_ORIGIN = /^http:\/\/(127\.0\.0\.1|localhost|\[::1\]):\d{1,5}$/;
 
@@ -146,6 +152,28 @@ Stopped after ${Math.round(timeoutMs / 1000)} s without finishing.`.trim(),
       child.on("close", (code) => finish({ code: code ?? 1, stdout, stderr }));
     });
   }
+
+  /**
+   * Read-only answers the page asks for often, kept a while: quick ones read in this process (no CLI
+   * run), slow ones (the scan plan reads the whole directory for seconds) from the CLI as before.
+   * Forgotten after a save to what they show (WRITES) and when a scan or check ends.
+   */
+  const readers = createReaders();
+  async function respondRead(res: ServerResponse, read: () => unknown) {
+    try {
+      json(res, await read());
+    } catch (err) {
+      json(res, { ok: false, errors: String((err as Error).message ?? err) }, 500);
+    }
+  }
+  /** The CLI's JSON answer, kept as `readers.memo` does; a run that fails isn't kept. */
+  const readCli = (key: string, ttlMs: number, args: string[]) =>
+    readers.memo(key, ttlMs, async () => {
+      const r = await collect(args);
+      const out = r.stdout.trim();
+      if (!out.startsWith("{") && !out.startsWith("[")) throw new Error((r.stderr || r.stdout || "rawjobs failed").trim().slice(-2000));
+      return JSON.parse(out) as unknown;
+    });
 
   /** Send the CLI's JSON stdout as the response, or a JSON error. */
   async function respondJson(res: ServerResponse, args: string[], stdin?: string) {
@@ -322,6 +350,7 @@ Stopped after ${Math.round(timeoutMs / 1000)} s without finishing.`.trim(),
       else if (code !== 0 && stderr) broadcast(JSON.stringify({ type: "error", message: stderr.trim().slice(-1500) }));
       for (const res of current.followers) res.end();
       scan = null;
+      readers.clear();
     };
     child.on("error", (err) => finish(1, err));
     child.on("close", (code) => finish(code));
@@ -346,6 +375,8 @@ Stopped after ${Math.round(timeoutMs / 1000)} s without finishing.`.trim(),
     const why = refuse(req);
     if (why) json(res, { ok: false, errors: why }, 403);
     else {
+      const writes = req.method !== "GET" && WRITES.test(url);
+      if (writes) readers.clear();
       try {
         await route(url, req, res);
       } catch (err) {
@@ -353,6 +384,9 @@ Stopped after ${Math.round(timeoutMs / 1000)} s without finishing.`.trim(),
         console.error(`${req.method} ${url} failed:`, err);
         if (!res.headersSent) json(res, { ok: false, errors: String(err) }, 500);
         else res.end();
+      } finally {
+        // Again once it's done: a read while it ran may have kept what it changed.
+        if (writes) readers.clear();
       }
     }
     return true;
@@ -398,7 +432,7 @@ Stopped after ${Math.round(timeoutMs / 1000)} s without finishing.`.trim(),
       return r.ok ? json(res, { ok: true, updatedAt: r.tracking.updatedAt }) : json(res, { ok: false, errors: r.error }, 400);
     }
     if (url === "/api/network" || url.startsWith("/api/network/")) return await networkRoute(url, req, res);
-    if (url === "/api/setup" && req.method === "GET") return await respondJson(res, ["setup", "status", "--data", dataDir]);
+    if (url === "/api/setup" && req.method === "GET") return await respondRead(res, () => readers.memo("setup", 10_000, () => setupStatus(home, dataDir)));
     if (url === "/api/setup/config" && req.method === "POST") return await respondJson(res, ["setup", "save"], await readBody(req));
     if (url === "/api/setup/reset" && req.method === "POST") {
       if (busy()) return json(res, { ok: false, errors: "A scan is running; try again when it's done." });
@@ -411,7 +445,11 @@ Stopped after ${Math.round(timeoutMs / 1000)} s without finishing.`.trim(),
     if (url === "/api/setup/resume" && req.method === "POST") return await respondJson(res, ["setup", "resume", "save"], await readBody(req));
     if (url === "/api/setup/resume" && req.method === "DELETE") return await respondJson(res, ["setup", "resume", "delete"]);
     if (url === "/api/setup/check" && req.method === "POST") return await respondJson(res, ["setup", "check", "--data", dataDir], await readBody(req));
-    if (url === "/api/directory" && req.method === "GET") return await respondJson(res, ["directory", "status", "--json", "--data", dataDir]);
+    if (url === "/api/directory" && req.method === "GET") {
+      // Kept while the local copy's files stay the same (an hour at most: it says how old it is).
+      const stamp = ["manifest.json", "outbox.json", "moves-outbox.json", "directory.json"].map((f) => fileStamp(resolve(dataDir, "catalog", f))).join("|");
+      return await respondRead(res, () => readCli(`directory|${stamp}`, HOUR_MS, ["directory", "status", "--json", "--data", dataDir]));
+    }
     if (url === "/api/directory/update" && req.method === "POST") return await respondJson(res, ["directory", "update", "--json", "--data", dataDir]);
     if (url === "/api/directory/moves" && req.method === "POST") {
       let body: unknown;
@@ -467,14 +505,16 @@ Stopped after ${Math.round(timeoutMs / 1000)} s without finishing.`.trim(),
         res.end(last.startsWith("{") ? last : JSON.stringify({ type: "error", message: (r.stderr || "check failed").trim().slice(-500) }));
       } finally {
         checking = false;
+        readers.clear();
       }
       return;
     }
-    if (url === "/api/scan/plan" && req.method === "GET") return await respondJson(res, ["scan", "--plan", "--data", dataDir]);
-    if (url === "/api/alerts/telegram" && req.method === "GET") return await respondJson(res, ["alerts", "telegram", "status"]);
+    if (url === "/api/scan/plan" && req.method === "GET") return await respondRead(res, () => readCli("plan", 30_000, ["scan", "--plan", "--data", dataDir]));
+    if (url === "/api/alerts/telegram" && req.method === "GET") return await respondRead(res, () => readers.memo("telegram", 30_000, () => telegramStatus(home)));
     const alert = url.match(/^\/api\/alerts\/telegram\/(token|connect|test|on|off|forget)$/);
     if (alert && req.method === "POST") return await respondJson(res, ["alerts", "telegram", alert[1]!], await readBody(req));
-    if (url === "/api/schedule" && req.method === "GET") return await respondJson(res, ["schedule", "status", "--data", dataDir]);
+    // Reading the scheduled tasks runs PowerShell on Windows: kept for 5 minutes.
+    if (url === "/api/schedule" && req.method === "GET") return await respondRead(res, () => readCli("schedule", 5 * 60_000, ["schedule", "status", "--data", dataDir]));
     if (url === "/api/schedule" && req.method === "POST") return await respondJson(res, ["schedule", "install", "--stdin", "--data", dataDir], await readBody(req));
     if (url === "/api/schedule" && req.method === "DELETE") return await respondJson(res, ["schedule", "remove", "--data", dataDir]);
     if (url === "/api/schedule/run" && req.method === "POST") return await respondJson(res, ["schedule", "run", "--data", dataDir]);

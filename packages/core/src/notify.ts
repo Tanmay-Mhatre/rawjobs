@@ -2,6 +2,7 @@ import { chmodSync, existsSync, mkdirSync, readFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import type { Config, Job } from "./schema";
 import type { ScanScope } from "./protocol";
+import { findConfigPath, loadConfig } from "./config";
 import { rawjobsHome } from "./paths";
 import { writeFileAtomic } from "./atomic";
 
@@ -44,6 +45,18 @@ export function saveTelegramSecrets(patch: TelegramSecrets, cwd = rawjobsHome())
 
 /** "123456:ABC…xyz": enough to recognise it, not enough to use it. */
 export const maskToken = (t?: string) => (t ? `${t.slice(0, t.indexOf(":") + 4)}…${t.slice(-3)}` : undefined);
+
+/** Telegram alerts for the dashboard: set up? on? (the token is only ever sent back masked). */
+export function telegramStatus(cwd = rawjobsHome()) {
+  const secrets = telegramSecrets(cwd);
+  let enabled = false;
+  try {
+    enabled = loadConfig(findConfigPath(cwd)).config.alerts.telegram;
+  } catch {
+    // no config yet
+  }
+  return { ok: true, token: maskToken(secrets.token) ?? null, bot: secrets.bot ?? null, connected: !!secrets.chatId, enabled, fromEnv: !!process.env.TELEGRAM_BOT_TOKEN };
+}
 
 const TOKEN = /^\d{5,}:[A-Za-z0-9_-]{30,}$/;
 export const looksLikeToken = (t: string) => TOKEN.test(t.trim());

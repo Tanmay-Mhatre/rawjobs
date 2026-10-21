@@ -3,8 +3,10 @@ import { createServer, request, type IncomingMessage, type Server } from "node:h
 import type { AddressInfo } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { folderId } from "@rawjobs/core/update";
+import { cmdAlerts } from "../../cli/src/commands/alerts";
+import { cmdSetup } from "../../cli/src/commands/setup";
 import { createApi } from "../src/api";
 import { refuse } from "../src/guard";
 import { findFile } from "../src/static";
@@ -167,7 +169,7 @@ console.log(JSON.stringify({ type: "done", scope: args[args.indexOf("--scope") +
 
   it("runs the CLI in your RawJobs folder", async () => {
     const { port, home } = await start();
-    expect(realpathSync(JSON.parse((await call(port, "GET", "/api/setup")).text).cwd)).toBe(realpathSync(home));
+    expect(realpathSync(JSON.parse((await call(port, "GET", "/api/setup/resume")).text).cwd)).toBe(realpathSync(home));
   });
 
   it("saves your tracking in profile/tracking.json and reads it back", async () => {
@@ -268,7 +270,6 @@ console.log(JSON.stringify({ type: "done", scope: args[args.indexOf("--scope") +
   it("hands each route to the right CLI command, with the request body on stdin", async () => {
     const { port, dataDir } = await start();
     const routes: [method: string, path: string, args: string[], body?: string][] = [
-      ["GET", "/api/setup", ["setup", "status", "--data", dataDir]],
       ["POST", "/api/setup/config", ["setup", "save"], '{"profile":{}}'],
       ["POST", "/api/setup/reset", ["setup", "reset"]],
       ["GET", "/api/setup/resume", ["setup", "resume"]],
@@ -278,7 +279,6 @@ console.log(JSON.stringify({ type: "done", scope: args[args.indexOf("--scope") +
       ["GET", "/api/directory", ["directory", "status", "--json", "--data", dataDir]],
       ["POST", "/api/directory/update", ["directory", "update", "--json", "--data", dataDir]],
       ["GET", "/api/scan/plan", ["scan", "--plan", "--data", dataDir]],
-      ["GET", "/api/alerts/telegram", ["alerts", "telegram", "status"]],
       ["POST", "/api/alerts/telegram/token", ["alerts", "telegram", "token"], '{"token":"x"}'],
       ["POST", "/api/alerts/telegram/forget", ["alerts", "telegram", "forget"]],
       ["GET", "/api/schedule", ["schedule", "status", "--data", dataDir]],
@@ -303,6 +303,59 @@ console.log(JSON.stringify({ type: "done", scope: args[args.indexOf("--scope") +
       expect(got.args, `${method} ${path}`).toEqual(args);
       if (body && path !== "/api/check") expect(got.stdin, `${method} ${path}`).toBe(body);
     }
+  });
+
+  it("answers setup and Telegram in this process, as the CLI prints them", async () => {
+    const { port, home, dataDir } = await start();
+    writeFileSync(join(home, "rawjobs.config.local.yaml"), readFileSync(join(import.meta.dirname, "../../../rawjobs.config.example.yaml"), "utf8"));
+    /** What the CLI command prints, run here with your RawJobs folder as its home. */
+    const cli = async (run: () => Promise<number> | number) => {
+      const before = process.env.RAWJOBS_HOME;
+      process.env.RAWJOBS_HOME = home;
+      const log = vi.spyOn(console, "log").mockImplementation(() => {});
+      try {
+        await run();
+        return JSON.parse(String(log.mock.calls.at(-1)![0])) as unknown;
+      } finally {
+        log.mockRestore();
+        if (before === undefined) delete process.env.RAWJOBS_HOME;
+        else process.env.RAWJOBS_HOME = before;
+      }
+    };
+    const get = async (path: string) => {
+      const r = await call(port, "GET", path);
+      expect(r.status, path).toBe(200);
+      return JSON.parse(r.text) as unknown;
+    };
+    expect(await get("/api/setup")).toEqual(await cli(() => cmdSetup(["status", "--data", dataDir])));
+    expect(await get("/api/alerts/telegram")).toEqual(await cli(() => cmdAlerts(["telegram", "status"])));
+  });
+
+  it("keeps read-only answers a while, and forgets them after a save", async () => {
+    const { port, home } = await start();
+    const config = join(home, "rawjobs.config.local.yaml");
+    writeFileSync(config, readFileSync(join(import.meta.dirname, "../../../rawjobs.config.example.yaml"), "utf8"));
+    const valid = async () => (JSON.parse((await call(port, "GET", "/api/setup")).text) as { valid: boolean }).valid;
+    expect(await valid()).toBe(true);
+    writeFileSync(config, "profile: [");
+    expect(await valid()).toBe(true);
+    await call(port, "POST", "/api/setup/config", "{}");
+    expect(await valid()).toBe(false);
+
+    // The schedule, scan plan and directory are read by the CLI: asked again, it isn't run again until a save.
+    const first = await call(port, "GET", "/api/schedule");
+    expect(JSON.parse(first.text)).toMatchObject({ args: ["schedule", "status", "--data", expect.any(String)] });
+    const plan = (await call(port, "GET", "/api/scan/plan")).text;
+    const directory = (await call(port, "GET", "/api/directory")).text;
+    writeFileSync(join(home, "../fake-cli.mjs"), "process.exit(1);");
+    expect((await call(port, "GET", "/api/schedule")).text).toBe(first.text);
+    expect((await call(port, "GET", "/api/scan/plan")).text).toBe(plan);
+    expect((await call(port, "GET", "/api/directory")).text).toBe(directory);
+    expect((await call(port, "DELETE", "/api/schedule")).status).toBe(500);
+    const after = await call(port, "GET", "/api/schedule");
+    expect(after.status).toBe(500);
+    expect(JSON.parse(after.text)).toMatchObject({ ok: false });
+    expect((await call(port, "GET", "/api/scan/plan")).status).toBe(500);
   });
 
   it("says how many companies a suggestion request checks, without running the CLI, and again once the index changes", async () => {

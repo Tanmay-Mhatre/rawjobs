@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs";
 import type { IncomingMessage, ServerResponse } from "node:http";
 import { join } from "node:path";
-import { APP_VERSION, BUNDLED, CODE_ROOT, loadConfig, sendTelegram, telegramMessage, telegramSecrets } from "@rawjobs/core";
+import { APP_VERSION, BUNDLED, CODE_ROOT, fileStamp, loadConfig, sendTelegram, telegramMessage, telegramSecrets } from "@rawjobs/core";
 import { type ChangelogEntry, compareVersions, type ReleaseChange } from "@rawjobs/core/release";
 import {
   beaconVersion,
@@ -119,6 +119,8 @@ export function createUpdater(o: {
   /** Beacon reads that failed in a row (for the back-off). */
   let failures = 0;
   let lastLook = 0;
+  /** When this server last read the beacon (updates.json keeps it only every few hours). */
+  let lastBeaconOk = 0;
 
   const judged = (): UpdateCheck | null => {
     const f = readUpdateFile(home);
@@ -237,14 +239,17 @@ export function createUpdater(o: {
     try {
       const r = await fetchBeacon(f.beacon?.etag);
       const b = r.same ? f.beacon : { etag: r.etag, stable: r.beacon.stable?.version, beta: r.beacon.beta?.version };
-      writeUpdateFile(home, { beacon: { ...b, checkedAt: new Date().toISOString() } });
+      // Written when the beacon changed, or every few hours (for after a restart): not every look.
+      const changed = b?.etag !== f.beacon?.etag || b?.stable !== f.beacon?.stable || b?.beta !== f.beacon?.beta;
+      if (changed || Date.now() - Date.parse(f.beacon?.checkedAt ?? "1970-01-01") > DIRECT_AFTER) writeUpdateFile(home, { beacon: { ...b, checkedAt: new Date().toISOString() } });
+      lastBeaconOk = Date.now();
       failures = 0;
       const v = beaconVersion(b, f.channel);
       // Newer than this version, and not already found and downloaded.
       wanted = !!v && compareVersions(v, APP_VERSION) > 0 && !(f.skip ?? []).includes(v) && (f.latest?.version !== v || f.ready?.version !== v);
     } catch (err) {
       failures++;
-      const quiet = Date.now() - Date.parse(f.beacon?.checkedAt ?? f.lastCheck ?? "1970-01-01");
+      const quiet = Date.now() - Math.max(lastBeaconOk, Date.parse(f.beacon?.checkedAt ?? f.lastCheck ?? "1970-01-01"));
       // Can't reach the beacon for a long while: GitHub, at most hourly.
       wanted = quiet > DIRECT_AFTER && (!f.lastCheck || Date.now() - Date.parse(f.lastCheck) > HOUR);
       if (failures === 1) console.log(`Couldn't read the update beacon: ${(err as Error).message}`);
@@ -304,13 +309,19 @@ export function createUpdater(o: {
   }
 
   /**
-   * For /api/health, which the dashboard asks every 5 seconds: the version waiting to be installed,
-   * so an open dashboard shows the Update pill within seconds of the server finding it.
+   * For /api/health, which an open dashboard asks every few seconds: the version waiting to be
+   * installed, so it shows the Update pill within seconds of the server finding it. Worked out
+   * again only when updates.json changes.
    */
+  let hint: { stamp: string; value: { version: string; critical: boolean } | null } | undefined;
   function updateHint(): { version: string; critical: boolean } | null {
     if (!installed) return null;
-    const c = judged();
-    return c?.available && !c.tooOld ? { version: c.manifest.version, critical: c.manifest.critical } : null;
+    const stamp = fileStamp(join(home, "updates.json"));
+    if (hint?.stamp !== stamp) {
+      const c = judged();
+      hint = { stamp, value: c?.available && !c.tooOld ? { version: c.manifest.version, critical: c.manifest.critical } : null };
+    }
+    return hint.value;
   }
 
   /** Release notes for Settings → About and "What's new": this version's history, and the one waiting, if any. */

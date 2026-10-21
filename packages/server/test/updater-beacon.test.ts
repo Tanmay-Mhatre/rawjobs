@@ -97,6 +97,36 @@ describe("watching the beacon", () => {
     expect(fake.fetchManifest).toHaveBeenCalledOnce();
   });
 
+  it("writes the beacon to updates.json only when it changed, or hours after the last time", async () => {
+    fake.beacon = { same: false, etag: '"2"', beacon: { stable: { version: "0.0.1" } } };
+    const u = updater();
+    await u.look();
+    const hourAgo = new Date(Date.now() - 3_600_000).toISOString();
+    writeUpdateFile(home, { beacon: { ...readUpdateFile(home).beacon!, checkedAt: hourAgo } });
+    await u.look();
+    expect(readUpdateFile(home).beacon!.checkedAt).toBe(hourAgo);
+    // A new beacon is written at once.
+    fake.beacon = { same: false, etag: '"3"', beacon: { stable: { version: "0.0.2" } } };
+    await u.look();
+    expect(readUpdateFile(home).beacon).toMatchObject({ etag: '"3"', stable: "0.0.2" });
+    expect(readUpdateFile(home).beacon!.checkedAt).not.toBe(hourAgo);
+    // Hours after it was written: written again, for after a restart.
+    const old = new Date(Date.now() - 7 * 3_600_000).toISOString();
+    writeUpdateFile(home, { beacon: { ...readUpdateFile(home).beacon!, checkedAt: old } });
+    await u.look();
+    expect(readUpdateFile(home).beacon!.checkedAt).not.toBe(old);
+  });
+
+  it("counts the hours without the beacon from when it last read it, not when it last wrote it", async () => {
+    fake.beacon = { same: false, etag: '"2"', beacon: { stable: { version: "0.0.1" } } };
+    const u = updater();
+    await u.look();
+    fake.beaconError = new TypeError("fetch failed");
+    writeUpdateFile(home, { beacon: { ...readUpdateFile(home).beacon!, checkedAt: new Date(Date.now() - 7 * 3_600_000).toISOString() } });
+    await u.look();
+    expect(fake.fetchManifest).not.toHaveBeenCalled();
+  });
+
   it("never looks when watching is off", async () => {
     writeUpdateFile(home, { mode: "off" });
     await updater().look();

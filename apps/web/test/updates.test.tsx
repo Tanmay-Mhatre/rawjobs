@@ -3,6 +3,7 @@ import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { AboutRawJobs, ServerNotices } from "../src/components/Updates";
 import { UpdatePill } from "../src/components/WhatsNew";
+import { __resetHealthForTests } from "../src/lib/health";
 import type { UpdateStatus } from "../src/lib/update";
 
 const base: UpdateStatus = {
@@ -43,6 +44,7 @@ function api(status: UpdateStatus, healthy = true, applied: UpdateStatus = statu
 
 afterEach(() => {
   cleanup();
+  __resetHealthForTests();
   vi.unstubAllGlobals();
   sessionStorage.clear();
 });
