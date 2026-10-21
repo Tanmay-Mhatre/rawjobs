@@ -218,7 +218,7 @@ const page = (name) => {
     .replace("/*__BUNDLE__*/", () => bundle)
     .replace("/*__SCORE__*/", () => score)
     .replaceAll("__WORDMARK__", () => wordmark)
-    .replace("__ATS__", () => ats)
+    .replaceAll("__ATS__", () => ats)
     .replace("<!--__WALL__-->", () => wallMarkup)
     .replace("<!--__ANALYTICS__-->", () => analytics)
     .replaceAll("__SITE_URL__", () => SITE_URL);

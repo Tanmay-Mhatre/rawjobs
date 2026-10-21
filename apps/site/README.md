@@ -9,6 +9,10 @@ The marketing page at <https://www.rawjobs.workers.dev>. One static HTML page bu
 - `/install` redirects to the install steps (`public/_redirects`)
 - the share image, `public/og.png`, is rendered from `src/og.html`: run `pnpm site:og` after changing it
 - the hero's wall is about 520 real careers-page addresses: `build.mjs` picks them from the directory release it already downloads (live boards only, a seeded sample that mixes hiring systems) and fills `<!--__WALL__-->`. Offline it uses `src/wall-fallback.json`; refresh that with `node apps/site/build.mjs --wall-fallback`. The seven stamped matches are a curated list in `src/index.html` (`#wall-data`), and the build puts each of their addresses in the wall
+- the cinematic layer (end of the page's `<style>`, and the last `<script>`) builds on the tokens with site-only extras: display type sizes, one accent serif (Instrument Serif Italic, OFL, self-hosted in `public/fonts/` with its licence), longer `--duration-cinematic`/`--duration-reveal` motion, glass surfaces and a soft glow behind "signal" moments. The dashboard never loads it
+- the hero radar is a 2D canvas behind the wall: a seeded field of dots, a sweep every 6s, and an orange blip on each stamped match that flashes the stamp when the sweep reaches it. It pauses off screen and in background tabs; reduced motion, Save-Data and devices with fewer than 4 cores get one still frame
+- the hiring systems marquee under the numbers repeats the FAQ's list (`__ATS__` is filled everywhere it appears) and is hidden from screen readers, which get the FAQ list
+- Get it shows one install line first; the five-step walkthrough with the mock screen sits in "Never used a terminal? Walk me through it"
 - an intro animation can hold the wall's scan: add the `intro` class to `<html>`, then dispatch `rawjobs:intro-done` on `window` (or call `window.rawjobsWall.start()`); it starts on its own after 2.5s
 
 `pnpm design:lint` checks `src/` too, with CSS-aware rules: no accent tokens outside their four jobs, durations only from the motion tokens, no px type sizes.
