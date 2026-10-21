@@ -27,6 +27,7 @@ jobs:
       - run: pnpm install --frozen-lockfile
       # Design tokens, design lint, typecheck and tests: the same gate as a release and the pre-push hook.
       - run: pnpm check
+        timeout-minutes: 5
       - name: Example config is valid
         run: pnpm rawjobs validate --config rawjobs.config.example.yaml
       - name: The bundle runs through its launcher (an installed copy, without pnpm or tsx)
@@ -57,9 +58,11 @@ jobs:
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       - run: pnpm test
+        timeout-minutes: 5
 
   # Release files like a real release's, signed with a key made for this run (the real one stays
-  # with releases), for the install test below.
+  # with releases), for the install test below. On a push to main its steps are skipped and the job
+  # still succeeds: the same tree was tested on its pull request, and a release reruns the install test.
   release-files:
     runs-on: ubuntu-24.04
     timeout-minutes: 10
@@ -68,12 +71,16 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+        if: github.event_name != 'push'
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        if: github.event_name != 'push'
         with:
           node-version: 24
           cache: pnpm
       - run: pnpm install --frozen-lockfile
+        if: github.event_name != 'push'
       - name: A throwaway signing key
+        if: github.event_name != 'push'
         id: key
         run: |
           node -e '
@@ -84,6 +91,7 @@ jobs:
             fs.appendFileSync(process.env.GITHUB_OUTPUT, "public-key=" + publicKey.export({ type: "spki", format: "der" }).toString("base64") + "\n");
           '
       - name: This version's release, a newer one and a broken one (for the update test)
+        if: github.event_name != 'push'
         run: |
           v="$(node -p 'require("./package.json").version')"
           bump() { node -p "const [a,b,c]='$v'.split('.').map(Number); [a,b,c+$1].join('.')"; }
@@ -97,6 +105,7 @@ jobs:
           pnpm bundle --skip-web --version "$(bump 2)" --broken
           pnpm release:files --unsigned --version "$(bump 2)" --out dist/release/broken && sign dist/release/broken
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        if: github.event_name != 'push'
         with:
           name: release-test
           path: dist/release
@@ -110,3 +119,5 @@ jobs:
       artifact: release-test
       public-key: ${{ needs.release-files.outputs.public-key }}
       update-test: true
+      # Pushes to main report the install checks as passed without running them (see release-files).
+      skip: ${{ github.event_name == 'push' }}
