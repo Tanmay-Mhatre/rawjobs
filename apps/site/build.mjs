@@ -156,6 +156,38 @@ const int = (x) => x.toLocaleString("en-US");
 const day = (iso) => new Date(iso).toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric", timeZone: "UTC" });
 /** 21,485 -> "21,000+"; 1,338,418 -> "1.3M+": numbers in prose round down, so they stay true for a while. */
 const atLeast = (x) => (x >= 1e6 ? `${Math.floor(x / 1e5) / 10}M+` : `${int(Math.floor(x / 1000) * 1000)}+`);
+
+// ---------- the project in the open: GitHub stars and the latest release ----------
+// Shown next to "Star on GitHub" and under the numbers. With GitHub out of reach (or rate-limited)
+// the page says neither, rather than showing a stale or made-up figure.
+async function projectNumbers() {
+  const headers = { accept: "application/vnd.github+json", ...(process.env.GITHUB_TOKEN ? { authorization: `Bearer ${process.env.GITHUB_TOKEN}` } : {}) };
+  const get = async (path) => {
+    const res = await fetch(`https://api.github.com/repos/${APP_REPO}${path}`, { headers, signal: AbortSignal.timeout(15_000) });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    return res.json();
+  };
+  const [repo, release] = await Promise.allSettled([get(""), get("/releases/latest")]);
+  if (repo.status === "rejected") console.warn(`GitHub stars: ${repo.reason.message}. Leaving the count out.`);
+  if (release.status === "rejected") console.warn(`Latest release: ${release.reason.message}. Leaving it out.`);
+  return {
+    stars: repo.status === "fulfilled" && Number.isInteger(repo.value.stargazers_count) ? repo.value.stargazers_count : null,
+    release: release.status === "fulfilled" && release.value.tag_name ? { tag: release.value.tag_name, at: release.value.published_at } : null,
+  };
+}
+const proj = await projectNumbers();
+/** 1234 -> "1.2k" */
+const compact = (x) => (x >= 1000 ? `${Math.floor(x / 100) / 10}k` : String(x));
+const STARS = proj.stars === null ? "" : `<span class="stars num" aria-label="${int(proj.stars)} stars">${compact(proj.stars)}</span>`;
+const escAttr = (x) => String(x).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);
+const releaseBits = [
+  proj.release
+    ? `Latest release <a href="https://github.com/${APP_REPO}/releases/latest" target="_blank" rel="noopener">${escAttr(proj.release.tag)}<span class="rj-sr"> (opens in a new tab)</span></a>, ${day(proj.release.at)}`
+    : "",
+  proj.stars === null ? "" : `${int(proj.stars)} ${proj.stars === 1 ? "star" : "stars"} on GitHub`,
+  "MIT licensed, built in the open",
+].filter(Boolean);
+const OPEN_LINE = releaseBits.join(" · ");
 const VERSION = JSON.parse(read(join(ROOT, "package.json"))).version;
 const NUMBERS = {
   __VERSION__: VERSION,
@@ -221,6 +253,8 @@ const page = (name) => {
     .replaceAll("__ATS__", () => ats)
     .replace("<!--__WALL__-->", () => wallMarkup)
     .replace("<!--__ANALYTICS__-->", () => analytics)
+    .replaceAll("<!--__STARS__-->", () => STARS)
+    .replaceAll("<!--__OPEN_LINE__-->", () => OPEN_LINE)
     .replaceAll("__SITE_URL__", () => SITE_URL);
   for (const [key, value] of Object.entries(NUMBERS)) out = out.replaceAll(key, () => value);
   const left = out.match(/__[A-Z_]+__/);
