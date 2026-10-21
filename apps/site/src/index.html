@@ -535,6 +535,12 @@ label.rj-chip:has(input:focus-visible) { outline: 2px solid var(--focus-ring); o
 .tbody .dim { color: var(--tw-dim); }
 .tbody .ok { color: var(--tw-ok); font-weight: 600; }
 .tbody .info { color: var(--tw-info); font-weight: 600; }
+/* the installer's own look: wordmark rows sit flush, the cursor and live progress in signal orange */
+.tbody .wm { display: block; line-height: 1.05; }
+.tbody b, .tbody .b { font-weight: 700; color: var(--tw-fg); }
+.tbody .sig { color: var(--brand-signal); }
+.tbody .u { text-decoration: underline; text-underline-offset: 0.2em; }
+.screen[data-scene="4"] .tbody, .screen[data-scene="5"] .tbody { font-size: calc(var(--u) * 1.22); white-space: pre; }
 .tbody .ln { display: block; animation: line-in var(--duration-base) var(--ease-enter) both; }
 @keyframes line-in { from { opacity: 0; transform: translateY(4px); } }
 .pill { position: absolute; z-index: 7; right: 4%; top: 6%; display: flex; align-items: center; gap: calc(var(--u) * 0.8); padding: calc(var(--u) * 0.9) calc(var(--u) * 1.6); border-radius: calc(var(--u) * 3); background: var(--bg-raised); color: var(--text-primary); border: 1px solid var(--border-default); box-shadow: var(--shadow-l2); font-size: calc(var(--u) * 1.6); opacity: 0; transform: translateY(-6px); transition: opacity var(--duration-base) var(--ease-enter), transform var(--duration-base) var(--ease-enter); }
@@ -591,6 +597,7 @@ label.rj-chip:has(input:focus-visible) { outline: 2px solid var(--focus-ring); o
   .twin { left: 4%; right: 4%; top: 8%; bottom: 15%; }
   .tbar { height: calc(var(--u) * 7); font-size: calc(var(--u) * 2.8); }
   .tbody { font-size: calc(var(--u) * 2.7); padding: calc(var(--u) * 2.4); }
+  .screen[data-scene="4"] .tbody, .screen[data-scene="5"] .tbody { font-size: calc(var(--u) * 2.2); white-space: pre-wrap; }
   .launcher--win, .launcher--mac { width: 84%; margin-left: -42%; }
   .launcher--win > *, .launcher--mac > * { font-size: calc(var(--u) * 3.2); }
   .l-hit small, .l-label { font-size: calc(var(--u) * 2.4); }
@@ -2270,25 +2277,80 @@ h1 .serif, h2 .serif { font-size: 1.08em; line-height: 0; }
   var isPhone = /android|iphone|ipod|mobile/i.test(navigator.userAgent) || (matchMedia('(pointer: coarse)').matches && matchMedia('(max-width: 760px)').matches);
   var os = detectOS(), copied = false;
 
-  var VERSION = '__VERSION__';
+  var VERSION = '__SHOWN_VERSION__';
   var TERM = {
-    win: { prompt: 'PS C:\\Users\\you> ', cmd: 'irm https://github.com/Tanmay-Mhatre/rawjobs/releases/latest/download/install.ps1 | iex', platform: 'win-x64', dir: 'C:\\Users\\you\\AppData\\Local\\RawJobs', open: 'It starts by itself when you log in. Open it any time from the Start menu: RawJobs.' },
-    mac: { prompt: 'you@MacBook ~ % ', cmd: 'curl -fsSL https://github.com/Tanmay-Mhatre/rawjobs/releases/latest/download/install.sh | sh', platform: 'darwin-arm64', dir: '/Users/you/Library/Application Support/RawJobs', open: 'It starts by itself when you log in. Open it any time: RawJobs in ~/Applications.' },
-    linux: { prompt: 'you@laptop:~$ ', cmd: 'curl -fsSL https://github.com/Tanmay-Mhatre/rawjobs/releases/latest/download/install.sh | sh', platform: 'linux-x64', dir: '/home/you/.local/share/rawjobs', open: 'It starts by itself when you log in. Open it any time: RawJobs in your app menu.' }
+    win: { prompt: 'PS C:\\Users\\you> ', cmd: 'irm https://github.com/Tanmay-Mhatre/rawjobs/releases/latest/download/install.ps1 | iex', platform: 'win-x64', dir: 'C:\\Users\\you\\AppData\\Local\\RawJobs', added: 'Added RawJobs to the Start menu and the Desktop', where: 'RawJobs, on the Desktop or in the Start menu.', uninstall: 'To uninstall: & "C:\\Users\\you\\AppData\\Local\\RawJobs\\bin\\rawjobs.cmd" uninstall' },
+    mac: { prompt: 'you@MacBook ~ % ', cmd: 'curl -fsSL https://github.com/Tanmay-Mhatre/rawjobs/releases/latest/download/install.sh | sh', platform: 'darwin-arm64', dir: '/Users/you/Library/Application Support/RawJobs', added: 'Added RawJobs to ~/Applications and the Desktop', where: 'RawJobs, on the Desktop or in ~/Applications.', uninstall: 'To uninstall: "/Users/you/Library/Application Support/RawJobs/bin/rawjobs" uninstall' },
+    linux: { prompt: 'you@laptop:~$ ', cmd: 'curl -fsSL https://github.com/Tanmay-Mhatre/rawjobs/releases/latest/download/install.sh | sh', platform: 'linux-x64', dir: '/home/you/.local/share/rawjobs', added: 'Added RawJobs to your app menu and the Desktop', where: 'RawJobs, on the Desktop or in your app menu.', uninstall: 'To uninstall: "/home/you/.local/share/rawjobs/bin/rawjobs" uninstall' }
   };
-  function output(t) {
-    return [
-      ['', ''],
-      ['info', 'Installing RawJobs'],
-      ['', '  Version ' + VERSION + ', for ' + t.platform],
-      ['', '  Downloading Node'],
-      ['', '  Downloading RawJobs'],
-      ['', '  Starting RawJobs (and at every log in)'],
-      ['', ''],
-      ['ok', 'RawJobs ' + VERSION + ' is running at http://127.0.0.1:4317'],
-      ['dim', '  Installed in ' + t.dir],
-      ['dim', '  ' + t.open]
+  /* What the one-line installer prints (packaging/install.ps1 and install.sh): the rawjobs wordmark with
+     the signal cursor, each step with a spinner (a bar while downloading) that turns into a tick, then a
+     box with the link and next steps. Like the real one, a narrow terminal gets the short wordmark and
+     the same lines without the box. Node's exact version comes from the release, so it's left as v24. */
+  var WORDMARK = [
+    '                         ^^        ##',
+    '##_#^ _####_ ##    ##    ## _####_ ##_##_ _#^^^^',
+    '##^   ____## ## ## ##    ## ##  ## ##  ## ^####_',
+    '##    ##  ## ## ## ##    ## ##  ## ##  ##     ##',
+    '##    ^###^# ^##^^##^    ## ^####^ ##__#^ ^####^',
+    '                      ^###^'
+  ].map(function (r) { return r.replace(/#/g, '\u2588').replace(/\^/g, '\u2580').replace(/_/g, '\u2584'); });
+  var SPIN = ['\u280b', '\u2819', '\u2839', '\u2838', '\u283c', '\u2834', '\u2826', '\u2827', '\u2807', '\u280f'];
+  var NODE = 'v24';
+  var termNarrow = function () { return screen.getBoundingClientRect().width < 560; };
+  function bannerHTML(t) {
+    var out = '\n';
+    if (termNarrow()) out += '  <b>rawjobs</b><span class="sig">\u2588</span>\n';
+    else WORDMARK.forEach(function (r, i) { out += '<span class="wm">  <b>' + esc(r) + '</b>' + (i >= 1 && i <= 4 ? ' <span class="sig">\u2588\u2588\u2588</span>' : '') + '</span>'; });
+    return out + '  Jobs, straight from the source.\n<span class="dim">  Version ' + esc(VERSION) + ', for ' + t.platform + '</span>\n\n';
+  }
+  /* .ln is a block (it fades in), so it carries its own line break */
+  function tickLine(text) { return '<span class="ln">  <span class="ok">\u2713</span> ' + esc(text) + '</span>'; }
+  function spinLine(text, frame, pct) {
+    var s = '  <span class="sig">' + SPIN[frame % SPIN.length] + '</span> ' + esc(text);
+    if (pct != null) { var n = Math.floor(pct / 5); s += '  <span class="sig">' + '\u2588'.repeat(n) + '</span><span class="dim">' + '\u2591'.repeat(20 - n) + '</span> ' + pct + '%'; }
+    return s + '\n';
+  }
+  function summaryHTML(t) {
+    var rows = [['<span class="ok">\u25cf</span>', 'b', 'RawJobs ' + VERSION + ' is running'], [' ', 'u', 'http://127.0.0.1:4317'], [' ', '', ''],
+      [' ', '', 'Installed in ' + t.dir], [' ', '', 'It starts by itself when you log in. Open it any time:'], [' ', '', t.where],
+      [' ', '', 'To update or repair it, run the same line again.'], [' ', '', t.uninstall]];
+    var cell = function (r) { return r[1] ? '<span class="' + r[1] + '">' + esc(r[2]) + '</span>' : esc(r[2]); };
+    if (termNarrow()) return rows.map(function (r) { return '  ' + r[0] + ' ' + cell(r) + '\n'; }).join('');
+    var w = Math.max.apply(null, rows.map(function (r) { return r[2].length; })), bar = '\u2500'.repeat(w + 6);
+    return '<span class="dim">  \u256d' + bar + '\u256e</span>\n' + rows.map(function (r) {
+      return '<span class="dim">  \u2502</span>  ' + r[0] + ' ' + cell(r) + ' '.repeat(w - r[2].length) + '  <span class="dim">\u2502</span>\n';
+    }).join('') + '<span class="dim">  \u2570' + bar + '\u256f</span>\n';
+  }
+  /* The whole run: animated in step 4, its last frame in step 5 and with motion off. */
+  async function installRun(t, id, animate) {
+    var head = promptHTML(t, t.cmd, false) + '\n' + bannerHTML(t), done = '', frame = 0;
+    var paint = function (live) { tbody.innerHTML = head + done + (live || ''); tbody.scrollTop = tbody.scrollHeight; };
+    var steps = [
+      { doing: 'Downloading Node ' + NODE, did: 'Downloaded Node ' + NODE, bar: true },
+      { did: "Checked the release's signature" },
+      { doing: 'Downloading RawJobs', did: 'Downloaded RawJobs ' + VERSION, bar: true },
+      { doing: 'Starting RawJobs (and at every log in)', mid: t.added, did: 'Started RawJobs (and at every log in)' }
     ];
+    if (!animate) {
+      steps.forEach(function (st) { if (st.mid) done += tickLine(st.mid); done += tickLine(st.did); });
+      paint('\n' + summaryHTML(t)); return;
+    }
+    paint(); await sleep(250);
+    for (var k = 0; k < steps.length; k++) {
+      var st = steps[k];
+      if (!st.doing) { done += tickLine(st.did); paint(); await sleep(220); if (id !== scene) return; continue; }
+      var ticks = st.bar ? 12 : 9;
+      for (var f = 0; f <= ticks; f++) {
+        if (id !== scene) return;
+        if (st.mid && f === 5) done += tickLine(st.mid);
+        paint(spinLine(st.doing, frame++, st.bar ? Math.round(100 * f / ticks) : null));
+        await sleep(80);
+      }
+      done += tickLine(st.did); paint();
+    }
+    await sleep(300); if (id !== scene) return;
+    paint('\n<span class="ln">' + summaryHTML(t).replace(/\n$/, '') + '</span>');
   }
 
   function setOS(next, focus) {
@@ -2364,7 +2426,6 @@ h1 .serif, h2 .serif { font-size: 1.08em; line-height: 0; }
   /* ---------- the mock screen: each step plays a short scene, or shows its last frame when motion is off ---------- */
   var scene = 0;
   function esc(s) { return s.replace(/&/g, '&amp;').replace(/</g, '&lt;'); }
-  function line(cls, text, animate) { return '<span class="' + (animate ? 'ln ' : '') + (cls || '') + '">' + (text ? esc(text) : ' ') + '</span>\n'; }
   function promptHTML(t, typed, caret) { return '<span class="dim">' + esc(t.prompt) + '</span>' + esc(typed) + (caret ? '<span class="caret"></span>' : ''); }
   function typeInto(el, text, every, id) {
     if (reduce) { el.textContent = text; return Promise.resolve(); }
@@ -2419,16 +2480,7 @@ h1 .serif, h2 .serif { font-size: 1.08em; line-height: 0; }
       $('#tenter').setAttribute('data-on', '');
       return;
     }
-    if (n === 4 || n === 5) {
-      var lines = output(t), html = promptHTML(t, t.cmd, false) + '\n';
-      if (reduce || n === 5) { tbody.innerHTML = html + lines.map(function (l) { return line(l[0], l[1], false); }).join(''); tbody.scrollTop = tbody.scrollHeight; return; }
-      tbody.innerHTML = html;
-      for (var j = 0; j < lines.length; j++) {
-        await sleep(j < 2 ? 200 : 420); if (id !== scene) return;
-        tbody.insertAdjacentHTML('beforeend', line(lines[j][0], lines[j][1], true));
-        tbody.scrollTop = tbody.scrollHeight;
-      }
-    }
+    if (n === 4 || n === 5) await installRun(t, id, !reduce && n === 4);
   }
 
   /* the screen's clock shows the visitor's own time */

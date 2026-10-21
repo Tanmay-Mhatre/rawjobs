@@ -178,7 +178,7 @@ async function projectNumbers() {
 const proj = await projectNumbers();
 /** 1234 -> "1.2k" */
 const compact = (x) => (x >= 1000 ? `${Math.floor(x / 100) / 10}k` : String(x));
-const STARS = proj.stars === null ? "" : `<span class="stars num" aria-label="${int(proj.stars)} stars">${compact(proj.stars)}</span>`;
+const STARS = proj.stars === null ? "" : `<span class="stars num" aria-label="${int(proj.stars)} ${proj.stars === 1 ? "star" : "stars"}">${compact(proj.stars)}</span>`;
 const escAttr = (x) => String(x).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);
 const releaseBits = [
   proj.release
@@ -189,6 +189,8 @@ const releaseBits = [
 ].filter(Boolean);
 const OPEN_LINE = releaseBits.join(" · ");
 const VERSION = JSON.parse(read(join(ROOT, "package.json"))).version;
+// The install mock prints the version people will get: the latest release, or package.json without GitHub.
+const SHOWN_VERSION = proj.release ? proj.release.tag.replace(/^v/, "") : VERSION;
 const NUMBERS = {
   __VERSION__: VERSION,
   __SYSTEMS_N__: String(SYSTEMS.length),
@@ -255,6 +257,7 @@ const page = (name) => {
     .replace("<!--__ANALYTICS__-->", () => analytics)
     .replaceAll("<!--__STARS__-->", () => STARS)
     .replaceAll("<!--__OPEN_LINE__-->", () => OPEN_LINE)
+    .replaceAll("__SHOWN_VERSION__", () => SHOWN_VERSION)
     .replaceAll("__SITE_URL__", () => SITE_URL);
   for (const [key, value] of Object.entries(NUMBERS)) out = out.replaceAll(key, () => value);
   const left = out.match(/__[A-Z_]+__/);
