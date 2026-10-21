@@ -916,6 +916,17 @@ h1 .serif, h2 .serif { font-size: 1.08em; line-height: 0; }
 .get[data-phone] .os-bar, .get[data-phone] .iprogress, .get[data-phone] .installer { display: none; }
 .show-steps { margin-bottom: var(--space-6); }
 
+/* ---------- scroll scenes ----------
+   Native scrolling only: the script maps scroll position onto CSS variables, nothing hijacks the wheel.
+   --read: how far down the page you are (the 2px bar at the top). --x: how far you've left the hero. */
+.readbar { position: fixed; z-index: calc(var(--z-sticky) + 1); top: 0; left: 0; right: 0; height: 2px; background: var(--text-primary); opacity: 0.7;
+  transform-origin: left; transform: scaleX(var(--read, 0)); pointer-events: none; }
+/* leaving the hero: the copy drifts up and fades a little, the radar zooms out and fades */
+.hero > .wrap { transform: translateY(calc(var(--x, 0) * -48px)); opacity: calc(1 - var(--x, 0) * 0.55); }
+.radar[data-settled] { transition: none; transform: scale(calc(1 - var(--x, 0) * 0.14)); opacity: calc(1 - var(--x, 0) * 0.9); }
+.hero::before { transform: scale(calc(1 + var(--x, 0) * 0.25)); }
+@media (prefers-reduced-motion: reduce) { .hero > .wrap, .radar[data-settled], .hero::before { transform: none; opacity: 1; } }
+
 /* ---------- privacy: three statements, big ---------- */
 .facts { grid-template-columns: minmax(0, 1fr); gap: 0; }
 .fact { grid-template-columns: auto minmax(0, 1fr); column-gap: var(--space-6); align-items: baseline; padding-block: var(--space-6); border-top: 1px solid var(--glass-line); }
@@ -1340,6 +1351,7 @@ h1 .serif, h2 .serif { font-size: 1.08em; line-height: 0; }
 </script>
 <div class="page rj-root">
 <a class="rj-btn rj-btn--primary skip" href="#main">Skip to content</a>
+<div class="readbar" aria-hidden="true"></div>
 
 <header class="nav" id="nav">
   <div class="wrap nav__in">
@@ -1940,14 +1952,15 @@ h1 .serif, h2 .serif { font-size: 1.08em; line-height: 0; }
 
   /* ---------- nav border once scrolled ---------- */
   /* it steps aside while you read down the page and comes back as soon as you scroll up */
-  var nav = $('#nav'), lastY = window.scrollY, fcta = $('#fcta'), getSection = $('#get');
+  var nav = $('#nav'), lastY = window.scrollY, fcta = $('#fcta'), getSection = $('#get'), heroBox = $('.hero');
   var onScroll = function () {
     var y = window.scrollY;
     nav.setAttribute('data-stuck', y > 8 ? 'true' : 'false');
     if (Math.abs(y - lastY) > 6) { nav.setAttribute('data-away', y > lastY && y > 240 && !nav.contains(document.activeElement) ? 'true' : 'false'); lastY = y; }
     /* the floating Get RawJobs shows while the nav is away, except over Get it itself */
     var g = getSection.getBoundingClientRect(), over = g.top < innerHeight * 0.8 && g.bottom > 0;
-    var show = nav.getAttribute('data-away') === 'true' && !over;
+    /* not while the hero's own Get RawJobs is still in view */
+    var show = nav.getAttribute('data-away') === 'true' && !over && y > heroBox.offsetHeight * 0.8;
     if (show !== fcta.hasAttribute('data-show')) {
       if (show) { fcta.setAttribute('data-show', ''); fcta.removeAttribute('aria-hidden'); fcta.removeAttribute('tabindex'); }
       else { fcta.removeAttribute('data-show'); fcta.setAttribute('aria-hidden', 'true'); fcta.setAttribute('tabindex', '-1'); }
@@ -2605,6 +2618,7 @@ h1 .serif, h2 .serif { font-size: 1.08em; line-height: 0; }
     }
     function start() {
       layout(); frame(performance.now()); canvas.setAttribute('data-on', ''); play();
+      setTimeout(function () { canvas.setAttribute('data-settled', ''); }, 1300);
       if ('IntersectionObserver' in window) new IntersectionObserver(function (es) { visible = es[0].isIntersecting; play(); }).observe(hero);
       document.addEventListener('visibilitychange', play);
       /* the wall places (and on resize re-places) its stamps: follow them */
@@ -2620,7 +2634,42 @@ h1 .serif, h2 .serif { font-size: 1.08em; line-height: 0; }
     if (document.fonts && document.fonts.ready) document.fonts.ready.then(start); else start();
   })();
 
+  /* ---------- the reading bar: how far down the page you are (a position, not motion, so it stays) ---------- */
+  var root = document.documentElement, readTick = false;
+  function readPos() { readTick = false; var max = root.scrollHeight - innerHeight; root.style.setProperty('--read', max > 0 ? Math.min(1, scrollY / max).toFixed(4) : '0'); }
+  addEventListener('scroll', function () { if (!readTick) { readTick = true; requestAnimationFrame(readPos); } }, { passive: true });
+  addEventListener('resize', readPos); readPos();
+
   if (reduce) return;
+
+  /* ---------- leaving the hero: --x goes 0 -> 1 over the hero's height ---------- */
+  var heroEl = document.querySelector('.hero'), heroTick = false;
+  function heroPos() { heroTick = false; var h = heroEl.offsetHeight || 1, x = Math.max(0, Math.min(1, scrollY / (h * 0.9))); heroEl.style.setProperty('--x', x.toFixed(3)); }
+  if (heroEl) { addEventListener('scroll', function () { if (!heroTick) { heroTick = true; requestAnimationFrame(heroPos); } }, { passive: true }); heroPos(); }
+
+  /* ---------- sections enter as a sequence: the label, then the heading (its words blur in), then the rest ---------- */
+  if ('IntersectionObserver' in window) {
+    var vh0 = innerHeight;
+    var seq = new IntersectionObserver(function (es) {
+      es.forEach(function (e) { if (!e.isIntersecting) return; seq.unobserve(e.target); e.target.classList.remove('rv-wait'); e.target.classList.add('rv-in'); });
+    }, { rootMargin: '0px 0px -8% 0px', threshold: 0.1 });
+    var stage = function (sel, i, step) {
+      Array.prototype.forEach.call(document.querySelectorAll(sel), function (el, k) {
+        if (el.getBoundingClientRect().top < vh0 * 0.92 || el.classList.contains('rv-wait')) return;
+        el.style.setProperty('--i', i + (step ? (k % 4) * step : 0));
+        el.classList.add('rv-wait'); seq.observe(el);
+      });
+    };
+    stage('.section .eyebrow', 0, 0);
+    stage('.section .split__head .prose, .section .section__lede, .fmap__head .rj-btn', 5, 0);
+    stage('.routes, .shot, .facts .fact, .faq details, .final__in', 6, 0);
+    Array.prototype.forEach.call(document.querySelectorAll('.fmap'), function (ul) {
+      Array.prototype.forEach.call(ul.children, function (li, k) {
+        if (li.getBoundingClientRect().top < vh0 * 0.92) return;
+        li.style.setProperty('--i', 3 + (k % 4) * 2); li.classList.add('rv-wait'); seq.observe(li);
+      });
+    });
+  }
 
   /* ---------- the dashboard rises flat as it scrolls up the screen ---------- */
   var tilts = Array.prototype.slice.call(document.querySelectorAll('[data-tilt]')), ticking = false;
