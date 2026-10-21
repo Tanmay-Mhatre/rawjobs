@@ -37,7 +37,7 @@ default. With it ticked, opening LinkedIn's data page starts a watch:
 - It opens only a file named like LinkedIn's export (`Basic_LinkedInDataExport_….zip`) that was
   saved after the watch started, and reads only Connections.csv, Positions.csv and Education.csv
   from it. It never opens any other file, and never moves or deletes your file.
-- It stops once it has imported the file, or after 24 hours, whichever comes first.
+- It stops once it has imported the file, or after 48 hours, whichever comes first.
 - Stop it any time with "Stop" next to "Watching Downloads until …" on a job or in Settings →
   Data & privacy → LinkedIn connections. Choosing the file yourself stops it too.
 

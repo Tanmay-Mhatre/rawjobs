@@ -37,7 +37,7 @@ export const IMPORT_ERROR: Record<ImportErrorCode, string> = {
   ZIP_TOO_BIG: "That export is too big to read here. Request only Connections, Positions and Education.",
   TOO_BIG: "That export is too big to read here. Request only Connections, Positions and Education.",
   ZIP_ENCRYPTED: "That ZIP has a password, so RawJobs can't read it. Request a new archive from LinkedIn.",
-  NO_CONNECTIONS: "That ZIP has no Connections.csv. Request the archive again with Connections ticked.",
+  NO_CONNECTIONS: "That ZIP has no Connections.csv. Request the larger data archive instead.",
   NEWER_FILE: "Your connections were saved by a newer RawJobs. Update RawJobs to read them.",
   FAILED: "Couldn't import the file. Check that RawJobs is running, then try again.",
 };
