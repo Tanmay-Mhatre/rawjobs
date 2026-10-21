@@ -6,6 +6,7 @@ import { companyKey, companyOfJobId, jobCompanyKey } from "./connectors";
 import { mergeHistory, type MergeResult } from "./diff";
 import { keptChecked, readLedger, recordChecks, writeLedger } from "./discover";
 import { HttpClient, type HttpStats } from "./http";
+import { FileBoardIds } from "./board-ids";
 import { FileHttpCache } from "./http-cache";
 import { readLocationCache, writeLocationCache } from "./location-cache";
 import { FEED_MAX_AGE_DAYS, feedMatches, jobFeedStatus } from "./job-feed";
@@ -327,6 +328,8 @@ export async function scan(config: Config, opts: ScanOptions): Promise<ScanResul
   const checks = byMatchChance(directoryPlan.fetch, hints);
   // Saved responses: a board that hasn't changed since the last scan answers with an empty 304.
   const cache = opts.http || opts.dryRun ? undefined : new FileHttpCache(join(opts.dataDir, "cache", "http"));
+  // Ids learned from careers pages (JOIN's company number): a board's page is read for it only once.
+  const ids = opts.http || opts.dryRun ? undefined : new FileBoardIds(join(opts.dataDir, "cache", "board-ids.json"));
   // The weekly word list that makes "PSP" count as payments (concepts-remote.ts); the built-in one when offline.
   if (!opts.http && !opts.dryRun) await loadConcepts(opts.dataDir);
   // A host that doesn't answer gives up after 8 s; one that answers gets 15 s for the body. One that keeps
@@ -353,6 +356,7 @@ export async function scan(config: Config, opts: ScanOptions): Promise<ScanResul
     if (force || Date.now() - lastCacheSave >= CACHE_SAVE_EVERY_MS) {
       lastCacheSave = Date.now();
       cache?.save();
+      ids?.save();
     }
   };
 
@@ -407,6 +411,7 @@ export async function scan(config: Config, opts: ScanOptions): Promise<ScanResul
     locations,
     // Your companies' first pages too: theirs are only reused when every job is there (run.ts).
     firstPages: fullScan ? knownFirstPages(boards, now.getTime()) : undefined,
+    ids,
     maxCompaniesInFlight: opts.maxCompaniesInFlight,
     describeWorkers: opts.describeWorkers,
     onCompanyDone: opts.onCompanyDone,
@@ -445,6 +450,7 @@ export async function scan(config: Config, opts: ScanOptions): Promise<ScanResul
   const merged = mergeHistory(previous, result, [...config.companies, ...kept], undefined, { lastRunAt });
   await cache?.flush();
   cache?.save({ prune: !stopped });
+  ids?.save();
   if (!opts.dryRun) writeLocationCache(opts.dataDir, locations, knownLocations);
 
   // This run's fetches only: a resumed scan's earlier ones were recorded when it stopped.
