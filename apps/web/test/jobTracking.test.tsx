@@ -247,6 +247,18 @@ describe("JobTracking", () => {
 });
 
 describe("TrackedJobDialog", () => {
+  it("keeps the offer's numbers hidden until you press Show", () => {
+    render(<TrackedJobDialog id="greenhouse:acme:1" entry={entry({ status: "offer", offer: { pay: "AED 50k a month" } })} onClose={() => {}} onUpdate={vi.fn()} />);
+    const details = screen.queryByRole("tab", { name: "Details" });
+    if (details) fireEvent.click(details);
+    expect(screen.getByText("Hidden")).toBeTruthy();
+    expect(screen.queryByDisplayValue("AED 50k a month")).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Show" }));
+    expect(screen.getByDisplayValue("AED 50k a month")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Hide" }));
+    expect(screen.queryByDisplayValue("AED 50k a month")).toBeNull();
+  });
+
   it("shows a hand-added job's own fields in Details, which rename it through the snapshot", () => {
     const onUpdate = vi.fn();
     const { unmount } = render(<TrackedJobDialog id="manual:abc" entry={entry({ cv: "PM v3" })} onClose={() => {}} onUpdate={onUpdate} />);

@@ -20,12 +20,13 @@ describe("progress tracking", () => {
     expect(applyPatch(old, job, { status: "applied" }, "2026-10-16T09:00:00Z")!.history?.[0]).toEqual({ status: "saved", at: "2026-10-01T09:00:00Z" });
   });
 
-  it("sets a follow-up a week after you apply, keeps your own date, and drops it when you move on", () => {
+  it("sets a follow-up a week after you apply, drops that one when you move on, and keeps your own date", () => {
     const applied = applyPatch(undefined, job, { status: "applied" }, "2026-10-16T09:00:00Z")!;
     expect(applied.followUp).toBe(dayAfter("2026-10-16T09:00:00Z", 7));
+    expect(applyPatch(applied, job, { status: "interviewing" }, "2026-10-20T09:00:00Z")!.followUp).toBeUndefined();
     const moved = applyPatch(applied, job, { followUp: "2026-10-30" }, "2026-10-17T09:00:00Z")!;
     expect(moved.followUp).toBe("2026-10-30");
-    expect(applyPatch(moved, job, { status: "interviewing" }, "2026-10-20T09:00:00Z")!.followUp).toBeUndefined();
+    expect(applyPatch(moved, job, { status: "interviewing" }, "2026-10-20T09:00:00Z")!.followUp).toBe("2026-10-30");
   });
 
   it("is due on its date, only in an active stage", () => {

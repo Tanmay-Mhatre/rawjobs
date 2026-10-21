@@ -305,7 +305,7 @@ export function Pipeline({ user, jobsById, onOpen, onApply, minScore, onPatch, o
             <Composer
               contacts={loggingEntry.contacts ?? []}
               initial={taskPrefill(loggingEntry, logging, loggingEntry.snapshot.title)}
-              hasFollowUp={!!loggingEntry.followUp}
+              hasFollowUp={!!loggingEntry.followUp && !loggingEntry.followUpPicked}
               followUps={loggingEntry.status !== "saved"}
               onLog={({ followUp, ...a }, opts) => {
                 // A Saved job's date is "Apply by": nothing logged there counts as a follow-up.
