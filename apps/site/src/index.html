@@ -33,13 +33,17 @@
 <link rel="preload" href="/fonts/GeistMono-500.woff2" as="font" type="font/woff2" crossorigin>
 <link rel="preload" href="/fonts/InstrumentSerif-Italic.woff2" as="font" type="font/woff2" crossorigin>
 <script>
-/* Intro: on every load and reload, but never with reduced motion, on a deep link (/#get) or in a background tab.
+/* Intro: on every load and reload, but never with reduced motion, on a link to a section (/#get) or in a background tab.
    html.intro shows the overlay (CSS) and makes the wall wait for rawjobs:intro-done. Without JS nothing happens. */
 (function () {
   var r = document.documentElement;
   try {
     if (!('animate' in r) || matchMedia('(prefers-reduced-motion: reduce)').matches) return;
-    if (location.hash.length > 1 || document.visibilityState === 'hidden') return;
+    /* a link straight to a section (/#get) skips it; a reload doesn't, even when the address still has the #section
+       a nav link left there */
+    var nav = performance.getEntriesByType && performance.getEntriesByType('navigation')[0];
+    var reload = nav ? nav.type === 'reload' : (performance.navigation && performance.navigation.type === 1);
+    if ((location.hash.length > 1 && !reload) || document.visibilityState === 'hidden') return;
   } catch (e) { return; }
   r.classList.add('intro');
   /* failsafe: if the intro script never runs, the overlay goes and the wall starts anyway */
@@ -1335,7 +1339,9 @@ h1 .serif, h2 .serif { font-size: 1.08em; line-height: 0; }
     ['pointerdown', 'keydown', 'wheel', 'touchstart'].forEach(function (t) { removeEventListener(t, skip, true); });
   }
   /* skip: before the lift, the sheet fades out fast and the wall starts; during the lift, everything jumps to the end */
-  function skip() {
+  function skip(e) {
+    /* keys left over from the reload itself (a held Ctrl or ⌘, F5, an auto-repeat) don't count as "skip" */
+    if (e && e.type === 'keydown' && (e.repeat || /^(Control|Meta|Shift|Alt|F5)$/.test(e.key))) return;
     if (state === 'done') return;
     if (state === 'lift') { end(); return; }
     state = 'lift';
