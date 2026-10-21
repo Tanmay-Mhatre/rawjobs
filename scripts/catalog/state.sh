@@ -4,7 +4,7 @@
 #   catalog  the directory runs (weekly rebuild, contributions), which take turns (one concurrency group)
 #   jobs     the job feed's merge job: what it last published (the next change files are made against
 #            it), and the hiring activity recorded so far
-#   jobs-<group>  each feed group's last shards and ETags (sr, payroll, enterprise, rest; jobs.ts GROUPS)
+#   jobs-<group>  each feed group's last shards and ETags (sr, payroll, enterprise, join, rest; jobs.ts GROUPS)
 #
 #   state.sh restore [catalog|jobs|jobs-<group>]   download and unpack; fails if it exists but can't be
 #                                     downloaded. Sets the step output restored=true|false.
@@ -57,11 +57,11 @@ case "$SET" in
     FILES=(out/jobs/jobs-manifest.json out/jobs/jobs-v2-manifest.json out/jobs/jobs-v3-manifest.json out/jobs/stats.json out/jobs/activity-state.json)
     for f in out/jobs/jobs-*.json.gz out/jobs/jobs-v2-snapshot-*.json.br out/jobs/jobs-v3-snapshot-*.txt.br; do FILES+=("$f"); done
     ;;
-  jobs-sr | jobs-payroll | jobs-enterprise | jobs-rest)
-    # One feed group (jobs.ts GROUPS): its last shards and ETags. Saved only by that group's job, so a
+  jobs-sr | jobs-payroll | jobs-enterprise | jobs-join | jobs-rest)
+    # One feed group (jobs.ts GROUPS): its last shards, ETags and learned board ids. Saved only by that group's job, so a
     # failed group leaves its previous copy for the merge job to fall back on.
     g="out/jobs/groups/${SET#jobs-}"
-    FILES=("$g/group.json" "$g/etags.json")
+    FILES=("$g/group.json" "$g/etags.json" "$g/board-ids.json")
     for f in "$g"/jobs-*.json.gz; do FILES+=("$f"); done
     ;;
   *)
