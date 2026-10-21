@@ -15,6 +15,14 @@ on:
 permissions:
   contents: read
 
+# One release at a time, in the order the tags were pushed. Never cancel one that has started
+# (a half-published release), and queue: max so a third tag pushed meanwhile doesn't replace the
+# second one's waiting run (the default keeps only one waiting run per group).
+concurrency:
+  group: release
+  cancel-in-progress: false
+  queue: max
+
 env:
   TAG: ${{ github.ref_name }}
 
@@ -91,6 +99,8 @@ jobs:
   publish:
     needs: test
     runs-on: ubuntu-24.04
+    # Usually 10-17 s (v0.6.9-v0.7.1); the rest is headroom for a slow asset upload.
+    timeout-minutes: 10
     permissions:
       contents: write
       # Start the site deploy (the update beacon) and close the "not released yet" reminder.

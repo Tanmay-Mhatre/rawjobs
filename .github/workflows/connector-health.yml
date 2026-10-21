@@ -27,6 +27,12 @@ env:
   DATA_REPO: ${{ vars.DATA_REPO || 'Tanmay-Mhatre/rawjobs-directory' }}
   TITLE: "Hiring system checks failing"
 
+# One check at a time: two runs (the schedule and a manual one) could both find no open issue and
+# open two. A newer waiting run replacing an older waiting one is fine: only the latest result matters.
+concurrency:
+  group: connector-health
+  cancel-in-progress: false
+
 jobs:
   check:
     runs-on: ubuntu-24.04

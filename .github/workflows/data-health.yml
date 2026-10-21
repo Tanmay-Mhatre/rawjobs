@@ -28,6 +28,11 @@ env:
   DATA_REPO: ${{ vars.DATA_REPO || 'Tanmay-Mhatre/rawjobs-directory' }}
   TITLE: "Shared data needs attention"
 
+# One check at a time, so two runs can't both open the "needs attention" issue.
+concurrency:
+  group: data-health
+  cancel-in-progress: false
+
 jobs:
   check:
     runs-on: ubuntu-24.04
