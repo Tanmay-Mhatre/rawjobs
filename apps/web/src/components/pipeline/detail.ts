@@ -14,11 +14,11 @@ export type TimelineItem =
   | { kind: "change"; key: string; at: string; text: string }
   | { kind: "found"; key: string; at: string };
 
-export type TimelineFilter = "all" | "messages" | "stages" | "notes" | "changes";
+/** Stage moves are one line each, so they show under All only. */
+export type TimelineFilter = "all" | "messages" | "notes" | "changes";
 export const TIMELINE_FILTERS: { id: TimelineFilter; label: string }[] = [
   { id: "all", label: "All" },
   { id: "messages", label: "Messages" },
-  { id: "stages", label: "Stages" },
   { id: "notes", label: "Notes" },
   { id: "changes", label: "Changes" },
 ];
@@ -60,7 +60,6 @@ export function timeline(entry: Entry, foundAt?: string): TimelineItem[] {
 
 export function filterTimeline(items: readonly TimelineItem[], f: TimelineFilter): TimelineItem[] {
   if (f === "messages") return items.filter((i) => i.kind === "touch");
-  if (f === "stages") return items.filter((i) => i.kind === "stage" || i.kind === "found");
   if (f === "notes") return items.filter((i) => i.kind === "note");
   if (f === "changes") return items.filter((i) => i.kind === "change");
   return [...items];

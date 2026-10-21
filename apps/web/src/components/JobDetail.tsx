@@ -39,6 +39,7 @@ import { isRoleStale, isStale, staleReasons } from "../lib/stale";
 import { type FitFix, fitFixes, fixApplied, useProfileFix } from "../lib/profileFix";
 import { load, save } from "../lib/storage";
 import { CLOSED_AS, type ClosedAs, type Entry, type EntryPatch, dayAfter, followUpDue, isActive, PIPELINE, quickStatus, STATUS_LABEL, type Status, stageSince, statusLabel } from "../lib/userState";
+import { DateField } from "./DateField";
 import { Dialog } from "./Dialog";
 import { settingsHash } from "./settings/registry";
 import { HiringActivity } from "./HiringActivity";
@@ -936,29 +937,31 @@ function ProgressLine({ entry, id, onUpdate }: { entry: Entry; id: string; onUpd
       )}
       {since && (
         // Tracked late (you applied last week): set the real date so the timeline and follow-ups count from it.
-        <label htmlFor={`${id}-since`} className="flex items-center gap-2">
-          {statusLabel(entry)} on
-          <input
+        <span className="flex items-center gap-2">
+          <label htmlFor={`${id}-since`}>{statusLabel(entry)} on</label>
+          <DateField
             id={`${id}-since`}
-            type="date"
+            label={`${statusLabel(entry)} on`}
             value={dayAfter(since, 0)}
             max={dayAfter(new Date().toISOString(), 0)}
-            onChange={(e) => e.target.value && onUpdate({ since: e.target.value })}
-            className="h-8 rounded-md border border-line bg-raised px-2 type-small text-ink"
+            onChange={(d) => d && onUpdate({ since: d })}
+            className="h-8 w-40"
           />
-        </label>
+        </span>
       )}
       {active && (
-        <label htmlFor={id} className={cx("flex items-center gap-2", due && "font-medium text-warning-text")}>
-          {entry.status === "saved" ? (due ? "Apply now" : "Apply by") : due ? "Follow up now" : "Follow up on"}
-          <input
+        <span className={cx("flex items-center gap-2", due && "font-medium text-warning-text")}>
+          <label htmlFor={id}>{entry.status === "saved" ? (due ? "Apply now" : "Apply by") : due ? "Follow up now" : "Follow up on"}</label>
+          <DateField
             id={id}
-            type="date"
+            label={entry.status === "saved" ? "Apply by" : "Follow up on"}
             value={entry.followUp ?? ""}
-            onChange={(e) => onUpdate({ followUp: e.target.value || undefined })}
-            className="h-8 rounded-md border border-line bg-raised px-2 type-small text-ink"
+            clearable
+            placeholder="No date"
+            onChange={(d) => onUpdate({ followUp: d || undefined })}
+            className="h-8 w-40"
           />
-        </label>
+        </span>
       )}
     </div>
   );

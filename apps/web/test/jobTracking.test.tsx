@@ -67,7 +67,7 @@ describe("timeline", () => {
     expect(items[1]).toMatchObject({ title: "Emailed Priya Shah" });
     expect(items[2]).toMatchObject({ text: "Moved to Applied" });
     expect(filterTimeline(items, "messages").map((i) => i.kind)).toEqual(["touch"]);
-    expect(filterTimeline(items, "stages").map((i) => i.kind)).toEqual(["stage", "stage", "found"]);
+    expect(filterTimeline(items, "changes")).toEqual([]);
     expect(filterTimeline(items, "notes")).toHaveLength(1);
   });
 
@@ -122,6 +122,9 @@ describe("JobTracking", () => {
     const onPatch = vi.fn();
     render(<Harness start={entry()} onPatch={onPatch} />);
     expect(screen.getByRole("tab", { name: "Activity" }).getAttribute("aria-selected")).toBe("true");
+    // One line until you use it.
+    expect(screen.queryByLabelText("What was said")).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Log a message, call or note…" }));
     fireEvent.change(screen.getByLabelText("What was said"), { target: { value: "Sent my portfolio" } });
     fireEvent.click(screen.getByRole("button", { name: "Log email" }));
     expect(onPatch.mock.calls[0]![0]).toMatchObject({ followUp: "2026-10-27", activities: [{ channel: "email", dir: "sent", text: "Sent my portfolio" }] });
@@ -135,13 +138,31 @@ describe("JobTracking", () => {
 
   it("filters the timeline with pressed chips", () => {
     render(<Harness start={entry({ note: "Old note" })} />);
-    const stages = screen.getByRole("button", { name: "Stages" });
-    fireEvent.click(stages);
-    expect(stages.getAttribute("aria-pressed")).toBe("true");
-    expect(screen.queryByText("Old note")).toBeNull();
     expect(screen.getByText("Moved to Applied")).toBeTruthy();
+    const messages = screen.getByRole("button", { name: "Messages" });
+    fireEvent.click(messages);
+    expect(messages.getAttribute("aria-pressed")).toBe("true");
+    expect(screen.queryByText("Old note")).toBeNull();
+    expect(screen.queryByText("Moved to Applied")).toBeNull();
     fireEvent.click(screen.getByRole("button", { name: "Notes" }));
     expect(screen.getByText("Old note")).toBeTruthy();
+  });
+
+  it("groups the timeline by day and folds edits in a row into one line", () => {
+    const at = "2026-10-20T10:00:00.000Z";
+    render(
+      <Harness
+        start={entry({
+          changes: [
+            { at, text: "CV set to v2" },
+            { at, text: "Follow-up moved to Oct 28" },
+          ],
+        })}
+      />,
+    );
+    const history = screen.getByRole("list", { name: "History" });
+    expect(within(history).getByText("Today")).toBeTruthy();
+    expect(within(history).getByText("2 edits: Follow-up moved to Oct 28, CV set to v2")).toBeTruthy();
   });
 
   it("pins an overdue follow-up with Log follow-up, which fills the composer, and Snooze", () => {
@@ -205,22 +226,33 @@ describe("JobTracking", () => {
     const onPatch = vi.fn();
     render(<Harness start={entry({ contacts: [priya] })} onPatch={onPatch} />);
     fireEvent.click(screen.getByRole("tab", { name: "Interviews" }));
+    fireEvent.click(screen.getByRole("button", { name: "Add interview" }));
     const form = within(screen.getByRole("form", { name: "Add an interview" }));
-    fireEvent.change(form.getByLabelText("Date"), { target: { value: "2026-10-23" } });
-    fireEvent.change(form.getByLabelText("Time"), { target: { value: "14:30" } });
-    fireEvent.change(form.getByLabelText("Round"), { target: { value: "Technical" } });
+    fireEvent.click(form.getByRole("button", { name: "Technical" }));
+    // Saving without a day asks for one.
+    fireEvent.click(form.getByRole("button", { name: "Save interview" }));
+    expect(form.getByText("Pick the day of the interview.")).toBeTruthy();
+    fireEvent.click(form.getByLabelText("Date"));
+    const day = new Date("2026-10-23T12:00:00").toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric" });
+    fireEvent.click(within(screen.getByRole("dialog", { name: "Interview date" })).getByRole("button", { name: day }));
+    const time = form.getByLabelText("Time");
+    fireEvent.change(time, { target: { value: "2:30 pm" } });
+    fireEvent.blur(time);
     fireEvent.change(form.getByLabelText("With"), { target: { value: "p1" } });
-    fireEvent.click(form.getByRole("button", { name: "Add interview" }));
+    fireEvent.click(form.getByRole("button", { name: "Save interview" }));
     expect(onPatch.mock.calls.at(-1)![0]).toEqual({ interviews: [{ on: "2026-10-23", what: "Technical", time: "14:30", contactId: "p1" }] });
-    expect(screen.getByText("with Priya Shah")).toBeTruthy();
+    expect(screen.getByText(/with Priya Shah/)).toBeTruthy();
+    expect(screen.queryByRole("form", { name: "Add an interview" })).toBeNull();
   });
 });
 
 describe("TrackedJobDialog", () => {
-  it("has a Job tab only for a job added by hand, which renames it through the snapshot", () => {
+  it("shows a hand-added job's own fields in Details, which rename it through the snapshot", () => {
     const onUpdate = vi.fn();
     const { unmount } = render(<TrackedJobDialog id="manual:abc" entry={entry({ cv: "PM v3" })} onClose={() => {}} onUpdate={onUpdate} />);
-    fireEvent.click(screen.getByRole("tab", { name: "Job" }));
+    // A side panel on wide screens, a Details tab on narrow ones.
+    const details = screen.queryByRole("tab", { name: "Details" });
+    if (details) fireEvent.click(details);
     const title = screen.getByLabelText("Job title");
     fireEvent.change(title, { target: { value: "Senior product manager" } });
     fireEvent.blur(title);
@@ -228,8 +260,8 @@ describe("TrackedJobDialog", () => {
     expect((screen.getByLabelText("CV used") as HTMLInputElement).value).toBe("PM v3");
     unmount();
     render(<TrackedJobDialog id="greenhouse:acme:1" entry={entry()} onClose={() => {}} onUpdate={onUpdate} />);
-    expect(screen.queryByRole("tab", { name: "Job" })).toBeNull();
-    expect(screen.getByRole("tab", { name: "Activity" })).toBeTruthy();
+    expect(screen.queryByLabelText("Job title")).toBeNull();
+    expect(screen.getByRole("list", { name: "History" })).toBeTruthy();
   });
 });
 
@@ -250,22 +282,22 @@ describe("review fixes", () => {
     expect(next.snapshot.title).toBe("Lead");
   });
 
-  it("saves a picked snooze date only when it's complete and from tomorrow on", () => {
+  it("saves a picked snooze date only from tomorrow on", () => {
     const onPatch = vi.fn();
     render(<Harness start={entry({ followUp: "2026-10-18" })} onPatch={onPatch} />);
     fireEvent.click(screen.getByRole("button", { name: "Snooze" }));
     fireEvent.click(screen.getByRole("menuitem", { name: "Pick a date" }));
-    const input = screen.getByLabelText("Follow up on");
-    fireEvent.change(input, { target: { value: "0002-10-28" } });
-    fireEvent.blur(input);
+    const cal = within(screen.getByRole("dialog", { name: "Follow up on" }));
+    const name = (d: string) => new Date(`${d}T12:00:00`).toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric" });
+    fireEvent.click(cal.getByRole("button", { name: name("2026-10-19") }));
     expect(onPatch).not.toHaveBeenCalled();
-    fireEvent.change(input, { target: { value: "2026-10-28" } });
-    fireEvent.keyDown(input, { key: "Enter" });
+    fireEvent.click(cal.getByRole("button", { name: name("2026-10-28") }));
     expect(onPatch).toHaveBeenCalledWith({ followUp: "2026-10-28" });
   });
 
   it("keeps a half-written touch when Add a person switches tabs and back", () => {
     render(<Harness start={entry()} />);
+    fireEvent.click(screen.getByRole("button", { name: "Log a message, call or note…" }));
     fireEvent.change(screen.getByLabelText("What was said"), { target: { value: "Draft" } });
     fireEvent.change(screen.getByLabelText("Person"), { target: { value: "__add" } });
     expect(screen.getByRole("tab", { name: /People/ }).getAttribute("aria-selected")).toBe("true");

@@ -320,7 +320,8 @@ export function capEntry(e: Entry, now = new Date()): Entry {
 }
 
 const dayLabel = (day: string) => new Date(`${day}T12:00:00`).toLocaleDateString(undefined, { month: "short", day: "numeric" });
-const interviewLabel = (i: Interview) => [i.what || "Interview", dayLabel(i.on), i.time].filter(Boolean).join(", ");
+const timeLabel = (hhmm: string) => new Date(`2000-01-01T${hhmm}:00`).toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" });
+const interviewLabel = (i: Interview) => [i.what || "Interview", dayLabel(i.on), i.time && timeLabel(i.time)].filter(Boolean).join(", ");
 const OFFER_LABEL: Record<(typeof OFFER_FIELDS)[number], string> = { pay: "pay", bonus: "bonus", equity: "equity", location: "location", start: "start date", deadline: "deadline", note: "note" };
 const TASK_LABEL: Record<string, string> = { "follow-up": "Follow-up", "thank-you": "Thank-you", interview: "Interview", deadline: "Deadline" };
 
