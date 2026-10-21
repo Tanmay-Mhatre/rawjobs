@@ -1,4 +1,4 @@
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, utimesSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
@@ -243,6 +243,19 @@ describe("scan", () => {
     expect(calls.some((u) => [...done].some((slug) => u.includes(`/${slug}`)))).toBe(false);
     expect(second.result.health.length).toBe(4);
     expect(existsSync(join(dir, "scan-progress-all.json"))).toBe(false);
+  });
+
+  it("removes progress files too old to resume, of any scan type", () => {
+    const dir = mkdtempSync(join(tmpdir(), "jh-progress-"));
+    const head = (scope: string) => `${JSON.stringify({ version: 2, scope, startedAt: new Date().toISOString() })}
+`;
+    writeFileSync(join(dir, "scan-progress-all.json"), head("all"));
+    writeFileSync(join(dir, "scan-progress-mine.json"), head("mine"));
+    const dayAgo = (Date.now() - 25 * 3_600_000) / 1000;
+    utimesSync(join(dir, "scan-progress-mine.json"), dayAgo, dayAgo);
+    expect(resumable(dir, "all")).toBeDefined();
+    expect(existsSync(join(dir, "scan-progress-mine.json"))).toBe(false);
+    rmSync(dir, { recursive: true, force: true });
   });
 
   it("appends progress line by line, and still resumes a progress file from before", async () => {
