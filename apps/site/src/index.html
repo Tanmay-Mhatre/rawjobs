@@ -33,19 +33,17 @@
 <link rel="preload" href="/fonts/GeistMono-500.woff2" as="font" type="font/woff2" crossorigin>
 <link rel="preload" href="/fonts/InstrumentSerif-Italic.woff2" as="font" type="font/woff2" crossorigin>
 <script>
-/* Intro: first visit per browser session only, never with reduced motion, never on a deep link or a background tab.
+/* Intro: on every load and reload, but never with reduced motion, on a deep link (/#get) or in a background tab.
    html.intro shows the overlay (CSS) and makes the wall wait for rawjobs:intro-done. Without JS nothing happens. */
 (function () {
   var r = document.documentElement;
   try {
     if (!('animate' in r) || matchMedia('(prefers-reduced-motion: reduce)').matches) return;
     if (location.hash.length > 1 || document.visibilityState === 'hidden') return;
-    if (sessionStorage.getItem('rawjobs:intro')) return;
-    sessionStorage.setItem('rawjobs:intro', '1');
   } catch (e) { return; }
   r.classList.add('intro');
   /* failsafe: if the intro script never runs, the overlay goes and the wall starts anyway */
-  setTimeout(function () { if (r.classList.contains('intro')) { r.classList.remove('intro'); dispatchEvent(new Event('rawjobs:intro-done')); } }, 4000);
+  setTimeout(function () { if (r.classList.contains('intro')) { r.classList.remove('intro'); dispatchEvent(new Event('rawjobs:intro-done')); } }, 6000);
 })();
 </script>
 <style>
@@ -630,7 +628,7 @@ label.rj-chip:has(input:focus-visible) { outline: 2px solid var(--focus-ring); o
 }
 
 /* ---------- intro and micro-animations (21st.dev Preloader, Scramble Text, Animate Digits, Text Blur Reveal; ported to plain CSS/JS) ---------- */
-/* ---------- intro: first visit only (html.intro, set by the head script) ----------
+/* ---------- intro: every load (html.intro, set by the head script) ----------
    A paper sheet over the real page: the cursor blinks, "rawjobs" types itself in from symbols, the directory count
    rolls, then the sheet lifts with a curved edge that flattens (21st.dev Preloader) and the cursor drops into the
    headline. Timing lives in intro.js, computed from the motion tokens. Without html.intro none of this renders. */
@@ -918,6 +916,17 @@ h1 .serif, h2 .serif { font-size: 1.08em; line-height: 0; }
 .get[data-phone] .os-bar, .get[data-phone] .iprogress, .get[data-phone] .installer { display: none; }
 .show-steps { margin-bottom: var(--space-6); }
 
+/* ---------- scroll scenes ----------
+   Native scrolling only: the script maps scroll position onto CSS variables, nothing hijacks the wheel.
+   --read: how far down the page you are (the 2px bar at the top). --x: how far you've left the hero. */
+.readbar { position: fixed; z-index: calc(var(--z-sticky) + 1); top: 0; left: 0; right: 0; height: 2px; background: var(--text-primary); opacity: 0.7;
+  transform-origin: left; transform: scaleX(var(--read, 0)); pointer-events: none; }
+/* leaving the hero: the copy drifts up and fades a little, the radar zooms out and fades */
+.hero > .wrap { transform: translateY(calc(var(--x, 0) * -48px)); opacity: calc(1 - var(--x, 0) * 0.55); }
+.radar[data-settled] { transition: none; transform: scale(calc(1 - var(--x, 0) * 0.14)); opacity: calc(1 - var(--x, 0) * 0.9); }
+.hero::before { transform: scale(calc(1 + var(--x, 0) * 0.25)); }
+@media (prefers-reduced-motion: reduce) { .hero > .wrap, .radar[data-settled], .hero::before { transform: none; opacity: 1; } }
+
 /* ---------- privacy: three statements, big ---------- */
 .facts { grid-template-columns: minmax(0, 1fr); gap: 0; }
 .fact { grid-template-columns: auto minmax(0, 1fr); column-gap: var(--space-6); align-items: baseline; padding-block: var(--space-6); border-top: 1px solid var(--glass-line); }
@@ -1171,8 +1180,9 @@ h1 .serif, h2 .serif { font-size: 1.08em; line-height: 0; }
 })();
 </script>
 <script>
-/* RawJobs intro: runs only when the head script set html.intro (first visit this session, motion allowed).
-   Story, about 1.5s, all on a paper sheet over the already-rendered page:
+/* RawJobs intro: runs only when the head script set html.intro (every load, motion allowed).
+   Story, about 2.9s (the timings below are at PACE 1; PACE and HOLD slow it so it can be read), all on a paper
+   sheet over the already-rendered page:
      0      the orange cursor sits alone and blinks once
      ~200   "rawjobs" types in left to right, each letter decoding from symbols (21st.dev Scramble Text, 32ms tick)
      ~350   "reading 47,737 careers pages" fades in; the count rolls up, only changing digits move (Animate Digits)
@@ -1197,16 +1207,18 @@ h1 .serif, h2 .serif { font-size: 1.08em; line-height: 0; }
   var LIFT_EASE = 'cubic-bezier(0.76, 0, 0.24, 1)'; /* 21st Preloader */
   var TICK = 32; /* 21st Scramble Text */
 
-  /* the timeline, from the motion tokens (default tokens: type 250, line 400, roll 380, lift at 880 for 680, curve 580) */
-  var T_TYPE = QUICK + INSTANT;         /* the blink (on 150, off 100), then typing starts */
-  var PER_CHAR = TICK * 1.5;            /* a new letter every 48ms */
-  var RESOLVE = TICK * 3;               /* each letter shows symbols for ~3 ticks before it settles */
-  var T_LINE = T_TYPE + QUICK;          /* the count line fades in */
-  var ROLL = STORY;                     /* the count rolls */
-  var T_LIFT = T_LINE + ROLL + INSTANT; /* a beat on the final count, then the sheet lifts and the wall sweeps */
-  var LIFT = STORY + SLOW;              /* sheet travel */
-  var CURVE = STORY + BASE;             /* bulge flattening, ends with the travel (Preloader: 0.7s inside 0.8s) */
-  var FLIGHT = STORY;                   /* the cursor's trip into the headline: it lands just after the sheet uncovers its slot */
+  /* the timeline, from the motion tokens, slowed by PACE so it plays on every load without rushing
+     (default tokens: type 375, line 600, roll 910, hold 500, lift at 2010 for 880, curve 750) */
+  var PACE = 1.5, HOLD = 500;                  /* HOLD: the final count stays up long enough to read */
+  var T_TYPE = (QUICK + INSTANT) * PACE;       /* the blink, then typing starts */
+  var PER_CHAR = TICK * 1.5 * PACE;            /* a new letter every 72ms */
+  var RESOLVE = TICK * 3 * PACE;               /* each letter shows symbols for a moment before it settles */
+  var T_LINE = T_TYPE + QUICK * PACE;          /* the count line fades in */
+  var ROLL = STORY * PACE * 1.6;               /* the count rolls */
+  var T_LIFT = T_LINE + ROLL + HOLD;           /* a beat on the final count, then the sheet lifts and the wall sweeps */
+  var LIFT = (STORY + SLOW) * 1.3;             /* sheet travel */
+  var CURVE = (STORY + BASE) * 1.3;            /* bulge flattening, ends with the travel (Preloader: 0.7s inside 0.8s) */
+  var FLIGHT = STORY * 1.3;                    /* the cursor's trip into the headline: it lands just after the sheet uncovers its slot */
 
   var sheet = box.querySelector('.rj-intro__sheet');
   var edge = box.querySelector('.rj-intro__edge');
@@ -1339,6 +1351,7 @@ h1 .serif, h2 .serif { font-size: 1.08em; line-height: 0; }
 </script>
 <div class="page rj-root">
 <a class="rj-btn rj-btn--primary skip" href="#main">Skip to content</a>
+<div class="readbar" aria-hidden="true"></div>
 
 <header class="nav" id="nav">
   <div class="wrap nav__in">
@@ -1939,14 +1952,15 @@ h1 .serif, h2 .serif { font-size: 1.08em; line-height: 0; }
 
   /* ---------- nav border once scrolled ---------- */
   /* it steps aside while you read down the page and comes back as soon as you scroll up */
-  var nav = $('#nav'), lastY = window.scrollY, fcta = $('#fcta'), getSection = $('#get');
+  var nav = $('#nav'), lastY = window.scrollY, fcta = $('#fcta'), getSection = $('#get'), heroBox = $('.hero');
   var onScroll = function () {
     var y = window.scrollY;
     nav.setAttribute('data-stuck', y > 8 ? 'true' : 'false');
     if (Math.abs(y - lastY) > 6) { nav.setAttribute('data-away', y > lastY && y > 240 && !nav.contains(document.activeElement) ? 'true' : 'false'); lastY = y; }
     /* the floating Get RawJobs shows while the nav is away, except over Get it itself */
     var g = getSection.getBoundingClientRect(), over = g.top < innerHeight * 0.8 && g.bottom > 0;
-    var show = nav.getAttribute('data-away') === 'true' && !over;
+    /* not while the hero's own Get RawJobs is still in view */
+    var show = nav.getAttribute('data-away') === 'true' && !over && y > heroBox.offsetHeight * 0.8;
     if (show !== fcta.hasAttribute('data-show')) {
       if (show) { fcta.setAttribute('data-show', ''); fcta.removeAttribute('aria-hidden'); fcta.removeAttribute('tabindex'); }
       else { fcta.removeAttribute('data-show'); fcta.setAttribute('aria-hidden', 'true'); fcta.setAttribute('tabindex', '-1'); }
@@ -2153,11 +2167,11 @@ h1 .serif, h2 .serif { font-size: 1.08em; line-height: 0; }
       if (p < 1) requestAnimationFrame(count); else wallDone();
     })(t0);
   }
-  /* Hook for an intro animation: with html.intro, the wall waits for rawjobs:intro-done (or 2.5s at most). */
+  /* Hook for an intro animation: with html.intro, the wall waits for rawjobs:intro-done (or 4.5s at most). */
   window.rawjobsWall = { start: function () { if (!wallStarted) startWall(); } };
   if (document.documentElement.classList.contains('intro')) {
     addEventListener('rawjobs:intro-done', window.rawjobsWall.start, { once: true });
-    setTimeout(window.rawjobsWall.start, 2500);
+    setTimeout(window.rawjobsWall.start, 4500);
   } else if (document.fonts && document.fonts.ready) {
     var wallGo = window.rawjobsWall.start;
     document.fonts.ready.then(wallGo); setTimeout(wallGo, 120);
@@ -2604,6 +2618,7 @@ h1 .serif, h2 .serif { font-size: 1.08em; line-height: 0; }
     }
     function start() {
       layout(); frame(performance.now()); canvas.setAttribute('data-on', ''); play();
+      setTimeout(function () { canvas.setAttribute('data-settled', ''); }, 1300);
       if ('IntersectionObserver' in window) new IntersectionObserver(function (es) { visible = es[0].isIntersecting; play(); }).observe(hero);
       document.addEventListener('visibilitychange', play);
       /* the wall places (and on resize re-places) its stamps: follow them */
@@ -2619,7 +2634,42 @@ h1 .serif, h2 .serif { font-size: 1.08em; line-height: 0; }
     if (document.fonts && document.fonts.ready) document.fonts.ready.then(start); else start();
   })();
 
+  /* ---------- the reading bar: how far down the page you are (a position, not motion, so it stays) ---------- */
+  var root = document.documentElement, readTick = false;
+  function readPos() { readTick = false; var max = root.scrollHeight - innerHeight; root.style.setProperty('--read', max > 0 ? Math.min(1, scrollY / max).toFixed(4) : '0'); }
+  addEventListener('scroll', function () { if (!readTick) { readTick = true; requestAnimationFrame(readPos); } }, { passive: true });
+  addEventListener('resize', readPos); readPos();
+
   if (reduce) return;
+
+  /* ---------- leaving the hero: --x goes 0 -> 1 over the hero's height ---------- */
+  var heroEl = document.querySelector('.hero'), heroTick = false;
+  function heroPos() { heroTick = false; var h = heroEl.offsetHeight || 1, x = Math.max(0, Math.min(1, scrollY / (h * 0.9))); heroEl.style.setProperty('--x', x.toFixed(3)); }
+  if (heroEl) { addEventListener('scroll', function () { if (!heroTick) { heroTick = true; requestAnimationFrame(heroPos); } }, { passive: true }); heroPos(); }
+
+  /* ---------- sections enter as a sequence: the label, then the heading (its words blur in), then the rest ---------- */
+  if ('IntersectionObserver' in window) {
+    var vh0 = innerHeight;
+    var seq = new IntersectionObserver(function (es) {
+      es.forEach(function (e) { if (!e.isIntersecting) return; seq.unobserve(e.target); e.target.classList.remove('rv-wait'); e.target.classList.add('rv-in'); });
+    }, { rootMargin: '0px 0px -8% 0px', threshold: 0.1 });
+    var stage = function (sel, i, step) {
+      Array.prototype.forEach.call(document.querySelectorAll(sel), function (el, k) {
+        if (el.getBoundingClientRect().top < vh0 * 0.92 || el.classList.contains('rv-wait')) return;
+        el.style.setProperty('--i', i + (step ? (k % 4) * step : 0));
+        el.classList.add('rv-wait'); seq.observe(el);
+      });
+    };
+    stage('.section .eyebrow', 0, 0);
+    stage('.section .split__head .prose, .section .section__lede, .fmap__head .rj-btn', 5, 0);
+    stage('.routes, .shot, .facts .fact, .faq details, .final__in', 6, 0);
+    Array.prototype.forEach.call(document.querySelectorAll('.fmap'), function (ul) {
+      Array.prototype.forEach.call(ul.children, function (li, k) {
+        if (li.getBoundingClientRect().top < vh0 * 0.92) return;
+        li.style.setProperty('--i', 3 + (k % 4) * 2); li.classList.add('rv-wait'); seq.observe(li);
+      });
+    });
+  }
 
   /* ---------- the dashboard rises flat as it scrolls up the screen ---------- */
   var tilts = Array.prototype.slice.call(document.querySelectorAll('[data-tilt]')), ticking = false;
