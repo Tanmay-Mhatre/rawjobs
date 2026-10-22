@@ -54,6 +54,33 @@ describe("dayforce", () => {
     expect(jobs[25]).toMatchObject({ location: "Toronto, ON, Canada, Remote", workplace: "remote", country: "Canada" });
   });
 
+  it("asks for one CSRF pair for many boards, and a new one when a search refuses it", async () => {
+    let pairs = 0;
+    let refuse = false;
+    const { http, calls } = fakeHttp((url) => {
+      if (url.endsWith("/api/auth/csrf")) {
+        pairs++;
+        return csrf();
+      }
+      // The first search after `refuse` is set turns the pair down once.
+      if (refuse) {
+        refuse = false;
+        return json({ error: "invalid csrf" }, 403);
+      }
+      return json({ jobPostings: [posting(1)], maxCount: 1 });
+    });
+    const c = getConnector("dayforce")!;
+    const board = (slug: string) => ({ name: slug, enabled: true, ats: "dayforce", slug, site: "candidateportal" }) as CompanyRef;
+    await c.fetch(board("aaawa"), { http, now: new Date() });
+    await c.fetch(board("gm"), { http, now: new Date() });
+    expect(pairs).toBe(1);
+
+    refuse = true;
+    await expect(c.fetch(board("acme"), { http, now: new Date() })).resolves.toHaveLength(1);
+    expect(pairs).toBe(2);
+    expect(calls.filter((u) => u.endsWith("/acme/jobposting/search"))).toHaveLength(2);
+  });
+
   it("needs the board code from the careers URL", async () => {
     const { http } = fakeHttp(() => csrf());
     await expect(getConnector("dayforce")!.fetch({ name: "x", enabled: true, ats: "dayforce", slug: "aaawa" } as CompanyRef, { http, now: new Date() })).rejects.toThrow(/need the tenant and "site"/);
