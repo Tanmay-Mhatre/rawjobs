@@ -21,6 +21,7 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { atsHints, careersLinks, findBoards, HttpClient, HttpError, type FoundBoard } from "@rawjobs/core";
 import { writeFileAtomic } from "./lib/fs";
+import { keepBoardOnError } from "./lib/resolved";
 import { maxMsFromArgs, nextInTime } from "./lib/time-box";
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -34,8 +35,9 @@ const MAX_MS = maxMsFromArgs();
 const onlyArg = process.argv.indexOf("--only");
 const ONLY = onlyArg > 0 ? new Set(process.argv[onlyArg + 1]!.split(",").map((s) => s.trim().toLowerCase())) : null;
 const MAX_PAGES = 8;
-// Every company is a different website, so bulk runs can use more workers without loading any one host.
-const WORKERS = BULK ? 16 : 6;
+// Every company is a different website, so bulk runs can use more workers without loading any one host
+// (HttpClient still spaces requests to each host by hostDelayMs).
+const WORKERS = BULK ? 32 : 6;
 const REUSE_DAYS = BULK ? 90 : 30;
 // Some sites only serve a full page to browser-like clients; say who we are anyway.
 const UA = "Mozilla/5.0 (compatible; RawJobs-resolver/0.1; open-source job radar; reads public careers pages)";
@@ -209,7 +211,7 @@ async function main() {
         const r = await resolveSeed(s).catch(
           (err): Resolved => ({ name: s!.name, website: s!.website, industries: s!.industries, status: "error", error: String(err).slice(0, 160), pages: 0, resolved_at: new Date().toISOString() }),
         );
-        byName.set(s.name.toLowerCase(), r);
+        byName.set(s.name.toLowerCase(), keepBoardOnError(byName.get(s.name.toLowerCase()), r));
         if (++done % 100 === 0) save();
         console.error(`  [${done}/${todo.length}] ${s.name}: ${r.status}${r.board ? ` ${r.board.key}${r.board.supported ? "" : " (not scannable yet)"}` : r.careers_url ? ` ${r.careers_url}` : ""}`);
       }

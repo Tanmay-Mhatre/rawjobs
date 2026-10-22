@@ -423,7 +423,13 @@ export function feedCoverage(companies: JobFeedShard["companies"], previous: num
 }
 
 /** Every group's shards into the published files. */
-function merge(out: string, generated: string) {
+async function merge(out: string, generated: string) {
+  // How long each part takes, for the workflow log (the step has run 15+ minutes).
+  let lapAt = Date.now();
+  const lap = (what: string) => {
+    console.error(`Merge: ${what} in ${((Date.now() - lapAt) / 1000).toFixed(1)} s`);
+    lapAt = Date.now();
+  };
   const previousManifest = readJson<JobFeedManifest>(join(out, "jobs-manifest.json"));
   const stamp = stampOf(generated);
   const everyone: JobFeedShard["companies"] = {};
@@ -445,6 +451,7 @@ function merge(out: string, generated: string) {
       stats[ats] = { ...g!.stats[ats]!, group, fresh };
     }
   }
+  lap("read the groups' shards");
 
   // Per system: a stop, many failures or a big swing in jobs usually means a broken connector or a blocked runner.
   const atsJobs: Record<string, number> = {};
@@ -500,9 +507,15 @@ function merge(out: string, generated: string) {
     }
   }
 
+  lap("read the previous third format");
+
   const original = Object.fromEntries(Object.entries(everyone).filter(([key]) => ORIGINAL_ATS.some((a) => key.startsWith(`${a}:`))));
-  const v2 = writeFeed(out, stateOf(original, 2), generated, 2);
-  const v3 = writeFeed(out, stateOf(everyone, 3), generated, 3);
+  const v2State = stateOf(original, 2);
+  const v3State = stateOf(everyone, 3);
+  lap("built the second and third formats' states");
+  // Side by side: their compressions share the runner's cores (feed-v2.ts brotliAsync).
+  const [v2, v3] = await Promise.all([writeFeed(out, v2State, generated, 2, console.error), writeFeed(out, v3State, generated, 3, console.error)]);
+  lap("wrote the second and third formats");
   const mb = (n: number) => (n / 1e6).toFixed(2);
   for (const [name, v] of [
     ["v2", v2],
@@ -529,7 +542,7 @@ async function main() {
     if (!(group in GROUPS)) throw new Error(`--group must be one of ${Object.keys(GROUPS).join(", ")}`);
     await crawl(out, group, generated, directory, deadline);
   } else if (command === "merge") {
-    merge(out, generated);
+    await merge(out, generated);
   } else {
     // Everything in one go (local runs): --ats narrows it to some systems.
     const only = arg("--ats")?.split(",");
@@ -540,7 +553,7 @@ async function main() {
         return atses.length ? crawl(out, group, generated, directory, deadline, atses) : undefined;
       }),
     );
-    merge(out, generated);
+    await merge(out, generated);
   }
 }
 

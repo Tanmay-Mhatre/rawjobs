@@ -161,8 +161,8 @@ function feedRelease(format: FeedFormat = 3) {
   const out = tmp();
   const files = new Map<string, Buffer>();
   const manifest = `jobs-v${format}-manifest.json`;
-  const publish = (companies: Companies, at: string) => {
-    const r = writeFeed(out, stateOf(companies, format), at, format);
+  const publish = async (companies: Companies, at: string) => {
+    const r = await writeFeed(out, stateOf(companies, format), at, format);
     for (const f of readdirSync(out)) files.set(f, readFileSync(join(out, f)));
     return r;
   };
@@ -179,10 +179,10 @@ function feedRelease(format: FeedFormat = 3) {
 }
 
 describe("the build", () => {
-  it("publishes a full copy, then a checked change file each run, and names the previous full copy to keep", () => {
+  it("publishes a full copy, then a checked change file each run, and names the previous full copy to keep", async () => {
     const rel = feedRelease();
-    expect(rel.publish(RUN1, run(1))).toMatchObject({ seq: 1, note: expect.stringMatching(/full copy only/) });
-    const r2 = rel.publish(RUN2, run(2));
+    expect(await rel.publish(RUN1, run(1))).toMatchObject({ seq: 1, note: expect.stringMatching(/full copy only/) });
+    const r2 = await rel.publish(RUN2, run(2));
     expect(r2).toMatchObject({ seq: 2, changedCompanies: 3, previousSnapshot: "jobs-v3-snapshot-1.txt.br" });
     const manifest = JSON.parse(readFileSync(join(rel.out, "jobs-v3-manifest.json"), "utf8"));
     expect(manifest).toMatchObject({ schema: 3, snapshot: { file: "jobs-v3-snapshot-2.txt.br" } });
@@ -194,9 +194,9 @@ describe("the build", () => {
     expect(KEEP_DIFFS).toBe(56);
   });
 
-  it("keeps the second format as older apps know it: five columns, no partial companies", () => {
+  it("keeps the second format as older apps know it: five columns, no partial companies", async () => {
     const out = tmp();
-    writeFeedV2(out, stateOf({ "workday:x|y": { fetched_at: run(1), jobs: [["1", "PM", "3 Locations", "onsite", null, "Dubai"]], partial: true } }), run(1));
+    await writeFeedV2(out, stateOf({ "workday:x|y": { fetched_at: run(1), jobs: [["1", "PM", "3 Locations", "onsite", null, "Dubai"]], partial: true } }), run(1));
     const snap = JSON.parse(brotliDecompressSync(readFileSync(join(out, "jobs-v2-snapshot-1.json.br"))).toString("utf8"));
     expect(snap.jobs["workday:x|y"]).toEqual([["1", "PM", "3 Locations", "onsite", null]]);
     expect(snap.partial).toBeUndefined();
@@ -208,10 +208,10 @@ describe("the app", () => {
     process.env.JOBHUNTER_JOBS_URL = "https://feed.example/jobs";
     const rel = feedRelease();
     const app = tmp();
-    rel.publish(RUN1, run(1));
+    await rel.publish(RUN1, run(1));
     expect((await syncJobFeed(app, { fetchImpl: rel.fetchImpl, now: Date.parse(run(1)) })).message).toMatch(/downloaded .*under an hour old/);
-    rel.publish(RUN2, run(2));
-    rel.publish(RUN3, run(3));
+    await rel.publish(RUN2, run(2));
+    await rel.publish(RUN3, run(3));
     rel.calls.length = 0;
     expect((await syncJobFeed(app, { fetchImpl: rel.fetchImpl, now: Date.parse(run(3)) + 2 * 3_600_000 })).message).toMatch(/2 change file\(s\).*2 h old/);
     expect(rel.calls).toEqual(["jobs-v3-manifest.json", "jobs-v3-diff-2.json.br", "jobs-v3-diff-3.json.br"]);
@@ -223,9 +223,9 @@ describe("the app", () => {
     process.env.JOBHUNTER_JOBS_URL = "https://feed.example/jobs";
     const rel = feedRelease();
     const app = tmp();
-    rel.publish(RUN1, run(1));
+    await rel.publish(RUN1, run(1));
     await syncJobFeed(app, { fetchImpl: rel.fetchImpl });
-    rel.publish(RUN2, run(2));
+    await rel.publish(RUN2, run(2));
     rel.files.set("jobs-v3-diff-2.json.br", Buffer.from("corrupt"));
     rel.calls.length = 0;
     expect((await syncJobFeed(app, { fetchImpl: rel.fetchImpl })).message).toMatch(/downloaded/);
@@ -237,17 +237,17 @@ describe("the app", () => {
     const rel = feedRelease();
     const app = tmp();
     const at = (n: number) => Date.parse(run(n));
-    rel.publish(RUN1, run(1));
+    await rel.publish(RUN1, run(1));
     await syncJobFeed(app, { fetchImpl: rel.fetchImpl });
     expect([...feedMatches(app, profile, at(1)).matching]).toEqual(["lever:gone"]);
 
-    rel.publish(RUN2, run(2));
+    await rel.publish(RUN2, run(2));
     await syncJobFeed(app, { fetchImpl: rel.fetchImpl });
     const m2 = feedMatches(app, profile, at(2));
     expect([...m2.matching].sort()).toEqual(["lever:acme", "lever:new"]);
     expect(m2.covered.has("lever:beta")).toBe(true); // read a run ago: still fresh
 
-    rel.publish(RUN3, run(3));
+    await rel.publish(RUN3, run(3));
     await syncJobFeed(app, { fetchImpl: rel.fetchImpl });
     // Same answer as checking everything from scratch.
     const incremental = [...feedMatches(app, profile, at(3)).matching].sort();
@@ -260,12 +260,12 @@ describe("the app", () => {
     process.env.JOBHUNTER_JOBS_URL = "https://feed.example/jobs";
     const rel = feedRelease();
     const app = tmp();
-    rel.publish(RUN1, run(1));
+    await rel.publish(RUN1, run(1));
     await syncJobFeed(app, { fetchImpl: rel.fetchImpl });
     const titles = (n: number): Companies => ({ "lever:acme": { fetched_at: run(n), jobs: Array.from({ length: 10 }, (_, i) => row(`${n}-${i}`, `Role ${n}-${i}`)) } });
-    rel.publish(titles(2), run(2));
+    await rel.publish(titles(2), run(2));
     expect((await syncJobFeed(app, { fetchImpl: rel.fetchImpl })).message).toMatch(/1 change file/);
-    rel.publish(titles(3), run(3));
+    await rel.publish(titles(3), run(3));
     expect((await syncJobFeed(app, { fetchImpl: rel.fetchImpl })).message).toMatch(/downloaded/);
     expect([...feedMatches(app, { ...profile, titles: { include: ["role"], exclude: [] } }, Date.parse(run(3))).matching]).toEqual(["lever:acme"]);
   });
@@ -274,7 +274,7 @@ describe("the app", () => {
     process.env.JOBHUNTER_JOBS_URL = "https://feed.example/jobs";
     const rel = feedRelease();
     const app = tmp();
-    rel.publish(
+    await rel.publish(
       {
         "workday:far|x": { fetched_at: run(1), jobs: [["1", "Product Manager", "3 Locations", "onsite", null, "Berlin; Paris"]] },
         "workday:near|x": { fetched_at: run(1), jobs: [["2", "Product Manager", "2 Locations", "onsite", null, "Dubai; Paris"]] },
@@ -294,7 +294,7 @@ describe("the app", () => {
     process.env.JOBHUNTER_JOBS_URL = "https://feed.example/jobs";
     const rel = feedRelease();
     const app = tmp();
-    rel.publish(RUN1, run(1));
+    await rel.publish(RUN1, run(1));
     await syncJobFeed(app, { fetchImpl: rel.fetchImpl });
     feedMatches(app, profile, Date.parse(run(1)));
     const designer = { ...profile, titles: { include: ["designer"], exclude: [] } };
@@ -307,19 +307,19 @@ describe("hiring activity", () => {
     process.env.JOBHUNTER_JOBS_URL = "https://feed.example/jobs";
     const rel = feedRelease();
     const app = tmp();
-    const publish = (companies: Parameters<typeof rel.publish>[0], at: string, activity = true) => {
-      rel.publish(companies, at);
+    const publish = async (companies: Parameters<typeof rel.publish>[0], at: string, activity = true) => {
+      await rel.publish(companies, at);
       if (activity) writeActivity(rel.out);
       for (const f of readdirSync(rel.out)) rel.files.set(f, readFileSync(join(rel.out, f)));
     };
     const now = Date.parse(run(2));
 
     // A feed without it: nothing to show.
-    publish(RUN1, run(1), false);
+    await publish(RUN1, run(1), false);
     await syncJobFeed(app, { fetchImpl: rel.fetchImpl });
     expect(readFeedActivity(app, now)).toBeUndefined();
 
-    publish(RUN2, run(2));
+    await publish(RUN2, run(2));
     rel.calls.length = 0;
     await syncJobFeed(app, { fetchImpl: rel.fetchImpl });
     expect(rel.calls).toContain("jobs-activity-2.json.br");
@@ -331,7 +331,7 @@ describe("hiring activity", () => {
     expect(rel.calls).toEqual(["jobs-v3-manifest.json"]);
 
     // A day the build couldn't make it: the copy stays.
-    publish(RUN3, run(3), false);
+    await publish(RUN3, run(3), false);
     rel.files.delete("jobs-activity-2.json.br");
     await syncJobFeed(app, { fetchImpl: rel.fetchImpl });
     expect(readFeedActivity(app, now)?.date).toBe("2026-10-01");
@@ -341,7 +341,7 @@ describe("hiring activity", () => {
     process.env.JOBHUNTER_JOBS_URL = "https://feed.example/jobs";
     const rel = feedRelease();
     const app = tmp();
-    rel.publish(RUN1, run(1));
+    await rel.publish(RUN1, run(1));
     writeActivity(rel.out);
     for (const f of readdirSync(rel.out)) rel.files.set(f, readFileSync(join(rel.out, f)));
     rel.files.set("jobs-activity-1.json.br", Buffer.from("tampered"));
