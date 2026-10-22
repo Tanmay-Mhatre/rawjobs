@@ -93,10 +93,17 @@ const ADAPTIVE_GROUPS = new Set(["join", "payroll", "sr"]);
  * Workable at 3/s drew 104 × 429 and 67 slow-downs (test run 39659100795), and still 24 slow-downs at 2/s
  * (39727895352); at a fixed 1/s it drew none.
  * SmartRecruiters ran at 3.3/s with no 429s in two real runs (39776553388, 39829420348), so it now takes
- * the app's ceiling of 5/s (docs/plans/actions-speedup, decision 1). JOIN at 3/s kept halving and climbing
- * back (176 × 429, 126 slow-downs; run 39650737780) and averaged ~2.2/s: 2.5 holds steadier.
+ * the app's ceiling of 5/s (docs/plans/actions-speedup, decision 1). JOIN keeps the app's 3/s: a cap of
+ * 2.5 drew as many 429s (see NO_HOLD_GROUPS).
  */
-const CI_PACE_CEILINGS: Record<string, number> = { workable: 1.5, join: 2.5 };
+const CI_PACE_CEILINGS: Record<string, number> = { workable: 1.5 };
+/**
+ * Groups whose pace climbs straight back after a slow-down. JOIN answers 429 at any pace we tried, a
+ * short-window quota rather than a rate: with a 60 s hold and a 2.5/s cap it drew 159 × 429 and 124
+ * slow-downs and took 171 min alone (run 39829420348), against ~176 × 429 and 121 min without them
+ * (39698361404). Holding only left it at half pace for most of the run.
+ */
+const NO_HOLD_GROUPS = new Set(["join"]);
 /**
  * The feed's pace per shared API host, faster than the app's own (HOST_DELAYS): one read per board per
  * run, from CI only. Any 429 still slows a host down for the rest of the run. In ADAPTIVE_GROUPS a host
@@ -243,7 +250,7 @@ async function crawl(out: string, group: string, generated: string, directoryFil
     // left JOIN at 1.2 s for 4 h. Payroll's slowest host, Paycom's API, had no gap of its own (1 s default).
     adaptive: ADAPTIVE_GROUPS.has(group),
     // After a halving, hold for a minute: an hour at the ceiling from one IP must not keep re-testing a limit.
-    climbHoldMs: 60_000,
+    climbHoldMs: NO_HOLD_GROUPS.has(group) ? 0 : 60_000,
     paceCeilings: CI_PACE_CEILINGS,
     // A paced API that fails 8 times in a row rests and is tried again, instead of every one of its boards
     // keeping stale rows for the rest of the run.
