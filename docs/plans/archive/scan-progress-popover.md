@@ -1,6 +1,6 @@
 # Scan progress pop-over: redesign
 
-Status: built in this PR. Mockup: [`scan-progress-popover-mockup.html`](scan-progress-popover-mockup.html)
+Status: Shipped (PR #230 / v0.6.11). Mockup: [`scan-progress-popover-mockup.html`](scan-progress-popover-mockup.html)
 (from before the decisions below: its Done line lists names; the build shows a count).
 
 ## Problem

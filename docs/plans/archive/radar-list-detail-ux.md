@@ -4,9 +4,9 @@ Four reviewers (code trace, visual design, UX/interaction, accessibility) looked
 pane: the job list on the left and the job detail with "Why it matched" on the right. Root causes
 below were spot-checked against the code.
 
-Status: design approved 2026-10-15. The build plan now lives in
+Status: Shipped through `radar-page-competitor-review.md` Phases 1-4 (PRs #243, #245, #246, #248 / v0.6.13). Design approved 2026-10-15. The build plan now lives in
 `radar-page-competitor-review.md` (Phases 1-5); the PR list below is kept for reference and is
-folded into those phases. Not built: wait for the user's go.
+folded into those phases.
 
 ## Why the data looks wrong (root causes)
 

@@ -1,5 +1,7 @@
 # Eightfold boards failing in the job feed (#232)
 
+Status: Shipped (PR #247 / v0.6.13).
+
 ## What we know (2026-10-15)
 
 - Test run 38707810379 (publish off, with #241's failure reasons): `eightfold: 10 companies, 5795 jobs (5 fetched, 27 failed [HTTP 403 ×27])`.
