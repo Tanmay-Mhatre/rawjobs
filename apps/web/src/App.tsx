@@ -377,7 +377,11 @@ export function App() {
             boardFills && "flex min-h-[calc(100dvh-3.5rem-1px)] flex-col",
           )}
         >
-          <ServerNotices onRadar={!inSetup && tab === "radar" && !openId && !showKeys && status !== undefined} />
+          <ServerNotices
+            onRadar={!inSetup && tab === "radar" && !openId && !showKeys && status !== undefined}
+            // Once the scans are read (not mid-scan): the star question dates your first use from them.
+            star={state.kind !== "loading" && !scanning && !background.running ? { state: user.state, runs: meta?.runs ?? [] } : undefined}
+          />
           {!inSetup && tab === "radar" && <FeedStaleNotice scan={scan} onOnlyMine={() => void restartScan("yours")} />}
           {!inSetup && tab === "radar" && <ReminderNotice />}
           {status === undefined || state.kind === "loading" ? (

@@ -1,4 +1,4 @@
-import { Copy, ExternalLink, Info, LoaderCircle, RefreshCw, ShieldCheck, Undo2 } from "lucide-react";
+import { Copy, ExternalLink, Info, LoaderCircle, RefreshCw, ShieldCheck, Star, Undo2 } from "lucide-react";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { formatDate, timeAgo } from "../lib/format";
 import {
@@ -9,6 +9,7 @@ import {
   ISSUES_URL,
   markUpdateSeen,
   RELEASES_URL,
+  REPO_URL,
   retryUpdate,
   saveUpdateSettings,
   updateNow,
@@ -19,6 +20,7 @@ import {
 } from "../lib/update";
 import { DesktopShortcutNotice, Row } from "./DesktopShortcut";
 import { RequiredUpdate } from "./RequiredUpdate";
+import { type StarInput, StarPrompt } from "./StarPrompt";
 import { ServerDownWindow } from "./ServerDown";
 import { toast } from "./Toast";
 import { Button, Card, Toggle } from "./ui";
@@ -64,9 +66,10 @@ const STOPPED_WHILE_UPDATING_MS = 60_000;
  * pill in the header (UpdatePill), not here. A required update, or a version too old to update by
  * itself, comes up in a window instead (RequiredUpdate). The first time you land on the Radar,
  * once per computer, a popup says where the RawJobs shortcuts are (DesktopShortcutNotice); never on
- * top of another window or after an update that didn't work.
+ * top of another window or after an update that didn't work. Last, on the Radar when it's due, the
+ * "Star on GitHub" question (StarPrompt), on copies run from the source code too.
  */
-export function ServerNotices({ onRadar = false }: { onRadar?: boolean }) {
+export function ServerNotices({ onRadar = false, star }: { onRadar?: boolean; star?: StarInput }) {
   const health = useServerHealth();
   const { down, since } = health;
   // Away for longer than an update's restart: it was stopped. From then on the "isn't running"
@@ -115,7 +118,10 @@ export function ServerNotices({ onRadar = false }: { onRadar?: boolean }) {
       </div>
     );
   }
-  if (!status?.installed) return null;
+  const starAsk = onRadar && star ? <StarPrompt state={star.state} runs={star.runs} /> : null;
+  // Not until the update status is read: a required update comes first.
+  if (!status) return null;
+  if (!status.installed) return starAsk;
 
   const update = async () => {
     setBusy(true);
@@ -129,11 +135,11 @@ export function ServerNotices({ onRadar = false }: { onRadar?: boolean }) {
   const required = !!status.available?.critical || status.tooOld;
   const last = status.lastUpdate;
 
-  // One window at a time: a required update first, then What's new, then the shortcut popup.
+  // One window at a time: a required update first, then What's new, then the shortcut popup, then the star question.
   if (required) return <RequiredUpdate status={status} update={update} busy={busy} />;
   if (last?.ok) return <WhatsNewDialog from={last.from} to={last.to} notes={last.notes} onSeen={(s) => s && setStatus(s)} />;
   const intro = onRadar && last?.ok !== false && status.about?.shortcuts?.notice ? <DesktopShortcutNotice status={status} onSeen={(s) => s && setStatus(s)} /> : null;
-  if (!last) return intro;
+  if (!last) return intro ?? starAsk;
 
   const seen = async () => {
     const s = await markUpdateSeen();
@@ -254,6 +260,14 @@ export function UpdateTelegramSetting() {
 
 const linkClass = "inline-flex h-8 items-center gap-1.5 rounded-md px-2.5 type-small text-muted hover:bg-inset hover:text-ink";
 
+function StarLink() {
+  return (
+    <a className={linkClass} href={REPO_URL} target="_blank" rel="noreferrer">
+      <Star className="size-3.5 text-accent-mark" aria-hidden /> Star on GitHub <ExternalLink className="size-3.5" aria-hidden />
+    </a>
+  );
+}
+
 /** Settings → About: which version this is, since when, what's newer, and where everything is. */
 export function AboutRawJobs() {
   const { status, setStatus } = useUpdateStatus();
@@ -267,12 +281,15 @@ export function AboutRawJobs() {
     );
   if (!status.installed) {
     return (
-      <dl className="divide-y divide-line">
-        <Row label="Version">RawJobs {status.current}</Row>
-        <Row label="Updates">
-          This copy runs from the source code and updates with <code className="font-mono">git pull</code>. Installed copies (from the install line) update from here.
-        </Row>
-      </dl>
+      <div className="space-y-4">
+        <dl className="divide-y divide-line">
+          <Row label="Version">RawJobs {status.current}</Row>
+          <Row label="Updates">
+            This copy runs from the source code and updates with <code className="font-mono">git pull</code>. Installed copies (from the install line) update from here.
+          </Row>
+        </dl>
+        <StarLink />
+      </div>
     );
   }
 
@@ -338,6 +355,7 @@ export function AboutRawJobs() {
         <a className={linkClass} href={ISSUES_URL} target="_blank" rel="noreferrer">
           Report a problem <ExternalLink className="size-3.5" aria-hidden />
         </a>
+        <StarLink />
       </div>
       {status.state === "waiting" && <p className="type-small text-muted">A scan is running: RawJobs updates as soon as it's done.</p>}
       {status.tooOld && (
