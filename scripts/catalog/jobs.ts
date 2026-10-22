@@ -73,9 +73,12 @@ export const atsOfGroup = (group: string): string[] => {
  * Eightfold one at a time: its CDN refuses a CI runner's whole IP past about a request a second overall.
  */
 const WORKERS: Record<string, number> = { workday: 20, icims: 10, successfactors: 8, join: 6, eightfold: 1 };
+/** Groups whose shared APIs are paced adaptively (see the HttpClient in crawl). */
+const ADAPTIVE_GROUPS = new Set(["join", "payroll"]);
 /**
  * The feed's pace per shared API host, faster than the app's own (HOST_DELAYS): one read per board per
- * run, from CI only. Any 429 still slows a host down for the rest of the run.
+ * run, from CI only. Any 429 still slows a host down for the rest of the run. In ADAPTIVE_GROUPS a host
+ * with a shared pace (paceOf) ignores its gap here; the gap applies again if the group stops being adaptive.
  */
 const CI_HOST_DELAYS: Record<string, number> = {
   ...HOST_DELAYS,
@@ -209,9 +212,18 @@ async function crawl(out: string, group: string, generated: string, directoryFil
     backoffMs: 3_000,
     breakAfter: 8,
     hostDelays: { ...CI_HOST_DELAYS, ...slowHosts(directory) },
-    // JOIN is paced like the app paces it (http.ts paceOf: up to 3/s, halved on a 429 and back up after).
-    // A fixed gap that a 429 doubles stays doubled for the run: two early 429s left it at 1.2 s for 4 h.
-    adaptive: group === "join",
+    // These groups are paced like the app paces them (http.ts paceOf: each API up to its ceiling, halved on
+    // a 429 and back up after). A fixed gap that a 429 doubles stays doubled for the run: two early 429s
+    // left JOIN at 1.2 s for 4 h. Payroll's slowest host, Paycom's API, had no gap of its own (1 s default).
+    adaptive: ADAPTIVE_GROUPS.has(group),
+    // After a halving, hold for a minute: an hour at the ceiling from one IP must not keep re-testing a limit.
+    climbHoldMs: 60_000,
+    // Workable at the app's 3/s drew 104 × 429 and 67 slow-downs in an hour from CI (test run 39659100795);
+    // at a fixed 1/s it drew none.
+    paceCeilings: { workable: 2 },
+    // A paced API that fails 8 times in a row rests and is tried again, instead of every one of its boards
+    // keeping stale rows for the rest of the run.
+    hostRests: ADAPTIVE_GROUPS.has(group),
     userAgent: "RawJobs-feed/0.2 (open-source job radar; one read per board every 6 hours; https://github.com/Tanmay-Mhatre/rawjobs)",
   });
   const now = new Date(generated);

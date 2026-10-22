@@ -144,10 +144,12 @@ Two lead changes after the debate (owner-approved 2026-10-21):
 - **P0, the coverage summary, ships first and on its own,** so a few runs record a "before" baseline.
   Every switch trigger above (SR 5/s, `--limit 2400`, daily Wayback) and the no-drop rule read from it.
 - **A1 is split into A1a, A1b and A3,** so a bad test run points at one change:
-  - **A1a (safety + Paycom):** `hostRests` for paced groups, the CI-only 60 s hold after a slow-down,
-    the shared `paycom-api` pace for every `portal-applicant-tracking.*.paycomonline.net` host.
-  - **A1b (speed):** adaptive pacing for `sr` + `payroll` with the SR CI cap of ~3.3/s, and the workers
-    (SR 8, paycom 10, paylocity 8, workable 6, hireology 4).
+  - **A1a (safety + Paycom):** `hostRests` for the paced groups, the CI-only 60 s hold after a slow-down
+    (`climbHoldMs`), the shared `paycom-api` pace for every `portal-applicant-tracking.*.paycomonline.net`
+    host, and adaptive pacing for `payroll` (a shared pace only applies in an adaptive group, so Paycom's
+    API needs it).
+  - **A1b (speed):** adaptive pacing for `sr` with the SR CI cap of ~3.3/s, and the workers (SR 8, paycom
+    10, paylocity 8, workable 6, hireology 4).
   - **A3 (merge):** parallel brotli + phase timings + peak heap.
 
 Two chains edit shared files, so each goes one PR at a time: `jobs.ts` (P0 → A1a → A1b → A3 → A2)

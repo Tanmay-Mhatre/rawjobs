@@ -96,6 +96,17 @@ export type HttpOptions = {
    * speed up a little with every answer and halve when the API pushes back (AIMD). For the app's scans.
    */
   adaptive?: boolean;
+  /**
+   * With adaptive: after a halving, hold the pace this long before it climbs again. Without it a halved
+   * pace is back at its ceiling within ~20 answers, so a limit below the ceiling keeps drawing 429s. For
+   * the feed's hour-long runs from one IP; the app's short scans keep 0.
+   */
+  climbHoldMs?: number;
+  /**
+   * With adaptive: a lower ceiling for some APIs, by pace key (paceOf). PACES' ceilings are the app's, for
+   * short scans from home connections; the feed holds an API for an hour from one CI IP.
+   */
+  paceCeilings?: Record<string, number>;
   fetchImpl?: typeof fetch;
   sleep?: (ms: number) => Promise<void>;
   /**
@@ -161,6 +172,7 @@ const PACES: Record<string, PaceSpec> = {
   "open.api.manatal.com": shared("manatal", 3),
   "jobs.jobvite.com": shared("jobvite", 3),
 };
+const PAYCOM_API_PACE = shared("paycom-api", 3);
 /** Each Workday shard (wd1, wd5…) as a whole, on top of every employer's own 1 s gap (measured: a tenant asked faster answers 429). */
 const WORKDAY_SHARD_PACE = { start: 4, ceiling: 8 };
 /** The slowest an API is ever paced at, after halving. */
@@ -175,6 +187,9 @@ const SPIKE_MS = 3_000;
 export function paceOf(host: string): PaceSpec | undefined {
   const known = PACES[host];
   if (known) return known;
+  // Paycom's API, named on each portal's page (connectors/paycom.ts); its region varies, so match any.
+  // One search per board after www's session page, so the same ceiling as www.
+  if (/^portal-applicant-tracking\.[a-z0-9-]+\.paycomonline\.net$/.test(host)) return PAYCOM_API_PACE;
   const shard = host.match(/^[^.]+\.(wd\d+)\.myworkdayjobs\.com$/)?.[1];
   return shard ? { key: `workday:${shard}`, ...WORKDAY_SHARD_PACE, hostGap: true } : undefined;
 }
@@ -239,6 +254,8 @@ export class HttpClient {
       hostRests: opts.hostRests ?? false,
       cache: opts.cache,
       adaptive: opts.adaptive ?? false,
+      climbHoldMs: opts.climbHoldMs ?? 0,
+      paceCeilings: opts.paceCeilings ?? {},
       fetchImpl: opts.fetchImpl ?? fetch,
       sleep: opts.sleep ?? realSleep,
       stopped: opts.stopped,
@@ -487,10 +504,12 @@ export class HttpClient {
 
   private paceFor(host: string): Pace | undefined {
     if (!this.opts.adaptive) return undefined;
-    const spec = paceOf(host);
-    if (!spec) return undefined;
-    let pace = this.paces.get(spec.key);
+    const found = paceOf(host);
+    if (!found) return undefined;
+    let pace = this.paces.get(found.key);
     if (!pace) {
+      const cap = this.opts.paceCeilings[found.key];
+      const spec = cap === undefined ? found : { ...found, ceiling: Math.min(found.ceiling, cap), start: Math.min(found.start, cap) };
       pace = { spec, rate: spec.start, next: 0, samples: 0, downAt: 0, downs: 0 };
       this.paces.set(spec.key, pace);
     }
@@ -508,7 +527,7 @@ export class HttpClient {
     // A shared API slowing down is straining; a Workday shard's employers answer at their own speeds, so only push-backs count there.
     const spike = !pace.spec.hostGap && usual !== undefined && pace.samples > 5 && ms > Math.max(usual * SPIKE_FACTOR, SPIKE_MS);
     if (status === 429 || status === 503 || (status === 403 && pace.spec.key === "paylocity") || spike) this.paceDown(pace);
-    else if (status < 500) pace.rate = Math.min(pace.spec.ceiling, pace.rate + pace.spec.ceiling / 20);
+    else if (status < 500 && Date.now() - pace.downAt >= this.opts.climbHoldMs) pace.rate = Math.min(pace.spec.ceiling, pace.rate + pace.spec.ceiling / 20);
     this.notePace(pace);
   }
 
