@@ -260,19 +260,25 @@ jobs:
         timeout-minutes: 5
         run: pnpm exec tsx scripts/catalog/build.ts
 
-      - name: Index open jobs
-        id: index
-        continue-on-error: true
-        timeout-minutes: 72
-        run: bash scripts/catalog/capped.sh "Index open jobs" ${{ inputs.smoke && 5 || 70 }} pnpm exec tsx scripts/catalog/index.ts --max-age-days 7 --max-minutes ${{ inputs.smoke && 2 || 60 }}
-
-      # Job titles for industry tags, for the companies the index doesn't read (best effort).
+      # The job index takes most companies' rows from it, and publish reads job titles from it for
+      # industry tags (best effort).
       - name: Download the job feed
+        id: feed
         timeout-minutes: 5
         continue-on-error: true
         env:
           GH_TOKEN: ${{ secrets.DATA_REPO_TOKEN }}
         run: bash scripts/catalog/feed.sh
+
+      # Rows from the feed for the boards it read in the last 7 days; the rest are read live. Only with
+      # the feed's second format: if the download failed or fell back to the first, everything is read live.
+      - name: Index open jobs
+        id: index
+        continue-on-error: true
+        timeout-minutes: 72
+        env:
+          FEED_ARGS: ${{ steps.feed.outcome == 'success' && steps.feed.outputs.format == 'v2' && '--feed scripts/catalog/out/feed' || '' }}
+        run: bash scripts/catalog/capped.sh "Index open jobs" ${{ inputs.smoke && 5 || 70 }} pnpm exec tsx scripts/catalog/index.ts --max-age-days 7 --max-minutes ${{ inputs.smoke && 2 || 60 }} $FEED_ARGS
 
       - name: Package
         timeout-minutes: 10
