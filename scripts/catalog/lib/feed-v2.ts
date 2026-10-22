@@ -12,7 +12,8 @@
 import { createHash } from "node:crypto";
 import { existsSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { brotliCompressSync, brotliDecompressSync, constants } from "node:zlib";
+import { promisify } from "node:util";
+import { brotliCompress, brotliCompressSync, brotliDecompressSync, constants } from "node:zlib";
 import {
   applyFeedDiff,
   compactOf,
@@ -36,9 +37,24 @@ export type FeedFormat = 2 | 3;
 const MANIFEST = (f: FeedFormat) => `jobs-v${f}-manifest.json`;
 const SNAPSHOT = (f: FeedFormat, seq: number) => (f === 3 ? `jobs-v3-snapshot-${seq}.txt.br` : `jobs-v2-snapshot-${seq}.json.br`);
 
+const brotliOptions = (b: Buffer) => ({ params: { [constants.BROTLI_PARAM_QUALITY]: 11, [constants.BROTLI_PARAM_LGWIN]: 24, [constants.BROTLI_PARAM_SIZE_HINT]: b.length } });
+const asBuffer = (s: string | Buffer) => (typeof s === "string" ? Buffer.from(s, "utf8") : s);
 export const brotli = (s: string | Buffer) => {
-  const b = typeof s === "string" ? Buffer.from(s, "utf8") : s;
-  return brotliCompressSync(b, { params: { [constants.BROTLI_PARAM_QUALITY]: 11, [constants.BROTLI_PARAM_LGWIN]: 24, [constants.BROTLI_PARAM_SIZE_HINT]: b.length } });
+  const b = asBuffer(s);
+  return brotliCompressSync(b, brotliOptions(b));
+};
+const brotliCompressAsync = promisify(brotliCompress);
+const seconds = (since: number) => ((Date.now() - since) / 1000).toFixed(1);
+/**
+ * The same bytes as brotli(), made on the libuv thread pool: several files compress side by side (a feed
+ * run's full copies and change files), each on its own core. Logs its input size and time.
+ */
+export const brotliAsync = async (s: string | Buffer, log?: (line: string) => void, what = "file") => {
+  const b = asBuffer(s);
+  const t0 = Date.now();
+  const buf = await brotliCompressAsync(b, brotliOptions(b));
+  log?.(`brotli ${what}: ${(b.length / 1e6).toFixed(1)} MB in ${seconds(t0)} s`);
+  return buf;
 };
 export const sha = (b: Buffer) => createHash("sha256").update(b).digest("hex");
 
@@ -99,32 +115,44 @@ export const readFeedV2 = (dir: string) => readFeed(dir, 2);
 
 export type V2Result = { seq: number; snapshotBytes: number; diffBytes?: number; changedCompanies?: number; note?: string; previousSnapshot?: string };
 
-export function writeFeed(out: string, state: FeedState, generated: string, format: FeedFormat): V2Result {
+/**
+ * Writes a format's full copy, its change file against the previous run's copy in `out` and its manifest.
+ * The compressions run on the thread pool, so a caller may write both formats at once. `log` gets timings.
+ */
+export async function writeFeed(out: string, state: FeedState, generated: string, format: FeedFormat, log?: (line: string) => void): Promise<V2Result> {
+  const say = log && ((line: string) => log(`v${format}: ${line}`));
+  let t0 = Date.now();
   const prev = readFeed(out, format);
+  say?.(`read the previous full copy in ${seconds(t0)} s`);
   const seq = (prev?.manifest.seq ?? 0) + 1;
   const schema = format === 3 ? JOB_FEED_SCHEMA_V3 : JOB_FEED_SCHEMA_V2;
   const stateSha = feedStateHash(state);
-  const snapBuf =
+  // The full copy compresses on the thread pool while the change file is worked out below.
+  const snapPending = brotliAsync(
     format === 3
-      ? brotli(encodeCompact(compactOf(state, { seq, generated_at: generated })))
-      : brotli(Buffer.from(JSON.stringify({ schema, seq, generated_at: generated, verified: state.verified, jobs: state.jobs } satisfies FeedSnapshot)));
+      ? encodeCompact(compactOf(state, { seq, generated_at: generated }))
+      : Buffer.from(JSON.stringify({ schema, seq, generated_at: generated, verified: state.verified, jobs: state.jobs } satisfies FeedSnapshot)),
+    say,
+    "full copy",
+  );
   const snapFile = SNAPSHOT(format, seq);
-  writeFileSync(join(out, snapFile), snapBuf);
   const diffFile = `jobs-v${format}-diff-${seq}.json.br`;
 
   // The previous full copy stays published one more run: an app may be part-way through downloading it.
-  const result: V2Result = { seq, snapshotBytes: snapBuf.length, ...(prev ? { previousSnapshot: prev.manifest.snapshot.file } : {}) };
+  const result: V2Result = { seq, snapshotBytes: 0, ...(prev ? { previousSnapshot: prev.manifest.snapshot.file } : {}) };
   let diffs = prev?.manifest.diffs ?? [];
+  let diffPending: Promise<Buffer> | undefined;
+  let changedCompanies = 0;
   if (prev) {
+    t0 = Date.now();
     const diff = diffFeedStates(prev.state, state, { schema, seq, generated_at: generated, date: generated });
     // Check the change file before publishing it: the previous copy plus it must be this copy exactly.
     const check: FeedState = { verified: { ...prev.state.verified }, jobs: { ...prev.state.jobs }, ...(prev.state.partial ? { partial: prev.state.partial } : {}) };
     applyFeedDiff(check, diff);
+    say?.(`worked out and checked the change file in ${seconds(t0)} s`);
     if (feedStateHash(check) === stateSha) {
-      const buf = brotli(Buffer.from(JSON.stringify(diff)));
-      writeFileSync(join(out, diffFile), buf);
-      diffs = [...diffs, { seq, file: diffFile, sha256: sha(buf), bytes: buf.length, state_sha256: stateSha }].slice(-KEEP_DIFFS);
-      Object.assign(result, { diffBytes: buf.length, changedCompanies: Object.keys(diff.changes).length + diff.removed.length });
+      diffPending = brotliAsync(Buffer.from(JSON.stringify(diff)), say, "change file");
+      changedCompanies = Object.keys(diff.changes).length + diff.removed.length;
     } else {
       // Never publish a change file that doesn't add up: apps take the full copy instead.
       diffs = [];
@@ -132,6 +160,14 @@ export function writeFeed(out: string, state: FeedState, generated: string, form
     }
   } else {
     result.note = "no saved feed from the previous run: published the full copy only";
+  }
+  const [snapBuf, buf] = await Promise.all([snapPending, diffPending]);
+  writeFileSync(join(out, snapFile), snapBuf);
+  result.snapshotBytes = snapBuf.length;
+  if (buf) {
+    writeFileSync(join(out, diffFile), buf);
+    diffs = [...diffs, { seq, file: diffFile, sha256: sha(buf), bytes: buf.length, state_sha256: stateSha }].slice(-KEEP_DIFFS);
+    Object.assign(result, { diffBytes: buf.length, changedCompanies });
   }
 
   const manifest: FeedManifestV2 = {

@@ -3,9 +3,11 @@
  * archives pages that Common Crawl's robots rules and sampling miss. Only index lines are read,
  * never page content, and each line is reduced to (ats, slug) like commoncrawl.ts does.
  *
- * Resumable and time-boxed: progress per query is saved after every page, so the weekly rebuild
- * reads for --max-minutes and carries on next week. A finished pass starts again after 30 days.
- * When the archive keeps failing (3 requests in a row) the run stops instead of retrying every query.
+ * Resumable and time-boxed: progress per query is saved after every page, so the daily URL-index run
+ * (directory-commoncrawl.yml, three days a week) reads for --max-minutes and carries on next time. A
+ * finished pass starts again after 30 days. When the archive keeps failing (3 requests in a row) the
+ * run stops instead of retrying every query. On GitHub Actions a blocked or stalled run leaves an
+ * annotation that Data · health reads (data-health.ts, by its title).
  *
  *   pnpm catalog:wayback [--max-minutes 90] [--since-years 3] [--pages 2]   -> raw/wayback/boards.json
  */
@@ -29,14 +31,14 @@ const SINCE = String(new Date().getUTCFullYear() - arg("--since-years", 3));
 const PAGE_LIMIT = arg("--pages", Infinity);
 const REPASS_DAYS = 30;
 const CDX = "https://web.archive.org/cdx/search/cdx";
-// The archive asks for gentle use: one request at a time, a few seconds apart.
+// The archive asks for gentle use: one request at a time, a few seconds apart, and a way to reach us.
 const http = new HttpClient({
   retries: 4,
-  hostDelayMs: 3_000,
+  hostDelayMs: 4_500,
   timeoutMs: 180_000,
   backoffMs: 30_000,
   breakAfter: 3,
-  userAgent: "RawJobs-catalog/0.1 (open-source job radar; reads the CDX index only)",
+  userAgent: "RawJobs-catalog/0.1 (open-source job radar; reads the CDX index only; https://github.com/Tanmay-Mhatre/rawjobs)",
 });
 const archiveDown = () => http.stats.brokenHosts.includes(new URL(CDX).host);
 
@@ -151,6 +153,7 @@ async function main() {
   };
 
   let outOfTime = false;
+  let pagesRead = 0;
   for (const q of QUERIES) {
     if (Date.now() - started > MAX_MS) {
       outOfTime = true;
@@ -190,6 +193,7 @@ async function main() {
         state.index_lines++;
         boards.add(line.slice(0, sp), year);
       }
+      pagesRead++;
       if (p.next % 10 === 0 || p.next === last - 1) console.error(`  ${q.url} page ${p.next + 1}/${p.pages}: ${boards.size} boards`);
       save();
     }
@@ -205,6 +209,11 @@ async function main() {
     `${finished ? "Pass complete" : outOfTime ? "Out of time; continues next run" : archiveDown() ? "Wayback index unavailable; continues next run" : "Stopped early; continues next run"}: ${boards.size} boards`,
     boards.byAts(),
   );
+  // Annotations for Data · health (data-health.ts matches these titles).
+  if (process.env.GITHUB_ACTIONS) {
+    if (archiveDown()) console.log(`::error title=Wayback blocked::web.archive.org kept failing and was marked broken after ${pagesRead} pages.`);
+    else if (!finished && pagesRead === 0) console.log("::warning title=Wayback stalled::No index page was read this run.");
+  }
 }
 
 main().catch((err) => {

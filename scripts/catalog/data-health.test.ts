@@ -1,6 +1,6 @@
 import { generateKeyPairSync, sign } from "node:crypto";
 import { describe, expect, it } from "vitest";
-import { checkSharedData, reportMarkdown } from "./data-health";
+import { checkSharedData, checkWayback, reportMarkdown } from "./data-health";
 
 const NOW = Date.parse("2026-10-12T12:00:00Z");
 const DAY = 86_400_000;
@@ -65,5 +65,55 @@ describe("the shared data health check", () => {
     const r = await check(repo({ "D/index.json.gz": null, "F/jobs-manifest.json": null }));
     expect(r.problems).toEqual([expect.stringMatching(/`index.json.gz`, listed in `manifest.json`, is missing/), expect.stringMatching(/`jobs-manifest.json` can't be downloaded \(HTTP 404\)/)]);
     expect(reportMarkdown(r)).toMatch(/has a problem/);
+  });
+});
+
+/** The GitHub API as checkWayback reads it: runs newest first, each with its Wayback step's conclusion and annotations. */
+function api(runs: { wayback: string | null; titles?: string[] }[]) {
+  return (async (url: string) => {
+    const path = url.replace("A/repos/o/r/", "");
+    if (path.startsWith("actions/workflows/")) return Response.json({ workflow_runs: runs.map((_, i) => ({ id: i })) });
+    const job = /^actions\/runs\/(\d+)\/jobs$/.exec(path);
+    if (job)
+      return Response.json({
+        jobs: [
+          {
+            id: Number(job[1]),
+            steps: [
+              { name: "Common Crawl", conclusion: "success" },
+              { name: "Wayback", conclusion: runs[Number(job[1])]!.wayback },
+            ],
+          },
+        ],
+      });
+    const notes = /^check-runs\/(\d+)\/annotations$/.exec(path);
+    if (notes) return Response.json((runs[Number(notes[1])]!.titles ?? []).map((title) => ({ title })));
+    return new Response("", { status: 404 });
+  }) as unknown as typeof fetch;
+}
+const wayback = (fetchImpl: typeof fetch) => checkWayback({ repo: "o/r", api: "A", fetchImpl });
+
+describe("the Wayback check", () => {
+  it("is fine when the latest Wayback runs read pages, skipping days it didn't run", async () => {
+    const r = await wayback(api([{ wayback: "skipped" }, { wayback: "success" }, { wayback: "skipped" }, { wayback: "success", titles: ["Wayback stalled"] }]));
+    expect(r).toEqual({ problems: [], checked: ["Wayback: last 2 runs not blocked or stalled"] });
+  });
+
+  it("spots a block in the latest run", async () => {
+    const r = await wayback(api([{ wayback: "success", titles: ["Wayback blocked"] }, { wayback: "success" }]));
+    expect(r.problems).toEqual([expect.stringMatching(/blocked the latest URL-index run/)]);
+  });
+
+  it("spots no progress over two runs, but not over one", async () => {
+    expect((await wayback(api([{ wayback: "success", titles: ["Wayback stalled"] }, { wayback: "skipped" }, { wayback: "failure", titles: ["Wayback stalled"] }]))).problems).toEqual([
+      expect.stringMatching(/no progress in the last two/),
+    ]);
+    expect((await wayback(api([{ wayback: "success", titles: ["Wayback stalled"] }, { wayback: "success" }]))).problems).toEqual([]);
+  });
+
+  it("notes, without failing, when the runs can't be read", async () => {
+    const r = await wayback((async () => new Response("", { status: 403 })) as unknown as typeof fetch);
+    expect(r.problems).toEqual([]);
+    expect(r.checked).toEqual([expect.stringMatching(/Wayback: not checked \(HTTP 403/)]);
   });
 });

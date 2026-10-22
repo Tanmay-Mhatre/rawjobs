@@ -9,7 +9,7 @@ run-name: ${{ inputs.source == 'scheduler' && format('{0} · scheduler', github.
 
 on:
   schedule:
-    # Off the hour, and clear of the job feed (04:23), the data checks (:37), Common Crawl (13:40),
+    # Off the hour, and clear of the job feed (04:23), the data checks (:37), the URL indexes (13:40, up to ~2 h),
     # the contributions runs (:17 every 3 hours) and Monday's rebuild.
     - cron: "53 6 * * *"
   workflow_dispatch:
