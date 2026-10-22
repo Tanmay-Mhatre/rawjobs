@@ -2,7 +2,7 @@ import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { detectCompany, getConnector } from "../src/connectors";
 import type { CompanyRef } from "../src/schema";
-import { fakeHttp } from "./helpers";
+import { fakeHttp, json } from "./helpers";
 
 const text = (body: string) => new Response(body, { status: 200, headers: { "content-type": "text/html" } });
 const openings = readFileSync(new URL("./fixtures/pages/hrmdirect-openings.html", import.meta.url), "utf8");
@@ -35,6 +35,50 @@ describe("hrmdirect", () => {
     const [raw] = await c.fetch({ name: "x", enabled: true, ats: "hrmdirect", slug: "healthadvances" } as CompanyRef, { http, now: new Date() });
     expect(raw).toMatchObject({ title: "Analyst", req: "1", loc: "2" });
     expect(c.vagueLocation!(raw!)).toBe(true);
+  });
+
+  it("reads an account that moved to ClearCompany from its careers API, and keeps the site id for next time", async () => {
+    const site = "69eb7736-6a58-51cd-4177-4fc2d015e896";
+    // The old address is followed to apply.clearcompany.com, whose page names the site id.
+    const moved = `<div class="cc-widget"><script src="https://careers-content.clearcompany.com/js/v1/career-site.js" data-site-id="${site}" data-default-source="CJB-0"></script></div>`;
+    const cc = (n: number) => ({
+      id: `job-${n}`,
+      positionTitle: ` Server ${n} `,
+      description: "<p>Breakfast <b>shifts</b>.</p>",
+      postedDate: "2026-10-22T00:00:00",
+      departmentName: "Restaurant",
+      locations: [{ city: "Uniontown", subdivision: "OH", country: "US", isRemote: false }],
+      applyLink: `https://firstwatch.clearcompany.com/careers/jobs/job-${n}/apply?source=CJB-0`,
+    });
+    const { http, calls } = fakeHttp((url) => {
+      if (url.includes("hrmdirect.com")) return text(moved);
+      const page = Number(new URL(url).searchParams.get("pageIndex"));
+      return json({ results: page === 0 ? Array.from({ length: 100 }, (_, i) => cc(i)) : [cc(100)], totalCount: 101 });
+    });
+    const kept = new Map<string, string>();
+    const ids = { get: (k: string) => kept.get(k), set: (k: string, v: string) => void kept.set(k, v) };
+    const c = getConnector("hrmdirect")!;
+    const r = { name: "First Watch", enabled: true, ats: "hrmdirect", slug: "firstwatch" } as CompanyRef;
+
+    const raws = await c.fetch(r, { http, now: new Date(), ids });
+    expect(raws).toHaveLength(101);
+    expect(calls.filter((u) => u.startsWith(`https://careers-api.clearcompany.com/v1/${site}?`))).toHaveLength(2);
+    expect(kept.get("hrmdirect:firstwatch")).toBe(site);
+    expect(c.normalize(raws[0]!, r)).toMatchObject({
+      id: "hrmdirect:firstwatch:job-0",
+      title: "Server 0",
+      location: "Uniontown, OH",
+      department: "Restaurant",
+      postedAt: "2026-10-22T00:00:00.000Z",
+      url: "https://firstwatch.clearcompany.com/careers/jobs/job-0",
+      description: "Breakfast shifts.",
+    });
+    expect(c.vagueLocation?.(raws[0]!)).toBe(false);
+
+    // Next read: straight to the API, no page.
+    calls.length = 0;
+    await c.fetch(r, { http, now: new Date(), ids });
+    expect(calls.some((u) => u.includes("hrmdirect.com"))).toBe(false);
   });
 
   it("is recognised from a careers or job link", () => {
