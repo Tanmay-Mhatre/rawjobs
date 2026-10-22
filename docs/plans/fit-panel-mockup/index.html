@@ -1,0 +1,422 @@
+<!doctype html>
+<html lang="en" data-theme="light">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Fit panel mockup</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+:root {
+  --font-sans: "Geist", system-ui, sans-serif;
+  --bg-canvas: #f5f1e8; --bg-raised: #fffbf5; --bg-hover: #ede9e2; --bg-active: #e5e1db; --bg-inset: #ede9e2;
+  --border-subtle: #d4d0c9; --border-default: #c4c0ba; --border-control: #888681;
+  --text-primary: #151412; --text-secondary: #605d59;
+  --accent-solid: #ff5a1f; --accent-text: #a33100;
+  --success-solid: #007d3e; --success-text: #007137; --success-subtle: #d3f3da;
+  --warning-text: #7f5300; --warning-subtle: #fde5c7;
+  --danger-text: #a12b46;
+  --meter-track: #e5e1db; --meter-fill: #151412; --meter-soft: #a9a59e;
+}
+[data-theme="dark"] {
+  --bg-canvas: #120f0b; --bg-raised: #181611; --bg-hover: #201d18; --bg-active: #27241f; --bg-inset: #120f0b;
+  --border-subtle: #37342e; --border-default: #45423b; --border-control: #6f6d66;
+  --text-primary: #ecebe8; --text-secondary: #cac7c2;
+  --accent-text: #ff9d7f;
+  --success-solid: #5bcc80; --success-text: #89dea1; --success-subtle: #12301c;
+  --warning-text: #f6bb6a; --warning-subtle: #36270e;
+  --danger-text: #ffaeb7;
+  --meter-track: #27241f; --meter-fill: #ecebe8; --meter-soft: #6f6d66;
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; }
+body { background: var(--bg-canvas); color: var(--text-primary); font: 400 14px/21px var(--font-sans); -webkit-font-smoothing: antialiased; padding: 24px 16px 64px; }
+.ico { width: 16px; height: 16px; flex: none; stroke: currentColor; fill: none; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+.muted { color: var(--text-secondary); }
+.tab { font-variant-numeric: tabular-nums; }
+
+/* Page chrome */
+.intro { max-width: 1240px; margin: 0 auto 16px; }
+.intro h1 { font-size: 20px; line-height: 28px; font-weight: 600; margin: 0 0 4px; }
+.intro p { margin: 0; color: var(--text-secondary); max-width: 760px; }
+.bar { max-width: 1240px; margin: 0 auto 20px; display: flex; flex-wrap: wrap; gap: 8px 20px; align-items: center; position: sticky; top: 0; z-index: 5; background: var(--bg-canvas); padding: 10px 0; border-bottom: 1px solid var(--border-subtle); }
+.seg { display: inline-flex; border: 1px solid var(--border-default); border-radius: 4px; overflow: hidden; }
+.seg button { font: inherit; font-size: 13px; padding: 5px 12px; background: transparent; color: var(--text-primary); border: 0; cursor: pointer; }
+.seg button + button { border-left: 1px solid var(--border-default); }
+.seg button[aria-pressed="true"] { background: var(--text-primary); color: var(--bg-raised); }
+.bar label { font-size: 12px; color: var(--text-secondary); margin-right: 6px; }
+.note { max-width: 1240px; margin: 0 auto 16px; font-size: 13px; color: var(--text-secondary); }
+.note b { color: var(--text-primary); font-weight: 500; }
+
+.grid { max-width: 1240px; margin: 0 auto; display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 560px), 1fr)); gap: 28px 24px; align-items: start; }
+body.phone .grid { grid-template-columns: repeat(auto-fill, 375px); justify-content: center; }
+.cap { font-size: 12px; line-height: 16px; color: var(--text-secondary); margin: 0 0 6px; display: flex; gap: 8px; }
+.cap b { color: var(--text-primary); font-weight: 600; }
+
+/* The panel */
+.fit { background: var(--bg-raised); border: 1px solid var(--border-subtle); border-radius: 4px; padding: 20px 24px; position: relative; }
+body.phone .fit { padding: 16px; }
+.head { display: flex; gap: 14px; align-items: center; }
+.badge { min-width: 72px; height: 52px; border-radius: 2px; display: grid; place-items: center; align-content: center; font-weight: 600; font-size: 26px; line-height: 28px; letter-spacing: -0.02em; border: 1.5px solid transparent; }
+.badge small { font-size: 10px; line-height: 12px; letter-spacing: .06em; text-transform: uppercase; font-weight: 500; }
+.badge.strong { background: var(--success-solid); color: #fff; }
+[data-theme="dark"] .badge.strong { color: #0b2214; }
+.badge.fair { background: var(--bg-active); border-color: var(--border-default); }
+.badge.weak { border-color: var(--border-control); color: var(--text-secondary); }
+.badge.est { background: transparent; border-style: dashed; }
+.badge.est.strong { color: var(--success-text); border-color: var(--success-text); }
+.badge.zero { border-color: var(--danger-text); color: var(--danger-text); background: transparent; }
+.head h3 { margin: 0; font-size: 17px; line-height: 24px; font-weight: 600; }
+.head .sub { font-size: 13px; line-height: 18px; color: var(--text-secondary); }
+.head .grow { flex: 1; min-width: 0; }
+.iconbtn { width: 32px; height: 32px; display: grid; place-items: center; border: 0; background: transparent; color: var(--text-secondary); border-radius: 4px; cursor: pointer; }
+.iconbtn:hover { background: var(--bg-hover); color: var(--text-primary); }
+.toggle { font: inherit; font-size: 13px; font-weight: 500; display: inline-flex; gap: 4px; align-items: center; border: 0; background: transparent; color: var(--text-primary); padding: 6px 8px; border-radius: 4px; cursor: pointer; }
+.toggle:hover { background: var(--bg-hover); }
+.info { display: none; margin-top: 12px; background: var(--bg-inset); border-radius: 4px; padding: 10px 12px; font-size: 13px; line-height: 19px; color: var(--text-secondary); }
+.info.on { display: block; }
+.info p { margin: 0; } .info p + p { margin-top: 6px; }
+
+.alert { margin-top: 14px; border-radius: 4px; padding: 10px 12px; font-size: 13px; line-height: 19px; background: var(--warning-subtle); color: var(--warning-text); display: flex; gap: 8px; }
+.alert.bad { background: transparent; border: 1px solid var(--danger-text); color: var(--danger-text); }
+.alert ul { margin: 4px 0 0; padding-left: 18px; }
+.alert b { font-weight: 600; }
+
+.group { margin-top: 18px; }
+.gh { font-size: 11px; line-height: 16px; letter-spacing: .06em; text-transform: uppercase; font-weight: 600; color: var(--text-secondary); margin: 0 0 2px; display: flex; justify-content: space-between; }
+.gh span { text-transform: none; letter-spacing: 0; font-weight: 400; }
+
+/* A: rows */
+.row { display: grid; grid-template-columns: 76px minmax(0,1fr) 56px; gap: 2px 14px; align-items: center; padding: 10px 0; border-top: 1px solid var(--border-subtle); }
+.row:last-child { border-bottom: 1px solid var(--border-subtle); }
+.row .lab { font-weight: 500; }
+.row .pts { text-align: right; font-variant-numeric: tabular-nums; font-weight: 500; }
+.row .pts span { color: var(--text-secondary); font-weight: 400; }
+.meter { height: 6px; background: var(--meter-track); border-radius: 3px; overflow: hidden; }
+.meter i { display: block; height: 100%; background: var(--meter-fill); border-radius: 3px; }
+.meter i.soft { background: var(--meter-soft); }
+.row .why { grid-column: 2 / 4; display: flex; gap: 6px; align-items: flex-start; font-size: 13px; line-height: 19px; color: var(--text-secondary); }
+.row .why .ico { margin-top: 2px; }
+.row.off .lab { color: var(--text-secondary); }
+.row.off .why { grid-column: 2 / 3; }
+body.phone .row { grid-template-columns: 64px minmax(0,1fr) 48px; gap: 6px 10px; }
+body.phone .row .why { grid-column: 1 / 4; }
+body.phone .row.off .why { grid-column: 2 / 3; }
+.ok { color: var(--success-text); } .no { color: var(--danger-text); } .unk { color: var(--text-secondary); }
+.fix { margin-left: auto; flex: none; font-size: 13px; font-weight: 500; color: var(--text-primary); text-decoration: underline; text-underline-offset: 2px; cursor: pointer; white-space: nowrap; padding-left: 8px; }
+.kw { margin-top: 4px; display: flex; flex-wrap: wrap; gap: 4px; }
+.kw span { font-size: 12px; line-height: 18px; padding: 0 6px; border-radius: 2px; background: var(--success-subtle); color: var(--success-text); }
+.kw span.miss { background: transparent; color: var(--text-secondary); border: 1px dashed var(--border-default); }
+.req { display: flex; gap: 8px; align-items: flex-start; padding: 7px 0; font-size: 13px; line-height: 19px; border-top: 1px solid var(--border-subtle); }
+.req:last-child { border-bottom: 1px solid var(--border-subtle); }
+.req .ico { margin-top: 2px; }
+
+/* B: lists */
+.list { margin: 0; padding: 0; list-style: none; }
+.list li { display: flex; gap: 8px; align-items: flex-start; padding: 6px 0; font-size: 14px; line-height: 20px; }
+.list li .ico { margin-top: 2px; }
+.list li .p { margin-left: auto; padding-left: 12px; font-size: 12px; color: var(--text-secondary); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.list li .body { min-width: 0; }
+.list li .fix { margin-left: 12px; }
+.total { margin-top: 14px; padding-top: 10px; border-top: 1px solid var(--border-subtle); display: flex; justify-content: space-between; font-size: 13px; color: var(--text-secondary); }
+.total b { color: var(--text-primary); font-weight: 600; }
+
+/* C: tiles */
+.tiles { margin-top: 16px; display: grid; grid-template-columns: repeat(auto-fit, minmax(96px, 1fr)); gap: 8px; }
+.tile { border: 1px solid var(--border-subtle); border-top-width: 3px; border-radius: 2px; padding: 8px 10px; }
+.tile.s-ok { border-top-color: var(--success-solid); }
+.tile.s-no { border-top-color: var(--danger-text); }
+.tile.s-unk { border-top-color: var(--border-control); border-top-style: dashed; }
+.tile.s-off { border-top-color: var(--border-subtle); color: var(--text-secondary); }
+.tile .tl { font-size: 12px; color: var(--text-secondary); }
+.tile .tv { font-size: 20px; line-height: 26px; font-weight: 600; font-variant-numeric: tabular-nums; }
+.tile .tv span { font-size: 13px; font-weight: 400; color: var(--text-secondary); }
+.tile .tw { font-size: 12px; line-height: 16px; }
+
+/* folded */
+.pills { margin: 12px 0 0; padding: 0; list-style: none; display: flex; flex-wrap: wrap; gap: 6px; }
+.pills li { display: inline-flex; gap: 6px; align-items: center; font-size: 13px; line-height: 18px; padding: 4px 10px; border: 1px solid var(--border-default); border-radius: 999px; }
+.pills li.miss { border-color: var(--danger-text); }
+.pills .fix { padding-left: 4px; }
+
+/* drawer context (first card only) */
+.ctx { background: var(--bg-raised); border: 1px solid var(--border-subtle); border-radius: 4px; overflow: hidden; }
+.ctx .top { padding: 18px 24px 14px; border-bottom: 1px solid var(--border-subtle); }
+.ctx .co { font-weight: 500; display: flex; gap: 8px; align-items: center; } .ctx .co i { width: 8px; height: 8px; border-radius: 50%; background: var(--accent-solid); }
+.ctx h2 { font-size: 20px; line-height: 28px; margin: 4px 0; font-weight: 600; }
+.ctx .m { font-size: 13px; color: var(--text-secondary); }
+.ctx .inner { padding: 16px 24px; }
+.ctx .inner .fit { border: 1px solid var(--border-subtle); }
+.ctx .foot { border-top: 1px solid var(--border-subtle); padding: 12px 24px; display: flex; gap: 8px; }
+.ctx .foot span { padding: 8px 14px; border-radius: 4px; font-weight: 500; font-size: 14px; }
+.ctx .foot .a { background: var(--accent-solid); color: #151412; } .ctx .foot .s { border: 1px solid var(--border-control); }
+</style>
+</head>
+<body>
+<svg width="0" height="0" style="position:absolute">
+  <symbol id="i-ok" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="m8.5 12 2.5 2.5 4.5-5"/></symbol>
+  <symbol id="i-no" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="m9 9 6 6M15 9l-6 6"/></symbol>
+  <symbol id="i-unk" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M9.5 9.5a2.5 2.5 0 1 1 3.5 2.3c-.6.3-1 .8-1 1.5v.4"/><path d="M12 17h.01"/></symbol>
+  <symbol id="i-info" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 11v5M12 8h.01"/></symbol>
+  <symbol id="i-warn" viewBox="0 0 24 24"><path d="M12 4 3 20h18L12 4z"/><path d="M12 10v4M12 17h.01"/></symbol>
+  <symbol id="i-down" viewBox="0 0 24 24"><path d="m6 9 6 6 6-6"/></symbol>
+  <symbol id="i-up" viewBox="0 0 24 24"><path d="m6 15 6-6 6 6"/></symbol>
+  <symbol id="i-plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></symbol>
+</svg>
+
+<div class="intro">
+  <h1>Fit panel: "Why it matched"</h1>
+  <p>Three layouts, each shown with every data state the panel handles today. Pick a layout at the top; every card below re-draws in it. Open the ⓘ on any card for the explainer that used to sit at the bottom.</p>
+</div>
+
+<div class="bar">
+  <div><label>Layout</label><span class="seg" id="layout"><button data-v="A" aria-pressed="true">A · Score rows</button><button data-v="B">B · Plain lists</button><button data-v="C">C · Tiles</button></span></div>
+  <div><label>Panel</label><span class="seg" id="fold"><button data-v="open" aria-pressed="true">Open (Why)</button><button data-v="folded">Folded</button></span></div>
+  <div><label>Width</label><span class="seg" id="width"><button data-v="desk" aria-pressed="true">Drawer</button><button data-v="phone">Phone 375</button></span></div>
+  <div><label>Theme</label><span class="seg" id="theme"><button data-v="light" aria-pressed="true">Light</button><button data-v="dark">Dark</button></span></div>
+</div>
+
+<p class="note" id="note"></p>
+<div class="grid" id="grid"></div>
+
+<script>
+const IC = (id, cls = "") => `<svg class="ico ${cls}"><use href="#i-${id}"/></svg>`;
+const S = { ok: ["ok", "ok"], no: ["no", "no"], unk: ["unk", "unk"] };
+
+// Every data state the panel renders today (JobDetail.tsx FitPanel), one job each.
+const STATES = [
+  {
+    key: "scaled", title: "Strong, no topics yet (your screenshot)", score: 73, cut: 70,
+    sub: "Above your 70 cut-off", scaled: true,
+    factors: [
+      { label: "Title", e: 19, m: 30, s: "ok", text: "Matches <b>product manager</b>" },
+      { label: "Place", e: 20, m: 20, s: "ok", text: "In <b>United Arab Emirates</b>" },
+      { label: "Topics", off: true, text: "Not set, so the three others make the score", fix: "Add topics" },
+      { label: "Industry", e: 5, m: 10, s: "unk", text: "Company's industry not known, half points" },
+    ],
+    reqs: [],
+  },
+  {
+    key: "full", title: "Strong, with topics and requirements", score: 86, cut: 70,
+    sub: "Above your 70 cut-off",
+    factors: [
+      { label: "Title", e: 30, m: 30, s: "ok", text: "Matches <b>senior product manager</b>, at your level" },
+      { label: "Place", e: 20, m: 20, s: "ok", text: "In <b>United Arab Emirates</b>" },
+      { label: "Topics", e: 26, m: 40, s: "ok", text: "Mentions your topics", found: ["marketplaces", "B2C", "roadmapping"], missing: ["experimentation", "SQL"] },
+      { label: "Industry", e: 10, m: 10, s: "ok", text: "<b>Mobility</b>, one of your industries" },
+    ],
+    reqs: [
+      { s: "ok", text: "Pay AED 40k–50k a month, above your minimum" },
+      { s: "ok", text: "Needs 6+ years, you have 7" },
+      { s: "unk", text: "Visa sponsorship not mentioned" },
+    ],
+  },
+  {
+    key: "fair", title: "Fair, with misses you can fix", score: 54, cut: 70,
+    sub: "16 under your 70 cut-off",
+    factors: [
+      { label: "Title", e: 15, m: 30, s: "ok", text: "Matches <b>product manager</b>, not near your level", fix: "Add Lead level" },
+      { label: "Place", e: 15, m: 20, s: "ok", text: "Remote, open to your regions" },
+      { label: "Topics", e: 14, m: 40, s: "ok", text: "Mentions your topics", found: ["payments"], missing: ["marketplaces", "B2C", "roadmapping", "SQL"] },
+      { label: "Industry", e: 0, m: 10, s: "no", text: "<b>Banking</b> isn't one of your industries", fix: "Add Banking" },
+    ],
+    reqs: [
+      { s: "no", text: "Needs 10+ years, you have 7", fix: "Edit years" },
+      { s: "unk", text: "Pay not stated" },
+    ],
+  },
+  {
+    key: "weak", title: "Weak: wrong title and place", score: 18, cut: 70,
+    sub: "Well under your 70 cut-off",
+    factors: [
+      { label: "Title", e: 0, m: 30, s: "no", text: "Title isn't one of your roles", fix: "Add Product owner" },
+      { label: "Place", e: 0, m: 20, s: "no", text: "In <b>Germany</b>, not one of your places" },
+      { label: "Topics", e: 18, m: 40, s: "ok", text: "Mentions your topics", found: ["B2C", "roadmapping"], missing: ["marketplaces"] },
+      { label: "Industry", e: 0, m: 10, s: "no", text: "<b>Retail</b> isn't one of your industries" },
+    ],
+    reqs: [],
+  },
+  {
+    key: "est", title: "Estimated: posting not fetched yet", score: 74, cut: 70, est: true,
+    sub: "Estimated from title, place and industry",
+    factors: [
+      { label: "Title", e: 25, m: 30, s: "ok", text: "Matches <b>product manager</b>, one level from yours" },
+      { label: "Place", e: 20, m: 20, s: "ok", text: "In <b>United Arab Emirates</b>" },
+      { label: "Topics", off: true, text: "Not checked yet: the full posting hasn't been fetched" },
+      { label: "Industry", e: 10, m: 10, s: "ok", text: "<b>Mobility</b>, one of your industries" },
+    ],
+    reqs: [],
+  },
+  {
+    key: "gate", title: "Failed a filter: score is 0", score: 0, cut: 70, zero: true,
+    sub: "Failed your visa filter",
+    alert: { bad: true, text: "Failed your <b>visa</b> filter, so the score is 0. The parts below are what it would have been." },
+    factors: [
+      { label: "Title", e: 30, m: 30, s: "ok", text: "Matches <b>senior product manager</b>, at your level" },
+      { label: "Place", e: 20, m: 20, s: "ok", text: "In <b>United Kingdom</b>" },
+      { label: "Topics", e: 22, m: 40, s: "ok", text: "Mentions your topics", found: ["marketplaces", "B2C"], missing: ["SQL"] },
+      { label: "Industry", e: 10, m: 10, s: "ok", text: "<b>Mobility</b>, one of your industries" },
+    ],
+    reqs: [{ s: "no", text: "Says it doesn't sponsor visas", fix: "Edit filter" }],
+  },
+  {
+    key: "held", title: "Held back just under the cut-off", score: 69, cut: 70,
+    sub: "Held at 69, just under your 70 cut-off",
+    alert: { text: "Adds up to a strong match, but kept just under your cut-off: the posting asks for Arabic, a must-have you don't list." },
+    factors: [
+      { label: "Title", e: 30, m: 30, s: "ok", text: "Matches <b>senior product manager</b>, at your level" },
+      { label: "Place", e: 20, m: 20, s: "ok", text: "In <b>Saudi Arabia</b>" },
+      { label: "Topics", e: 24, m: 40, s: "ok", text: "Mentions your topics", found: ["B2C", "roadmapping"], missing: ["SQL"] },
+      { label: "Industry", e: 10, m: 10, s: "ok", text: "<b>Mobility</b>, one of your industries" },
+    ],
+    reqs: [{ s: "no", text: "Must have: Arabic", fix: "I have this" }],
+  },
+  {
+    key: "deal", title: "Breaks dealbreakers: capped at half", score: 38, cut: 70,
+    sub: "Capped, under your 70 cut-off",
+    alert: { bad: true, text: "Breaks <b>2 of your dealbreakers</b>, so the score is at most half what its parts add up to:", items: ["Mentions on-site 5 days a week", "Mentions crypto"] },
+    factors: [
+      { label: "Title", e: 30, m: 30, s: "ok", text: "Matches <b>senior product manager</b>, at your level" },
+      { label: "Place", e: 20, m: 20, s: "ok", text: "In <b>United Arab Emirates</b>" },
+      { label: "Topics", e: 16, m: 40, s: "ok", text: "Mentions your topics", found: ["payments"], missing: ["B2C", "marketplaces"] },
+      { label: "Industry", e: 10, m: 10, s: "ok", text: "<b>Fintech</b>, one of your industries" },
+    ],
+    reqs: [],
+  },
+  {
+    key: "fresh", title: "Old score: freshness in place of industry", score: 78, cut: 70,
+    sub: "Above your 70 cut-off",
+    factors: [
+      { label: "Title", e: 30, m: 30, s: "ok", text: "Matches <b>senior product manager</b>, at your level" },
+      { label: "Place", e: 20, m: 20, s: "ok", text: "In <b>United Arab Emirates</b>" },
+      { label: "Topics", e: 22, m: 40, s: "ok", text: "Mentions your topics", found: ["B2C", "roadmapping"], missing: ["SQL"] },
+      { label: "Fresh", e: 6, m: 10, s: "ok", text: "Posted this week. Industry is scored from the next scan" },
+    ],
+    reqs: [],
+  },
+];
+
+const band = (st) => (st.zero ? "zero" : st.score >= st.cut ? "strong" : st.score >= 40 ? "fair" : "weak");
+const word = { strong: "Strong", fair: "Fair", weak: "Weak", zero: "Filtered" };
+const fix = (f) => (f ? `<a class="fix">${f}</a>` : "");
+const kws = (f) =>
+  f.found || f.missing ? `<div class="kw">${(f.found || []).map((k) => `<span>${k}</span>`).join("")}${(f.missing || []).map((k) => `<span class="miss">${k}</span>`).join("")}</div>` : "";
+
+function head(st, folded) {
+  const b = band(st);
+  return `<div class="head">
+    <div class="badge ${b} ${st.est ? "est" : ""}">${st.est ? "~" : ""}${st.score}<small>${word[b]}</small></div>
+    <div class="grow"><h3>${word[b]} match</h3><div class="sub">${st.sub}</div></div>
+    <button class="iconbtn" aria-label="How the score works" onclick="this.closest('.fit').querySelector('.info').classList.toggle('on')">${IC("info")}</button>
+    <button class="toggle" onclick="setFold(${folded ? "'open'" : "'folded'"})">${folded ? "Why" : "Hide"} ${IC(folded ? "down" : "up", "")}</button>
+  </div>
+  <div class="info">
+    <p>The score is how well the job fits what you asked for, not your odds of an interview.</p>
+    ${st.scaled ? "<p>You have no topics yet, so title, place and industry are scaled up to make the whole 100.</p>" : ""}
+    <p>Best match also lists newer jobs higher. The score itself doesn't change.</p>
+  </div>
+  ${st.alert ? `<div class="alert ${st.alert.bad ? "bad" : ""}">${IC("warn")}<div>${st.alert.text}${st.alert.items ? `<ul>${st.alert.items.map((i) => `<li>${i}</li>`).join("")}</ul>` : ""}</div></div>` : ""}`;
+}
+
+function reqsA(st) {
+  if (!st.reqs.length) return "";
+  return `<div class="group"><p class="gh">Requirements <span>don't add points</span></p>
+    ${st.reqs.map((r) => `<div class="req"><span class="${r.s}">${IC(r.s)}</span><span class="${r.s === "ok" ? "" : "muted"}">${r.text}</span>${fix(r.fix)}</div>`).join("")}</div>`;
+}
+
+function layoutA(st) {
+  const rows = st.factors
+    .map((f) =>
+      f.off
+        ? `<div class="row off"><span class="lab">${f.label}</span><span class="why">${f.text}</span><span class="pts">${f.fix ? `<a class="fix">${f.fix}</a>` : "–"}</span></div>`
+        : `<div class="row"><span class="lab">${f.label}</span><div class="meter"><i class="${f.s === "unk" ? "soft" : ""}" style="width:${(f.e / f.m) * 100}%"></i></div><span class="pts">${f.e}<span>/${f.m}</span></span>
+           <div class="why"><span class="${f.s}">${IC(f.s)}</span><div>${f.text}${kws(f)}</div>${fix(f.fix)}</div></div>`,
+    )
+    .join("");
+  return `<div class="group"><p class="gh">Score</p>${rows}</div>${reqsA(st)}`;
+}
+
+function layoutB(st) {
+  const items = [
+    ...st.factors.map((f) => ({ ...f, s: f.off ? "unk" : f.s, p: f.off ? "" : `${f.e}/${f.m}`, text: `<b>${f.label}:</b> ${f.text.replace(/<\/?b>/g, "")}` })),
+    ...st.reqs.map((r) => ({ ...r, p: "" })),
+  ];
+  const groups = [
+    ["ok", "Fits"],
+    ["no", "Doesn't fit"],
+    ["unk", "Not known"],
+  ];
+  const li = (it) => `<li><span class="${it.s}">${IC(it.s)}</span><div class="body">${it.text}${kws(it)}</div>${fix(it.fix)}${it.p ? `<span class="p">${it.p}</span>` : ""}</li>`;
+  const sum = st.factors.filter((f) => !f.off).reduce((a, f) => [a[0] + f.e, a[1] + f.m], [0, 0]);
+  return (
+    groups
+      .map(([s, name]) => {
+        const g = items.filter((i) => i.s === s);
+        return g.length ? `<div class="group"><p class="gh">${name}</p><ul class="list">${g.map(li).join("")}</ul></div>` : "";
+      })
+      .join("") + `<div class="total"><span>Points</span><span><b>${sum[0]}</b> of ${sum[1]}${st.scaled ? `, scaled to ${st.score}` : ""}</span></div>`
+  );
+}
+
+function layoutC(st) {
+  const t = st.factors
+    .map((f) =>
+      f.off
+        ? `<div class="tile s-off"><div class="tl">${f.label}</div><div class="tv">–</div><div class="tw">${f.fix ? `<a class="fix" style="padding:0">${f.fix}</a>` : "Not checked"}</div></div>`
+        : `<div class="tile s-${f.s}"><div class="tl">${f.label}</div><div class="tv">${f.e}<span>/${f.m}</span></div><div class="tw ${f.s}">${f.s === "ok" ? (f.e === f.m ? "Full" : "Partly") : f.s === "no" ? "No match" : "Not known"}</div></div>`,
+    )
+    .join("");
+  const notes = [
+    ...st.factors.filter((f) => !f.off).map((f) => ({ s: f.s, text: `<b>${f.label}:</b> ${f.text.replace(/<\/?b>/g, "")}`, fix: f.fix, found: f.found, missing: f.missing })),
+    ...st.reqs,
+  ];
+  return `<div class="tiles">${t}</div>
+    <ul class="list" style="margin-top:12px">${notes.map((n) => `<li><span class="${n.s}">${IC(n.s)}</span><div class="body">${n.text}${kws(n)}</div>${fix(n.fix)}</li>`).join("")}</ul>`;
+}
+
+function folded(st) {
+  const miss = [...st.factors.filter((f) => f.s === "no"), ...st.reqs.filter((r) => r.s === "no")];
+  const unk = [...st.factors.filter((f) => f.s === "unk" || (f.off && f.fix)), ...st.reqs.filter((r) => r.s === "unk")];
+  if (!miss.length && !unk.length) return "";
+  const t = (x) => (x.label && !x.text.startsWith(x.label) ? `${x.label}:${x.text.charAt(0).toLowerCase()}${x.text.slice(1)}` : x.text).replace(/<\/?b>/g, "");
+  return `<ul class="pills">${miss.map((m) => `<li class="miss"><span class="no">${IC("no")}</span>${t(m)}${fix(m.fix)}</li>`).join("")}${unk
+    .map((m) => `<li><span class="unk">${IC("unk")}</span>${t(m)}${fix(m.fix)}</li>`)
+    .join("")}</ul>`;
+}
+
+const NOTES = {
+  A: "<b>A · Score rows.</b> One row per scored part: meter, points and the reason together, with its fix on the same line. Requirements (pay, years, visa, must-haves) sit in their own group because they don't add points. Recommended.",
+  B: "<b>B · Plain lists.</b> No graphics. Everything sorted into Fits / Doesn't fit / Not known, points in small type at the right, one total line at the end. Fastest to read, weakest on \"how close\".",
+  C: "<b>C · Tiles.</b> The four parts as small tiles up top (status by top border colour and word), then one list of reasons. Most visual, but the number and its reason sit apart again.",
+};
+
+let L = "A", F = "open";
+function render() {
+  document.getElementById("note").innerHTML = NOTES[L];
+  const body = (st) => (F === "folded" ? folded(st) : L === "A" ? layoutA(st) : L === "B" ? layoutB(st) : layoutC(st));
+  const panel = (st) => `<section class="fit">${head(st, F === "folded")}${body(st)}</section>`;
+  document.getElementById("grid").innerHTML = STATES.map(
+    (st, i) =>
+      `<div><p class="cap"><b>${i + 1}</b>${st.title}</p>${
+        i === 0
+          ? `<div class="ctx"><div class="top"><div class="co"><i></i>inDrive</div><h2>Senior Product Manager (Passenger Experience)</h2><div class="m">Abu Dhabi · Hybrid · First seen 7h ago · listed on Pinpoint</div></div><div class="inner">${panel(st)}</div><div class="foot"><span class="a">Apply at inDrive</span><span class="s">Save</span></div></div>`
+          : panel(st)
+      }</div>`,
+  ).join("");
+}
+window.setFold = (v) => { F = v; sync("fold", v); render(); };
+function sync(id, v) { document.querySelectorAll(`#${id} button`).forEach((b) => b.setAttribute("aria-pressed", String(b.dataset.v === v))); }
+for (const id of ["layout", "fold", "width", "theme"])
+  document.getElementById(id).addEventListener("click", (e) => {
+    const v = e.target.closest("button")?.dataset.v; if (!v) return;
+    sync(id, v);
+    if (id === "layout") L = v;
+    if (id === "fold") F = v;
+    if (id === "width") document.body.classList.toggle("phone", v === "phone");
+    if (id === "theme") document.documentElement.dataset.theme = v;
+    render();
+  });
+render();
+</script>
+</body>
+</html>

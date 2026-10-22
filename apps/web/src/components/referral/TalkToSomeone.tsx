@@ -1,6 +1,6 @@
 import { networkKey } from "@rawjobs/core/network/company";
 import { type PersonScore, scorePerson } from "@rawjobs/core/network/score";
-import { ChevronRight, ExternalLink, Users } from "lucide-react";
+import { ChevronRight, ExternalLink, MessageSquare, Users } from "lucide-react";
 import { type ReactNode, useEffect, useMemo, useRef, useState } from "react";
 import { isAgencyPosting } from "../../lib/agency";
 import { LINK_REL } from "../../lib/contactLinks";
@@ -27,7 +27,8 @@ export const TOP_PEOPLE = 5;
 export const STALE_AFTER_DAYS = 60;
 const DAY = 86_400_000;
 
-const BAND_CLASS: Record<PersonScore["band"], string> = { high: "text-success-text", medium: "text-ink", low: "text-muted" };
+/** "AK" for Aisha Khan: the avatar on a person's row. */
+const initials = (p: { first: string; last: string }) => `${p.first.trim().charAt(0)}${p.last.trim().charAt(0)}`.toUpperCase() || "?";
 
 /** Nothing for the first 100 ms, so a quick answer never flashes a loading line. */
 function useAfter(on: boolean, ms = 100): boolean {
@@ -188,7 +189,7 @@ function Section({ job, entry, profile, onUpdate, onOpenPeople }: Props) {
     <section className="rj-drawer__section" aria-labelledby={headingId}>
       <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2">
         {/* mr-auto keeps the buttons together on the right; Find friends' paste box wraps below them all. */}
-        <h3 id={headingId} className="rj-h mr-auto">
+        <h3 id={headingId} className="rj-sec-h mr-auto">
           Talk to someone who works here
         </h3>
         {!agency && <SeePeople job={job} company={company} onFailed={() => setCardFailed(true)} />}
@@ -360,65 +361,71 @@ function PersonRow({ person, score, loose, job, contacts }: Ranked & { loose: bo
     if (!ok) toast({ message: "Couldn't save that. Check that RawJobs is running, then try again." });
   };
   return (
-    <div className="space-y-0.5">
-      <div className="flex flex-wrap items-baseline gap-x-2">
-        {href ? (
-          <a href={href} target="_blank" rel={LINK_REL} className="type-body font-medium text-ink underline-offset-2 hover:underline">
-            {name}
-          </a>
-        ) : (
-          <span className="type-body font-medium text-ink">{name}</span>
-        )}
-        <span className={cx("type-meta", BAND_CLASS[score.band])}>Likely to help: {score.band}</span>
-        {here &&
-          (contacts.onOpenPeople ? (
-            <button type="button" className="type-meta font-medium text-ink underline underline-offset-2 hover:text-muted" onClick={contacts.onOpenPeople}>
-              {onJobLabel(here.outreach)}
-            </button>
+    <div className="grid grid-cols-[36px_minmax(0,1fr)_auto] items-start gap-x-3">
+      {/* Drawn from the attribute, so the row's text (and what screen readers hear) starts with the name. */}
+      <span className="rj-avatar" data-initials={initials(person)} aria-hidden />
+      <div className="min-w-0 space-y-0.5">
+        <div className="flex flex-wrap items-baseline gap-x-2">
+          {href ? (
+            <a href={href} target="_blank" rel={LINK_REL} className="type-body font-medium text-ink underline-offset-2 hover:underline">
+              {name}
+            </a>
           ) : (
-            <span className="type-meta font-medium text-ink">{onJobLabel(here.outreach)}</span>
-          ))}
-      </div>
-      {(person.position || (loose && person.company)) && (
-        <p className="type-small text-muted">
-          {person.position}
-          {loose && person.company && `${person.position ? " · " : ""}Works at ${person.company}`}
-        </p>
-      )}
-      {score.why && <p className="type-small">{score.why}.</p>}
-      <details className="group/more">
-        <summary className="inline-flex min-h-8 cursor-pointer list-none items-center gap-1 type-meta text-muted hover:text-ink [&::-webkit-details-marker]:hidden" aria-label={`More about ${name}`}>
-          <ChevronRight className="size-3.5 transition-transform duration-150 group-open/more:rotate-90" aria-hidden />
-          More
-        </summary>
-        <div className="space-y-2 pb-1 pl-5">
-          <div>
-            <p className="type-label">How this is worked out</p>
-            <dl className="mt-1 grid grid-cols-[auto_1fr] gap-x-2 gap-y-0.5 type-small">
-              {score.points.map((pt) => (
-                <div key={pt.id} className="contents">
-                  <dt className="tabular text-ink">+{pt.points}</dt>
-                  <dd className="text-muted">{pt.text}</dd>
-                </div>
-              ))}
-            </dl>
-            <p className="mt-1 type-meta text-muted">{score.total} in all. 60 or more is high, 35 to 59 medium, under 35 low.</p>
-          </div>
-          <div className="flex flex-wrap gap-1.5">
-            {!here && contacts.add && (
-              <Button size="sm" onClick={addThem}>
-                Add to contacts
-              </Button>
-            )}
-            <Button size="sm" aria-pressed={person.friend} aria-label={`Mark ${name} as a close contact`} onClick={() => void toggle()}>
-              Close contact
-            </Button>
-            <Button size="sm" onClick={() => setDrafting(true)}>
-              Draft a message
-            </Button>
-          </div>
+            <span className="type-body font-medium text-ink">{name}</span>
+          )}
+          <span className={cx("rj-tag", score.band === "high" && "rj-tag--good")}>Likely to help: {score.band}</span>
+          {here &&
+            (contacts.onOpenPeople ? (
+              <button type="button" className="type-meta font-medium text-ink underline underline-offset-2 hover:text-muted" onClick={contacts.onOpenPeople}>
+                {onJobLabel(here.outreach)}
+              </button>
+            ) : (
+              <span className="type-meta font-medium text-ink">{onJobLabel(here.outreach)}</span>
+            ))}
         </div>
-      </details>
+        {(person.position || (loose && person.company)) && (
+          <p className="type-small text-muted">
+            {person.position}
+            {loose && person.company && `${person.position ? " · " : ""}Works at ${person.company}`}
+          </p>
+        )}
+        {score.why && <p className="type-small">{score.why}.</p>}
+        <details className="group/more">
+          <summary className="inline-flex min-h-8 cursor-pointer list-none items-center gap-1 type-meta text-muted hover:text-ink [&::-webkit-details-marker]:hidden" aria-label={`More about ${name}`}>
+            <ChevronRight className="size-3.5 transition-transform duration-150 group-open/more:rotate-90" aria-hidden />
+            More
+          </summary>
+          <div className="space-y-2 pb-1 pl-5">
+            <div>
+              <p className="type-label">How this is worked out</p>
+              <dl className="mt-1 grid grid-cols-[auto_1fr] gap-x-2 gap-y-0.5 type-small">
+                {score.points.map((pt) => (
+                  <div key={pt.id} className="contents">
+                    <dt className="tabular text-ink">+{pt.points}</dt>
+                    <dd className="text-muted">{pt.text}</dd>
+                  </div>
+                ))}
+              </dl>
+              <p className="mt-1 type-meta text-muted">{score.total} in all. 60 or more is high, 35 to 59 medium, under 35 low.</p>
+            </div>
+            <div className="flex flex-wrap gap-1.5">
+              {!here && contacts.add && (
+                <Button size="sm" onClick={addThem}>
+                  Add to contacts
+                </Button>
+              )}
+              <Button size="sm" aria-pressed={person.friend} aria-label={`Mark ${name} as a close contact`} onClick={() => void toggle()}>
+                Close contact
+              </Button>
+            </div>
+          </div>
+        </details>
+      </div>
+      {/* The one action on the row; the rest is under More. */}
+      {/* On a phone it drops under the name rather than squeezing it. */}
+      <Button size="sm" className="max-[480px]:col-start-2 max-[480px]:mt-2 max-[480px]:justify-self-start" onClick={() => setDrafting(true)}>
+        <MessageSquare className="size-4" aria-hidden /> Draft a message
+      </Button>
       {drafting && (
         <MessageDrafts
           name={name}

@@ -42,9 +42,9 @@ import { CLOSED_AS, type ClosedAs, type Entry, type EntryPatch, dayAfter, follow
 import { DateField } from "./DateField";
 import { Dialog } from "./Dialog";
 import { settingsHash } from "./settings/registry";
-import { HiringActivity } from "./HiringActivity";
+import { HiringActivity, hiringLine } from "./HiringActivity";
 import { ReasonPicker, useNotForMe } from "./NotForMe";
-import { Button, buttonClass, IconButton, Menu, ScoreBadge, scoreBandOf, ScoreBreakdown, scoreParts, Tooltip } from "./primitives";
+import { Button, buttonClass, IconButton, Menu, ScoreBadge, scoreBandOf, scoreParts, Tooltip } from "./primitives";
 import { toast } from "./Toast";
 import { JobTracking } from "./pipeline/JobTracking";
 import { ConnectBanner } from "./referral/ConnectBanner";
@@ -113,7 +113,9 @@ function MetaLine({ parts, className }: { parts: ReactNode[]; className?: string
 export function JobDetail(p: JobDetailProps) {
   const { job, entry, profile } = p;
   const description = useDescription(job);
-  const hiring = useHiring(job);
+  const hiringData = useHiring(job);
+  // Only with a count to say: "records started…" alone tells you nothing about the company.
+  const hiring = hiringData && hiringLine(hiringData) ? hiringData : null;
   const [copied, setCopied] = useState(false);
   /** The full-window reader, for reading the whole description in one view. */
   const [expanded, setExpanded] = useState(false);
@@ -239,40 +241,43 @@ export function JobDetail(p: JobDetailProps) {
     : job.eligibility?.nationalsOnly && limits.some((n) => n.text.endsWith("nationals only"))
       ? "From the posting"
       : "From the description";
-  const last30 = hiring?.last30 ?? job.surge?.n;
-  const usual = hiring?.usual ?? job.surge?.usual;
-  const surge = hiring ? hiring.surge : !!job.surge;
-  // The decision facts the posting gives, as pills (where each came from on hover); what it doesn't say folds into one line.
-  const facts: { text: string; title: string; tone?: "warn" | "good" }[] = [
-    ...(salary ? [{ text: salary, title: job.salaryFrom === "description" ? "Salary, read from the description" : "Salary, from the posting" }] : []),
-    { text: SENIORITY_LABEL[job.seniority] ?? job.seniority, title: "Seniority, read from the title" },
-    ...(job.employmentType ? [{ text: EMPLOYMENT_LABEL[job.employmentType], title: `Job type, via ${source}` }] : []),
-    ...limits.map((n) => ({ text: n.text, tone: "warn" as const, title: `Who can apply: ${limitsFrom.toLowerCase()}` })),
+  const last30 = hiringData?.last30 ?? job.surge?.n;
+  const usual = hiringData?.usual ?? job.surge?.usual;
+  const surge = hiringData ? hiringData.surge : !!job.surge;
+  // The decision facts the posting gives, as label / value pairs (where each came from on hover); what it doesn't say shows as "Not stated".
+  const industryLabels = (p.industries ?? []).map((i) => INDUSTRY_BY_ID.get(i)?.label ?? i);
+  const facts: { label: string; text: string; title: string; tone?: "warn" | "good" }[] = [
+    ...(salary ? [{ label: "Pay", text: salary, title: job.salaryFrom === "description" ? "Salary, read from the description" : "Salary, from the posting" }] : []),
+    { label: "Level", text: SENIORITY_LABEL[job.seniority] ?? job.seniority, title: "Seniority, read from the title" },
+    ...(job.employmentType ? [{ label: "Type", text: EMPLOYMENT_LABEL[job.employmentType], title: `Job type, via ${source}` }] : []),
+    ...limits.map((n) => ({ label: "Who can apply", text: n.text, tone: "warn" as const, title: `Who can apply: ${limitsFrom.toLowerCase()}` })),
     ...(sponsor
       ? [
           {
+            label: "Visa",
             text: "Sponsors visas",
             tone: "good" as const,
             title: `${sponsorSentence(companyName(job.company), sponsor)} That means it can sponsor, not that this role will. Source: ${VISA_REGISTERS[sponsor.country].source}.`,
           },
         ]
       : []),
-    ...eligibility.filter((n) => !n.limit).map((n) => ({ text: n.text, tone: "good" as const, title: "Who can apply: from the description" })),
+    ...eligibility.filter((n) => !n.limit).map((n) => ({ label: "Who can apply", text: n.text, tone: "good" as const, title: "Who can apply: from the description" })),
     ...(last30 !== undefined
       ? [
           {
+            label: "Hiring",
             text: `${last30} ${last30 === 1 ? "role" : "roles"} in 30 days`,
             tone: surge ? ("good" as const) : undefined,
             title: surge ? "Company hiring: a surge, far more than usual" : usual !== undefined ? `Company hiring: usually about ${Math.round(usual)}` : "Company hiring",
           },
         ]
       : []),
-    ...(job.department ? [{ text: job.department, title: "Department" }] : []),
-    ...(p.industries ?? []).map((i) => ({ text: INDUSTRY_BY_ID.get(i)?.label ?? i, title: "Industry" })),
+    ...(job.department ? [{ label: "Team", text: job.department, title: "Department" }] : []),
+    ...(industryLabels.length ? [{ label: industryLabels.length > 1 ? "Industries" : "Industry", text: industryLabels.join(", "), title: "Industry" }] : []),
   ];
   // A pay floor already says "Pay not listed" in the verdict.
   const payChecked = job.why.checks?.some((c) => c.id === "pay");
-  const notStated = [...(salary || payChecked ? [] : ["salary"]), ...(WORKPLACE_LABEL[job.workplace] ? [] : ["work mode"])];
+  const notStated = [...(salary || payChecked ? [] : ["Pay"]), ...(WORKPLACE_LABEL[job.workplace] ? [] : ["Work mode"])];
   const saved = status === "saved";
   // Further along than Saved (Applied, Interviewing…): Save shows where it is and doesn't move it back.
   const further = !!status && quickStatus(status, "saved") === null;
@@ -308,7 +313,7 @@ export function JobDetail(p: JobDetailProps) {
       </p>
     ) : (
       <section className="rj-drawer__section">
-        <h3 className="rj-h">About the role</h3>
+        <h3 className="rj-sec-h">About the role</h3>
         {description === undefined ? (
           <p className="flex items-center gap-2 type-small text-muted">
             <LoaderCircle className="size-4 animate-spin" /> Loading…
@@ -381,34 +386,44 @@ export function JobDetail(p: JobDetailProps) {
       <div ref={scrollRef} className={cx("rj-drawer__body min-h-0 flex-1", p.expanded && "md:grid-cols-[minmax(0,1fr)_20rem] md:gap-x-10")}>
         {/* Expanded: the description gets the wide column, everything else sits beside it. */}
         {p.expanded && descriptionSection}
-        <div className={cx("grid min-w-0 grid-cols-1 content-start gap-6", p.expanded && "md:col-start-2 md:row-start-1")}>
+        {/* Sections in the order you decide: fit, the facts, who can get you in, the role, your progress, the company. */}
+        <div className={cx("rj-drawer__stack grid min-w-0 grid-cols-1 content-start gap-6", p.expanded && "md:col-start-2 md:row-start-1")}>
           <ConnectBanner job={job} notInterested={status === "dismissed"} />
 
           {stale && (
-            <section className="rj-drawer__section">
-              <h3 className="rj-h text-warning-text">May be stale</h3>
-              <ul className="list-disc space-y-1 pl-5 type-small">
+            <aside aria-label="May be stale" className="grid gap-1 rounded-md bg-warning-subtle p-3 type-small text-warning-text">
+              <h3 className="font-semibold text-warning-text">May be stale</h3>
+              <ul className="list-disc space-y-1 pl-5">
                 {stale.map((r) => (
                   <li key={r}>{r}</li>
                 ))}
               </ul>
-              <p className="type-small text-muted">It's still on the company's board, so it may be real. Worth asking a recruiter before spending time on it.</p>
-            </section>
+              <p>It's still on the company's board, so it may be real. Worth asking a recruiter before spending time on it.</p>
+            </aside>
           )}
 
           <WhyItMatches job={job} profile={profile} yours={!!p.yours} />
 
           {!job.estimated && (
-            <div className="grid gap-2">
-              <ul className="rj-pills" aria-label="Key facts">
+            <section className="rj-drawer__section gap-3" aria-labelledby={`facts-${job.id}`}>
+              <h3 id={`facts-${job.id}`} className="rj-sec-h">
+                The job
+              </h3>
+              <dl className="rj-facts type-small" aria-label="Key facts">
                 {facts.map((f) => (
-                  <li key={`${f.title}:${f.text}`} title={f.title} className={cx("rj-pill", f.tone === "warn" && "text-warning-text", f.tone === "good" && "text-success-text")}>
-                    {f.text}
-                  </li>
+                  <div key={`${f.label}:${f.text}`} title={f.title} className="min-w-0">
+                    <dt className="text-muted">{f.label}</dt>
+                    <dd className={cx(f.tone === "warn" && "text-warning-text", f.tone === "good" && "text-success-text")}>{f.text}</dd>
+                  </div>
                 ))}
-              </ul>
-              {notStated.length > 0 && <p className="type-small text-muted">Not stated: {notStated.join(", ")}.</p>}
-            </div>
+                {notStated.map((n) => (
+                  <div key={n} className="min-w-0">
+                    <dt className="text-muted">{n}</dt>
+                    <dd className="font-normal text-muted">Not stated</dd>
+                  </div>
+                ))}
+              </dl>
+            </section>
           )}
 
           <TalkToSomeone job={job} entry={entry} profile={profile} onUpdate={p.onUpdate} onOpenPeople={() => setPeopleAsk((x) => ({ jobId: job.id, n: (x?.n ?? 0) + 1 }))} />
@@ -421,10 +436,10 @@ export function JobDetail(p: JobDetailProps) {
           {!tracked && status !== "dismissed" && <NotesField key={job.id} id={`notes-${job.id}`} note={entry?.note ?? ""} onSave={(note) => p.onUpdate({ note: note || undefined })} />}
 
           {(tracked || status === "dismissed") && (
-            <section className="rj-drawer__section border-t border-line pt-4">
+            <section className="rj-drawer__section">
               {/* The one place to set any status; Save and Not interested (More) in the foot are shortcuts. */}
               <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
-                <label htmlFor={`status-${job.id}`} className="font-medium text-ink">
+                <label htmlFor={`status-${job.id}`} className="rj-sec-h">
                   Your progress
                 </label>
                 <Select id={`status-${job.id}`} value={progressValue(entry)} onChange={(e) => setProgress(e.target.value)}>
@@ -455,54 +470,62 @@ export function JobDetail(p: JobDetailProps) {
             </section>
           )}
 
-          {postings && (
-            <section className="rj-drawer__section">
-              <h3 className="rj-h">{placeCount > 1 ? `Posted in ${placeCount} locations` : `Posted ${postings.length} times`}</h3>
-              <ul className="divide-y divide-line rounded-md border border-line">
-                {postings.map((j) => {
-                  const ctx = j.id === job.id ? staleCtx : undefined;
-                  return (
-                    <li key={j.id} className={cx("flex items-center gap-2 px-3 py-2 type-small", j.id === job.id && "bg-active")}>
-                      <button type="button" className="min-w-0 flex-1 truncate text-left hover:underline" onClick={() => p.onOpenJob?.(j)} aria-current={j.id === job.id || undefined}>
-                        {j.location || "Location not listed"}
-                        {fromJobBoard(j) && <span className="text-muted"> · via {atsLabel(j.ats)}</span>}
-                      </button>
-                      {/* The role may be live while this posting of it isn't. */}
-                      {isStale(j, ctx) && (
-                        <span className="shrink-0 text-warning-text" title={staleReasons(j, ctx)[0]}>
-                          may be stale
-                        </span>
-                      )}
-                      <span className="tabular text-muted">{j.score}</span>
-                      <a href={safeUrl(j.url)} target="_blank" rel="noreferrer" onClick={() => p.onApply?.(j)} className="text-muted hover:text-ink" aria-label={`Open the ${j.location} posting`}>
-                        <ExternalLink className="rj-icon" />
-                      </a>
-                    </li>
-                  );
-                })}
-              </ul>
-            </section>
-          )}
+          {/* The company, in one section: how fast it's hiring, this role's other postings, and more jobs there. */}
+          {(hiring || postings || !!p.moreFromCompany?.length) && (
+            <section className="rj-drawer__section gap-4" aria-labelledby={`company-${job.id}`}>
+              <h3 id={`company-${job.id}`} className="rj-sec-h">
+                About {companyName(job.company)}
+              </h3>
+              {hiring && <HiringActivity summary={hiring} />}
 
-          {hiring && <HiringActivity company={companyName(job.company)} summary={hiring} />}
+              {postings && (
+                <div className="grid gap-2">
+                  <h4 className="rj-sub-h">{placeCount > 1 ? `Posted in ${placeCount} locations` : `Posted ${postings.length} times`}</h4>
+                  <ul className="divide-y divide-line rounded-md border border-line">
+                    {postings.map((j) => {
+                      const ctx = j.id === job.id ? staleCtx : undefined;
+                      return (
+                        <li key={j.id} className={cx("flex items-center gap-2 px-3 py-2 type-small", j.id === job.id && "bg-active")}>
+                          <button type="button" className="min-w-0 flex-1 truncate text-left hover:underline" onClick={() => p.onOpenJob?.(j)} aria-current={j.id === job.id || undefined}>
+                            {j.location || "Location not listed"}
+                            {fromJobBoard(j) && <span className="text-muted"> · via {atsLabel(j.ats)}</span>}
+                          </button>
+                          {/* The role may be live while this posting of it isn't. */}
+                          {isStale(j, ctx) && (
+                            <span className="shrink-0 text-warning-text" title={staleReasons(j, ctx)[0]}>
+                              may be stale
+                            </span>
+                          )}
+                          <span className="tabular text-muted">{j.score}</span>
+                          <a href={safeUrl(j.url)} target="_blank" rel="noreferrer" onClick={() => p.onApply?.(j)} className="text-muted hover:text-ink" aria-label={`Open the ${j.location} posting`}>
+                            <ExternalLink className="rj-icon" />
+                          </a>
+                        </li>
+                      );
+                    })}
+                  </ul>
+                </div>
+              )}
 
-          {/* Only when there's something to show; hiding the company is in More. */}
-          {!!p.moreFromCompany?.length && (
-            <section className="rj-drawer__section">
-              <h3 className="rj-h">More from {companyName(job.company)}</h3>
-              <ul className="divide-y divide-line rounded-md border border-line">
-                {p.moreFromCompany.map((j) => (
-                  <li key={j.id}>
-                    <button type="button" onClick={() => p.onOpenJob?.(j)} className="flex w-full items-center gap-3 px-3 py-2 text-left type-small hover:bg-hover">
-                      <span className="tabular w-7 shrink-0 font-semibold text-muted">{j.score}</span>
-                      <span className="min-w-0 flex-1">
-                        <span className="block truncate font-medium">{j.title}</span>
-                        <span className="block truncate text-muted">{j.location}</span>
-                      </span>
-                    </button>
-                  </li>
-                ))}
-              </ul>
+              {/* Only when there's something to show; hiding the company is in More. */}
+              {!!p.moreFromCompany?.length && (
+                <div className="grid gap-2">
+                  <h4 className="rj-sub-h">More from {companyName(job.company)}</h4>
+                  <ul className="divide-y divide-line rounded-md border border-line">
+                    {p.moreFromCompany.map((j) => (
+                      <li key={j.id}>
+                        <button type="button" onClick={() => p.onOpenJob?.(j)} className="flex w-full items-center gap-3 px-3 py-2 text-left type-small hover:bg-hover">
+                          <span className="tabular w-7 shrink-0 font-semibold text-muted">{j.score}</span>
+                          <span className="min-w-0 flex-1">
+                            <span className="block truncate font-medium">{j.title}</span>
+                            <span className="block truncate text-muted">{j.location}</span>
+                          </span>
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
             </section>
           )}
         </div>
@@ -658,12 +681,14 @@ function NotCheckedYet({ indexGeneratedAt, onCheck }: { indexGeneratedAt?: strin
   );
 }
 
-/** Whether "Why it matched" shows its bars and checklist; folded by default so the description starts higher. */
+/** Whether "Why it matched" shows its rows; folded by default so the description starts higher. */
 const WHY_OPEN_KEY = "rawjobs.whyOpen";
 
-/** The score and its band against your threshold; unfolds to the score bars and a plain-language checklist of why. */
+/** The score and its band against your threshold; unfolds to a row per scored part (points and reason) and the requirements. */
 function WhyItMatches({ job, profile, yours }: { job: Job; profile: Profile; yours: boolean }) {
   const [open, setOpen] = useState(() => load<boolean>(WHY_OPEN_KEY, false));
+  /** "How the score works", behind the ⓘ. */
+  const [info, setInfo] = useState(false);
   const toggle = () => {
     save(WHY_OPEN_KEY, !open);
     setOpen(!open);
@@ -698,8 +723,10 @@ function WhyItMatches({ job, profile, yours }: { job: Job; profile: Profile; you
   const fixer = useProfileFix();
   const fixes = fixer ? fitFixes(job).filter((f) => !fixApplied(f, fixer.draft)) : [];
   const fixFor = (check: string) => fixes.find((f) => f.check === check);
-  const items: { ok: boolean; unknown?: boolean; text: ReactNode; fix?: FitFix }[] = [
+  // `part` ties a check to its score part (scoreParts' label); checks without one are requirements, worth no points.
+  const items: { ok: boolean; unknown?: boolean; text: ReactNode; fix?: FitFix; part?: string }[] = [
     {
+      part: "Title",
       ok: w.title > 0,
       fix: fixFor("level"),
       text:
@@ -713,6 +740,7 @@ function WhyItMatches({ job, profile, yours }: { job: Job; profile: Profile; you
         ),
     },
     {
+      part: "Place",
       ok: w.location > 0,
       text:
         w.location === 20 ? (
@@ -735,6 +763,7 @@ function WhyItMatches({ job, profile, yours }: { job: Job; profile: Profile; you
       ? []
       : [
           {
+            part: "Keywords",
             ok: own.length > 0 || added.length > 0,
             text: own.length ? (
               <>
@@ -755,8 +784,8 @@ function WhyItMatches({ job, profile, yours }: { job: Job; profile: Profile; you
     // One year short of the years asked is close enough to count.
     ...eligibility.map((c) => ({ ok: c.status === "met" || (c.id === "experience" && c.status === "near"), unknown: c.status === "unknown", text: c.note, fix: fixFor(c.id) })),
     w.industry === undefined
-      ? { ok: (w.freshness ?? 0) >= 6, text: w.freshness === 10 ? "Posted in the last 3 days" : w.freshness === 6 ? "Posted this week" : "Posted more than a week ago" }
-      : { ok: w.industry === 10, unknown: w.industry === 5, text: industryText(w.industry, job, profile, yours) },
+      ? { part: "Fresh", ok: (w.freshness ?? 0) >= 6, text: w.freshness === 10 ? "Posted in the last 3 days" : w.freshness === 6 ? "Posted this week" : "Posted more than a week ago" }
+      : { part: "Industry", ok: w.industry === 10, unknown: w.industry === 5, text: industryText(w.industry, job, profile, yours) },
   ];
   const min = profile.min_score;
   const cutOff = job.score > min ? `above your ${min} cut-off` : job.score === min ? `at your ${min} cut-off` : `below your ${min} cut-off`;
@@ -771,8 +800,11 @@ function WhyItMatches({ job, profile, yours }: { job: Job; profile: Profile; you
   // The verdict in a few words: which parts of the score it earned ("Matches on title, place and keywords").
   const earned = parts.filter((x) => x.earned > 0).map((x) => (x.label === "Fresh" ? "posting date" : x.label.toLowerCase()));
   const matchesOn = earned.length ? `Matches on ${earned.length > 1 ? `${earned.slice(0, -1).join(", ")} and ${earned.at(-1)}` : earned[0]}` : "Matches none of what you asked for";
+  // Open: one row per scored part with its check; the other checks (pay, visa, years, must-haves) are requirements.
+  const reqs = items.filter((it) => !it.part);
+  const sum = (key: "earned" | "max") => Math.round(parts.reduce((n, x) => n + x[key], 0) * 10) / 10;
   return (
-    <section aria-label="Why it matched" className={cx("rj-drawer__section rj-fit", open && "gap-4")}>
+    <section aria-label="Why it matched" className={cx("rj-drawer__section", open && "gap-4")}>
       {/* On a phone the toggle drops under the verdict rather than squeezing it. */}
       <div className="flex flex-wrap items-center gap-3">
         <ScoreBadge score={job.score} threshold={min} estimated={job.estimated} word />
@@ -787,11 +819,28 @@ function WhyItMatches({ job, profile, yours }: { job: Job; profile: Profile; you
             )}
           </p>
         </div>
-        <Button size="sm" variant="quiet" onClick={toggle} aria-expanded={open} aria-controls={`why-${job.id}`} icon={open ? <ChevronUp className="rj-icon" /> : <ChevronDown className="rj-icon" />}>
-          {open ? "Hide why" : "Why"}
-        </Button>
+        <div className="flex items-center">
+          <IconButton label="How the score works" size="sm" onClick={() => setInfo(!info)} aria-expanded={info} aria-controls={`score-info-${job.id}`}>
+            <Info className="rj-icon" />
+          </IconButton>
+          <Button size="sm" variant="quiet" onClick={toggle} aria-expanded={open} aria-controls={`why-${job.id}`} icon={open ? <ChevronUp className="rj-icon" /> : <ChevronDown className="rj-icon" />}>
+            {open ? "Hide why" : "Why"}
+          </Button>
+        </div>
       </div>
-      {/* Folded: only what didn't fit or isn't known, each with its fix. The points are in the breakdown. */}
+      {info && (
+        <div id={`score-info-${job.id}`} className="grid gap-1 rounded-md bg-inset p-3 type-small text-muted">
+          <p>The score is how well the job fits what you asked for, not your odds of an interview.</p>
+          {/* A gate or a dealbreaker changes the score past the sum: their own lines say how. */}
+          {w.scale && !w.gate && !w.dealbreakers?.length && (
+            <p>
+              You have no topics yet, so title, place and industry make up the whole score: {sum("earned")} of {sum("max")} points, shown as {job.score} out of 100.
+            </p>
+          )}
+          <p>Best match also lists newer jobs{yours ? " and your companies" : ""} higher. The score itself doesn't change.</p>
+        </div>
+      )}
+      {/* Folded: only what didn't fit or isn't known, each with its fix. The points are in the rows. */}
       {!open && misses.length + unknowns.length > 0 && (
         <ul className="rj-pills">
           {misses.map((it, i) => (
@@ -812,15 +861,6 @@ function WhyItMatches({ job, profile, yours }: { job: Job; profile: Profile; you
           ))}
         </ul>
       )}
-      {/* A gate or a dealbreaker changes the score past the sum: their own lines below say how. */}
-      {w.scale && !w.gate && !w.dealbreakers?.length && (
-        <p className="type-small">
-          <b>
-            {parts.reduce((n, p) => n + p.earned, 0)} of {parts.reduce((n, p) => n + p.max, 0)} points, shown as {job.score} out of 100.
-          </b>{" "}
-          <span className="text-muted">You have no topics yet, so title, place and industry make up the whole score.</span>
-        </p>
-      )}
       {w.gate && <p className="type-small text-warning-text">Failed your {w.gate} filter, so the score is 0.</p>}
       {w.heldBack && !w.dealbreakers?.length && (
         <p className="type-small text-warning-text">Adds up to a strong match, but kept just under your cut-off: {w.heldBack.charAt(0).toLowerCase() + w.heldBack.slice(1)}.</p>
@@ -840,31 +880,73 @@ function WhyItMatches({ job, profile, yours }: { job: Job; profile: Profile; you
       )}
       {open && (
         <div id={`why-${job.id}`} className="grid gap-4">
-          <ScoreBreakdown score={job.score} parts={parts} missing={missing} />
-          <ul className="space-y-1.5 type-small">
-            {items.map((it, i) => (
-              // biome-ignore lint/suspicious/noArrayIndexKey: a fixed list rebuilt from the same input, never reordered: the index is a stable key
-              <li key={i} className="flex items-start gap-2">
-                {it.ok ? (
-                  <CircleCheck className="mt-0.5 size-4 shrink-0 text-success-text" />
-                ) : it.unknown ? (
-                  <CircleHelp className="mt-0.5 size-4 shrink-0 text-muted" aria-label="Not stated:" />
-                ) : (
-                  <X className="mt-0.5 size-4 shrink-0 text-muted" />
-                )}
-                <span className={cx(!it.ok && "text-muted")}>{it.text}</span>
-                {it.fix && <FixButton fix={it.fix} />}
-              </li>
-            ))}
-          </ul>
-          <p className="type-small text-muted">
-            The score is how well the job fits what you asked for, not your odds of an interview. Best match also lists newer jobs{yours ? " and your companies" : ""} higher. The score itself doesn't
-            change.
-          </p>
+          <div className="rj-fit-rows">
+            {parts.map((x) => {
+              const label = x.label === "Keywords" ? "Topics" : x.label;
+              const it = items.find((i) => i.part === x.label);
+              const fill = x.max ? Math.min(1, Math.max(0, x.earned / x.max)) : 0;
+              return (
+                <div key={x.label} className="rj-fit-row">
+                  <span className="font-medium">{label}</span>
+                  <span className={cx("rj-meter", it?.unknown && "rj-meter--soft")} role="img" aria-label={`${label}: ${Math.round(x.earned)} of ${x.max} points`}>
+                    <i style={{ width: `${fill * 100}%` }} />
+                  </span>
+                  <span className="tabular text-right font-medium" aria-hidden>
+                    {Math.round(x.earned)}
+                    <span className="font-normal text-muted">/{x.max}</span>
+                  </span>
+                  {it && (
+                    <p className="rj-fit-row__why flex items-start gap-2 type-small text-muted">
+                      <CheckIcon it={it} />
+                      <span className="min-w-0 flex-1">
+                        {it.text}
+                        {x.label === "Keywords" && missing.length > 0 && <span className="block">Not found: {missing.join(", ")}.</span>}
+                      </span>
+                      {it.fix && <FixButton fix={it.fix} />}
+                    </p>
+                  )}
+                </div>
+              );
+            })}
+            {/* No topics: say so where their points would be, with the way to add some. */}
+            {w.scale && (
+              <div className="rj-fit-row">
+                <span className="font-medium text-muted">Topics</span>
+                <span className="type-small text-muted">Not set, so the three others make the score</span>
+                <a href={`#${settingsHash("keywords")}`} className="text-right type-small font-medium text-ink underline underline-offset-2 hover:text-muted">
+                  Add
+                </a>
+              </div>
+            )}
+          </div>
+          {reqs.length > 0 && (
+            <div className="grid gap-1">
+              <h4 className="rj-sec-h">
+                Requirements <span className="font-normal text-muted">· don't add points</span>
+              </h4>
+              <ul className="space-y-1.5 type-small">
+                {reqs.map((it, i) => (
+                  // biome-ignore lint/suspicious/noArrayIndexKey: a fixed list rebuilt from the same input, never reordered: the index is a stable key
+                  <li key={i} className="flex items-start gap-2">
+                    <CheckIcon it={it} />
+                    <span className={cx("min-w-0 flex-1", !it.ok && "text-muted")}>{it.text}</span>
+                    {it.fix && <FixButton fix={it.fix} />}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
         </div>
       )}
     </section>
   );
+}
+
+/** A check's mark: met, not stated, or missed. */
+function CheckIcon({ it }: { it: { ok: boolean; unknown?: boolean } }) {
+  if (it.ok) return <CircleCheck className="mt-0.5 size-4 shrink-0 text-success-text" aria-label="Met:" />;
+  if (it.unknown) return <CircleHelp className="mt-0.5 size-4 shrink-0 text-muted" aria-label="Not stated:" />;
+  return <X className="mt-0.5 size-4 shrink-0 text-muted" aria-label="Missed:" />;
 }
 
 /** A fix beside a check: saves one word to your profile (re-scored on the next scan), or opens the setting. */

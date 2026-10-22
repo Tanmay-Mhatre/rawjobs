@@ -1,0 +1,326 @@
+<!doctype html>
+<html lang="en" data-theme="light">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Job drawer mockup</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+:root {
+  --font-sans: "Geist", system-ui, sans-serif;
+  --bg-canvas: #f5f1e8; --bg-raised: #fffbf5; --bg-hover: #ede9e2; --bg-active: #e5e1db; --bg-inset: #f0ece4;
+  --border-subtle: #d4d0c9; --border-default: #c4c0ba; --border-control: #888681;
+  --text-primary: #151412; --text-secondary: #605d59;
+  --accent-solid: #ff5a1f; --mark: #ffe2da;
+  --success-solid: #007d3e; --success-text: #007137; --success-subtle: #d3f3da;
+  --warning-text: #7f5300; --warning-subtle: #fde5c7; --danger-text: #a12b46;
+  --meter-track: #e5e1db; --meter-fill: #151412; --meter-soft: #a9a59e;
+}
+[data-theme="dark"] {
+  --bg-canvas: #120f0b; --bg-raised: #181611; --bg-hover: #201d18; --bg-active: #27241f; --bg-inset: #1d1a15;
+  --border-subtle: #37342e; --border-default: #45423b; --border-control: #6f6d66;
+  --text-primary: #ecebe8; --text-secondary: #cac7c2; --mark: #3a1d10;
+  --success-solid: #5bcc80; --success-text: #89dea1; --success-subtle: #12301c;
+  --warning-text: #f6bb6a; --warning-subtle: #36270e; --danger-text: #ffaeb7;
+  --meter-track: #27241f; --meter-fill: #ecebe8; --meter-soft: #6f6d66;
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; }
+body { background: var(--bg-canvas); color: var(--text-primary); font: 400 14px/21px var(--font-sans); -webkit-font-smoothing: antialiased; padding: 0 16px 64px; }
+.ico { width: 16px; height: 16px; flex: none; stroke: currentColor; fill: none; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+.muted { color: var(--text-secondary); } .ok { color: var(--success-text); } .no { color: var(--danger-text); } .unk { color: var(--text-secondary); }
+a.l { color: var(--text-primary); font-weight: 500; text-decoration: underline; text-underline-offset: 2px; cursor: pointer; white-space: nowrap; }
+
+/* chrome */
+.bar { max-width: 1280px; margin: 0 auto 16px; display: flex; flex-wrap: wrap; gap: 8px 18px; align-items: center; position: sticky; top: 0; z-index: 9; background: var(--bg-canvas); padding: 10px 0; border-bottom: 1px solid var(--border-subtle); }
+.bar label { font-size: 12px; color: var(--text-secondary); margin-right: 6px; }
+.seg { display: inline-flex; flex-wrap: wrap; border: 1px solid var(--border-default); border-radius: 4px; overflow: hidden; }
+.seg button { font: inherit; font-size: 13px; padding: 5px 10px; background: transparent; color: var(--text-primary); border: 0; cursor: pointer; }
+.seg button + button { border-left: 1px solid var(--border-default); }
+.seg button[aria-pressed="true"] { background: var(--text-primary); color: var(--bg-raised); }
+.stage { max-width: 1280px; margin: 0 auto; display: grid; grid-template-columns: minmax(0, 560px) minmax(0, 1fr); gap: 32px; align-items: start; }
+body.phone .stage, body.wide .stage { grid-template-columns: minmax(0,1fr); }
+body.phone .drawer { width: 375px; margin: 0 auto; }
+.notes h2 { font-size: 15px; margin: 0 0 6px; font-weight: 600; }
+.notes ol { margin: 0; padding-left: 18px; font-size: 13px; line-height: 20px; color: var(--text-secondary); }
+.notes ol b { color: var(--text-primary); font-weight: 500; }
+.notes li + li { margin-top: 8px; }
+body.phone .notes, body.wide .notes { display: none; }
+
+/* drawer */
+.drawer { background: var(--bg-raised); border: 1px solid var(--border-subtle); border-radius: 4px; display: flex; flex-direction: column; height: 860px; overflow: hidden; }
+body.phone .drawer { height: 760px; }
+.dh { padding: 16px 24px 14px; border-bottom: 1px solid var(--border-subtle); }
+body.phone .dh, body.phone .db, body.phone .df { padding-left: 16px; padding-right: 16px; }
+.dh .top { display: flex; align-items: center; gap: 8px; }
+.dh .co { font-weight: 500; display: flex; gap: 8px; align-items: center; flex: 1; }
+.dot { width: 8px; height: 8px; border-radius: 50%; background: var(--accent-solid); }
+.ib { width: 28px; height: 28px; display: grid; place-items: center; color: var(--text-secondary); border-radius: 4px; }
+.dh h1 { font-size: 20px; line-height: 27px; margin: 6px 0 4px; font-weight: 600; }
+.dh .meta { font-size: 13px; color: var(--text-secondary); }
+.chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
+.chip { display: inline-flex; gap: 6px; align-items: center; font-size: 13px; line-height: 18px; padding: 3px 10px; border: 1px solid var(--border-default); border-radius: 999px; color: var(--text-primary); text-decoration: none; }
+.chip.warn { border-color: var(--warning-text); color: var(--warning-text); }
+.db { flex: 1; overflow-y: auto; padding: 4px 24px 24px; }
+body.wide .db { display: grid; grid-template-columns: minmax(0,1fr) 340px; gap: 0 40px; }
+.df { border-top: 1px solid var(--border-subtle); padding: 12px 24px; display: flex; gap: 8px; align-items: center; }
+.btn { font: inherit; font-size: 14px; font-weight: 500; padding: 7px 14px; border-radius: 4px; border: 1px solid var(--border-control); background: transparent; color: var(--text-primary); display: inline-flex; gap: 6px; align-items: center; white-space: nowrap; }
+.btn.p { background: var(--accent-solid); border-color: var(--accent-solid); color: #151412; }
+.btn.sm { font-size: 13px; padding: 4px 10px; }
+.btn.q { border-color: transparent; }
+kbd { font: 500 11px/16px var(--font-sans); padding: 0 5px; border: 1px solid var(--border-default); border-radius: 2px; color: var(--text-secondary); }
+
+/* sections: one rhythm for all */
+.sec { padding: 20px 0; border-top: 1px solid var(--border-subtle); }
+.sec:first-child { border-top: 0; }
+.sh { display: flex; align-items: baseline; gap: 8px; margin: 0 0 10px; }
+.sh h3 { margin: 0; font-size: 11px; line-height: 16px; letter-spacing: .07em; text-transform: uppercase; font-weight: 600; color: var(--text-secondary); }
+.sh .n { font-size: 12px; color: var(--text-secondary); }
+.sh .act { margin-left: auto; font-size: 13px; }
+.callout { margin-top: 16px; border-radius: 4px; padding: 12px; display: flex; gap: 10px; align-items: flex-start; background: var(--bg-inset); border: 1px solid var(--border-subtle); font-size: 13px; line-height: 19px; }
+.callout.warn { background: var(--warning-subtle); border-color: transparent; color: var(--warning-text); }
+.callout b { font-weight: 600; }
+.callout .grow { flex: 1; min-width: 0; }
+.callout .acts { display: flex; gap: 6px; margin-top: 8px; }
+
+/* fit */
+.head { display: flex; gap: 14px; align-items: center; }
+.badge { min-width: 64px; height: 48px; border-radius: 2px; display: grid; place-items: center; align-content: center; font-weight: 600; font-size: 24px; line-height: 26px; border: 1.5px solid transparent; }
+.badge small { font-size: 10px; line-height: 12px; letter-spacing: .06em; text-transform: uppercase; font-weight: 500; }
+.badge.strong { background: var(--success-solid); color: #fff; } [data-theme="dark"] .badge.strong { color: #0b2214; }
+.badge.fair { background: var(--bg-active); border-color: var(--border-default); }
+.badge.est { background: transparent; border-style: dashed; color: var(--success-text); border-color: var(--success-text); }
+.head h4 { margin: 0; font-size: 16px; font-weight: 600; } .head .sub { font-size: 13px; color: var(--text-secondary); } .head .grow { flex: 1; }
+.tg { font: inherit; font-size: 13px; font-weight: 500; border: 0; background: transparent; color: var(--text-primary); display: inline-flex; gap: 4px; align-items: center; cursor: pointer; padding: 4px 6px; border-radius: 4px; }
+.pills { margin: 12px 0 0; padding: 0; list-style: none; display: flex; flex-wrap: wrap; gap: 6px; }
+.pills li { display: inline-flex; gap: 6px; align-items: center; font-size: 13px; padding: 3px 10px; border: 1px solid var(--border-default); border-radius: 999px; }
+.pills li.miss { border-color: var(--danger-text); }
+.row { display: grid; grid-template-columns: 72px minmax(0,1fr) 52px; gap: 2px 12px; align-items: center; padding: 9px 0; border-top: 1px solid var(--border-subtle); }
+.rows { margin-top: 12px; } .rows .row:last-child { border-bottom: 1px solid var(--border-subtle); }
+.row .lab { font-weight: 500; } .row .pts { text-align: right; font-variant-numeric: tabular-nums; font-weight: 500; } .row .pts span { color: var(--text-secondary); font-weight: 400; }
+.meter { height: 6px; background: var(--meter-track); border-radius: 3px; overflow: hidden; } .meter i { display: block; height: 100%; background: var(--meter-fill); } .meter i.soft { background: var(--meter-soft); }
+.row .why { grid-column: 2/4; display: flex; gap: 6px; font-size: 13px; line-height: 19px; color: var(--text-secondary); } .row .why .ico { margin-top: 2px; }
+body.phone .row .why { grid-column: 1/4; }
+.row.off .lab { color: var(--text-secondary); }
+
+/* facts */
+.facts { display: grid; grid-template-columns: repeat(2, minmax(0,1fr)); gap: 10px 20px; margin: 0; }
+body.phone .facts { grid-template-columns: minmax(0,1fr) minmax(0,1fr); }
+.facts div { min-width: 0; } .facts dt { font-size: 12px; color: var(--text-secondary); } .facts dd { margin: 0; font-weight: 500; }
+.facts dd.good { color: var(--success-text); } .facts dd.warn { color: var(--warning-text); } .facts dd.none { color: var(--text-secondary); font-weight: 400; }
+
+/* people */
+.person { display: grid; grid-template-columns: 36px minmax(0,1fr) auto; gap: 0 12px; align-items: center; padding: 10px 0; border-top: 1px solid var(--border-subtle); }
+.person:first-of-type { border-top: 0; }
+.av { width: 36px; height: 36px; border-radius: 50%; background: var(--bg-active); display: grid; place-items: center; font-size: 12px; font-weight: 600; }
+.person .nm { font-weight: 500; } .person .rl { font-size: 13px; color: var(--text-secondary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.tag { font-size: 11px; line-height: 16px; padding: 0 6px; border-radius: 2px; background: var(--success-subtle); color: var(--success-text); margin-left: 6px; font-weight: 500; }
+.tag.mid { background: var(--bg-active); color: var(--text-secondary); }
+.ways { margin-top: 10px; font-size: 13px; color: var(--text-secondary); display: flex; flex-wrap: wrap; gap: 4px 14px; }
+
+/* description */
+.desc { font-size: 14px; line-height: 22px; position: relative; max-height: 240px; overflow: hidden; }
+.desc.full { max-height: none; }
+.desc:not(.full)::after { content: ""; position: absolute; left: 0; right: 0; bottom: 0; height: 64px; background: linear-gradient(transparent, var(--bg-raised)); }
+.desc h5 { margin: 12px 0 4px; font-size: 14px; } .desc p, .desc ul { margin: 0 0 8px; } .desc ul { padding-left: 18px; }
+mark { background: var(--mark); color: inherit; border-radius: 2px; padding: 0 2px; }
+.empty { border: 1px dashed var(--border-default); border-radius: 4px; padding: 10px 12px; font-size: 13px; color: var(--text-secondary); }
+
+/* progress */
+.prog { display: grid; grid-template-columns: 88px minmax(0,1fr); gap: 10px 12px; align-items: center; font-size: 13px; }
+.prog .k { color: var(--text-secondary); }
+.sel { font: inherit; font-size: 13px; padding: 4px 8px; border: 1px solid var(--border-control); border-radius: 4px; background: transparent; color: var(--text-primary); display: inline-flex; gap: 6px; align-items: center; }
+.tabs { display: flex; gap: 18px; border-bottom: 1px solid var(--border-subtle); margin-top: 16px; font-size: 13px; }
+.tabs span { padding: 6px 0; color: var(--text-secondary); } .tabs span.on { color: var(--text-primary); border-bottom: 2px solid var(--text-primary); font-weight: 500; }
+.log { list-style: none; padding: 0; margin: 10px 0 0; font-size: 13px; } .log li { display: flex; gap: 10px; padding: 4px 0; } .log time { width: 56px; color: var(--text-secondary); flex: none; }
+textarea { font: inherit; font-size: 13px; width: 100%; min-height: 60px; border: 1px solid var(--border-default); border-radius: 4px; background: transparent; color: var(--text-primary); padding: 8px; }
+
+/* company */
+.kv { list-style: none; padding: 0; margin: 0; }
+.kv li { display: flex; gap: 10px; align-items: center; padding: 8px 0; border-top: 1px solid var(--border-subtle); font-size: 13px; }
+.kv li:first-child { border-top: 0; }
+.kv .sc { width: 28px; font-weight: 600; color: var(--text-secondary); font-variant-numeric: tabular-nums; }
+.kv .t { flex: 1; min-width: 0; } .kv .t b { font-weight: 500; display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.kv li.cur { font-weight: 500; }
+.sub-h { font-size: 13px; font-weight: 500; margin: 14px 0 4px; }
+</style>
+</head>
+<body>
+<svg width="0" height="0" style="position:absolute">
+  <symbol id="i-ok" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="m8.5 12 2.5 2.5 4.5-5"/></symbol>
+  <symbol id="i-no" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="m9 9 6 6M15 9l-6 6"/></symbol>
+  <symbol id="i-unk" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M9.5 9.5a2.5 2.5 0 1 1 3.5 2.3c-.6.3-1 .8-1 1.5v.4"/><path d="M12 17h.01"/></symbol>
+  <symbol id="i-info" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 11v5M12 8h.01"/></symbol>
+  <symbol id="i-warn" viewBox="0 0 24 24"><path d="M12 4 3 20h18L12 4z"/><path d="M12 10v4M12 17h.01"/></symbol>
+  <symbol id="i-down" viewBox="0 0 24 24"><path d="m6 9 6 6 6-6"/></symbol>
+  <symbol id="i-up" viewBox="0 0 24 24"><path d="m6 15 6-6 6 6"/></symbol>
+  <symbol id="i-users" viewBox="0 0 24 24"><circle cx="9" cy="8" r="3.5"/><path d="M3 20c0-3.3 2.7-6 6-6s6 2.7 6 6"/><path d="M16 4.5a3.5 3.5 0 0 1 0 7M21 20c0-2.6-1.6-4.8-4-5.6"/></symbol>
+  <symbol id="i-ext" viewBox="0 0 24 24"><path d="M14 4h6v6M20 4l-9 9M18 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h5"/></symbol>
+  <symbol id="i-bm" viewBox="0 0 24 24"><path d="M6 4h12v16l-6-4-6 4z"/></symbol>
+  <symbol id="i-x" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18"/></symbol>
+  <symbol id="i-more" viewBox="0 0 24 24"><circle cx="5" cy="12" r="1.2"/><circle cx="12" cy="12" r="1.2"/><circle cx="19" cy="12" r="1.2"/></symbol>
+  <symbol id="i-max" viewBox="0 0 24 24"><path d="M14 4h6v6M10 20H4v-6M20 4l-6 6M4 20l6-6"/></symbol>
+  <symbol id="i-msg" viewBox="0 0 24 24"><path d="M4 5h16v11H8l-4 4z"/></symbol>
+</svg>
+
+<div class="bar">
+  <div><label>Job</label><span class="seg" id="sc"></span></div>
+  <div><label>View</label><span class="seg" id="vw"><button data-v="drawer" aria-pressed="true">Drawer</button><button data-v="wide">Wide (F)</button><button data-v="phone">Phone 375</button></span></div>
+  <div><label>Theme</label><span class="seg" id="th"><button data-v="light" aria-pressed="true">Light</button><button data-v="dark">Dark</button></span></div>
+</div>
+
+<div class="stage">
+  <div class="drawer" id="drawer"></div>
+  <div class="notes">
+    <h2>What changed, section by section</h2>
+    <ol>
+      <li><b>One section style.</b> Every block gets the same small uppercase heading, an optional count, and its action on the right, divided by one hairline. Before, each section had its own look, so the page read as one long scroll.</li>
+      <li><b>Order follows the decision:</b> fit → the facts → who can get you in → the role itself → your progress → the company. Things you act on sit above things you read.</li>
+      <li><b>Fit</b> starts folded (verdict + what's wrong). "Why" opens the score rows from the fit mockup.</li>
+      <li><b>Key facts</b> become a label/value grid instead of a pill cloud. "Not stated" values show in grey in place, not in a separate line.</li>
+      <li><b>People you know</b>: top 3 as real rows (initials, role, "likely to help" tag, one Message button). "Show all", the LinkedIn search and "Find friends" fold into one line of links.</li>
+      <li><b>LinkedIn import ask</b> stays a callout above the fold but shorter; closing it moves the ask into the People section.</li>
+      <li><b>About the role</b>: your topics highlighted, faded preview, "Read full". In Wide (F) it takes the left column.</li>
+      <li><b>Your progress</b>: status, CV, follow-up date as one label/value block; Activity / People / Interviews tabs below.</li>
+      <li><b>Company</b> merges three sections: hiring pace (one line, <b>no 12-month bar chart</b>), other locations of this role, and more jobs there.</li>
+    </ol>
+  </div>
+</div>
+
+<script>
+const IC = (id, c = "") => `<svg class="ico ${c}"><use href="#i-${id}"/></svg>`;
+
+const FIT73 = {
+  score: 73, band: "strong", sub: "Above your 70 cut-off",
+  rows: [["Title", 19, 30, "ok", "Matches <b>product manager</b>"], ["Place", 20, 20, "ok", "In <b>United Arab Emirates</b>"], ["Topics", null, null, "off", "Not set yet", "Add topics"], ["Industry", 5, 10, "unk", "Company's industry not known, half points"]],
+  pills: [["unk", "Topics: not set", "Add topics"], ["unk", "Industry not known"]],
+};
+const FIT58 = {
+  score: 58, band: "fair", sub: "12 under your 70 cut-off",
+  rows: [["Title", 25, 30, "ok", "Matches <b>product manager</b>, one level from yours"], ["Place", 20, 20, "ok", "In <b>United Arab Emirates</b>"], ["Topics", 12, 40, "ok", "Mentions <b>payments</b>; not marketplaces, B2C"], ["Industry", 0, 10, "no", "<b>Banking</b> isn't one of your industries", "Add Banking"]],
+  pills: [["no", "Banking isn't one of your industries", "Add Banking"], ["unk", "Pay not stated"]],
+};
+const FIT_EST = {
+  score: 74, band: "est", sub: "Estimated from title, place and industry",
+  rows: [["Title", 25, 30, "ok", "Matches <b>product manager</b>"], ["Place", 20, 20, "ok", "In <b>United Arab Emirates</b>"], ["Topics", null, null, "off", "Not checked: posting not fetched yet"], ["Industry", 10, 10, "ok", "<b>Mobility</b>, one of your industries"]],
+  pills: [["unk", "Topics not checked yet"]],
+};
+
+const FACTS_FULL = [["Pay", "AED 35k–45k / month"], ["Level", "Senior"], ["Type", "Full time"], ["Work mode", "Hybrid"], ["Visa", "Sponsors visas", "good"], ["Hiring", "14 roles in 30 days, 3× usual", "good"], ["Team", "Passenger Experience"], ["Industry", "Mobility"]];
+const FACTS_THIN = [["Pay", "Not stated", "none"], ["Level", "Mid"], ["Type", "Full time"], ["Work mode", "Not stated", "none"], ["Who can apply", "UAE nationals only", "warn"], ["Industry", "Banking"]];
+
+const PEOPLE = [
+  ["AK", "Aisha Khan", "Product Lead, Rider Growth", "high", "Worked together at Careem"],
+  ["RM", "Rahul Menon", "Senior Engineer", "medium", "Same university"],
+  ["LP", "Lina Petrova", "Talent Partner", "high", "Recruiter"],
+];
+
+const DESC = `<p>inDrive is a global mobility platform in 48 countries. We're looking for a Senior Product Manager to own the passenger experience end to end.</p>
+<h5>What you'll do</h5><ul><li>Own the <mark>roadmap</mark> for booking, pricing display and trip safety</li><li>Run <mark>experiments</mark> across a two-sided <mark>marketplace</mark></li><li>Work with design, data and 3 engineering squads</li></ul>
+<h5>What you'll bring</h5><ul><li>6+ years in product, 3+ in <mark>B2C</mark> consumer apps</li><li>Strong with data: SQL, A/B testing</li><li>Arabic is a plus</li></ul><p>We offer relocation support and visa sponsorship.</p>`;
+
+const SC = [
+  { key: "new", name: "1 · New, LinkedIn not linked", fit: FIT73, facts: FACTS_FULL, banner: true, people: "notlinked", desc: DESC, track: "none", company: "full" },
+  { key: "people", name: "2 · People you know", fit: FIT73, facts: FACTS_FULL, people: "list", desc: DESC, track: "none", company: "full", chip: "3 you know" },
+  { key: "applied", name: "3 · Applied (tracked)", fit: FIT73, facts: FACTS_FULL, people: "list", desc: DESC, track: "applied", company: "full", chip: "3 you know", saved: true },
+  { key: "fair", name: "4 · Fair + stale + no one known", fit: FIT58, facts: FACTS_THIN, stale: true, people: "none", desc: DESC, track: "none", company: "thin", co: "Emirates NBD", title: "Product Manager, Payments", meta: "Dubai · Not stated · First seen 41 days ago · listed on Oracle, checked 2h ago" },
+  { key: "est", name: "5 · Not scanned yet", fit: FIT_EST, facts: null, est: true, people: "notlinked-quiet", desc: null, track: "none", company: "none", co: "Talabat", title: "Product Manager, Consumer", meta: "Dubai · Company directory · updated 3 days ago" },
+  { key: "agency", name: "6 · Agency posting, no description", fit: FIT58, facts: FACTS_THIN, people: "agency", desc: "", track: "none", company: "none", co: "Hays (agency)", title: "Product Manager – Fintech", meta: "Dubai · On-site · First seen 2d ago · listed on Workday" },
+];
+
+let cur = SC[0], foldOpen = false;
+
+function fit(f) {
+  const badge = `<div class="badge ${f.band}">${f.band === "est" ? "~" : ""}${f.score}<small>${f.band === "fair" ? "Fair" : "Strong"}</small></div>`;
+  const pills = `<ul class="pills">${f.pills.map(([s, t, x]) => `<li class="${s === "no" ? "miss" : ""}"><span class="${s}">${IC(s)}</span>${t}${x ? ` <a class="l">${x}</a>` : ""}</li>`).join("")}</ul>`;
+  const rows = `<div class="rows">${f.rows
+    .map(([lab, e, m, s, t, x]) =>
+      s === "off"
+        ? `<div class="row off"><span class="lab">${lab}</span><span class="muted" style="font-size:13px">${t}</span><span class="pts">${x ? `<a class="l" style="font-size:13px">${x}</a>` : "–"}</span></div>`
+        : `<div class="row"><span class="lab">${lab}</span><div class="meter"><i class="${s === "unk" ? "soft" : ""}" style="width:${(e / m) * 100}%"></i></div><span class="pts">${e}<span>/${m}</span></span><div class="why"><span class="${s}">${IC(s)}</span><span style="flex:1">${t}</span>${x ? `<a class="l">${x}</a>` : ""}</div></div>`,
+    )
+    .join("")}</div>`;
+  return `<section class="sec"><div class="head">${badge}<div class="grow"><h4>${f.band === "fair" ? "Fair" : "Strong"} match</h4><div class="sub">${f.sub}</div></div>
+    <span class="ib" title="How the score works">${IC("info")}</span><button class="tg" onclick="foldOpen=!foldOpen;render()">${foldOpen ? "Hide" : "Why"} ${IC(foldOpen ? "up" : "down")}</button></div>${foldOpen ? rows : pills}</section>`;
+}
+
+function facts(list) {
+  if (!list) return "";
+  return `<section class="sec"><div class="sh"><h3>The job</h3></div><dl class="facts">${list.map(([k, v, t]) => `<div><dt>${k}</dt><dd class="${t || ""}">${v}</dd></div>`).join("")}</dl></section>`;
+}
+
+function people(mode, co) {
+  const h = (n, act) => `<div class="sh"><h3>People you know</h3>${n ? `<span class="n">${n}</span>` : ""}<span class="act">${act || ""}</span></div>`;
+  if (mode === "agency")
+    return `<section class="sec">${h("", "")}<p class="muted" style="margin:0;font-size:13px">An agency posted this and may not name the employer. Ask the recruiter which company it is, then look for people there.</p></section>`;
+  // The banner above already asks: here, only the searches.
+  if (mode === "notlinked" && cur.banner)
+    return `<section class="sec">${h("", "")}<div class="ways" style="margin:0">Search LinkedIn: <a class="l">People at ${co}</a><a class="l">Recruiters</a><a class="l">Your old colleagues</a></div></section>`;
+  if (mode === "notlinked" || mode === "notlinked-quiet")
+    return `<section class="sec">${h("", "")}<div style="display:flex;gap:12px;align-items:center;flex-wrap:wrap"><p class="muted" style="margin:0;font-size:13px;flex:1;min-width:200px">Import your LinkedIn connections to see who you know at ${co}. They stay on this computer.</p><button class="btn sm">${IC("users")} Import connections</button></div>
+      <div class="ways">Or search LinkedIn: <a class="l">People at ${co}</a><a class="l">Recruiters</a><a class="l">Your old colleagues</a></div></section>`;
+  if (mode === "none")
+    return `<section class="sec">${h("0", "")}<p class="muted" style="margin:0;font-size:13px">You don't know anyone at ${co} on LinkedIn yet. These find people one step away:</p>
+      <div class="ways"><a class="l">People at ${co}</a><a class="l">Recruiters</a><a class="l">Alumni of your university</a><a class="l">Find friends…</a></div></section>`;
+  return `<section class="sec" id="people">${h("3", `<a class="l">Show all</a>`)}
+    ${PEOPLE.map(([i, n, r, b, w]) => `<div class="person"><div class="av">${i}</div><div style="min-width:0"><div class="nm">${n}<span class="tag ${b === "high" ? "" : "mid"}">${b === "high" ? "Likely to help" : "Might help"}</span></div><div class="rl">${r} · ${w}</div></div><button class="btn sm">${IC("msg")} Message</button></div>`).join("")}
+    <div class="ways">More ways in: <a class="l">People at ${co}</a><a class="l">Recruiters</a><a class="l">Find friends…</a></div></section>`;
+}
+
+function desc(d, est, wide) {
+  if (est)
+    return `<section class="sec"><div class="sh"><h3>About the role</h3></div><div class="empty">Not scanned yet, so no description. The score is an estimate. <a class="l">Scan this company</a></div></section>`;
+  if (d === "") return `<section class="sec"><div class="sh"><h3>About the role</h3></div><div class="empty">The hiring system didn't include a description. <a class="l">Open the job page</a></div></section>`;
+  return `<section class="sec"><div class="sh"><h3>About the role</h3><span class="n">your topics highlighted</span><span class="act"><a class="l">Copy</a></span></div><div class="desc ${wide ? "full" : ""}">${d}</div>${wide ? "" : `<button class="btn sm q" style="padding-left:0;margin-top:4px">Read full description ${IC("down")}</button>`}</section>`;
+}
+
+function progress(t) {
+  if (t === "none")
+    return `<section class="sec"><div class="sh"><h3>Your notes</h3><span class="act muted" style="font-size:12px">Save <kbd>S</kbd> to track it</span></div><textarea placeholder="Anything to remember about this job"></textarea></section>`;
+  return `<section class="sec"><div class="sh"><h3>Your progress</h3></div>
+    <div class="prog"><span class="k">Status</span><span><span class="sel">Applied ${IC("down")}</span></span>
+    <span class="k">Applied</span><span>20 Oct · 2 days ago</span>
+    <span class="k">CV sent</span><span>PM-mobility-v3.pdf</span>
+    <span class="k">Follow up</span><span>Mon 27 Oct <a class="l" style="margin-left:8px">Change</a></span></div>
+    <div class="tabs"><span class="on">Activity</span><span>People 1</span><span>Interviews</span></div>
+    <ul class="log"><li><time>20 Oct</time>Applied with PM-mobility-v3.pdf</li><li><time>19 Oct</time>Messaged Aisha Khan</li><li><time>18 Oct</time>Saved</li></ul>
+    <button class="btn sm" style="margin-top:8px">Log something</button></section>`;
+}
+
+function company(m, co) {
+  if (m === "none") return "";
+  const hiring = m === "full" ? `<p style="margin:0 0 4px"><b style="font-weight:600">14 new roles in 30 days</b>, about 3× their usual pace.</p><p class="muted" style="margin:0;font-size:12px">From RawJobs' daily read of their careers page.</p>` : `<p style="margin:0 0 4px">2 new roles in 30 days.</p><p class="muted" style="margin:0;font-size:12px">Records started October 2026. Comparisons show after 6 weeks.</p>`;
+  const places = m === "full" ? `<p class="sub-h">This role in 3 places</p><ul class="kv"><li class="cur"><span class="sc">73</span><span class="t">Abu Dhabi <span class="muted">· this one</span></span></li><li><span class="sc">71</span><span class="t">Dubai</span>${IC("ext", "muted")}</li><li><span class="sc">48</span><span class="t">Almaty <span class="muted">· may be stale</span></span>${IC("ext", "muted")}</li></ul>` : "";
+  const more = `<p class="sub-h">More jobs here</p><ul class="kv"><li><span class="sc">81</span><span class="t"><b>Lead Product Manager, Driver</b><span class="muted">Dubai</span></span></li><li><span class="sc">64</span><span class="t"><b>Product Manager, Safety</b><span class="muted">Abu Dhabi</span></span></li></ul>`;
+  return `<section class="sec"><div class="sh"><h3>About ${co}</h3></div>${hiring}${places}${more}</section>`;
+}
+
+function render() {
+  const s = cur, co = s.co || "inDrive", wide = document.body.classList.contains("wide");
+  const banner = s.banner
+    ? `<div class="callout">${IC("users")}<div class="grow"><b>See who you know at ${co}</b><div class="muted">Import your LinkedIn connections. Read on this computer, nothing sent anywhere.</div><div class="acts"><button class="btn sm p">Import connections</button><button class="btn sm q">Not now</button></div></div><span class="ib">${IC("x")}</span></div>`
+    : "";
+  const stale = s.stale ? `<div class="callout warn">${IC("warn")}<div class="grow"><b>May be stale.</b> First seen 41 days ago and the posting date hasn't changed. It's still on their board, so ask a recruiter before spending time on it.</div></div>` : "";
+  const main = [fit(s.fit), facts(s.facts), people(s.people, co), wide ? "" : desc(s.desc, s.est), progress(s.track), company(s.company, co)].join("");
+  const body = wide ? `<div>${banner}${stale}${desc(s.desc, s.est, true)}</div><div>${main}</div>` : `${banner}${stale}${main}`;
+  document.getElementById("drawer").innerHTML = `
+    <header class="dh"><div class="top"><span class="co"><span class="dot"></span>${co}</span><span class="ib">${IC("up")}</span><span class="ib">${IC("down")}</span><span class="ib">${IC("max")}</span></div>
+      <h1>${s.title || "Senior Product Manager (Passenger Experience)"}</h1>
+      <div class="meta">${s.meta || "Abu Dhabi · Hybrid · First seen 7h ago · listed on Pinpoint, checked 7h ago"}</div>
+      ${s.chip || s.stale ? `<div class="chips">${s.chip ? `<a class="chip" href="#people">${IC("users", "muted")}${s.chip}</a>` : ""}${s.stale ? `<span class="chip warn">${IC("warn")}May be stale</span>` : ""}</div>` : ""}
+    </header>
+    <div class="db">${body}</div>
+    <footer class="df"><button class="btn p">${IC("ext")}${s.est ? "Open careers page" : `Apply at ${co.replace(" (agency)", "")}`}</button><button class="btn">${IC("bm")}${s.saved ? "Applied" : "Save"} <kbd>S</kbd></button><button class="btn" style="margin-left:auto;padding:7px 10px" aria-label="More">${IC("more")}</button></footer>`;
+}
+
+const sc = document.getElementById("sc");
+sc.innerHTML = SC.map((s, i) => `<button data-v="${i}" aria-pressed="${i === 0}">${s.name}</button>`).join("");
+function seg(el, fn) { el.addEventListener("click", (e) => { const b = e.target.closest("button"); if (!b) return; el.querySelectorAll("button").forEach((x) => x.setAttribute("aria-pressed", String(x === b))); fn(b.dataset.v); render(); }); }
+seg(sc, (v) => { cur = SC[+v]; foldOpen = false; });
+seg(document.getElementById("vw"), (v) => { document.body.classList.toggle("wide", v === "wide"); document.body.classList.toggle("phone", v === "phone"); });
+seg(document.getElementById("th"), (v) => (document.documentElement.dataset.theme = v));
+render();
+</script>
+</body>
+</html>

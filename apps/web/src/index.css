@@ -240,11 +240,97 @@ h3 {
   max-width: calc(100vw - 2rem);
 }
 
-/* "Why it matched" as a card: score and verdict, then a pill per miss or unknown (the points unfold). */
-.rj-fit {
-  padding: var(--space-4);
-  border: 1px solid var(--border-subtle);
-  border-radius: var(--radius-md);
+/* The job's sections share one look: a small sentence-case heading (action beside it), a hairline above each. */
+.rj-drawer__stack > .rj-drawer__section ~ .rj-drawer__section {
+  border-top: 1px solid var(--border-subtle);
+  padding-top: var(--space-6);
+}
+.rj-sec-h {
+  margin: 0;
+  font: 600 14px/20px var(--font-sans);
+  color: var(--text-primary);
+}
+.rj-sub-h {
+  margin: 0;
+  font: 500 13px/18px var(--font-sans);
+  color: var(--text-secondary);
+}
+
+/* "Why it matched": one row per scored part (label, meter, points), its reason and fix under the meter. */
+.rj-fit-rows {
+  display: grid;
+}
+.rj-fit-row {
+  display: grid;
+  grid-template-columns: 4.5rem minmax(0, 1fr) 3.25rem;
+  gap: 2px var(--space-3);
+  align-items: center;
+  padding: var(--space-2) 0;
+  border-top: 1px solid var(--border-subtle);
+}
+.rj-fit-row__why {
+  grid-column: 2 / 4;
+}
+.rj-meter {
+  height: 6px;
+  border-radius: 3px;
+  background: var(--breakdown-track, var(--bg-active));
+  overflow: hidden;
+}
+.rj-meter > i {
+  display: block;
+  height: 100%;
+  border-radius: 3px;
+  background: var(--breakdown-fill, var(--text-primary));
+  transform-origin: left;
+}
+.rj-meter--soft > i {
+  background: var(--border-control);
+}
+@media (max-width: 480px) {
+  .rj-fit-row__why {
+    grid-column: 1 / 4;
+  }
+}
+
+/* The job's facts as label / value pairs, two to a row. */
+.rj-facts {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-3) var(--space-5, 20px);
+  margin: 0;
+}
+.rj-facts dd {
+  margin: 0;
+  font-weight: 500;
+}
+
+/* A person you know: initials, name and role, then the one action. */
+.rj-avatar {
+  width: 36px;
+  height: 36px;
+  border-radius: 999px;
+  background: var(--bg-active);
+  display: grid;
+  place-items: center;
+  font: 600 12px/1 var(--font-sans);
+  color: var(--text-primary);
+  flex: none;
+}
+.rj-avatar::before {
+  content: attr(data-initials);
+}
+.rj-tag {
+  display: inline-block;
+  padding: 0 6px;
+  border-radius: var(--radius-sm);
+  font: 500 11px/16px var(--font-sans);
+  background: var(--bg-active);
+  color: var(--text-secondary);
+}
+.rj-tag--good {
+  background: var(--success-subtle, var(--bg-active));
+  color: var(--success-text);
 }
 .rj-pills {
   display: flex;
