@@ -24,12 +24,14 @@ profile:
     # ...unless the location also names a region you can't work from (e.g. "Remote (US)").
     remote_exclude: ["us", "usa", "united states", "canada", "americas", "latam", "apac"]
 
-  # Industries you want to work in. Companies in them are suggested first.
+  # Industries you want to work in: jobs at companies in them rank higher (up to +10), and those
+  # companies are suggested first. They don't decide what a scan fetches.
   # Ids: crypto, crypto-exchange, brokerage, trading-tech, payments, digital-bank, … (see the setup's Industries step)
   industries: ["payments"]
 
-  # Matched as whole words in the title and description. Weight 1 (nice) to 5 (core).
-  # Points are summed and capped at 40.
+  # Topics, matched as whole words in the title and description. Weight 1 (nice) to 5 (core).
+  # Up to 40 points: 40 × matched weight ÷ min(total weight, 12), so about three core topics fill
+  # the bar. See "How scoring works" in README.md.
   keywords:
     payments: 5
     fintech: 4
@@ -38,7 +40,8 @@ profile:
     b2b: 2
     compliance: 1
 
-  # Jobs scoring at least this trigger an alert (when alerts arrive in phase 1).
+  # Jobs scoring at least this are strong matches: highlighted on the Radar and counted as
+  # strong fits in Telegram alerts.
   min_score: 70
 
 # One line per company. Get these lines from careers URLs with:
@@ -48,7 +51,9 @@ companies:
   - { name: "Palantir", ats: lever, slug: "palantir" }
   - { name: "Ramp", ats: ashby, slug: "ramp" }
 
+# Set up Telegram in the dashboard (Settings → Notifications), or with `pnpm rawjobs alerts telegram`.
+# The bot token and chat id go in profile/secrets.json (or TELEGRAM_BOT_TOKEN + TELEGRAM_CHAT_ID), never here.
 alerts:
-  telegram: false # needs TELEGRAM_BOT_TOKEN + TELEGRAM_CHAT_ID secrets (phase 1)
-  email: false
-  only_new: true
+  telegram: false
+  email: false # not used yet
+  only_new: true # scheduled scans send only jobs you haven't been sent before

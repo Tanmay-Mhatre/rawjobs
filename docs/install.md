@@ -65,9 +65,9 @@ your network can't reach it.
   It always opens the right address. Typing it yourself: http://127.0.0.1:4317, with the `:4317`
   (`127.0.0.1` alone is a different address, where nothing answers). Closing the browser doesn't
   stop RawJobs; it keeps running in the background, using very little.
-- Deleted the Desktop shortcut? Settings → About → **Add a Desktop shortcut**, or run
+- Deleted the Desktop shortcut? Settings → Updates → Desktop shortcut → **Add to Desktop**, or run
   `rawjobs shortcuts --desktop`.
-- Scheduled scans (Settings → Scans & alerts) run while your computer is on, and catch up when it
+- Scheduled scans (Settings → Scans) run while your computer is on, and catch up when it
   wakes up.
 - From a terminal, the `rawjobs` command is in the `bin` folder of the install folder, for example
   `"%LOCALAPPDATA%\RawJobs\bin\rawjobs.cmd" scan` on Windows or
@@ -83,14 +83,15 @@ RawJobs updates in a few seconds: the dashboard shows "Reconnecting…" and relo
 shows **What's new** once (everything new since the version you had).
 
 - **On Telegram too.** If Telegram alerts are set up and on, you get one message per version when
-  it's downloaded and ready. Turn that off in Settings → About → Updates.
+  it's downloaded and ready. Turn that off in Settings → Notifications → What to send.
 - **A scan is never cut off.** Click Update while a scan runs (also a scheduled one) and RawJobs
   waits for it to finish, then updates.
 - **Required updates** (an important fix) come up in a window that only closes by updating. If the
   update fails, for example while you're offline, you can continue for now; it asks again next time.
-- **Settings → About** shows your version, when it was installed or updated, the newest version,
+- **Settings → Updates** shows your version, when it was installed or updated, the newest version,
   when RawJobs last checked, and has **Check for updates**. Below it: turn watching for new versions
-  off, get test versions early, and **Release notes**, what changed in every version.
+  off, and get test versions early. **Settings → What's new** has the release notes, what changed in
+  every version.
 - **Your data is never removed.** Before every update and every reinstall, your profile, tracking
   and scan data are copied to the `backups` folder (the last three are kept). If a new version
   doesn't start within a minute, RawJobs goes back to the one you had and tells you; your data stays
