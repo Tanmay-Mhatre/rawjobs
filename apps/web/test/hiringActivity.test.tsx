@@ -26,7 +26,7 @@ const summary = (o: Partial<HiringSummary> = {}): HiringSummary => ({
   ...o,
 });
 
-describe("Hiring at … text", () => {
+describe("Hiring line", () => {
   it("says the last 30 days, and the pace once it can be compared and is well above usual", () => {
     expect(hiringLine(summary())).toBe("14 new roles in the last 30 days, about 3× their usual pace.");
     expect(hiringLine(summary({ last30: 1, pace: 1.2 }))).toBe("1 new role in the last 30 days.");
@@ -47,17 +47,12 @@ describe("Hiring at … text", () => {
     expect(hiringFootnote(summary({ source: "local" }))).toBe("New roles seen in your scans of their careers page.");
   });
 
-  it("draws 12 bars with this month in ink, months without records as a dashed line, and reads them out", () => {
-    const { container } = render(<HiringActivity company="Northwind Pay" summary={summary()} />);
-    expect(screen.getByRole("heading", { name: "Hiring at Northwind Pay" })).toBeTruthy();
-    const bars = screen.getByRole("img");
-    expect(bars.children).toHaveLength(12);
-    expect(bars.lastElementChild!.className).toContain("bg-ink");
-    expect(bars.firstElementChild!.className).toContain("border-dashed");
-    expect(bars.getAttribute("aria-label")).toBe(
-      "New roles per month: November 2025 no records, December 2025 no records, January 2026 no records, February 2026 no records, March 2026 no records, April 2026 no records, May 2026 no records, June 2026 no records, July 2026 2, August 2026 3, September 2026 2, October 2026 14 (this month).",
-    );
+  it("says it in one line with where the numbers come from, and no monthly chart", () => {
+    const { container } = render(<HiringActivity summary={summary()} />);
+    expect(screen.getByRole("heading", { name: "Hiring" })).toBeTruthy();
+    expect(screen.queryByRole("img")).toBeNull();
     expect(container.textContent).toContain("about 3× their usual pace");
+    expect(container.textContent).toContain("New roles seen in RawJobs' daily read of their careers page.");
   });
 });
 
@@ -91,17 +86,18 @@ describe("in the drawer and the feed", () => {
 
   it("shows the block for a company with records, and the tag with its numbers", async () => {
     const { container } = render(<JobDetail job={job({ surge })} profile={profile} onUpdate={() => {}} />);
-    expect(await screen.findByRole("heading", { name: "Hiring at Acme" })).toBeTruthy();
+    expect(await screen.findByRole("heading", { name: "About Acme" })).toBeTruthy();
+    expect(screen.getByRole("heading", { name: "Hiring" })).toBeTruthy();
     expect(container.textContent).toContain("14 new roles in the last 30 days, about");
-    const fact = [...container.querySelectorAll('[aria-label="Key facts"] li')].find((f) => f.getAttribute("title")?.startsWith("Company hiring"))!;
-    expect(fact.textContent).toBe("14 roles in 30 days");
+    const fact = [...container.querySelectorAll('[aria-label="Key facts"] > div')].find((f) => f.getAttribute("title")?.startsWith("Company hiring"))!;
+    expect(fact.querySelector("dd")!.textContent).toBe("14 roles in 30 days");
   });
 
   it("hides the block for a company without records", async () => {
     render(<JobDetail job={job({ companyKey: "lever:nobody" })} profile={profile} onUpdate={() => {}} />);
     await screen.findByRole("region", { name: "Why it matched" });
     await new Promise((r) => setTimeout(r, 0));
-    expect(screen.queryByRole("heading", { name: /^Hiring at/ })).toBeNull();
+    expect(screen.queryByRole("heading", { name: "Hiring" })).toBeNull();
   });
 
   it("tags a feed row only when its company has a surge", () => {

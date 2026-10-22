@@ -24,41 +24,18 @@ export function hiringFootnote(s: HiringSummary): string {
   return s.source === "local" ? "New roles seen in your scans of their careers page." : "New roles seen in RawJobs' daily read of their careers page.";
 }
 
-/** "New roles per month: November 2025 no records, …, October 2026 14 (this month)." */
-function spokenBars(s: HiringSummary): string {
-  const last = s.months.length - 1;
-  const parts = s.months.map((m, i) => `${monthName(m.month)} ${m.count === null ? "no records" : m.count}${i === last ? " (this month)" : ""}`);
-  return `New roles per month: ${parts.join(", ")}.`;
-}
-
 /**
- * "Hiring at {company}" in the job drawer: new roles in the last 30 days against the usual pace, and
- * the last 12 months as bars (this month in ink; months before records started as a dashed baseline).
- * Never part of the score.
+ * "Hiring" in the job drawer's company section: new roles in the last 30 days against the usual pace,
+ * and where the numbers come from. One line, no monthly chart: most people use RawJobs for weeks, not
+ * the months a chart needs to say anything. Never part of the score.
  */
-export function HiringActivity({ company, summary }: { company: string; summary: HiringSummary }) {
+export function HiringActivity({ summary }: { summary: HiringSummary }) {
   const line = hiringLine(summary);
-  const max = Math.max(1, ...summary.months.map((m) => m.count ?? 0));
-  const last = summary.months.length - 1;
   return (
-    <section className="rj-drawer__section">
-      <h3 className="rj-h">Hiring at {company}</h3>
+    <div className="grid gap-1">
+      <h4 className="rj-sub-h">Hiring</h4>
       {line && <p className={cx("type-small", summary.surge && "font-medium")}>{line}</p>}
-      <div className="mt-2 grid h-16 grid-cols-12 items-end gap-1" role="img" aria-label={spokenBars(summary)}>
-        {summary.months.map((m, i) =>
-          m.count === null ? (
-            <span key={m.month} className="block border-b border-dashed border-line" />
-          ) : (
-            <span key={m.month} className={cx("block min-h-0.5 rounded-t-sm", i === last ? "bg-ink" : "bg-control")} style={{ height: `${(m.count / max) * 100}%` }} />
-          ),
-        )}
-      </div>
-      <div className="grid grid-cols-12 gap-1 text-center type-meta text-muted" aria-hidden>
-        {summary.months.map((m) => (
-          <span key={m.month}>{MONTH_NAMES[Number(m.month.slice(5, 7)) - 1]![0]}</span>
-        ))}
-      </div>
-      <p className="type-small text-muted">{hiringFootnote(summary)}</p>
-    </section>
+      <p className="type-meta text-muted">{hiringFootnote(summary)}</p>
+    </div>
   );
 }

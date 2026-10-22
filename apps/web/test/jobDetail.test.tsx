@@ -43,11 +43,10 @@ describe("JobDetail", () => {
     expect(metaText(container)).toMatch(/Posted 2d ago/);
   });
 
-  it("shows the facts it knows as pills, and folds the unknown ones into one line", () => {
+  it("shows the facts as label and value, the unknown ones as not stated", () => {
     const { container } = renderDetail(job({ employmentType: "full-time", department: "Product" }));
-    const facts = [...container.querySelectorAll('[aria-label="Key facts"] li')].map((li) => li.textContent);
-    expect(facts).toEqual(["Senior", "Full-time", "Product"]);
-    expect(container.textContent).toContain("Not stated: salary.");
+    const facts = [...container.querySelectorAll('[aria-label="Key facts"] > div')].map((d) => `${d.querySelector("dt")!.textContent}: ${d.querySelector("dd")!.textContent}`);
+    expect(facts).toEqual(["Level: Senior", "Type: Full-time", "Team: Product", "Pay: Not stated"]);
     // Said once: no Details table repeating the dates.
     expect(screen.queryByRole("heading", { name: "Details" })).toBeNull();
   });
