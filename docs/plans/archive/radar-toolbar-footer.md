@@ -1,7 +1,7 @@
 # Radar toolbar + job footer (2026-10-15)
 
-Status: mockups on the canvas (row "Toolbar + job footer — 3 options",
-https://claude.ai/artifact/SavyR2gnvbJEtYsQViv11T). Awaiting the user's pick and go.
+Status: Shipped (PR #251, plus #253 for 1024px / v0.6.14) with option A's toolbar and option B's footer. Mockups on the canvas (row "Toolbar + job footer — 3 options",
+https://claude.ai/artifact/SavyR2gnvbJEtYsQViv11T).
 
 ## Why it looks wrong (root causes)
 

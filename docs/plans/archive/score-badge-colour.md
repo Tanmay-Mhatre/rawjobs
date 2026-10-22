@@ -1,6 +1,6 @@
 # Score badge colour: amber means caution only
 
-Status: option A approved and built (2026-10-16).
+Status: Shipped, option A (PR #257 / v0.6.14).
 
 ## Problem
 

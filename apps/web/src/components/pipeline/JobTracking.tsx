@@ -11,7 +11,7 @@ import { PeopleTab } from "./PeopleTab";
 type Tab = "activity" | "people" | "interviews" | "job";
 
 /**
- * A tracked job's progress (docs/plans/pipeline-v2.md, section 6.2), in the job detail and in the
+ * A tracked job's progress (docs/plans/archive/pipeline-v2.md, section 6.2), in the job detail and in the
  * dialog for jobs not on the Radar: Activity, People, Interviews and, for a job you added by hand,
  * Job (`jobTab`). Saying what was logged goes through one polite live region.
  *

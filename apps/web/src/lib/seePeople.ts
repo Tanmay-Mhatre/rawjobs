@@ -1,5 +1,5 @@
 /**
- * "See people at {Company}" (docs/plans/referral-finder.md, sections 6.G and 12.6): a small RawJobs
+ * "See people at {Company}" (docs/plans/archive/referral-finder.md, sections 6.G and 12.6): a small RawJobs
  * card to keep beside LinkedIn while you look for people. It opens in Document Picture-in-Picture
  * where the browser has it, else in a small popup routed as "#card/<jobId>?t=…&c=…". LinkedIn opens
  * only from the card's own button, on the left half of the screen.

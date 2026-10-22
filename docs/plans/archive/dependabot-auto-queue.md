@@ -1,5 +1,7 @@
 # Auto-queue Dependabot's weekly minor/patch PRs
 
+Status: Shipped (PR #226 / v0.6.9).
+
 ## Problem
 
 Dependabot PRs only join the merge queue when someone adds the `queue` label. Nobody does, so they

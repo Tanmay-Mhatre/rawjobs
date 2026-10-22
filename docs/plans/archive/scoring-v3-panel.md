@@ -1,6 +1,6 @@
 # Fit score v3: panel review (2026-10-16)
 
-Status: research only. Nothing gets built until the user says go.
+Status: Shipped (PRs #261, #263, #264, #265 / v0.6.15).
 
 Six experts were briefed with the same pack: the current scorer, the constraints, and the v3 proposal. Each researched on their own (web and repo, reading `origin/main` at 23e4487).
 

@@ -1,6 +1,6 @@
 # Pipeline v2: activity, people, next steps, To review, weekly plan
 
-Status: approved by the owner (2026-10-20) from the 6-flow mockup. This doc is the build spec. Review notes are in section 9.
+Status: Shipped (PRs #279, #281, #282, #283 / v0.6.17). Approved by the owner (2026-10-20) from the 6-flow mockup. This doc is the build spec. Review notes are in section 9.
 
 ## 1. Why
 

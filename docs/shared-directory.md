@@ -38,8 +38,8 @@ user is ever uploaded.
 | Move review | `scripts/catalog/moves.ts`, `moves-approve.ts`, `lib/moves.ts`, `.github/workflows/directory-move-approval.yml` | Moved careers pages users report: checked and recorded every 3 hours by the contributions workflow, approved by a maintainer on a GitHub issue, or accepted automatically with company-owned evidence when `MOVES_AUTO_ACCEPT` is set. See [Moved careers pages](#moved-careers-pages). |
 | Weekly rebuild | `.github/workflows/directory-rebuild.yml` | Full rebuild and a dated release, in two jobs: `collect` gathers and checks boards, `publish` builds, gates and releases, and runs even if `collect` failed or ran out of time. The working state is saved as the `state` release, so the next run skips recently checked boards. Each collector runs under its own time cap (`scripts/catalog/capped.sh`) and may stop early without stopping the rebuild, so build and publish always get their turn. A run that doesn't publish opens a "Directory rebuild did not publish" issue. GitHub's schedules are best effort, so Monday has backup times (03:07, 05:37, 09:41, and Tuesday 03:13); each runs only if no rebuild has published in the last 5 days. The contributions, URL-index and job-feed workflows also start it when it's overdue (`scripts/catalog/watchdog.sh`: nothing for 8 days, or none yet this week by Monday 12:00 UTC), at most once a day and not while a "did not publish" issue is open; they also keep the scheduled workflows from being switched off after 60 quiet days. The directory runs share one concurrency group with `queue: max`, so a waiting run is never cancelled by a newer one. A published rebuild starts the site deploy. To test the workflow without publishing: `gh workflow run directory-rebuild.yml -f smoke=true` (about 25 minutes). |
 | Releases | `rawjobs-directory` releases | Every publish is a new dated release, so earlier ones stay: `directory-YYYY-MM-DD` from the weekly rebuild, `directory-YYYY-MM-DD-HHMM-shared` when users' companies are added in between. Apps read the one marked latest. **Roll back:** `gh release edit <tag> -R Tanmay-Mhatre/rawjobs-directory --latest`. |
-| Daily URL indexes | `.github/workflows/directory-commoncrawl.yml` | Our own URL indexes, which the weekly rebuild no longer reads: 50 minutes a day of the Common Crawl URL index (the 12 newest crawls), then 25 minutes of the Wayback Machine's on Tuesday, Thursday and Saturday (never Monday), one request every 4.5 seconds. Each resumes per query and stops when its index keeps failing. Data · health opens its issue when Wayback is blocked or makes no progress in two runs. The boards it finds are merged and checked by the next contributions run or rebuild. |
-| Release gate | `scripts/catalog/guard.ts`, `gate.sh` | Runs before every upload, in the rebuild and the contributions workflow. Refuses a directory under 90% of the live release's companies or 85% of its indexed ones, under 20,000 / 10,000, with broken rows, or with broken or more than 50 new moves. A deliberate shrink: `gh workflow run directory-rebuild.yml -f allow_shrink=true`. |
+| Daily URL indexes | `.github/workflows/directory-commoncrawl.yml` | Our own URL indexes, which the weekly rebuild no longer reads: 50 minutes a day of the Common Crawl URL index (the newest crawls, about a year), then 25 minutes of the Wayback Machine's on Tuesday, Thursday and Saturday (never Monday), one request every 4.5 seconds. Each resumes per query and stops when its index keeps failing. Data · health opens its issue when Wayback is blocked or makes no progress in two runs. The boards it finds are merged and checked by the next contributions run or rebuild. |
+| Release gate | `scripts/catalog/guard.ts`, `gate.sh` | Runs before every upload, in the rebuild and the contributions workflow. Refuses a directory under 90% of the live release's companies or 85% of its indexed ones, under a floor of companies and indexed companies, with broken rows, or with broken or too many new moves (the thresholds are the constants at the top of `guard.ts`). A deliberate shrink: `gh workflow run directory-rebuild.yml -f allow_shrink=true`. |
 | Finding more companies | `scripts/catalog/` | See [Coverage](#coverage) below. |
 | Visa sponsors | `scripts/catalog/visa.ts`, `lib/visa.ts`, `packages/core/src/catalog/visa.ts` | Government lists of employers that may sponsor work visas, matched to directory companies by name. See [Visa sponsors](#visa-sponsors). |
 | Public directory repo | `Tanmay-Mhatre/rawjobs-directory` | Releases (the files apps download), `contributions.json`, `coverage.md`, attribution. |
@@ -53,11 +53,11 @@ The goal is to hold at least 90% of the companies on each hiring system the dire
 
 | Step | Script | What it adds | Per run |
 |---|---|---|---|
-| Common Crawl URL index | `commoncrawl.ts --crawls 12 --per-run 2 --max-minutes 50` (daily) | Board URLs in the 12 newest crawls, including the boards' API URLs. Incremental: only crawls not read yet. | 50 min a day |
+| Common Crawl URL index | `commoncrawl.ts --crawls 12 --per-run 2 --max-minutes 50` (daily) | Board URLs in the newest crawls (`--crawls`), including the boards' API URLs. Incremental: only crawls not read yet. | 50 min a day |
 | Wayback Machine URL index | `wayback.ts --max-minutes 25` (Tue, Thu, Sat) | Board URLs the Internet Archive kept (snapshots from the last 3 years). Resumable; a full pass takes a few weeks, then starts again after 30 days. | 25 min, 3 days a week |
-| Wikidata companies | `seeds-bulk.ts`, `resolve.ts --bulk --limit 1500` | About 18k companies (50+ staff or listed, CC0), resolved from their own websites. Results are reused for 90 days. | 1,500 companies |
+| Wikidata companies | `seeds-bulk.ts`, `resolve.ts --bulk --limit 1500` | Companies with 50+ staff or listed (CC0), resolved from their own websites. Results are reused for 90 days. | 1,500 companies |
 | Try known companies elsewhere | `crossprobe.ts --max-minutes 45` | Dead or empty boards (the company usually moved systems), companies whose site had no readable board, and Workday tenants whose site is dead. A board counts only if it is live and its own name matches the company. Attempts are kept for 90 days. | 45 min |
-| Job board links | `feed-boards.ts --max-minutes 5` (contributions workflow, every 3 hours) | Boards the public job boards' jobs link to (apply links, links in Hacker News posts), kept in `raw/feeds/boards.json` with which feed saw each and when. Only the board is kept, never the jobs. Each feed is read at most as often as its connector allows (Himalayas daily, Hacker News twice a day, the rest every 6 hours). | 7 feeds |
+| Job board links | `feed-boards.ts --max-minutes 5` (contributions workflow, every 3 hours) | Boards the public job boards' jobs link to (apply links, links in Hacker News posts), kept in `raw/feeds/boards.json` with which feed saw each and when. Only the board is kept, never the jobs. Each feed is read at most as often as its connector allows (Himalayas daily, Hacker News twice a day, the rest every 6 hours). | every public job board |
 | Add by link | contributions | Boards users add (see above). | – |
 
 `coverage.md` (in the directory repo) opens with the **Universe** table:
@@ -112,14 +112,15 @@ doesn't change scores or order. A company on the list can sponsor; that doesn't 
 
 ## Industry tags
 
-"My companies + my industries" scans, the Companies page's industry filter and the starter packs
-only see directory companies with an industry, so `publish.ts` tags as many as it can verify. No AI:
+Industries don't decide what a scan fetches, but they rank jobs higher ("Rank jobs in my
+industries higher" in Settings → Scans), and the Companies page's industry filter and its starter
+packs only see directory companies with an industry, so `publish.ts` tags as many as it can verify. No AI:
 each tag comes from one of these sources (`scripts/catalog/lib/tags.ts`):
 
 | Source | `tag_src` | How | Kept in |
 |---|---|---|---|
 | Hand-made lists | (absent) | The seed list (`seeds/industries.json`), the curated list's `segment`, crypto-jobs-fyi's `category`. The other public lists have no industry column. | `tags` |
-| Wikidata (CC0) | `wikidata` | The industries (P452) of the ~18k companies `seeds-bulk.ts` reads, fetched by two more item-pair queries in the same run (seconds each). Mapped by a fixed table of Wikidata items (`lib/wikidata.ts`; broad ones like "financial services" count only when nothing more specific does). A company matches by the board `resolve.ts --bulk` found on its website, or by the same name (one Wikidata company has it) and a board named like its website (`visa` for visa.com). | `tags` |
+| Wikidata (CC0) | `wikidata` | The industries (P452) of the companies `seeds-bulk.ts` reads, fetched by two more item-pair queries in the same run (seconds each). Mapped by a fixed table of Wikidata items (`lib/wikidata.ts`; broad ones like "financial services" count only when nothing more specific does). A company matches by the board `resolve.ts --bulk` found on its website, or by the same name (one Wikidata company has it) and a board named like its website (`visa` for visa.com). | `tags` |
 | Job titles | `titles` | `industriesFromTitles` (8% of titles, at least 2). Role words ("Store Manager", "Cashier") count anywhere; an industry's generic words ("retail", "healthcare", "banking") don't count where they name a customer segment: in a business-to-business selling title ("Account Executive, Retail", "Healthcare Solutions Engineer") or after "for"/"to", so a restaurant-software company isn't tagged Retail. Measured with `scripts/catalog/industry-precision.ts`. Titles come from the job index (Greenhouse, Lever, Ashby, SmartRecruiters); else from the daily job feed's full copy (`jobs-v2-snapshot-<seq>.json.br`; the first format's shards if it can't be downloaded) for Workday and boards the index didn't reach, downloaded by `scripts/catalog/feed.sh` (one row per job id, up to 300 titles per company); else from the titles a live check read anyway (systems with no cheap count read the whole list: up to 60 distinct titles go to `out/titles.jsonl`, kept in the saved state). No extra requests. | `title_tags` |
 
 In `directory.json` (and `index.json`) each company keeps `tags` (what the company is: lists,
@@ -129,16 +130,12 @@ hand-made list, e.g. `{"payments": "titles", "banking": "wikidata"}`; the Compan
 after the industry ("Payments · from its job titles"). `out/tags.json` records every source of
 every tag. The publish log prints how many live companies have an industry, by source.
 
-Measured on 2026-10-13 (the saved state, today's job feed and Wikidata): the 2026-10-12 release had
-an industry on 6,176 of 38,302 live companies (16%). The same inputs built today hold 91,140 live
-companies; the old rules tag 6,307 of them, the new ones 10,161 (+1,198 through Wikidata, +2,656
-more through the job feed's titles, mostly Workday), before any check has kept titles. A sample of 400 live boards on the other
-systems found titles for 398 and an industry for 134 (34%): about 20,000 more companies once their
-monthly recheck has run.
+Wikidata and job titles tag many more live companies than the hand-made lists alone, and more get
+an industry as their monthly recheck keeps titles. The publish log has the current numbers.
 
 ## What is shared, and what isn't
 
-Shared (on by default, off with `directory.share_additions: false` or Settings → Sharing): hiring
+Shared (on by default, off with `directory.share_additions: false` or Settings → Data & privacy → Sharing): hiring
 system, board slug (plus Workday shard/site, EU region), company name, and the app name
 (`rawjobs`, optionally `/version`; older apps send `job-hunter`; any other value is dropped).
 Confirmed careers-link moves (same switch): the company name and its old and new board, sent with
@@ -187,7 +184,7 @@ When a company's board stops working and a user finds its new one, the app can r
 (`POST /v1/moves` on the inbox; plan: `docs/plans/update-careers-link-plan.md`, PR 3). Every report
 is checked and recorded, and a maintainer approves the good ones. A move whose company page proves it
 can also be accepted automatically, but only with the `MOVES_AUTO_ACCEPT` repo variable set (see
-[Company evidence and auto-accept](#company-evidence-and-auto-accept); plan: `docs/plans/auto-accept-moves.md`).
+[Company evidence and auto-accept](#company-evidence-and-auto-accept); plan: `docs/plans/archive/auto-accept-moves.md`).
 
 **Files in the directory repo** (written by the workflows, next to `denylist.json`):
 - `moves-pending.json`: reports waiting, keyed by the old board (`ats:slug|shard|site`), each with its

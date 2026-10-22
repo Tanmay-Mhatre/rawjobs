@@ -1,6 +1,6 @@
 # Fit score review (2026-10-15)
 
-Status: go given 2026-10-16. PR 1 built as one PR (scorer v2 + list reasons + detail checks + eval tie metrics).
+Status: Shipped (PR #254, then on-device learning D in PR #255 / v0.6.14). PR 1 was built as one PR (scorer v2 + list reasons + detail checks + eval tie metrics).
 Kept the 100/60 scale for profiles with no topics (dropping it would put every such job under the cut-off);
 spread now comes from title focus and topic strength instead. On-device learning (D) is the next PR.
 

@@ -1,6 +1,6 @@
 # Radar page: competitor review and what to show (2026-10-15)
 
-Status: **design approved 2026-10-15** (board "Recommended" on the mock canvas
+Status: Phases 1-4 shipped (PRs #243, #245, #246, #248 / v0.6.13); Phase 5 not built. Design approved 2026-10-15 (board "Recommended" on the mock canvas
 https://claude.ai/artifact/SavyR2gnvbJEtYsQViv11T). The UX fixes in `radar-list-detail-ux.md` are
 folded into the phases below.
 
@@ -8,7 +8,7 @@ Progress:
 - Phase 1 shipped in PR #243.
 - Phase 2 shipped in PR #245.
 - Phase 3 shipped in PR #246.
-- Phase 4 is the PR that adds this line.
+- Phase 4 shipped in PR #248.
 - Phase 5 waits for the user's go.
 
 ## The team

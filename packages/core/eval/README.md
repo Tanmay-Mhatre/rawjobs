@@ -9,13 +9,13 @@ Everything here is invented: the candidates, the companies and the postings. No 
 
 | Path | What |
 |---|---|
-| `profiles/*.yaml` | Six candidates across role families. Each has a real RawJobs `profile` (what the scorer sees) and an `about` block: a short resume summary with level, work authorisation, salary floor and dealbreakers (what a labeller reads). The salary floor, work authorisation and dealbreakers are also in the `profile` as `salary_floor`, `work_authorization` and `avoid`, written from `about` the way the person would fill them in Settings; the rest of `about` (level, years, domain) the scorer can't see. |
+| `profiles/*.yaml` | Six candidates across role families. Each has a real RawJobs `profile` (what the scorer sees) and an `about` block: a short resume summary with level, work authorisation, salary floor and dealbreakers (what a labeller reads). The salary floor, work authorisation and dealbreakers are also in the `profile` as `salary_floor`, `work_authorization` and `avoid`, written from `about` the way the person would fill them in Settings, and so are their years of experience (`experience_years`). The rest of `about` (such as the domain they know) the scorer can't see. |
 | `jobs/*.json` | 49 postings, grouped by family. Realistic noise on purpose: company boilerplate, requirements vs nice-to-haves, sponsorship lines, EEO footers. Includes hard cases: the same role at several levels, synonyms (k8s, Golang, ML, payment), keyword-stuffed wrong roles, right roles with a dealbreaker, title-only postings, and adjacent titles that fit. |
 | `labels.yaml` | A 0..4 label, a one-line `why`, and `by` for every profile x posting pair (294). |
 | `lib.ts` | Loads and checks the set, scores every pair, computes the metrics. |
 | `run.ts` | The report (`pnpm eval:match`). |
-| `baseline.json` | The last accepted report, with every pair's score. `test/eval.test.ts` fails if NDCG@10 drops more than 0.02 below it. |
-| `REVIEW.md` | The 50 in-field pairs, with the posting's key requirements and the label, for a person to confirm or correct. |
+| `baseline.json` | The last accepted report, with every pair's score. `test/eval.test.ts` fails if NDCG@10 drops more than 0.02 below it, or either tie rate rises more than 0.02 above it. |
+| `archive/REVIEW.md` | The one-time form a person used to confirm or correct the in-field labels. Historical. |
 
 ## Rubric
 
@@ -97,12 +97,12 @@ The report shows, per profile and as a mean:
 - **P@5**: share of the top five labelled 3 or 4. Some profiles have fewer than five such postings, so 1.0 isn't always reachable; compare against the baseline, not against 1.
 - **Spearman** correlation of score and label over all postings.
 - **Band agreement**: the score's band from `min_score` (strong at min_score, good within 20 below, else weak) against the label's band (4-3 strong, 2 good, 1-0 weak), as a 3 x 3 table.
+- **Ties** and **Ties (no topics)**: the share of pairs of matched jobs (score above 0) with the same score, with the profile as it is and with its topics taken out. Lower is better: it shows how finely the scores tell jobs apart.
 - The **10 worst disagreements**: score / 25 furthest from the label, with the label's `why`.
 
 When a scoring change makes the order better, run `--json` and commit the new `baseline.json` with it.
 
-Dealbreakers (0.4.0) moved NDCG@10 from 0.789 to 0.919 and the label 0-1 pairs scoring in the strong band from 15 to 2
-(both left are level and must-have gaps, which the scorer can't read yet).
+The current numbers are in `baseline.json` (`overall`), so they are not repeated here. Dealbreakers (0.4.0) were the first big step: they cut the label 0-1 pairs scoring in the strong band from 15 to 2. Since then the scorer also reads a posting's must-haves and the years it asks for (`packages/core/src/score.ts`: must-haves you can check, and `yearsGap` against `experience_years`).
 
 ## Adding pairs
 
@@ -116,8 +116,8 @@ Dealbreakers (0.4.0) moved NDCG@10 from 0.789 to 0.919 and the label 0-1 pairs s
 ## Who labelled what
 
 `by: draft` labels were written by Claude from the first, looser rubric, before the scorer was run; they are all
-"different job" zeros now. `by: reconciled` labels (the 50 in-field pairs) were re-labelled under the tie-break rules
+"different job" zeros now. `by: reconciled` labels (the in-field pairs) were re-labelled under the tie-break rules
 above, after a blind second labeller who never saw the drafts labelled the same pairs: where the two disagreed, the
 rules were sharpened until the case had one answer, and the pair was labelled again from the profile and posting.
-When a person confirms or corrects a label (see `REVIEW.md`), set its `by: user` and change the label if needed. The
+When a person confirms or corrects a label (the first round used `archive/REVIEW.md`), set its `by: user` and change the label if needed. The
 report counts reconciled and person-reviewed pairs.

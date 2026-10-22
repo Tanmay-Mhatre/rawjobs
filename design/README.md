@@ -7,7 +7,7 @@
 3. **Never color alone.** Every state is a shape, a color and a word.
 4. **Borders carry depth.** A 1px frame first, a soft shadow only on things that float.
 5. **One accent.** Signal orange is about 10% of a screen at most. If everything is orange, nothing is new.
-6. **Fast and calm.** Four durations, nothing over 300ms, nothing that loops except a loading shimmer.
+6. **Fast and calm.** Four durations, nothing over 300ms, and nothing loops except something that shows work in progress (see Motion).
 7. **Keyboard first.** Everything works without a mouse, and focus is always visible.
 
 ## Voice
@@ -23,7 +23,7 @@ Plain, specific, a little dry. Show the number, skip the hype. Write to "you"; t
 | Runs on your machine. Nothing is sent anywhere. | Enterprise-grade privacy |
 | Scanned 214 companies. 9 new for you. | Your personalized feed is ready! |
 
-- Buttons start with a verb and say what happens: "Scan now", "Apply on Lever", "Remove company". Never "OK", "Submit" or "Click here".
+- Buttons start with a verb and say what happens: "Scan now", "Apply at Stripe", "Remove company". Never "OK", "Submit" or "Click here".
 - Sentence case everywhere. No emoji. No em dashes; use a period or a colon.
 - Words to own: **source, live, raw, direct, first.** Words to avoid: AI-powered, smart, seamless, revolutionize, dream job.
 - Taglines: **"Jobs, straight from the source."** Subline: **"See it before LinkedIn does."**
@@ -91,7 +91,7 @@ const more = matchMedia('(prefers-contrast: more)').matches;
 document.documentElement.dataset.theme = (dark ? 'dark' : 'light') + (more ? '-hc' : '');
 ```
 
-Every pair the CSS actually renders is checked in all four themes, 294 pairs in all:
+The colors were audited once, when the kit was made, for every text and border pair the CSS renders, in all four themes, against these targets. No script re-checks them: when you change a color token, check its pairs again by hand. `pnpm design:shots --axe` runs axe (WCAG 2 A and AA, which includes text contrast) over the dashboard screenshots.
 
 - Primary text at least 7:1 (WCAG 2) and APCA Lc 90 on the main grounds.
 - Secondary, accent and status text at least 4.5:1 and Lc 60; 7:1 in increased contrast.
@@ -134,16 +134,20 @@ Light-mode shadows stay under 8% opacity. A list is never bare text on the canva
 - Easing: `ease-enter` for things arriving, `ease-exit` for things leaving, `ease-standard` for color and opacity on the spot. No bounce, no elastic.
 - Movement uses `transform` and `opacity` only. State changes (hover, press, selection) may change color and border color, at `duration-instant`.
 - Exits: set `data-state="closing"` on the drawer, scrim, menu or toast and remove it on `animationend`.
-- The 1.4s skeleton shimmer is the one exception to the four durations, and the only loop.
-- Under `prefers-reduced-motion`, slides become fades and the loading shimmer stops.
-- **The not-running exception.** The "RawJobs isn't running" window, the offline page and the 404 page (`packages/server/src/pages.ts`) tell a short story with pictures: RawJobs asleep and waking up (the cursor in its icon fills like a battery, the one place the cursor moves inside the product), the Desktop shortcut being double-clicked, a scan line finding no match. Each step keeps to the durations above; the story chains them over about 2 s, plays once, and shows its last frame under `prefers-reduced-motion`. The Start button fills like a progress bar while RawJobs starts (up to 20 s). Nothing else in the product does this.
-- **Marketing pages** follow the same rules, with one documented exception: `duration-story` (380ms) for a step of a story the eye has to follow, used only by the hero's load and the "where your resume goes" route animation. Everything else on the site (row arrivals, reveals, bars, feedback) uses the four durations above, and nothing loops: example feeds tick a fixed number of times and stop.
+- Only things that show work in progress loop, and none of them is held to the four durations: the 1.4s skeleton shimmer, the scan progress bar's sweep while the total isn't known yet and the pulsing dot next to "Last checked" (both 1.6s, `rj-progress__track--sweep` and `rj-pulse`), and spinners.
+- Under `prefers-reduced-motion`, slides become fades and the shimmer, sweep and pulse stop.
+- **The not-running exception.** The "RawJobs isn't running" window, the offline page and the 404 page (`packages/server/src/pages.ts`, shared with `apps/web/src/components/ServerDown.tsx`) tell a short story with pictures: RawJobs asleep and waking up, the Desktop shortcut being double-clicked, a scan line finding no match. This is the one place the logo's cursor moves inside the product: in RawJobs' icon it fills like a battery, slowly while RawJobs starts (up to 12 s) and in `duration-slow` once it's running. The Desktop story chains steps in the motion tokens plus `duration-story` (380ms) for the pointer's move, over about 2 s, and plays once. The Start button fills like a progress bar while RawJobs starts (up to 20 s), and the step being worked on shows a spinner. Under `prefers-reduced-motion` each picture shows its last frame. Nothing else in the product does this.
+- **Marketing pages** (`apps/site`) follow the same rules, with documented exceptions:
+  - `duration-story` (380ms) for a step of a story the eye has to follow: the hero's load, its wall scan and the "where your resume goes" route animation.
+  - The site-only cinematic layer at the end of the page's styles (`apps/site/README.md`) adds `--duration-cinematic` (700ms) for reveals, bars and gauges, `--duration-reveal` (1200ms) for the slowest arrivals, and its own easing. The dashboard never loads it.
+  - A few things loop: the blinking caret in the install steps' mock screen, the hiring systems marquee (it pauses on hover), the hero radar's sweep (every 6 s, paused off screen and in background tabs) and the slow radar sweep behind the closing call. The intro's logo cursor blinks once.
+  - Demos (the typed intro, the install steps' terminal) play a fixed number of steps and stop. Under `prefers-reduced-motion` every loop stops and each scene shows its end state.
 
 ## Interaction
 
 - Focus: 2px `focus-ring` outline, 2px offset, on every interactive element, shown on `:focus-visible`.
 - Overlays trap focus, close on `Esc`, and return focus to what opened them.
-- Shortcuts: `J` / `K` move, `Enter` open, `S` save, `A` applied, `X` not interested, `C` copy description, `R` scan now, `/` search, `1`-`6` views, `[` / `]` move a pipeline card, `⌘K` commands, `?` help, `Esc` close.
+- Shortcuts (the list is `shortcutRows` in `apps/web/src/components/ShortcutList.tsx`, shown by `?` and on Settings › Keyboard): `J` / `K` next / previous job, `Enter` open, `S` save, `A` mark as applied, `X` not interested, `C` copy description, `F` expand the job to the full window, `R` scan now, `/` search, `1`-`3` the Radar's quick filters (My companies, New, Strong, each on or off), `1`-`4` switch section outside the Radar, `G` then `R` / `P` / `C` / `S` go to Radar, Pipeline, Companies or Settings, `[` / `]` move a pipeline card back / forward, `?` show the shortcuts, `Esc` close. Single keys never fire while you type, or with Ctrl, Cmd or Alt held.
 - Touch targets are at least `control-lg` (44px) on touch screens: buttons, icon buttons, chips, tabs and menu items. Row actions are always visible on touch screens and phones.
 - Lists are real lists (`ul` / `li`) under real headings; whatever sits behind an open drawer is `inert`.
 - Loading: nothing under 100ms, keep old content up to 1s, skeleton rows up to 10s, per-source scan progress beyond.
@@ -154,18 +158,20 @@ Lucide at 16px with a 1.5 stroke, in `text-primary` or `text-secondary`. Icons s
 
 ## Logo
 
-**rawjobs** in lowercase Geist Mono, outlined, followed by a solid signal block cursor: a live feed, still streaming. Use `rawjobs-wordmark-ink.svg` on light grounds and `rawjobs-wordmark-paper.svg` on dark. The cursor on an ink square (`rawjobs-mark.svg`) is the app icon and favicon. Keep clear space equal to the cursor width on every side. Never recolor the cursor or animate it inside the product. The cursor is always `brand-signal`, in every theme, including increased contrast: it's a logo, so contrast rules don't apply. Interactive orange (the primary button, focus, the star, the new dot) uses the accent tokens, which follow the theme.
+**rawjobs** in lowercase Geist Mono, outlined, followed by a solid signal block cursor: a live feed, still streaming. Use `rawjobs-wordmark-ink.svg` on light grounds and `rawjobs-wordmark-paper.svg` on dark. The cursor on an ink square (`rawjobs-mark.svg`) is the app icon and favicon. Keep clear space equal to the cursor width on every side. Never recolor the cursor. Never animate it inside the product, except the battery fill on the not-running pages (see Motion); on the marketing site the intro may blink it. The cursor is always `brand-signal`, in every theme, including increased contrast: it's a logo, so contrast rules don't apply. Interactive orange (the primary button, focus, the star, the new dot) uses the accent tokens, which follow the theme.
 
 ## Consuming
 
-Load `tokens.css` and `components/bundle.css`, set `data-theme` on `<html>`, and use the `rj-` classes. Fonts ship in `fonts/` (Geist, SIL Open Font License, see `fonts/OFL.txt`). For Tailwind, map the semantic tokens, never the primitives:
+Load `apps/web/src/design/tokens.css` and `design/components/bundle.css`, set `data-theme` on `<html>`, and use the `rj-` classes. The fonts ship in `apps/web/src/design/fonts/` (Geist, SIL Open Font License, see `OFL.txt` there) and the logos in `apps/web/src/design/logos/`. Tokens are written in `apps/web/src/design/tokens.json`; `pnpm design:build` compiles them to `tokens.css` and `utilities.css`.
 
-```js
-// tailwind.config.js
-theme: { extend: { colors: {
-  canvas: 'var(--bg-canvas)', raised: 'var(--bg-raised)', overlay: 'var(--bg-overlay)',
-  ink: 'var(--text-primary)', muted: 'var(--text-secondary)',
-  line: 'var(--border-default)', hairline: 'var(--border-subtle)',
-  accent: { DEFAULT: 'var(--accent-solid)', text: 'var(--accent-text)' },
-} } }
+The dashboard uses Tailwind 4. `apps/web/src/index.css` switches Tailwind's own palette and scales off and maps its theme to the semantic tokens only, never the primitives, for example:
+
+```css
+@theme inline reference {
+  --color-canvas: var(--bg-canvas);
+  --color-raised: var(--bg-raised);
+  --color-ink: var(--text-primary);
+  --color-muted: var(--text-secondary);
+  --color-line: var(--border-default);
+}
 ```
