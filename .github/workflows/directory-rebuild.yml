@@ -166,7 +166,7 @@ jobs:
         timeout-minutes: 59
         env:
           UV_THREADPOOL_SIZE: 32
-        run: bash scripts/catalog/capped.sh "Wikidata companies" ${{ inputs.smoke && 8 || 57 }} bash -c "pnpm exec tsx scripts/catalog/seeds-bulk.ts && pnpm exec tsx scripts/catalog/resolve.ts --bulk --limit ${{ inputs.smoke && 20 || 2000 }} --max-minutes ${{ inputs.smoke && 2 || 45 }}"
+        run: bash scripts/catalog/capped.sh "Wikidata companies" ${{ inputs.smoke && 8 || 57 }} bash -c "pnpm exec tsx scripts/catalog/seeds-bulk.ts && pnpm exec tsx scripts/catalog/resolve.ts --bulk --limit ${{ inputs.smoke && 20 || 2400 }} --max-minutes ${{ inputs.smoke && 2 || 45 }}"
 
       - name: Merge
         timeout-minutes: 5
