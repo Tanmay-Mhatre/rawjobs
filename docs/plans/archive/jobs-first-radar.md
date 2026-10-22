@@ -1,6 +1,6 @@
 # Jobs-first Radar + my companies (plan v1)
 
-Status: **built** (2026-10-06), steps 0–4. Notes on what changed from the plan are under each step. Replaces the "Suggested for you" part of `companies-flow.md`.
+Status: Shipped (PR #1 / v0.1.0), steps 0–4. Notes on what changed from the plan are under each step. Replaces the "Suggested for you" part of `companies-flow.md`.
 Built from a code and data review, a two-agent debate (job-first vs company-first), and the user's decisions.
 
 ## Decisions

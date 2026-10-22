@@ -20,7 +20,7 @@
     "release:notes": "tsx scripts/release/notes.ts",
     "site:build": "node apps/site/build.mjs",
     "site:og": "tsx scripts/site/og.ts",
-    "site:dev": "node apps/site/build.mjs && npx wrangler@4.147.0 dev --config apps/site/wrangler.toml",
+    "site:dev": "node apps/site/build.mjs && npx wrangler@4.151.1 dev --config apps/site/wrangler.toml",
     "rawjobs": "tsx packages/cli/src/index.ts",
     "jobhunter": "tsx packages/cli/src/index.ts",
     "hooks:install": "git config core.hooksPath scripts/hooks",
@@ -51,7 +51,7 @@
     "catalog:release": "tsx scripts/catalog/release.ts",
     "directory:update": "tsx packages/cli/src/index.ts directory update",
     "connector:health": "tsx scripts/catalog/connector-health.ts",
-    "catalog:coverage":"tsx scripts/catalog/coverage.ts",
+    "catalog:coverage": "tsx scripts/catalog/coverage.ts",
     "catalog:refresh": "tsx scripts/catalog/sources.ts && tsx scripts/catalog/resolve.ts && tsx scripts/catalog/merge.ts && tsx scripts/catalog/check.ts --recheck-days 30 && tsx scripts/catalog/build.ts && tsx scripts/catalog/index.ts --max-age-days 7 && tsx scripts/catalog/publish.ts && tsx scripts/catalog/coverage.ts"
   },
   "devDependencies": {

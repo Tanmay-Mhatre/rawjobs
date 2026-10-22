@@ -17,7 +17,7 @@ Every scan shows the newest jobs, fetched live by the user's own scan. Scans can
 | 7 | **Default schedule**: daily, at a time the user picks; twice a day is an option. |
 
 ## 1. One scan command
-The command is `jobhunter scan [--scope all|mine] [--notify]`, where `mine` means my companies + my industries. It replaces `run` for scheduled and button scans; `run` stays as an alias.
+The command is `rawjobs scan [--scope all|mine] [--notify]`, where `mine` means my companies + my industries. It replaces `run` for scheduled and button scans; `run` stays as an alias.
 
 1. **Sync.** `updateDirectory()` is called with no 7-day wait. The manifest version is checked every time, but files are downloaded only when the version changed. If it fails (offline), the scan continues on the local copy and the report says so.
 2. **Refresh the list.** For each company on the list, look it up in the directory by key or name. When its board moved (new ATS or slug) or went dormant, update the config line and report "Kraken moved from Lever to Ashby". New boards are never added automatically.
@@ -63,18 +63,18 @@ How the app handles that:
   - `-WakeToRun`: wakes the PC from sleep, but can't start it when it's shut down
 - **macOS:** launchd (runs after wake).
 - **Linux:** a systemd timer with `Persistent=true`, or cron.
-- **The task runs** `jobhunter scan --scope <type> --notify` from the repo folder. It doesn't need the dashboard to be open.
+- **The task runs** `rawjobs scan --scope <type> --notify` from the repo folder. It doesn't need the dashboard to be open.
 - **What the app shows:**
   - "Scans only run while this computer is on (or asleep). A missed scan runs when it's back on."
   - The last run (time, result) and the next run.
   - With All companies picked: "Each scan takes about 2 h."
-- **CLI:** `jobhunter schedule install --time 08:00 [--twice] --scope mine|all`, plus `schedule remove` and `schedule status`.
+- **CLI:** `rawjobs schedule install --time 08:00 [--twice] --scope mine|all`, plus `schedule remove` and `schedule status`.
 - **Scan now** stays, with the same scan-type picker next to it.
 
 ## Phase 2: Scheduling on GitHub (later)
 - A workflow template `.github/workflows/radar.yml`:
   - a cron trigger (converted from the user's local time to UTC)
-  - runs `pnpm jobhunter scan --notify`
+  - runs `pnpm rawjobs scan --notify`
   - commits `data/` to a `data` branch
 - A guided setup: make a **private** repo from the template, add 2 secrets, and push the config.
 - **Minutes:** "My companies + my industries" is 1–2 min per run, which is fine on the free tier. "All companies" is about 2 h per run, roughly 3,600 min a month daily, which is **over the 2,000 free minutes** for private repos. GitHub mode will warn about this or offer only the smaller scan type.
@@ -99,7 +99,7 @@ How the app handles that:
   - the per-host limiter (never more than 1 request per second per host)
   - the Telegram digest formatting (with a fake fetch)
 - **Locally:**
-  - `pnpm jobhunter scan --scope mine` finishes in under 3 minutes for about 265 companies.
+  - `pnpm rawjobs scan --scope mine` finishes in under 3 minutes for about 265 companies.
   - `--scope all` shows the right estimate, can be stopped and resumes without refetching boards done today.
   - A second run with an unchanged directory downloads nothing.
 - **Telegram:** the test message arrives; a scan with new jobs sends exactly one digest.

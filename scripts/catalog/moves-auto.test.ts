@@ -103,7 +103,7 @@ describe("safe fetch", () => {
   });
 });
 
-// ---- evidence (red-team fixtures from docs/plans/auto-accept-moves.md) ----
+// ---- evidence (red-team fixtures from docs/plans/archive/auto-accept-moves.md) ----
 
 /** A pretend fetcher: each URL answers what the test says. */
 function pages(map: Record<string, SafeResult | string>): SafeGet {

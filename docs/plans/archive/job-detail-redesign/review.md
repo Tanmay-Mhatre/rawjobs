@@ -1,9 +1,9 @@
 # Job detail pane: review (2026-10-21)
 
-Research only, no code changed. Read from `origin/main` (v0.6.20+): `apps/web/src/components/JobDetail.tsx`,
+Status: Shipped as Option A (PRs #311, #313, #315 / v0.6.21). Written as research only, no code changed. Read from `origin/main` (v0.6.20+): `apps/web/src/components/JobDetail.tsx`,
 `components/referral/*`, `components/settings/NetworkSection.tsx`, `design/tokens.css`, `index.css`,
-`packages/core/src/schema.ts`. Earlier decisions: `docs/plans/radar-list-detail-ux.md`,
-`docs/plans/radar-page-competitor-review.md`.
+`packages/core/src/schema.ts`. Earlier decisions: `docs/plans/archive/radar-list-detail-ux.md`,
+`docs/plans/archive/radar-page-competitor-review.md`.
 
 Reviewed as three roles: **job seeker** (what helps me decide and act), **designer** (hierarchy,
 repetition, rhythm), **front-end** (what the data carries, what's cheap).

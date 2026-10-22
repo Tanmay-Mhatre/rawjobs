@@ -1,6 +1,6 @@
 # Fix it from "Why it matched" (inline correction)
 
-Status: built (go given 2026-10-16). From the 2026-10-15 scoring review (`docs/plans/scoring-review.md`): only
+Status: Shipped (PR #258 / v0.6.14). From the 2026-10-15 scoring review (`docs/plans/archive/scoring-review.md`): only
 Indeed lets you correct a wrong inference where you see it. RawJobs now says why each check passed or
 not (`job.why.checks`, PR #254), so the next step is a one-click fix beside the checks that are wrong
 because your profile is incomplete.

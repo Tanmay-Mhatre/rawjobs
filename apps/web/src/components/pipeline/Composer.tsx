@@ -103,7 +103,7 @@ function Radios<T extends string>({ label, value, options, onChange }: { label: 
 const shortDay = (day: string) => new Date(`${day}T12:00:00`).toLocaleDateString(undefined, { month: "short", day: "numeric" });
 
 /**
- * Log a touch on one job (section 6.3 of docs/plans/pipeline-v2.md): a channel, Sent or Received, a
+ * Log a touch on one job (section 6.3 of docs/plans/archive/pipeline-v2.md): a channel, Sent or Received, a
  * person, the day (today or earlier) and a line of text. A sent touch sets the next follow-up; a
  * received one clears it. Ctrl or Cmd + Enter logs. RawJobs sends nothing: this only records it.
  */

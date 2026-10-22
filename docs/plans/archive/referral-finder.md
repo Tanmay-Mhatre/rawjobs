@@ -1,6 +1,6 @@
 # Referral finder: implementation plan
 
-Ready to save as `docs/plans/referral-finder.md`. Status: draft for the specialist audit. Nothing has been built yet.
+Status: Shipped in nine parts (PRs #297-#305 / v0.6.19).
 
 **Baseline.** Written against `origin/main` @ `6c49687` (2026-10-20, "Site: refresh the offline fallback numbers and wall"). The local `main` checkout is **144 commits behind origin**, so every anchor below comes from `git show origin/main:<path>`. Run `git pull` before building, and re-check line numbers after any PR that lands in between.
 
@@ -13,7 +13,7 @@ Read these first. Each one changes the design.
 1. **The contact log should live in the per-job `Entry`, not in a new tracking part.** The brief's premise no longer holds.
    - `keep()` at `apps/web/src/lib/userState.ts:281` already keeps an entry that has `contacts` or `activities`, even with no status or note.
    - Pipeline v2 already stores people per job: `Entry.contacts` (`:119`) and `Entry.activities` (`:121`), with a stable `Contact.id` shared across jobs.
-   - `docs/plans/pipeline-v2.md` §3 records the owner's decision: "Where do contacts live? Inside each job's entry … No new tracking part, so the server, export and import don't change."
+   - `docs/plans/archive/pipeline-v2.md` §3 records the owner's decision: "Where do contacts live? Inside each job's entry … No new tracking part, so the server, export and import don't change."
    - A new tracking part would mean changing `PARTS` in `packages/core/src/tracking.ts:20-26`, the `TrackingPart` type in `apps/web/src/lib/tracking.ts:13`, and the export/import code.
    - **Recommendation:** add one optional field, `Entry.outreach`, keyed by `contactId`. If the auditors insist on a separate part, see §11 Q1.
 2. **The Settings page is "Data & privacy" (`id: "data"`), not "Your data"** (`apps/web/src/components/settings/registry.ts:18`).
@@ -381,7 +381,7 @@ All new routes go in `packages/server/src/api.ts`.
 | File | Change |
 |---|---|
 | `PRIVACY.md` | §9, in the PRs that add the handling. |
-| `docs/plans/referral-finder.md` | This plan, committed with PR 1. |
+| `docs/plans/archive/referral-finder.md` | This plan, committed with PR 1. |
 | `design/components/*` | No new kit component. The panel reuses `rj-drawer__section` and `rj-h` (as `JobDetail.tsx:289-290` does). |
 
 ---
