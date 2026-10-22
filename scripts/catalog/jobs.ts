@@ -92,9 +92,10 @@ const ADAPTIVE_GROUPS = new Set(["join", "payroll", "sr"]);
  * The feed's own ceilings, below the app's (http.ts PACES), for APIs held for an hour from one CI IP.
  * Workable at 3/s drew 104 × 429 and 67 slow-downs (test run 39659100795); at a fixed 1/s it drew none.
  * SmartRecruiters documents 10/s for signed-in API users, not the public postings we read: 3.3/s until
- * two runs show no 429s (docs/plans/actions-speedup, decision 1).
+ * two runs show no 429s (docs/plans/actions-speedup, decision 1). JOIN at 3/s kept halving and climbing
+ * back (176 × 429, 126 slow-downs; run 39650737780) and averaged ~2.2/s: 2.5 holds steadier.
  */
-const CI_PACE_CEILINGS: Record<string, number> = { workable: 2, smartrecruiters: 3.3 };
+const CI_PACE_CEILINGS: Record<string, number> = { workable: 2, smartrecruiters: 3.3, join: 2.5 };
 /**
  * The feed's pace per shared API host, faster than the app's own (HOST_DELAYS): one read per board per
  * run, from CI only. Any 429 still slows a host down for the rest of the run. In ADAPTIVE_GROUPS a host
