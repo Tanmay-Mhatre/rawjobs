@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
 # Download the shared job feed (the "jobs" release, built daily by jobs-daily.yml) into
-# scripts/catalog/out/feed, so publish.ts can tag industries from the job titles of companies the job
-# index doesn't read (Workday, and boards it didn't reach this run). Already fetched for everyone: no
-# board is asked again. Best effort: without the feed, those companies just keep fewer tags.
+# scripts/catalog/out/feed, so index.ts can take its rows from it instead of reading those boards again,
+# and publish.ts can tag industries from the job titles of companies the job index doesn't read (Workday,
+# and boards it didn't reach this run). Best effort: without the feed, the index reads every board live
+# and those companies just keep fewer tags. Writes format=v2|v1 to $GITHUB_OUTPUT on Actions.
 #
 # Reads the second format's full copy (jobs-v2-manifest.json and the snapshot it names, ~20 MB). Only
 # when that can't be downloaded, the first format's shards (jobs-manifest.json), while they're published.
@@ -54,10 +55,14 @@ v1() {
   echo "Job feed: $(ls "$dir" | grep -c '\.json\.gz$') shards in $dir"
 }
 
+# Which format landed, for the workflow: the job index takes rows from the feed only with the second.
+format=v2
 if ! v2; then
   # Don't let a half-downloaded second format be read instead of the first.
   rm -f "$dir"/jobs-v2-*
   warn "Reading the job feed's first format instead."
   v1
+  format=v1
 fi
+if [ -n "${GITHUB_OUTPUT:-}" ]; then echo "format=$format" >> "$GITHUB_OUTPUT"; fi
 exit 0
