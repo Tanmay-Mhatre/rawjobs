@@ -2,9 +2,11 @@
 # contributions, re-check boards, refresh the job index, and publish a new release.
 # Setup: docs/shared-directory.md
 #
-# Two jobs, each with its own time limit: "collect" gathers and checks boards and saves the working
-# state; "publish" restores it, builds, indexes, gates and releases. Publish runs even when collect
-# failed or ran out of time (its progress is saved), so a slow source can never stop a release.
+# Jobs, each with its own time limit: "resolve" (company-first resolving) and "check-known" (the
+# monthly check of known boards, then the cross-probe) run at the same time and hand their files to
+# "collect", which merges, checks the boards this week found and saves the working state; "publish"
+# restores it, builds, indexes, gates and releases. Collect and publish run even when an earlier job
+# failed or ran out of time (its progress is kept), so a slow source can never stop a release.
 # Collectors may also stop early on their own without failing collect: each saves what it found and
 # the next run continues. The steps on the publish path (sources, merge, build, package, gate,
 # publish) must succeed.
@@ -12,16 +14,18 @@
 # Time budget (minutes; soft cap = the script's --max-minutes, hard cap = capped.sh, which runs it
 # under `timeout`):
 #
-#   stage            soft  hard     stage          soft  hard
-#   industry resolve   10    15     check 2          15    20
-#   bulk resolve       45    57     index            60    70
-#   check 1            60    70     publish job       –   ~35 besides index (setup, sources, visa registers ≤10, merge, build, package, gate, release)
-#   crossprobe         20    25
+#   job          stage              soft  hard
+#   resolve      industry resolve     10    15     (job limit 100)
+#                bulk resolve         45    57
+#   check-known  check 1              60    70     (job limit 110)
+#                crossprobe           20    25
+#   collect      check 2              25    30     (job limit 120)
+#   publish      index                60    70     (job limit 120; ~35 besides index: setup, sources,
+#                                                   visa registers ≤10, merge, build, package, gate, release)
 #
 # Our own URL indexes (Common Crawl, Wayback) are read by the daily URL-index run
-# (directory-commoncrawl.yml), not here. Collect's hard caps add up to about 220 of its 240;
-# publish's to about 110 of its 120. A typical run took 2h48 with the URL indexes in it
-# (19 Oct 2026); without them, expect about 2 hours.
+# (directory-commoncrawl.yml), not here. Run times: 2h48 with the URL indexes in it (19 Oct 2026),
+# 1h52 without them and before the two stage-1 jobs ran side by side (22 Oct).
 # A smoke run (dispatch with smoke) gives every stage 2 minutes, publishes nothing and checks
 # that a step past its timeout-minutes fails without stopping the job: about 25 minutes.
 name: Directory · weekly rebuild
@@ -98,11 +102,159 @@ jobs:
             echo "run=true" >> "$GITHUB_OUTPUT"
           fi
 
-  collect:
+  # Stage 1, two jobs at once: company-first resolving, and the monthly check of known boards then
+  # the cross-probe (which needs fresh checks). Each restores the state, never saves it, and hands
+  # its files to collect, the one job that saves (state.sh keeps one tarball).
+  resolve:
     needs: due
     if: needs.due.outputs.run == 'true'
     runs-on: ubuntu-24.04
-    timeout-minutes: 240
+    timeout-minutes: 100
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+
+      - name: Restore the catalog's working state
+        id: state
+        env:
+          GH_TOKEN: ${{ secrets.DATA_REPO_TOKEN }}
+        run: bash scripts/catalog/state.sh restore
+
+      # Industry seeds, then the next batch of Wikidata companies (the coverage sample).
+      - name: Resolve industry seeds
+        id: seeds
+        continue-on-error: true
+        timeout-minutes: 17
+        run: bash scripts/catalog/capped.sh "Industry seeds" ${{ inputs.smoke && 5 || 15 }} pnpm exec tsx scripts/catalog/resolve.ts --max-minutes ${{ inputs.smoke && 2 || 10 }}
+
+      # 32 workers (resolve.ts): every company is a different site. More threads for its DNS lookups.
+      - name: Resolve Wikidata companies
+        id: bulk
+        continue-on-error: true
+        timeout-minutes: 59
+        env:
+          UV_THREADPOOL_SIZE: 32
+        run: bash scripts/catalog/capped.sh "Wikidata companies" ${{ inputs.smoke && 8 || 57 }} bash -c "pnpm exec tsx scripts/catalog/seeds-bulk.ts && pnpm exec tsx scripts/catalog/resolve.ts --bulk --limit ${{ inputs.smoke && 20 || 2400 }} --max-minutes ${{ inputs.smoke && 2 || 45 }}"
+
+      # Only from a restored state, so a run that started from nothing never replaces good state.
+      # Also after a step ran out of time: the scripts save what they have.
+      - name: Hand the results to collect
+        if: ${{ !cancelled() && steps.state.outcome == 'success' }}
+        working-directory: scripts/catalog
+        run: |
+          h="$RUNNER_TEMP/handoff"
+          mkdir -p "$h/out" "$h/raw/wikidata"
+          [ ! -f raw/wikidata/companies.json ] || cp raw/wikidata/companies.json "$h/raw/wikidata/companies.json"
+          [ ! -f out/resolved.json ] || cp out/resolved.json "$h/out/resolved.json"
+          [ ! -f out/resolved-bulk.json ] || cp out/resolved-bulk.json "$h/out/resolved-bulk.json"
+
+      - name: Upload the hand-off
+        if: ${{ !cancelled() && steps.state.outcome == 'success' }}
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: catalog-resolve
+          # The folder's contents (out/…, raw/…) are the artifact's root, so they land on the same
+          # paths under scripts/catalog in collect.
+          path: ${{ runner.temp }}/handoff/
+          if-no-files-found: ignore
+          retention-days: 3
+          # A re-run of this job replaces its earlier hand-off.
+          overwrite: true
+
+  check-known:
+    needs: due
+    if: needs.due.outputs.run == 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 110
+    env:
+      CONTRIBUTIONS_FILE: ${{ github.workspace }}/directory-repo/contributions.json
+      DENYLIST_FILE: ${{ github.workspace }}/directory-repo/denylist.json
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+
+      - name: Check out the public directory repo
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: ${{ env.DATA_REPO }}
+          token: ${{ secrets.DATA_REPO_TOKEN }}
+          path: directory-repo
+
+      - name: Restore the catalog's working state
+        id: state
+        env:
+          GH_TOKEN: ${{ secrets.DATA_REPO_TOKEN }}
+        run: bash scripts/catalog/state.sh restore
+
+      - name: Download the public lists
+        timeout-minutes: 5
+        run: |
+          [ -f directory-repo/contributions.json ] || echo '{"companies":[]}' > directory-repo/contributions.json
+          pnpm catalog:sources
+
+      # Last week's resolving is in the restored state; this week's new boards are checked in collect.
+      - name: Merge
+        timeout-minutes: 5
+        run: pnpm exec tsx scripts/catalog/merge.ts
+
+      - name: Check boards
+        id: check1
+        continue-on-error: true
+        timeout-minutes: 72
+        run: bash scripts/catalog/capped.sh "Check boards" ${{ inputs.smoke && 5 || 70 }} pnpm exec tsx scripts/catalog/check.ts --recheck-days 30 --max-minutes ${{ inputs.smoke && 2 || 60 }}
+
+      # Known companies tried on other systems (needs fresh check results).
+      - name: Cross-probe
+        id: crossprobe
+        continue-on-error: true
+        timeout-minutes: 27
+        run: bash scripts/catalog/capped.sh "Cross-probe" ${{ inputs.smoke && 5 || 25 }} pnpm exec tsx scripts/catalog/crossprobe.ts --max-minutes ${{ inputs.smoke && 2 || 20 }}
+
+      # Only from a restored state, so a run that started from nothing never replaces good state.
+      # Also after a step ran out of time: the scripts save what they have.
+      - name: Hand the results to collect
+        if: ${{ !cancelled() && steps.state.outcome == 'success' }}
+        working-directory: scripts/catalog
+        run: |
+          h="$RUNNER_TEMP/handoff"
+          mkdir -p "$h/out" "$h/raw/wikidata"
+          # Under their own names: readChecks and compact.ts fold checks-*.jsonl and titles-*.jsonl into
+          # checks.jsonl, so collect adds these to its copy instead of replacing it.
+          [ ! -f out/checks.jsonl ] || cp out/checks.jsonl "$h/out/checks-known.jsonl"
+          [ ! -f out/titles.jsonl ] || cp out/titles.jsonl "$h/out/titles-known.jsonl"
+          [ ! -f out/probe.jsonl ] || cp out/probe.jsonl "$h/out/probe.jsonl"
+          [ ! -f out/probe-found.json ] || cp out/probe-found.json "$h/out/probe-found.json"
+
+      - name: Upload the hand-off
+        if: ${{ !cancelled() && steps.state.outcome == 'success' }}
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: catalog-known
+          # The folder's contents (out/…, raw/…) are the artifact's root, so they land on the same
+          # paths under scripts/catalog in collect.
+          path: ${{ runner.temp }}/handoff/
+          if-no-files-found: ignore
+          retention-days: 3
+          # A re-run of this job replaces its earlier hand-off.
+          overwrite: true
+
+  # Stage 2: takes both hand-offs, merges, checks the boards this week found, and saves the state.
+  # Runs when a stage-1 job failed or ran out of time: that part keeps last week's copy.
+  collect:
+    needs: [due, resolve, check-known]
+    if: ${{ !cancelled() && needs.due.outputs.run == 'true' }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
     env:
       CONTRIBUTIONS_FILE: ${{ github.workspace }}/directory-repo/contributions.json
       DENYLIST_FILE: ${{ github.workspace }}/directory-repo/denylist.json
@@ -152,48 +304,53 @@ jobs:
       # Our own URL lists (Common Crawl, Wayback) are read by directory-commoncrawl.yml; their
       # results are in the restored state and picked up by the merge below.
 
-      # Company-first: industry seeds, then the next batch of Wikidata companies (the coverage sample).
-      - name: Resolve industry seeds
-        id: seeds
+      - name: Take the resolving
+        id: got_resolve
+        if: steps.state.outcome == 'success'
         continue-on-error: true
-        timeout-minutes: 17
-        run: bash scripts/catalog/capped.sh "Industry seeds" ${{ inputs.smoke && 5 || 15 }} pnpm exec tsx scripts/catalog/resolve.ts --max-minutes ${{ inputs.smoke && 2 || 10 }}
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: catalog-resolve
+          path: scripts/catalog
 
-      # 32 workers (resolve.ts): every company is a different site. More threads for its DNS lookups.
-      - name: Resolve Wikidata companies
-        id: bulk
+      - name: Take the checks and the cross-probe
+        id: got_known
+        if: steps.state.outcome == 'success'
         continue-on-error: true
-        timeout-minutes: 59
-        env:
-          UV_THREADPOOL_SIZE: 32
-        run: bash scripts/catalog/capped.sh "Wikidata companies" ${{ inputs.smoke && 8 || 57 }} bash -c "pnpm exec tsx scripts/catalog/seeds-bulk.ts && pnpm exec tsx scripts/catalog/resolve.ts --bulk --limit ${{ inputs.smoke && 20 || 2400 }} --max-minutes ${{ inputs.smoke && 2 || 45 }}"
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: catalog-known
+          path: scripts/catalog
+
+      # A missing hand-off (that job failed) only warns: that part keeps last week's copy. One that
+      # arrived without its files landing where expected is a broken workflow, so it fails.
+      - name: Check the hand-offs
+        if: steps.state.outcome == 'success'
+        working-directory: scripts/catalog
+        run: |
+          if [ "${{ steps.got_resolve.outcome }}" = success ]; then
+            [ -s out/resolved-bulk.json ] || [ -s out/resolved.json ] || { echo "::error::The resolving arrived but out/resolved*.json is missing."; exit 1; }
+          else
+            echo "::warning::No resolving from this run; last week's stands."
+            echo "- No resolving from this run; last week's stands." >> "$GITHUB_STEP_SUMMARY"
+          fi
+          if [ "${{ steps.got_known.outcome }}" = success ]; then
+            [ -s out/checks-known.jsonl ] || { echo "::error::The checks arrived but out/checks-known.jsonl is missing."; exit 1; }
+          else
+            echo "::warning::No board checks or cross-probe from this run; last week's stand."
+            echo "- No board checks or cross-probe from this run; last week's stand." >> "$GITHUB_STEP_SUMMARY"
+          fi
 
       - name: Merge
         timeout-minutes: 5
         run: pnpm exec tsx scripts/catalog/merge.ts
 
-      - name: Check boards
-        id: check1
-        continue-on-error: true
-        timeout-minutes: 72
-        run: bash scripts/catalog/capped.sh "Check boards" ${{ inputs.smoke && 5 || 70 }} pnpm exec tsx scripts/catalog/check.ts --recheck-days 30 --max-minutes ${{ inputs.smoke && 2 || 60 }}
-
-      # Known companies tried on other systems (needs fresh check results), then merge and check what it found.
-      - name: Cross-probe
-        id: crossprobe
-        continue-on-error: true
-        timeout-minutes: 27
-        run: bash scripts/catalog/capped.sh "Cross-probe" ${{ inputs.smoke && 5 || 25 }} pnpm exec tsx scripts/catalog/crossprobe.ts --max-minutes ${{ inputs.smoke && 2 || 20 }}
-
-      - name: Merge again
-        timeout-minutes: 5
-        run: pnpm exec tsx scripts/catalog/merge.ts
-
+      # This week's new boards (resolved and cross-probed), new ones first (check.ts).
       - name: Check new boards
         id: check2
         continue-on-error: true
-        timeout-minutes: 22
-        run: bash scripts/catalog/capped.sh "Check new boards" ${{ inputs.smoke && 5 || 20 }} pnpm exec tsx scripts/catalog/check.ts --recheck-days 30 --max-minutes ${{ inputs.smoke && 2 || 15 }}
+        timeout-minutes: 32
+        run: bash scripts/catalog/capped.sh "Check new boards" ${{ inputs.smoke && 5 || 30 }} pnpm exec tsx scripts/catalog/check.ts --recheck-days 30 --max-minutes ${{ inputs.smoke && 2 || 25 }}
 
       - name: Save the working state
         # Also after a failure or timeout, so progress isn't lost; but never when the restore failed,
@@ -204,11 +361,10 @@ jobs:
         run: bash scripts/catalog/state.sh save
 
   publish:
-    needs: collect
+    needs: [resolve, check-known, collect]
     # Also when collect failed or hit its time limit: its progress was saved, and the release gate
-    # decides whether the result is good enough to ship. (Cancelling the run by hand doesn't stop
-    # this job; cancel it again once it starts.)
-    if: always() && needs.collect.result != 'skipped'
+    # decides whether the result is good enough to ship. Cancelling the run stops it.
+    if: ${{ !cancelled() && needs.collect.result != 'skipped' }}
     runs-on: ubuntu-24.04
     timeout-minutes: 120
     env:
@@ -356,11 +512,13 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           OUTCOMES: ${{ toJSON(steps) }}
+          RESOLVE: ${{ needs.resolve.result }}
+          CHECK_KNOWN: ${{ needs.check-known.result }}
           COLLECT: ${{ needs.collect.result }}
         run: |
           title="Directory rebuild did not publish"
           run_url="${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
-          steps=$(printf -- '- collect job: %s\n%s' "$COLLECT" "$(echo "$OUTCOMES" | jq -r 'to_entries | map("- \(.key): \(.value.outcome)") | join("\n")')")
+          steps=$(printf -- '- resolve job: %s\n- check-known job: %s\n- collect job: %s\n%s' "$RESOLVE" "$CHECK_KNOWN" "$COLLECT" "$(echo "$OUTCOMES" | jq -r 'to_entries | map("- \(.key): \(.value.outcome)") | join("\n")')")
           body=$(printf 'The weekly rebuild ended without a new release. Installs keep the current one.\n\nRun: %s\n\nSteps:\n%s\n\nIf the release gate refused a deliberate shrink, re-run with: gh workflow run directory-rebuild.yml -f allow_shrink=true' "$run_url" "$steps")
           open=$(gh issue list -R "${{ github.repository }}" --state open --search "\"$title\" in:title" --json number -q '.[0].number')
           if [ -n "$open" ]; then gh issue comment "$open" -R "${{ github.repository }}" --body "$body"; else gh issue create -R "${{ github.repository }}" --title "$title" --body "$body"; fi
@@ -377,7 +535,7 @@ jobs:
             echo
             echo "| Step | Result | Minutes |"
             echo "|---|---|---|"
-            gh run view "${{ github.run_id }}" -R "${{ github.repository }}" --json jobs -q '.jobs[] | select(.name == "collect" or .name == "publish") | .name as $job | .steps[] | select(.conclusion != null and .conclusion != "" and (.completedAt | startswith("0001") | not)) | "| \($job): \(.name) | \(.conclusion) | \((((.completedAt | fromdate) - (.startedAt | fromdate)) / 60) | floor) |"' || echo "| (step times unavailable) | | |"
+            gh run view "${{ github.run_id }}" -R "${{ github.repository }}" --json jobs -q '.jobs[] | select(.name == "resolve" or .name == "check-known" or .name == "collect" or .name == "publish") | .name as $job | .steps[] | select(.conclusion != null and .conclusion != "" and (.completedAt | startswith("0001") | not)) | "| \($job): \(.name) | \(.conclusion) | \((((.completedAt | fromdate) - (.startedAt | fromdate)) / 60) | floor) |"' || echo "| (step times unavailable) | | |"
             echo
             live="${RUNNER_TEMP}/live-manifest.json"
             if [ -s "$live" ]; then echo "Live release: $(jq -r '"\(.companies) companies, \(.indexed) indexed"' "$live")."; fi
