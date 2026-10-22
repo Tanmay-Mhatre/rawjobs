@@ -1,6 +1,6 @@
 # Local install and updates: one line to install, updates by themselves (plan v1)
 
-Status: **steps 1–6 built on 2026-10-11; first release v0.3.0.** Written from the decisions made with the user on 2026-10-10/11, after a review of the code, of how competitors ship, and of signing rules on Windows and macOS.
+Status: Shipped (PRs #60-#64 and #66 / v0.3.0, 2026-10-11). Written from the decisions made with the user on 2026-10-10/11, after a review of the code, of how competitors ship, and of signing rules on Windows and macOS.
 
 ## Goal
 Anyone on Windows or macOS installs RawJobs by pasting one line, with no Node, pnpm, git or Claude needed. The dashboard is always there while the computer is on, without a terminal. New versions reach every user by themselves, safely. Nothing is hosted and nothing costs money.

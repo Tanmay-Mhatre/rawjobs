@@ -13,7 +13,7 @@
  *   moves-baselines.json { version: 1, pages: { [dirKey]: Baseline } } (lib/evidence.ts)
  *
  * A move reaches moves.json through a maintainer's approval (moves-approve.ts, by: "review"), or, with
- * AUTO_ACCEPT on, through company-owned evidence (moves.ts, by: "auto"; docs/plans/auto-accept-moves.md).
+ * AUTO_ACCEPT on, through company-owned evidence (moves.ts, by: "auto"; docs/plans/archive/auto-accept-moves.md).
  * An auto move ships only once a second check of that evidence, a day later, confirms it (confirmed_at).
  */
 import { createHash } from "node:crypto";

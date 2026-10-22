@@ -6,7 +6,7 @@
  * "auto" is accepted here (by: "auto") and ships once a second look a day later confirms it; without
  * it, the verdict is only shown on the issue (shadow mode). Each run also re-checks recent auto moves
  * (reverting one only when the company page now points somewhere else) and snapshots company careers
- * pages as baselines (docs/plans/auto-accept-moves.md).
+ * pages as baselines (docs/plans/archive/auto-accept-moves.md).
  *
  *   pnpm exec tsx scripts/catalog/moves.ts --items moves-inbox.json --dir directory-repo \
  *     --directory live-directory.json [--issues] [--max-minutes 10]

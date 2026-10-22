@@ -1,6 +1,6 @@
 # Companies flow: directory + suggestions (plan v1)
 
-Status: **final draft for approval**. Built from the v0 draft, two independent research reviews (Data & Sourcing; Product & Matching), a debate round, and the user's decisions (2026-10-04).
+Status: Shipped (PR #4 / v0.1.0). Built from the v0 draft, two independent research reviews (Data & Sourcing; Product & Matching), a debate round, and the user's decisions (2026-10-04).
 
 ## Goal
 Users pick companies from a large shared directory instead of hunting for careers links, and get **suggestions that fit them, without AI**: rule-based, explainable, private. Adding by link stays as a fallback, and new companies can be shared back to the directory (opt-in).

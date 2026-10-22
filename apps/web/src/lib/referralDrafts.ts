@@ -1,5 +1,5 @@
 /**
- * Message drafts for asking someone about a job (docs/plans/referral-finder.md, sections 6.H and 7).
+ * Message drafts for asking someone about a job (docs/plans/archive/referral-finder.md, sections 6.H and 7).
  * Pure: the dialog fills them in, you edit and copy them. Nothing is ever sent from RawJobs.
  */
 import { safeUrl } from "@rawjobs/core/text";

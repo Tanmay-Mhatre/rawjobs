@@ -1,6 +1,6 @@
 # Must-have extraction (matching phase 3)
 
-Status: go given 2026-10-16; built in one PR. "As built" below records where tuning moved the plan.
+Status: Shipped (PR #259 / v0.6.14). "As built" below records where tuning moved the plan.
 
 Read what a posting requires (must-haves, nice-to-haves, years of experience) with plain rules, and let the
 score use it. No AI in the app. Open models (TechWolf ConTeXT, ESCO) stay a later option for the offline
