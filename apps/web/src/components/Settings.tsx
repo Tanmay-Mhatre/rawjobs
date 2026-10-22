@@ -26,7 +26,8 @@ import { ShortcutList } from "./ShortcutList";
 import { DISMISS_KEY as CHECKLIST_DISMISSED_KEY } from "./Guidance";
 import { DISMISSED_KEY as GO_BACK_DISMISSED_KEY } from "./companies/ForYou";
 import { BANNER_DISMISSED_KEY } from "./referral/ConnectBanner";
-import { save } from "../lib/storage";
+import { load, save } from "../lib/storage";
+import { STAR_KEY, type StarPrompt } from "../lib/starPrompt";
 import { ReleaseNotes } from "./WhatsNew";
 import { parseSettingsHash, SETTINGS_GROUPS, SETTINGS_PAGES, SETTINGS_SECTIONS, settingsHash, type SettingsPageId } from "./settings/registry";
 import { searchSettings, type SettingsHit } from "./settings/search";
@@ -643,6 +644,8 @@ function ShowTipsAgain() {
           save(CHECKLIST_DISMISSED_KEY, false);
           save(GO_BACK_DISMISSED_KEY, []);
           save(BANNER_DISMISSED_KEY, null);
+          // The "Star on GitHub" question asks again when it's next due; when you started stays.
+          save(STAR_KEY, { firstSeen: load<StarPrompt>(STAR_KEY, {}).firstSeen });
           setDone(true);
         }}
       >

@@ -133,6 +133,7 @@ export const KEPT_ON_DISK: readonly string[] = [
   "rawjobs.notThisOne",
   "rawjobs.setupDraft.v1",
   "rawjobs.welcomeSeen",
+  "rawjobs.starPrompt",
   "rawjobs.linkedinBanner.dismissed",
 ];
 
