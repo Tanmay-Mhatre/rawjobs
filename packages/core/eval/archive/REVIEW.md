@@ -1,3 +1,5 @@
+> **Historical.** This one-time review form has been used: the answers are in `labels.yaml` as `by: user` labels. Kept as a record; to review labels again, start from `labels.yaml` and the rubric in `../README.md`.
+
 # Label review
 
 These 50 pairs are the in-field ones, where the label decides the ranking. Each label was written from the
