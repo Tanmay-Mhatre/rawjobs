@@ -1,7 +1,7 @@
 /**
- * Searches that find people at a company: LinkedIn people and post searches, and Blind. Pure. Every
+ * Searches that find people at a company: LinkedIn people and post searches. Pure. Every
  * part taken from a job, a CSV or your profile is encoded, and every result goes through safeUrl.
- * Opening one is a plain visit: those sites see what you searched for, RawJobs sends nothing.
+ * Opening one is a plain visit: LinkedIn sees what you searched for, RawJobs sends nothing.
  */
 import { safeUrl } from "@rawjobs/core/text";
 
@@ -28,39 +28,33 @@ export function friendsSearch(company: string): string {
 
 export type LinkInputs = {
   company: string;
-  /** The job's title, for "people in this role". */
-  title: string;
   /** Your schools (Education.csv), at most 2 used. */
   schools?: readonly string[];
   /** Your past employers (Positions.csv and your profile), at most 3 used. */
   pastEmployers?: readonly string[];
 };
 
-/** People one step away: friends of friends, alumni and past colleagues who work there now. */
+/** People one step away, warmest first: past colleagues and alumni who work there now, then your 1st and 2nd connections. */
 export function warmLinks({ company, schools = [], pastEmployers = [] }: LinkInputs): SearchLink[] {
   const c = quoted(company);
   const uniq = (xs: readonly string[]) => [...new Map(xs.map((x) => [x.trim().toLowerCase(), x.trim()])).values()].filter(Boolean);
   return [
-    ...link("friends", "Your 1st and 2nd connections there", friendsSearch(company)),
-    ...link("second", "Friends of friends there", people(c, ["S"])),
-    ...uniq(schools)
-      .slice(0, 2)
-      .flatMap((s, i) => link(`school-${i}`, `People from ${s}`, people(`${c} ${quoted(s)}`))),
     ...uniq(pastEmployers)
       .filter((p) => p.toLowerCase() !== company.trim().toLowerCase())
       .slice(0, 3)
       .flatMap((p, i) => link(`past-${i}`, `People who also worked at ${p}`, people(`${c} ${quoted(p)}`))),
+    ...uniq(schools)
+      .slice(0, 2)
+      .flatMap((s, i) => link(`school-${i}`, `People from ${s}`, people(`${c} ${quoted(s)}`))),
+    ...link("friends", "Your 1st and 2nd connections there", friendsSearch(company)),
   ];
 }
 
-/** Anyone there: people in this role, recruiters, hiring posts and Blind's referral threads. */
-export function coldLinks({ company, title }: LinkInputs): SearchLink[] {
-  const c = quoted(company);
+/** Anyone there: hiring posts, then recruiters. */
+export function coldLinks({ company }: LinkInputs): SearchLink[] {
   return [
-    ...link("role", "People in this role", people(`${c} ${title.trim()}`)),
+    ...link("posts", "Hiring posts from the last month", `https://www.linkedin.com/search/results/content/?keywords=${enc(`${quoted(company)} hiring`)}&datePosted=${enc('"past-month"')}`),
     ...recruiterLinks(company),
-    ...link("posts", "Hiring posts from the last month", `https://www.linkedin.com/search/results/content/?keywords=${enc(`${c} hiring`)}&datePosted=${enc('"past-month"')}`),
-    ...link("blind", "Referral threads on Blind", `https://www.teamblind.com/search/${enc(`${company.trim()} referral`)}`),
   ];
 }
 
@@ -119,26 +113,4 @@ export function nameFromProfile(url: string): string | undefined {
     .filter((w) => /^\p{L}+$/u.test(w))
     .slice(0, 3);
   return words.length ? words.map((w) => w.charAt(0).toUpperCase() + w.slice(1)).join(" ") : undefined;
-}
-
-/**
- * A company's name as a URL slug: lower case, accents dropped, every run of spaces or punctuation
- * one hyphen ("Procter & Gamble" is "procter-gamble", "AT&T" is "at-t"). Letters in other scripts stay.
- */
-export function companySlug(company: string): string {
-  return company
-    .normalize("NFKD")
-    .replace(/\p{M}+/gu, "")
-    .normalize("NFC")
-    .toLowerCase()
-    .replace(/[^\p{L}\p{N}]+/gu, "-")
-    .replace(/^-+|-+$/g, "");
-}
-
-/** Where to book a call for advice: ADPList's free mentors at the company and Topmate's search. Plain new-tab links. */
-export function callLinks(company: string): SearchLink[] {
-  const slug = companySlug(company);
-  if (!slug) return [];
-  const name = company.trim();
-  return [...link("adplist", `Free mentors at ${name}`, `https://adplist.org/mentors/company/${enc(slug)}`), ...link("topmate", "Paid calls on Topmate", `https://topmate.io/s/${enc(slug)}`)];
 }
