@@ -4,7 +4,7 @@
 (plan-A to plan-D beside this page). A lead review, then an independent four-specialist review
 (Actions/Mergify platform, crawler pacing, data reliability, devil's advocate) checked them against
 the code and official docs. **The amendments below override the plan files where they differ.**
-Nothing is built until the owner says go.
+Built 2026-10-21 to 2026-10-22; the measured results are in [Results](#results-2026-10-22) at the end.
 
 | Plan | Scope | Today | After | Risk |
 |---|---|---|---|---|
@@ -189,3 +189,55 @@ the lead changes above, and said go.
 - CI: one macOS and one Windows job fewer per merge. A hang fails in 5 min.
 - No company dropped: every saving comes from pacing, parallel work or skipping repeated reads, and the
   coverage summary proves it each run.
+
+## Results (2026-10-22)
+
+Measured on real runs (createdAt → updatedAt includes queue time, so the job times below are from each
+job's start and end).
+
+### Job feed (`jobs-daily.yml`)
+
+| Group | Before | After | Run | What did it |
+|---|---|---|---|---|
+| payroll | 195 min | **69** | 39776553388 | Paycom API pace (#346), adaptive + workers (#354), Workable 1.5/s cap (#358) |
+| sr | 126 | **77** at 3.3/s, ~50 expected at 5/s | 39829420348 | adaptive + 8 workers (#354), 5/s (#371) |
+| rest | 100 | **58** | 39829420348 | one Dayforce CSRF pair per run (#358); now bound by ADP |
+| enterprise | ~68 | **62-71** | 39776553388, 39829420348 | unchanged group, off the critical path |
+| join | 121 alone | 171 under the 2.5 cap + hold, ~121 expected after #372 | 39829420348 | the hold and cap slowed it; reverted for JOIN only (#372) |
+| merge step | 15-16 | **~8** (+3 activity) | 39698361404 | parallel brotli, byte-identical (#349) |
+| **Whole run** | **~4 h 20 m** (~3 h 30 m on 21 Oct) | 3 h 08 m at 18:13; **~2 h 20 m** expected with #372 | | JOIN is the critical path |
+
+- Coverage (P0, #340): every run kept its companies within 0.01% (153,780 against 153,790 at 12:13).
+- Push-back: Workable 67 → 2 slow-downs; SmartRecruiters 0 × 429 at 3.3/s in two runs; JOIN ~125-160 ×
+  429 at any pace tried (a short-window quota), so it keeps the app's pacing with no hold.
+- Lesson: JOIN throttles all our runners together. A test run overlapping a real run adds ~50 min to
+  both runs' JOIN, so JOIN changes are judged on real runs with nothing overlapping.
+
+### Directory rebuild (`directory-rebuild.yml`)
+
+| | Before | After | Run |
+|---|---|---|---|
+| Whole rebuild | 168 min (heavy 268) | **112** with B1+B2; **55** with E + B3 (index still fresh) | 39794752243, 39821526597 |
+| Collect stage | 137 (19 Oct) | 58 (B1+B2), **52** with B3 and 20% more lookups | |
+| Bulk lookups | 1,500, stopped at 45 min | 2,000 done in 30 min (#347), 2,400 a week (#368) | |
+| Companies | 210,606 | 211,364 → 211,455 | |
+| Index step | 27-49 min | 3.5 min, but on rows indexed 2 h earlier: E's real effect shows on the next weekly rebuild (2 Nov) | |
+
+- Wayback moved to the daily URL-index run on Tue/Thu/Sat (#347): the first Thursday run read 101,377
+  boards, with one 503 (paused, not blocked). It stays at three days a week until two clean weeks.
+
+### CI and safety
+
+- Install tests skipped on pushes to `main` (#341), step timeouts (#341), macOS release-file server
+  41 s → 1 s (#345). The arm64 trial (#348) was slower and closed. C4 (docs-only skip) dropped.
+- Releases serialised with a `publish` time limit, health checks one at a time (#343).
+
+### Found on the way
+
+- HRMDirect moved every careers site to ClearCompany; the feed failed all 904 companies. Fixed by
+  #360 (reads ClearCompany's careers API; 868-904 of 904 per run) and released in v0.7.4.
+
+### Still open
+
+- Plan E's effect on a weekly rebuild with week-old index rows (next scheduled rebuild, 2 Nov).
+- Wayback daily after two clean weeks; Node 22 → 24 before 2027-04-30 (owner's call on `engines`).
