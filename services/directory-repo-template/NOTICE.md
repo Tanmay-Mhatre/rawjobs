@@ -8,7 +8,7 @@ used only to confirm boards that are already listed, and are never published.
 
 | Source | Licence | Use |
 |---|---|---|
-| Companies' own public job boards (Greenhouse, Lever, Ashby, SmartRecruiters, Workday) | facts published by each company | live checks; job titles, locations and dates in the index |
+| Companies' own public job boards, on the hiring systems RawJobs reads ([list](https://github.com/Tanmay-Mhatre/rawjobs/blob/main/docs/hiring-systems.md)) | facts published by each company | live checks; job titles, locations and dates in the index |
 | [latmay/ats-career-page-urls](https://huggingface.co/datasets/latmay/ats-career-page-urls) | CC BY 4.0 | adds companies |
 | [kalil0321/ats-scrapers](https://github.com/kalil0321/ats-scrapers) | MIT | adds companies |
 | [amikai/openings-mcp](https://github.com/amikai/openings-mcp) | MIT | adds companies, each verified live by its author |
