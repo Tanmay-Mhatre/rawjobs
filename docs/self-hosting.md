@@ -10,14 +10,25 @@ central inbox, like any other install. You only need the steps below if you want
 
 ### Point the app at your own data
 
-Three environment variables, read by the CLI and the local server (`packages/core/src/directory.ts`):
+These environment variables are read by the CLI and the local server (`packages/core/src/directory.ts`
+unless noted; the older `JOBHUNTER_` names still work for the URLs, the key and `RAWJOBS_DATA`):
 
 | Variable | Default | What it is |
 |---|---|---|
 | `RAWJOBS_DIRECTORY_URL` | `https://github.com/Tanmay-Mhatre/rawjobs-directory/releases/latest/download` | Where `manifest.json`, `directory.json.gz` and `index.json.gz` are downloaded from. |
 | `RAWJOBS_CONTRIBUTE_URL` | `https://rawjobs-contribute.rawjobs.workers.dev` | The contribution inbox that shared boards are sent to. Set it to an empty string to send nothing. |
-| `RAWJOBS_JOBS_URL` | `https://github.com/Tanmay-Mhatre/rawjobs-directory/releases/download/jobs` | The shared daily job feed that scans use to skip companies with nothing for you (`packages/core/src/job-feed.ts`). |
-| `RAWJOBS_DATA_PUBLIC_KEY` | `DATA_PUBLIC_KEY` in `packages/core/src/data-signing.ts` | The key the directory's and the job feed's manifests must be signed with. Set it to your own key's public half when you point the two URLs above at your own data. |
+| `RAWJOBS_JOBS_URL` | `https://github.com/Tanmay-Mhatre/rawjobs-directory/releases/download/jobs` | The shared job feed that scans use to skip companies with nothing for you (`packages/core/src/job-feed.ts`). |
+| `RAWJOBS_CONCEPTS_URL` | `https://github.com/Tanmay-Mhatre/rawjobs-directory/releases/download/concepts/concepts.json` | The topic word list scans download at most once a day (`packages/core/src/concepts-remote.ts`). |
+| `RAWJOBS_DATA_PUBLIC_KEY` | `DATA_PUBLIC_KEY` in `packages/core/src/data-signing.ts` | The key the directory's and the job feed's manifests, and the word list, must be signed with. Set it to your own key's public half when you point the URLs above at your own data. |
+
+Where RawJobs keeps your files, and which port it uses (`packages/core/src/paths.ts`,
+`packages/server/src/serve.ts`):
+
+| Variable | Default | What it is |
+|---|---|---|
+| `RAWJOBS_HOME` | the folder RawJobs runs in (installed copies: the install folder, set by the launchers in `packaging/bin`) | Your RawJobs folder: the config, `profile/` and, unless `RAWJOBS_DATA` says otherwise, `data/`. |
+| `RAWJOBS_DATA` | `data` | The scan data folder, relative to `RAWJOBS_HOME`. |
+| `RAWJOBS_PORT` | `4317` | The dashboard's port (`rawjobs serve --port` wins over it). |
 
 For example:
 
@@ -49,8 +60,8 @@ and accept only releases signed with **its** key. To ship your own installs and 
    `README.md`, `docs/install.md` and `apps/site/src/index.html`.
 4. Add the private key as the `RAWJOBS_SIGNING_KEY` Actions secret
    (`gh secret set RAWJOBS_SIGNING_KEY < release-signing-key.pem`).
-5. Set the version in `package.json`, merge, and push an annotated `v*` tag. The release workflow
-   builds, signs, test-installs and publishes it (see [README → Development](../README.md#development)).
+5. Merge, and push an annotated `v*` tag. The tag names the version (no version bump needed). The
+   release workflow builds, signs, test-installs and publishes it (see [README → Development](../README.md#development)).
 
 ### Run your own directory
 

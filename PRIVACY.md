@@ -75,6 +75,11 @@ from GitHub Releases of `Tanmay-Mhatre/rawjobs-directory`. GitHub sees your IP a
 any download. Everyone downloads the same files, and your filters are applied on your computer, so
 nothing about you is uploaded and the downloads don't reveal what you're looking for.
 
+Scans also download the topic word list (which words count as naming a topic, for example "PSP"
+for payments): `concepts.json` from the `concepts` release of the same repo, at most once a day,
+kept in `data/cache`. It's the same file for everyone and is checked against the project's data
+signing key; when it can't be downloaded, the last good copy or the built-in list is used.
+
 ### Sharing companies you add (on by default)
 When you add a company by its careers link, and it isn't in the directory yet, the app sends that
 board to the project's contribution inbox, so everyone can find it. This is **on by default**.
@@ -130,9 +135,11 @@ the old board (a keyed hash, not the address itself, deleted with the report), o
 many different people reported the same move.
 
 ### Telegram alerts (only if you set them up)
-Alerts are sent through Telegram's API (`api.telegram.org`) with your own bot. They contain job
-titles, companies and links. Once it's set up, scheduled scans and every scan you start from the dashboard send one
-message when they finish.
+Alerts are sent through Telegram's API (`api.telegram.org`) with your own bot. Once it's set up,
+scheduled scans and every scan you start from the dashboard send one message when they finish.
+Scan messages give counts only (new jobs, strong fits, jobs available to apply), not job titles or
+companies. The daily summary, only if you turn it on in Settings → Notifications, names the jobs
+and companies due today in your Pipeline, never people, emails, phone numbers or notes.
 
 ### Installing and updating (installed copies only)
 The install line downloads RawJobs from this repository's GitHub Releases and Node from
@@ -143,7 +150,7 @@ versions" on, it lists releases through `api.github.com`) and the new version. C
 serves that file), GitHub and nodejs.org see your IP address, as with any download. Nothing about
 you is sent, and Cloudflare Web Analytics doesn't count these requests. If Telegram alerts are on,
 the "update ready" message goes from your computer to your own bot, like scan alerts. Turn the
-checks off in Settings → About → Updates. A copy run from the source code (`pnpm start`) never
+checks off in Settings → Updates ("Watch for new versions"). A copy run from the source code (`pnpm start`) never
 checks.
 
 ### Links you open
