@@ -72,9 +72,28 @@ export const atsOfGroup = (group: string): string[] => {
  * Companies in flight per hiring system: shared API hosts just queue (HttpClient paces each host).
  * Eightfold one at a time: its CDN refuses a CI runner's whole IP past about a request a second overall.
  */
-const WORKERS: Record<string, number> = { workday: 20, icims: 10, successfactors: 8, join: 6, eightfold: 1 };
+const WORKERS: Record<string, number> = {
+  workday: 20,
+  icims: 10,
+  successfactors: 8,
+  join: 6,
+  eightfold: 1,
+  // Enough boards in flight to reach each shared pace with slow answers (lanes ≈ rate × seconds a board).
+  // SmartRecruiters allows 8 requests at once.
+  smartrecruiters: 8,
+  paycom: 10,
+  paylocity: 8,
+  workable: 6,
+};
 /** Groups whose shared APIs are paced adaptively (see the HttpClient in crawl). */
-const ADAPTIVE_GROUPS = new Set(["join", "payroll"]);
+const ADAPTIVE_GROUPS = new Set(["join", "payroll", "sr"]);
+/**
+ * The feed's own ceilings, below the app's (http.ts PACES), for APIs held for an hour from one CI IP.
+ * Workable at 3/s drew 104 × 429 and 67 slow-downs (test run 39659100795); at a fixed 1/s it drew none.
+ * SmartRecruiters documents 10/s for signed-in API users, not the public postings we read: 3.3/s until
+ * two runs show no 429s (docs/plans/actions-speedup, decision 1).
+ */
+const CI_PACE_CEILINGS: Record<string, number> = { workable: 2, smartrecruiters: 3.3 };
 /**
  * The feed's pace per shared API host, faster than the app's own (HOST_DELAYS): one read per board per
  * run, from CI only. Any 429 still slows a host down for the rest of the run. In ADAPTIVE_GROUPS a host
@@ -85,6 +104,8 @@ const CI_HOST_DELAYS: Record<string, number> = {
   "api.smartrecruiters.com": 500,
   "recruiting.paylocity.com": 550,
   "www.paycomonline.net": 667,
+  // No shared pace (not in PACES), so a fixed gap: at the 1 s default it was payroll's slowest system.
+  "api.hireology.com": 500,
 };
 /**
  * Hiring systems whose every board is its own host, with the gap the feed keeps on each. Eightfold's CDN
@@ -218,9 +239,7 @@ async function crawl(out: string, group: string, generated: string, directoryFil
     adaptive: ADAPTIVE_GROUPS.has(group),
     // After a halving, hold for a minute: an hour at the ceiling from one IP must not keep re-testing a limit.
     climbHoldMs: 60_000,
-    // Workable at the app's 3/s drew 104 × 429 and 67 slow-downs in an hour from CI (test run 39659100795);
-    // at a fixed 1/s it drew none.
-    paceCeilings: { workable: 2 },
+    paceCeilings: CI_PACE_CEILINGS,
     // A paced API that fails 8 times in a row rests and is tried again, instead of every one of its boards
     // keeping stale rows for the rest of the run.
     hostRests: ADAPTIVE_GROUPS.has(group),
