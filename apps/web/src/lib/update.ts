@@ -30,6 +30,7 @@ export type UpdateStatus = {
   };
 };
 
+export const REPO_URL = "https://github.com/Tanmay-Mhatre/rawjobs";
 export const RELEASES_URL = "https://github.com/Tanmay-Mhatre/rawjobs/releases";
 export const ISSUES_URL = "https://github.com/Tanmay-Mhatre/rawjobs/issues/new/choose";
 

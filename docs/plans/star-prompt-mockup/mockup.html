@@ -1,0 +1,245 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Star prompt mockup</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600&family=Geist+Mono:wght@500;600&display=swap">
+<style>
+[data-theme="light"] {
+  --sand-1:#fffbf5;--sand-2:#f5f1e8;--sand-3:#ede9e2;--sand-4:#e5e1db;--sand-5:#dddad3;--sand-6:#d4d0c9;--sand-7:#c4c0ba;--sand-8:#aca9a2;--sand-9:#888681;--sand-10:#77746f;--sand-11:#605d59;--sand-12:#151412;
+  --orange-3:#ffe2da;--orange-7:#ffa88c;--orange-8:#ff7e56;--orange-9:#ff5a1f;--orange-10:#dd4400;--orange-11:#a33100;
+  --green-3:#d3f3da;--green-9:#007d3e;--green-11:#007137;
+  --amber-3:#fde5c7;--amber-9:#f3aa36;--amber-11:#7f5300;
+  --red-3:#ffe1e4;--red-9:#b11f47;--red-11:#a12b46;
+  --bg-canvas:var(--sand-2);--bg-raised:var(--sand-1);--bg-overlay:var(--sand-1);--bg-hover:var(--sand-3);--bg-active:var(--sand-4);--bg-inset:var(--sand-3);
+  --border-subtle:var(--sand-6);--border-default:var(--sand-7);--border-control:var(--sand-9);--border-control-hover:var(--sand-11);
+  --text-primary:var(--sand-12);--text-secondary:var(--sand-11);--text-disabled:var(--sand-9);
+  --accent-solid:var(--orange-9);--accent-solid-hover:var(--orange-8);--brand-signal:var(--orange-9);--accent-mark:var(--orange-10);--accent-text:var(--orange-11);--accent-subtle:var(--orange-3);--on-accent:var(--sand-12);--focus-ring:var(--orange-11);
+  --success-solid:var(--green-9);--success-text:var(--green-11);--success-subtle:var(--green-3);
+  --warning-solid:var(--amber-9);--warning-text:var(--amber-11);--warning-subtle:var(--amber-3);
+  --danger-solid:var(--red-9);--danger-text:var(--red-11);--danger-subtle:var(--red-3);
+  --scrim:rgba(21,20,18,.32);
+  --shadow-l1:none;--shadow-l2:0 4px 12px rgba(21,20,18,.06);--shadow-l3:0 8px 24px rgba(21,20,18,.07);
+}
+[data-theme="dark"] {
+  --sand-1:#120f0b;--sand-2:#181611;--sand-3:#201d18;--sand-4:#27241f;--sand-5:#2e2b26;--sand-6:#37342e;--sand-7:#45423c;--sand-8:#5c5953;--sand-9:#6b6964;--sand-10:#7d7a75;--sand-11:#cac7c2;--sand-12:#ecebe8;
+  --orange-3:#351005;--orange-7:#762100;--orange-8:#9c2e00;--orange-9:#ff5a1f;--orange-10:#ff7a51;--orange-11:#ff9d7f;
+  --green-3:#082412;--green-9:#5bcc80;--green-11:#89dea1;
+  --amber-3:#2b1901;--amber-9:#f3aa36;--amber-11:#f6bb6a;
+  --red-3:#331016;--red-9:#f86680;--red-11:#ffaeb7;
+  --bg-canvas:var(--sand-1);--bg-raised:var(--sand-2);--bg-overlay:var(--sand-3);--bg-hover:var(--sand-3);--bg-active:var(--sand-4);--bg-inset:var(--sand-1);
+  --border-subtle:var(--sand-6);--border-default:var(--sand-7);--border-control:var(--sand-9);--border-control-hover:var(--sand-11);
+  --text-primary:var(--sand-12);--text-secondary:var(--sand-11);--text-disabled:var(--sand-9);
+  --accent-solid:var(--orange-9);--accent-solid-hover:var(--orange-10);--brand-signal:var(--orange-9);--accent-mark:var(--orange-9);--accent-text:var(--orange-11);--accent-subtle:var(--orange-3);--on-accent:var(--sand-1);--focus-ring:var(--orange-10);
+  --success-solid:var(--green-9);--success-text:var(--green-11);--success-subtle:var(--green-3);
+  --warning-solid:var(--amber-9);--warning-text:var(--amber-11);--warning-subtle:var(--amber-3);
+  --danger-solid:var(--red-9);--danger-text:var(--red-11);--danger-subtle:var(--red-3);
+  --scrim:rgba(0,0,0,.6);
+  --shadow-l1:inset 0 1px 0 rgba(255,255,255,.04);--shadow-l2:inset 0 1px 0 rgba(255,255,255,.06),0 4px 12px rgba(0,0,0,.32);--shadow-l3:inset 0 1px 0 rgba(255,255,255,.06),0 12px 32px rgba(0,0,0,.4);
+}
+* { box-sizing: border-box; }
+body { margin: 0; font: 400 1rem/1.5rem "Geist", ui-sans-serif, system-ui, sans-serif; background: #e9e5dd; color: #151412; }
+.page { max-width: 1180px; margin: 0 auto; padding: 32px 16px 64px; }
+.page > h1 { font: 600 1.5rem/1.875rem "Geist", sans-serif; margin: 0 0 4px; }
+.page > p.lede { margin: 0 0 28px; color: #605d59; max-width: 72ch; }
+.row { display: grid; grid-template-columns: repeat(auto-fit, minmax(460px, 1fr)); gap: 24px; margin-bottom: 36px; }
+.label { font: 500 .875rem/1.25rem "Geist", sans-serif; margin: 0 0 8px; }
+.label small { font-weight: 400; color: #605d59; }
+
+/* A frame is a fake app window in one theme */
+.frame { position: relative; background: var(--bg-canvas); color: var(--text-primary); border: 1px solid var(--border-subtle); overflow: hidden; min-height: 470px; border-radius: 4px; }
+.frame.phone { width: 375px; min-height: 720px; margin: 0 auto; }
+.bar { display: flex; align-items: center; gap: 10px; height: 48px; padding: 0 16px; border-bottom: 1px solid var(--border-subtle); background: var(--bg-raised); }
+.bar .logo { width: 18px; height: 18px; background: #151412; position: relative; }
+.bar .logo::after { content: ""; position: absolute; left: 6px; top: 4px; width: 6px; height: 10px; background: #ff5a1f; }
+[data-theme="dark"] .bar .logo { outline: 1px solid var(--border-control); }
+.bar b { font-weight: 600; font-size: .9375rem; }
+.bar nav { display: flex; gap: 14px; margin-left: 12px; font-size: .875rem; color: var(--text-secondary); }
+.bar nav .on { color: var(--text-primary); font-weight: 500; }
+.ghost { padding: 16px; display: grid; gap: 10px; }
+.ghost i { display: block; height: 58px; background: var(--bg-raised); border: 1px solid var(--border-subtle); }
+.scrim { position: absolute; inset: 0; background: var(--scrim); display: flex; align-items: center; justify-content: center; padding: 16px; }
+.frame.phone .scrim { align-items: flex-end; padding: 0; }
+
+/* The dialog card (mirrors Card p-5 sm:p-6 shadow-l3 in DesktopShortcutNotice) */
+.card { width: 100%; max-width: 480px; background: var(--bg-overlay); border: 1px solid var(--border-subtle); box-shadow: var(--shadow-l3); padding: 24px; border-radius: 4px; }
+.frame.phone .card { max-width: none; padding: 20px 20px 24px; border-radius: 4px 4px 0 0; border-bottom: 0; }
+.head { display: flex; gap: 16px; align-items: flex-start; }
+.star { flex: none; width: 48px; height: 48px; display: grid; place-items: center; background: var(--accent-subtle); border: 1px solid var(--border-subtle); color: var(--accent-mark); border-radius: 4px; }
+.star svg { width: 24px; height: 24px; }
+.frame.phone .star { width: 40px; height: 40px; }
+.frame.phone .star svg { width: 20px; height: 20px; }
+h2 { font: 600 1.125rem/1.5rem "Geist", sans-serif; margin: 0 0 8px; text-wrap: balance; }
+.small { font: 400 .875rem/1.3125rem "Geist", sans-serif; margin: 0; }
+.muted { color: var(--text-secondary); }
+.stats { display: flex; flex-wrap: wrap; gap: 6px; margin: 12px 0 0; padding: 0; list-style: none; }
+.stats li { font: 500 .75rem/1rem "Geist", sans-serif; padding: 4px 8px; background: var(--bg-inset); border: 1px solid var(--border-subtle); border-radius: 2px; color: var(--text-secondary); font-variant-numeric: tabular-nums; }
+.stats li b { color: var(--text-primary); font-weight: 600; }
+.actions { display: flex; flex-wrap: wrap; gap: 8px; justify-content: flex-end; align-items: center; margin-top: 20px; }
+.frame.phone .actions { flex-direction: column-reverse; align-items: stretch; }
+.btn { white-space: nowrap; font: 500 .875rem/1.25rem "Geist", sans-serif; height: 36px; padding: 0 14px; display: inline-flex; align-items: center; justify-content: center; gap: 6px; border-radius: 4px; border: 1px solid var(--border-control); background: var(--bg-raised); color: var(--text-primary); cursor: pointer; }
+.btn.primary { background: var(--accent-solid); border-color: var(--accent-solid); color: var(--on-accent); }
+.btn.primary:focus-visible, .btn.primary.focus { outline: 2px solid var(--focus-ring); outline-offset: 2px; }
+.btn svg { width: 14px; height: 14px; }
+.frame.phone .btn { height: 44px; }
+.link { white-space: nowrap; font: 500 .875rem/1.25rem "Geist", sans-serif; color: var(--text-secondary); background: none; border: 0; padding: 0 4px; height: 36px; text-decoration: underline; text-underline-offset: 2px; cursor: pointer; margin-right: auto; }
+.frame.phone .link { margin: 4px 0 0; height: 32px; }
+.foot .fine { margin: 0; }
+.foot { display: flex; justify-content: space-between; align-items: center; gap: 12px; margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--border-subtle); }
+.foot .link { margin: 0; height: auto; font-size: .75rem; }
+.fine { margin-top: 14px; font: 400 .75rem/1rem "Geist", sans-serif; color: var(--text-secondary); }
+
+/* Settings frames */
+.settings { padding: 20px 16px; display: grid; gap: 16px; }
+.sec { background: var(--bg-raised); border: 1px solid var(--border-subtle); padding: 20px; border-radius: 4px; }
+.sec h3 { font: 600 1rem/1.5rem "Geist", sans-serif; margin: 0 0 4px; }
+.kv { display: grid; grid-template-columns: 120px 1fr; gap: 6px 12px; margin: 12px 0 16px; font-size: .875rem; }
+.kv dt { color: var(--text-secondary); }
+.kv dd { margin: 0; font-variant-numeric: tabular-nums; }
+.btns { display: flex; flex-wrap: wrap; gap: 8px; }
+.new { outline: 2px dashed var(--accent-mark); outline-offset: 3px; }
+.tip { display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 10px 0; border-top: 1px solid var(--border-subtle); font-size: .875rem; }
+.tip:first-of-type { border-top: 0; }
+
+/* Logic panel */
+.logic { background: #fffbf5; border: 1px solid #d4d0c9; padding: 20px 24px; border-radius: 4px; }
+.logic h2 { margin-bottom: 12px; }
+.logic ol, .logic ul { margin: 0 0 12px; padding-left: 20px; }
+.logic li { margin: 4px 0; font-size: .9375rem; }
+.logic code { font: 500 .8125rem "Geist Mono", monospace; background: #ede9e2; padding: 1px 4px; }
+.flow { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin: 8px 0 16px; font-size: .875rem; }
+.flow span { padding: 6px 10px; border: 1px solid #c4c0ba; background: #f5f1e8; }
+.flow em { font-style: normal; color: #888681; }
+@media (max-width: 520px) { .row { grid-template-columns: 1fr; } .frame.phone { width: 100%; } }
+</style>
+</head>
+<body>
+<div class="page">
+  <h1>Star prompt mockup</h1>
+  <p class="lede">A one-time "Star on GitHub" popup, shown on Radar only after someone has got real value from RawJobs. Uses the app's own Dialog and Card styles, with the same layout as the Desktop-shortcut intro. Dashed outlines in Settings mark what's new.</p>
+
+  <!-- 1 + 2: popup light and dark -->
+  <div class="row">
+    <div>
+      <p class="label">1 · Popup on Radar, light <small>(desktop, focus starts on "Star on GitHub")</small></p>
+      <div class="frame" data-theme="light">
+        <div class="bar"><span class="logo"></span><b>RawJobs</b><nav><span class="on">Radar</span><span>Pipeline</span><span>Companies</span><span>Settings</span></nav></div>
+        <div class="ghost"><i></i><i></i><i></i><i></i><i></i></div>
+        <div class="scrim">
+          <div class="card" role="dialog" aria-labelledby="t1">
+            <div class="head">
+              <div class="star"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 2.5l2.9 6.1 6.6.8-4.9 4.6 1.3 6.6L12 17.3l-5.9 3.3 1.3-6.6L2.5 9.4l6.6-.8z"/></svg></div>
+              <div>
+                <h2 id="t1">Is RawJobs helping your search?</h2>
+                <p class="small">RawJobs is free and open source. A star on GitHub helps other job seekers find it, and takes one click.</p>
+                <ul class="stats" aria-label="Your RawJobs so far">
+                  <li><b>14</b> days</li><li><b>9</b> scans</li><li><b>3</b> jobs applied</li>
+                </ul>
+              </div>
+            </div>
+            <div class="actions">
+              <button class="btn">Remind me later</button>
+              <button class="btn primary focus">Star on GitHub <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><path d="M6 3h7v7M13 3L4 12"/></svg></button>
+            </div>
+            <div class="foot"><p class="fine">Opens github.com in your browser. You'll need a GitHub account.</p><button class="link">Don't ask again</button></div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div>
+      <p class="label">2 · Same popup, dark</p>
+      <div class="frame" data-theme="dark">
+        <div class="bar"><span class="logo"></span><b>RawJobs</b><nav><span class="on">Radar</span><span>Pipeline</span><span>Companies</span><span>Settings</span></nav></div>
+        <div class="ghost"><i></i><i></i><i></i><i></i><i></i></div>
+        <div class="scrim">
+          <div class="card" role="dialog" aria-labelledby="t2">
+            <div class="head">
+              <div class="star"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 2.5l2.9 6.1 6.6.8-4.9 4.6 1.3 6.6L12 17.3l-5.9 3.3 1.3-6.6L2.5 9.4l6.6-.8z"/></svg></div>
+              <div>
+                <h2 id="t2">Is RawJobs helping your search?</h2>
+                <p class="small">RawJobs is free and open source. A star on GitHub helps other job seekers find it, and takes one click.</p>
+                <ul class="stats" aria-label="Your RawJobs so far">
+                  <li><b>14</b> days</li><li><b>9</b> scans</li><li><b>3</b> jobs applied</li>
+                </ul>
+              </div>
+            </div>
+            <div class="actions">
+              <button class="btn">Remind me later</button>
+              <button class="btn primary">Star on GitHub <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><path d="M6 3h7v7M13 3L4 12"/></svg></button>
+            </div>
+            <div class="foot"><p class="fine">Opens github.com in your browser. You'll need a GitHub account.</p><button class="link">Don't ask again</button></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 3 phone + 4 settings -->
+  <div class="row">
+    <div>
+      <p class="label">3 · Phone <small>(bottom sheet, full-width 44px buttons, primary on top)</small></p>
+      <div class="frame phone" data-theme="light">
+        <div class="bar"><span class="logo"></span><b>RawJobs</b></div>
+        <div class="ghost"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div>
+        <div class="scrim">
+          <div class="card" role="dialog" aria-labelledby="t3">
+            <div class="head">
+              <div class="star"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 2.5l2.9 6.1 6.6.8-4.9 4.6 1.3 6.6L12 17.3l-5.9 3.3 1.3-6.6L2.5 9.4l6.6-.8z"/></svg></div>
+              <div>
+                <h2 id="t3">Is RawJobs helping your search?</h2>
+                <p class="small">RawJobs is free and open source. A star on GitHub helps other job seekers find it, and takes one click.</p>
+                <ul class="stats"><li><b>14</b> days</li><li><b>9</b> scans</li><li><b>3</b> jobs applied</li></ul>
+              </div>
+            </div>
+            <div class="actions">
+              <button class="link">Don't ask again</button>
+              <button class="btn">Remind me later</button>
+              <button class="btn primary">Star on GitHub <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><path d="M6 3h7v7M13 3L4 12"/></svg></button>
+            </div>
+            <p class="fine">Opens github.com. You'll need a GitHub account.</p>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div>
+      <p class="label">4 · Settings: always-on star link + reset <small>(new parts dashed)</small></p>
+      <div class="frame" data-theme="light" style="min-height:0">
+        <div class="bar"><span class="logo"></span><b>RawJobs</b><nav><span>Radar</span><span>Pipeline</span><span>Companies</span><span class="on">Settings</span></nav></div>
+        <div class="settings">
+          <section class="sec">
+            <h3>RawJobs</h3>
+            <p class="small muted">Settings → Updates</p>
+            <dl class="kv"><dt>Version</dt><dd>0.7.2</dd><dt>Updates</dt><dd>Up to date</dd></dl>
+            <div class="btns">
+              <button class="btn">Check for updates</button>
+              <button class="btn">Release notes</button>
+              <button class="btn new"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true" style="width:14px;height:14px;color:var(--accent-mark)"><path d="M12 2.5l2.9 6.1 6.6.8-4.9 4.6 1.3 6.6L12 17.3l-5.9 3.3 1.3-6.6L2.5 9.4l6.6-.8z"/></svg>Star on GitHub</button>
+            </div>
+          </section>
+          <section class="sec">
+            <h3>Tips you've closed</h3>
+            <p class="small muted">Settings → Data &amp; privacy</p>
+            <div style="margin-top:8px">
+              <div class="tip new"><span>Checklist, tips and the "Star on GitHub" question</span><button class="btn">Show them again</button></div>
+            </div>
+          </section>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Logic -->
+  <section class="logic">
+    <h2>When it shows</h2>
+    <div class="flow"><span>7+ days since first use</span><em>and</em><span>1+ job marked Applied <em>or</em> 5+ finished scans</span><em>and</em><span>on Radar, no scan running, no other popup</span><em>→</em><span>show once</span></div>
+    <ul>
+      <li><b>Star on GitHub</b>: opens <code>github.com/Tanmay-Mhatre/rawjobs</code> in a new tab. Never asks again.</li>
+      <li><b>Remind me later</b> (or Esc / backdrop): asks once more after 30 days, then never.</li>
+      <li><b>Don't ask again</b>: never asks again. "Show them again" (Settings → Data &amp; privacy → Tips you've closed) resets it.</li>
+    </ul>
+    <p class="small">State lives in <code>rawjobs.starPrompt</code> = <code>{ firstSeen, later[], answer }</code>, added to <code>KEPT_ON_DISK</code>. For existing users, <code>firstSeen</code> is backfilled from the earliest scan in <code>meta.json</code> or tracking change still on file. The popup joins <code>ServerNotices</code> last, after the required update, What's new and the shortcut intro. Counts in the chips come from real data. Chips with a 0 are hidden. Nothing is sent anywhere.</p>
+  </section>
+</div>
+</body>
+</html>

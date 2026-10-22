@@ -14,7 +14,7 @@ import { Toaster } from "../src/components/Toast";
 import { isAgencyPosting } from "../src/lib/agency";
 import type { Profile } from "../src/lib/data";
 import { type NetworkPersonRow, networkChanged, resetNetworkStore, usePeopleAt } from "../src/lib/network";
-import { callLinks, coldLinks, companySlug, friendsSearch, profileHref, recruiterLinks, warmLinks } from "../src/lib/referralLinks";
+import { coldLinks, friendsSearch, profileHref, recruiterLinks, warmLinks } from "../src/lib/referralLinks";
 import { makeJob } from "./helpers";
 
 const connected = (ageDays = 2) => ({
@@ -139,21 +139,11 @@ describe("Talk to someone who works here", () => {
     expect(screen.getByText("More ways in")).toBeTruthy();
     // Never asks for people before there's an import.
     expect(fetch.mock.calls.some(([u]) => String(u).includes("/people"))).toBe(false);
-    expect(screen.getByText("Book a call")).toBeTruthy();
-    expect(screen.getByText("For advice, not referrals")).toBeTruthy();
-    const adplist = screen.getByRole("link", { name: "Free mentors at Acme (opens ADPList)" });
-    expect(adplist.getAttribute("href")).toBe("https://adplist.org/mentors/company/acme");
-    expect(adplist.getAttribute("target")).toBe("_blank");
-    expect(screen.getByRole("link", { name: "Paid calls on Topmate (opens Topmate)" }).getAttribute("href")).toBe("https://topmate.io/s/acme");
-    expect(screen.getByText("Pay for advice, never for a referral. Most companies don't allow paid referrals.")).toBeTruthy();
-  });
-
-  it("offers Book a call when connected too", async () => {
-    stubApi({ network: connected(), people: { how: "none", people: [] } });
-    render(<TalkToSomeone job={makeJob({ company: "Procter & Gamble" })} />);
-    await screen.findByText(/You don't know anyone at Procter & Gamble/);
-    expect(screen.getByRole("link", { name: "Free mentors at Procter & Gamble (opens ADPList)" }).getAttribute("href")).toBe("https://adplist.org/mentors/company/procter-gamble");
-    expect(screen.getByText("Topmate searches service titles, not employers. Check each profile.")).toBeTruthy();
+    const links = screen.getAllByRole("link").filter((a) => a.closest("details"));
+    expect(links.map((a) => a.textContent?.trim())).toEqual(["Your 1st and 2nd connections there", "Hiring posts from the last month", "Recruiters there"]);
+    expect(links.every((a) => new URL(a.getAttribute("href") ?? "").hostname === "www.linkedin.com" && a.getAttribute("target") === "_blank")).toBe(true);
+    expect(screen.getByText("Opens LinkedIn in your browser. LinkedIn sees what you search for. RawJobs sends nothing else.")).toBeTruthy();
+    expect(screen.queryByText("Book a call")).toBeNull();
   });
 
   it("ranks the people you know, top 5 first, with the band and why", async () => {
@@ -487,43 +477,27 @@ describe("Remind me in 48 hours", () => {
 });
 
 describe("search links", () => {
-  it("builds exact, encoded LinkedIn and Blind searches", () => {
+  it("builds exact, encoded LinkedIn searches, warmest first", () => {
     expect(friendsSearch("Acme")).toBe("https://www.linkedin.com/search/results/people/?keywords=%22Acme%22&network=%5B%22F%22%2C%22S%22%5D");
-    const warm = warmLinks({ company: "Acme", title: "PM", schools: ["State University"], pastEmployers: ["Initech", "Acme"] });
+    const warm = warmLinks({ company: "Acme", schools: ["State University"], pastEmployers: ["Initech", "Acme"] });
     expect(warm.map((l) => l.href)).toEqual([
-      "https://www.linkedin.com/search/results/people/?keywords=%22Acme%22&network=%5B%22F%22%2C%22S%22%5D",
-      "https://www.linkedin.com/search/results/people/?keywords=%22Acme%22&network=%5B%22S%22%5D",
-      "https://www.linkedin.com/search/results/people/?keywords=%22Acme%22%20%22State%20University%22",
       "https://www.linkedin.com/search/results/people/?keywords=%22Acme%22%20%22Initech%22",
+      "https://www.linkedin.com/search/results/people/?keywords=%22Acme%22%20%22State%20University%22",
+      "https://www.linkedin.com/search/results/people/?keywords=%22Acme%22&network=%5B%22F%22%2C%22S%22%5D",
     ]);
-    expect(coldLinks({ company: "AT&T", title: "Senior PM" }).map((l) => l.href)).toEqual([
-      "https://www.linkedin.com/search/results/people/?keywords=%22AT%26T%22%20Senior%20PM",
-      "https://www.linkedin.com/search/results/people/?keywords=%22AT%26T%22%20(recruiter%20OR%20%22talent%20acquisition%22)",
+    expect(coldLinks({ company: "AT&T" }).map((l) => l.href)).toEqual([
       "https://www.linkedin.com/search/results/content/?keywords=%22AT%26T%22%20hiring&datePosted=%22past-month%22",
-      "https://www.teamblind.com/search/AT%26T%20referral",
+      "https://www.linkedin.com/search/results/people/?keywords=%22AT%26T%22%20(recruiter%20OR%20%22talent%20acquisition%22)",
     ]);
     expect(recruiterLinks("Acme")).toHaveLength(1);
   });
 
   it("never lets a name break out of its query", () => {
-    for (const l of [...warmLinks({ company: 'x"&network=evil#', title: "a/b?c", schools: ["s&t"], pastEmployers: ["p#q"] }), ...coldLinks({ company: "x?y#z", title: "t&u" })]) {
+    for (const l of [...warmLinks({ company: 'x"&network=evil#', schools: ["s&t"], pastEmployers: ["p#q"] }), ...coldLinks({ company: "x?y#z" })]) {
       const u = new URL(l.href);
       expect(u.hash).toBe("");
       expect([...u.searchParams.keys()].every((k) => ["keywords", "network", "datePosted"].includes(k))).toBe(true);
     }
-  });
-
-  it("slugs company names for the call links", () => {
-    expect(companySlug("AT&T")).toBe("at-t");
-    expect(companySlug("Procter & Gamble")).toBe("procter-gamble");
-    expect(companySlug("  J.P. Morgan Chase & Co. ")).toBe("j-p-morgan-chase-co");
-    expect(companySlug("Nestlé")).toBe("nestle");
-    expect(companySlug("日立製作所")).toBe("日立製作所");
-    expect(companySlug("삼성전자")).toBe("삼성전자");
-    expect(companySlug("&&")).toBe("");
-    expect(callLinks("AT&T").map((l) => l.href)).toEqual(["https://adplist.org/mentors/company/at-t", "https://topmate.io/s/at-t"]);
-    expect(callLinks("日立").map((l) => l.href)).toEqual(["https://adplist.org/mentors/company/%E6%97%A5%E7%AB%8B", "https://topmate.io/s/%E6%97%A5%E7%AB%8B"]);
-    expect(callLinks("?#/")).toEqual([]);
   });
 
   it("links only real LinkedIn profiles", () => {
