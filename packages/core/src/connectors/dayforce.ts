@@ -1,3 +1,4 @@
+import { HttpError } from "../http";
 import type { CompanyRef, NormalizedJob } from "../schema";
 import { inferWorkplace } from "../text";
 import { countryName, joinParts } from "./parse";
@@ -29,8 +30,31 @@ const MAX_POSTINGS = 2000;
 
 const culture = (ref: { shard?: string }) => (ref.shard && CULTURE.test(ref.shard) ? ref.shard : "en-US");
 
+type Pair = { cookie: string; token: string };
+
+/**
+ * One CSRF pair serves every board (it names no tenant; probed 2026-10-22: two tenants, and again 90 s
+ * later). Kept per client for PAIR_MS, under its Cloudflare cookie's ~30 min life, so a crawl of
+ * thousands of boards asks for a few pairs, not one per board.
+ */
+const PAIR_MS = 10 * 60_000;
+const pairs = new WeakMap<Ctx["http"], { at: number; pair: Promise<Pair> }>();
+
+function sharedCsrf(http: Ctx["http"], fresh = false): Promise<Pair> {
+  const kept = pairs.get(http);
+  if (!fresh && kept && Date.now() - kept.at < PAIR_MS) return kept.pair;
+  const pair = csrf(http);
+  pairs.set(http, { at: Date.now(), pair });
+  // A failed fetch isn't kept: the next board asks again.
+  pair.catch(() => pairs.get(http)?.pair === pair && pairs.delete(http));
+  return pair;
+}
+
+/** A search refused for its CSRF pair (stale or rejected), so a new pair may get through. */
+const refusedPair = (err: unknown) => err instanceof HttpError && (err.status === 401 || err.status === 403 || err.status === 419);
+
 /** The anonymous CSRF pair every visitor gets: the cookie to send back, and its token for the header. */
-async function csrf(http: Ctx["http"]): Promise<{ cookie: string; token: string }> {
+async function csrf(http: Ctx["http"]): Promise<Pair> {
   const { res, body } = await http.requestBody(`${BASE}/api/auth/csrf`, { headers: { accept: "application/json" } });
   const cookie = res.headers
     .getSetCookie()
@@ -44,14 +68,23 @@ async function csrf(http: Ctx["http"]): Promise<{ cookie: string; token: string 
 /** The board's postings, or those its search finds for `searchText`, up to `max`. */
 async function list(ref: CompanyRef, http: Ctx["http"], searchText: string, max: number) {
   if (!NAME.test(ref.slug) || !ref.site || !NAME.test(ref.site)) throw new Error('Dayforce boards need the tenant and "site" (the board code) from the careers URL');
-  const { cookie, token } = await csrf(http);
+  let pair = await sharedCsrf(http);
+  let renewed = false;
+  const search = (start: number) =>
+    http.requestBody(`${BASE}/api/geo/${encodeURIComponent(ref.slug)}/jobposting/search`, {
+      method: "POST",
+      headers: { accept: "application/json", "content-type": "application/json", cookie: pair.cookie, "x-csrf-token": pair.token },
+      body: JSON.stringify({ clientNamespace: ref.slug, jobBoardCode: ref.site, cultureCode: culture(ref), paginationStart: start, ...(searchText ? { searchText } : {}) }),
+    });
   const out: DayforceJob[] = [];
   let total = 0;
   for (let start = 0; start < max; start += PAGE) {
-    const { body } = await http.requestBody(`${BASE}/api/geo/${encodeURIComponent(ref.slug)}/jobposting/search`, {
-      method: "POST",
-      headers: { accept: "application/json", "content-type": "application/json", cookie, "x-csrf-token": token },
-      body: JSON.stringify({ clientNamespace: ref.slug, jobBoardCode: ref.site, cultureCode: culture(ref), paginationStart: start, ...(searchText ? { searchText } : {}) }),
+    const { body } = await search(start).catch(async (err: unknown) => {
+      // Once per board: a refused pair is replaced for every board, and this page asked again.
+      if (renewed || !refusedPair(err)) throw err;
+      renewed = true;
+      pair = await sharedCsrf(http, true);
+      return search(start);
     });
     const page = JSON.parse(body) as { jobPostings?: DayforceJob[]; maxCount?: number };
     if (!Array.isArray(page.jobPostings)) throw new Error("unexpected Dayforce response: no jobPostings");

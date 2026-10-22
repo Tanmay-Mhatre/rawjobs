@@ -84,6 +84,7 @@ const WORKERS: Record<string, number> = {
   paycom: 10,
   paylocity: 8,
   workable: 6,
+  dayforce: 6,
 };
 /** Groups whose shared APIs are paced adaptively (see the HttpClient in crawl). */
 const ADAPTIVE_GROUPS = new Set(["join", "payroll", "sr"]);
@@ -106,6 +107,8 @@ const CI_HOST_DELAYS: Record<string, number> = {
   "www.paycomonline.net": 667,
   // No shared pace (not in PACES), so a fixed gap: at the 1 s default it was payroll's slowest system.
   "api.hireology.com": 500,
+  // One CSRF pair now serves every board (connectors/dayforce.ts), so each board is just its searches.
+  "jobs.dayforcehcm.com": 400,
 };
 /**
  * Hiring systems whose every board is its own host, with the gap the feed keeps on each. Eightfold's CDN
