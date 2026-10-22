@@ -187,7 +187,7 @@ When a company's board stops working and a user finds its new one, the app can r
 (`POST /v1/moves` on the inbox; plan: `docs/plans/update-careers-link-plan.md`, PR 3). Every report
 is checked and recorded, and a maintainer approves the good ones. A move whose company page proves it
 can also be accepted automatically, but only with the `MOVES_AUTO_ACCEPT` repo variable set (see
-[Company evidence and auto-accept](#company-evidence-and-auto-accept); plan: `docs/plans/auto-accept-moves.md`).
+[Company evidence and auto-accept](#company-evidence-and-auto-accept); plan: `docs/plans/archive/auto-accept-moves.md`).
 
 **Files in the directory repo** (written by the workflows, next to `denylist.json`):
 - `moves-pending.json`: reports waiting, keyed by the old board (`ats:slug|shard|site`), each with its

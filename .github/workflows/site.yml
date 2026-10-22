@@ -101,8 +101,9 @@ jobs:
         if: github.event_name != 'pull_request' && env.HAS_CF_TOKEN == 'true'
         # npx, not cloudflare/wrangler-action: the action installs wrangler with `npm i`, which fails
         # on the root package.json's workspace:* dependencies (EUNSUPPORTEDPROTOCOL).
+        # Same wrangler version as services/contribute/package.json (Dependabot bumps that one).
         working-directory: apps/site
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-        run: npx --yes wrangler@4.147.0 deploy
+        run: npx --yes wrangler@4.151.1 deploy

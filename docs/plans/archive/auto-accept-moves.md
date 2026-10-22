@@ -1,9 +1,9 @@
 # Auto-accepting moved careers pages (v4: fact-checked, peer-reviewed, owner decisions)
 
-**Built** (2026-10-15) as one PR: fast-track, shadow mode and auto-accept behind `MOVES_AUTO_ACCEPT`
+Status: Shipped (PR #249 / v0.6.13): built 2026-10-15 as fast-track, shadow mode and auto-accept behind `MOVES_AUTO_ACCEPT`
 (off by default). How it works now: `docs/shared-directory.md`, "Company evidence and auto-accept".
 
-Status: plan only, not built. History: v1 was in chat. v2 was corrected by a repo fact-check and a web fact-check. v3 adds an independent adversarial peer review and checks its claims against the code (2026-10-15).
+History: v1 was in chat. v2 was corrected by a repo fact-check and a web fact-check. v3 adds an independent adversarial peer review and checks its claims against the code (2026-10-15).
 
 ## Recommendation
 Build it in three steps. Each later step only starts if the earlier one shows it's worth it.

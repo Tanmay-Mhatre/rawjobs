@@ -1,5 +1,5 @@
 /**
- * Company-owned evidence for a moved careers page (docs/plans/auto-accept-moves.md). Only the company
+ * Company-owned evidence for a moved careers page (docs/plans/archive/auto-accept-moves.md). Only the company
  * itself can point at its new board, so evidence comes from one place: the company-hosted careers page
  * the directory already had for the old board (its `careers_url` on a host that isn't a hiring
  * system), and that same host's homepage. Never a sibling subdomain, never anything a reporter or a

@@ -3,7 +3,7 @@ import { activityText, type Task } from "../../lib/nextSteps";
 import { type Activity, CHANNEL_LABEL, type Channel, type Contact, type Entry, ROLE_LABEL, STATUS_LABEL, statusLabel, type UserState } from "../../lib/userState";
 
 /**
- * The job detail's logic (docs/plans/pipeline-v2.md, section 6.2), kept out of the components so it
+ * The job detail's logic (docs/plans/archive/pipeline-v2.md, section 6.2), kept out of the components so it
  * can be tested on its own: the timeline, its filters, paste-to-fill and people across jobs.
  */
 
