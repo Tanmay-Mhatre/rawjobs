@@ -109,7 +109,7 @@ export function displayPlace(s: string): string {
     .join("");
 }
 
-/** Directory-sized totals shown to people: "~21,000". Exact below 1,000. One rounding everywhere (see H9 in docs/design-review.md). */
+/** Directory-sized totals shown to people: "~21,000". Exact below 1,000. One rounding everywhere (see H9 in docs/plans/archive/design-review.md). */
 export function roughCount(n: number): string {
   if (n < 1000) return n.toLocaleString();
   return `~${(Math.round(n / 1000) * 1000).toLocaleString()}`;
