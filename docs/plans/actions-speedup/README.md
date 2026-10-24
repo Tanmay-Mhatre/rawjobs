@@ -200,16 +200,18 @@ job's start and end).
 | Group | Before | After | Run | What did it |
 |---|---|---|---|---|
 | payroll | 195 min | **69** | 39776553388 | Paycom API pace (#346), adaptive + workers (#354), Workable 1.5/s cap (#358) |
-| sr | 126 | **77** at 3.3/s, ~50 expected at 5/s | 39829420348 | adaptive + 8 workers (#354), 5/s (#371) |
+| sr | 126 | **51** at 5/s, 0 × 429 (77 at 3.3/s) | 39876788840, 39910168772 | adaptive + 8 workers (#354), 5/s (#371) |
 | rest | 100 | **58** | 39829420348 | one Dayforce CSRF pair per run (#358); now bound by ADP |
 | enterprise | ~68 | **62-71** | 39776553388, 39829420348 | unchanged group, off the critical path |
-| join | 121 alone | 171 under the 2.5 cap + hold, ~121 expected after #372 | 39829420348 | the hold and cap slowed it; reverted for JOIN only (#372) |
+| join | 121 alone | **137-139** with a 15 s hold, 2.7-3.1% × 429 | 40001501696, 40043875305 | 60 s hold + 2.5 cap: 171 min, 1.0% (#358); no hold: 112-119 min but 4.9-6.3% and rising (#372); 15 s hold (#374) |
 | merge step | 15-16 | **~8** (+3 activity) | 39698361404 | parallel brotli, byte-identical (#349) |
-| **Whole run** | **~4 h 20 m** (~3 h 30 m on 21 Oct) | 3 h 08 m at 18:13; **~2 h 20 m** expected with #372 | | JOIN is the critical path |
+| **Whole run** | **~4 h 20 m** (~3 h 30 m on 21 Oct) | **2 h 28 m - 2 h 30 m** (2 h 05 m - 2 h 14 m with no JOIN hold) | 40001501696, 40043875305 | JOIN is the critical path |
 
 - Coverage (P0, #340): every run kept its companies within 0.01% (153,780 against 153,790 at 12:13).
-- Push-back: Workable 67 → 2 slow-downs; SmartRecruiters 0 × 429 at 3.3/s in two runs; JOIN ~125-160 ×
-  429 at any pace tried (a short-window quota), so it keeps the app's pacing with no hold.
+- Push-back: Workable 67 → 2 slow-downs; SmartRecruiters 0 × 429 at 3.3/s and at 5/s. JOIN answers 429 at
+  any pace tried (a short-window quota that tightened over 23 Oct): with no hold its share rose from
+  4.9% to 6.3% in three runs, so it holds 15 s after a slow-down, about half the 429s for ~20 more
+  minutes. A 60 s hold halved them again but cost 50 minutes.
 - Lesson: JOIN throttles all our runners together. A test run overlapping a real run adds ~50 min to
   both runs' JOIN, so JOIN changes are judged on real runs with nothing overlapping.
 
