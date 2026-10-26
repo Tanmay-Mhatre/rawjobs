@@ -55,7 +55,7 @@
     "catalog:refresh": "tsx scripts/catalog/sources.ts && tsx scripts/catalog/resolve.ts && tsx scripts/catalog/merge.ts && tsx scripts/catalog/check.ts --recheck-days 30 && tsx scripts/catalog/build.ts && tsx scripts/catalog/index.ts --max-age-days 7 && tsx scripts/catalog/publish.ts && tsx scripts/catalog/coverage.ts"
   },
   "devDependencies": {
-    "@biomejs/biome": "2.5.15",
+    "@biomejs/biome": "2.6.2",
     "@rawjobs/core": "workspace:*",
     "@types/node": "^24.19.2",
     "axe-core": "^4.14.0",
