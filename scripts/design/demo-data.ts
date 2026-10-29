@@ -525,7 +525,7 @@ export const SETUP_STATUS = {
 export const SETUP_STATUS_FRESH = { configPath: SETUP_STATUS.configPath, isPersonal: false, valid: false, hasData: false, hasResume: true };
 
 export const DIRECTORY_STATUS = {
-  local: { version: "2026.06.13", generated_at: daysAgo(2), companies: 18_204, indexed: 9_862, files: {}, updated_at: daysAgo(2) },
+  local: { version: "2026.06.13", generated_at: daysAgo(2), companies: 18_204, indexed: 9_862, files: {}, updated_at: daysAgo(2), checked_at: daysAgo(0) },
   present: true,
   outbox: 0,
   sharing: true,

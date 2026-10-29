@@ -5,11 +5,17 @@ import { roughCount, timeAgo } from "../lib/format";
 import { Button, cx } from "./ui";
 
 type Status = {
-  local?: { version: string; companies: number; updated_at: string };
+  local?: { version: string; companies: number; generated_at: string; updated_at: string; checked_at?: string };
   present: boolean;
   outbox: number;
   sharing: boolean;
   age_days: number | null;
+};
+
+/** "22 Oct", with the year only when it isn't this year. */
+const shortDate = (iso: string) => {
+  const d = new Date(iso);
+  return d.toLocaleDateString(undefined, { day: "numeric", month: "short", ...(d.getFullYear() === new Date().getFullYear() ? {} : { year: "numeric" }) });
 };
 
 export type DirectoryUpdate = { ok: boolean; updated: boolean; text: string };
@@ -62,8 +68,9 @@ export function DirectoryBar({ onUpdated, companies }: { onUpdated: () => void; 
   };
 
   const count = companies ?? status.local?.companies;
+  // Checking finds nothing new most days (the shared directory is rebuilt weekly), so say both.
   const text = status.local
-    ? `${count ? `${roughCount(count)} companies · ` : ""}updated ${timeAgo(status.local.updated_at)}`
+    ? `${count ? `${roughCount(count)} companies · ` : ""}checked ${timeAgo(status.local.checked_at ?? status.local.updated_at)} · version from ${shortDate(status.local.generated_at)}`
     : status.present
       ? `${count ? `${roughCount(count)} companies · ` : ""}built on this computer. Update to get everyone's additions`
       : "Not downloaded yet";
@@ -71,7 +78,7 @@ export function DirectoryBar({ onUpdated, companies }: { onUpdated: () => void; 
   return (
     <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5 rounded-md bg-inset/60 px-3 py-2 type-small">
       <Database className="size-4 shrink-0 text-muted" />
-      <p className="min-w-0 flex-1">
+      <p className="min-w-0 flex-1 basis-60">
         <span className="font-medium">Company directory:</span> <span className="text-muted">{text}</span>
         {status.outbox > 0 && <span className="text-muted"> · {status.outbox} of your additions waiting to be shared</span>}
       </p>
