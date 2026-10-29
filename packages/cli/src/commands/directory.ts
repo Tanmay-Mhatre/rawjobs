@@ -33,7 +33,7 @@ export async function cmdDirectory(args: string[]): Promise<number> {
       out(
         { ...s, age_days: Number.isFinite(age) ? Math.round(age * 10) / 10 : null, industries: directoryIndustryCounts(dataDir) },
         s.local
-          ? `Shared directory ${s.local.version}: ${s.local.companies.toLocaleString()} companies, downloaded ${Math.round(age)} day(s) ago.`
+          ? `Shared directory ${s.local.version}: ${s.local.companies.toLocaleString()} companies, version from ${s.local.generated_at.slice(0, 10)}, downloaded ${Math.round(age)} day(s) ago${s.local.checked_at ? `, checked ${s.local.checked_at.slice(0, 10)}` : ""}.`
           : s.present
             ? "Using a directory built on this computer (not downloaded)."
             : "No company directory yet. Run: pnpm rawjobs directory update",
