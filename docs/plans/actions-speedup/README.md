@@ -219,11 +219,12 @@ job's start and end).
 
 | | Before | After | Run |
 |---|---|---|---|
-| Whole rebuild | 168 min (heavy 268) | **112** with B1+B2; **55** with E + B3 (index still fresh) | 39794752243, 39821526597 |
+| Whole rebuild | 168 min (heavy 268) | **112** with B1+B2; **51** with E + B3 on week-old index rows | 39794752243, 40843181945 |
 | Collect stage | 137 (19 Oct) | 58 (B1+B2), **52** with B3 and 20% more lookups | |
 | Bulk lookups | 1,500, stopped at 45 min | 2,000 done in 30 min (#347), 2,400 a week (#368) | |
 | Companies | 210,606 | 211,364 → 211,455 | |
-| Index step | 27-49 min | 3.5 min, but on rows indexed 2 h earlier: E's real effect shows on the next weekly rebuild (2 Nov) | |
+| Index step | 27-49 min | **19 s**: 27,668 companies from the job feed, 146 read live, 0 refused as stale (29 Oct, rows a week old) | 40843181945 |
+| Companies / indexed | 211,455 / 27,768 (22 Oct) | 222,307 / 27,824 (473,855 job rows) | 40843181945 |
 
 - Wayback moved to the daily URL-index run on Tue/Thu/Sat (#347): the first Thursday run read 101,377
   boards, with one 503 (paused, not blocked). It stays at three days a week until two clean weeks.
@@ -241,5 +242,4 @@ job's start and end).
 
 ### Still open
 
-- Plan E's effect on a weekly rebuild with week-old index rows (next scheduled rebuild, 2 Nov).
 - Wayback daily after two clean weeks; Node 22 → 24 before 2027-04-30 (owner's call on `engines`).
