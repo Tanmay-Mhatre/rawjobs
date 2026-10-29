@@ -30,8 +30,11 @@ export type DirectoryManifest = {
 };
 
 export type DirectoryStatus = {
-  /** The local copy's manifest, if it came from the shared directory. */
-  local?: DirectoryManifest & { updated_at: string };
+  /**
+   * The local copy's manifest, if it came from the shared directory. `updated_at`: when this version
+   * was downloaded; `checked_at`: the last successful check for a newer one.
+   */
+  local?: DirectoryManifest & { updated_at: string; checked_at?: string };
   /** A directory exists locally (downloaded or built here). */
   present: boolean;
   /** Boards added here and waiting to be shared (boards only: careers-link moves are counted in `moves`). */
@@ -86,7 +89,14 @@ export async function updateDirectory(dataDir: string, opts: { force?: boolean; 
     };
   const manifest = signed.value;
   const current = directoryStatus(dataDir).local;
-  if (!opts.force && current?.version === manifest.version) return { updated: false, version: manifest.version, companies: manifest.companies, message: "Already up to date." };
+  if (!opts.force && current?.version === manifest.version) {
+    try {
+      writeFileAtomic(join(catalogDir(dataDir), "manifest.json"), JSON.stringify({ ...current, checked_at: new Date().toISOString() }, null, 2));
+    } catch {
+      // Only the "checked" time is lost; the copy is still up to date.
+    }
+    return { updated: false, version: manifest.version, companies: manifest.companies, message: "Already up to date." };
+  }
 
   const unsafe = Object.keys(manifest.files ?? {}).find((f) => !isSafeName(f));
   if (unsafe !== undefined) return { updated: false, message: `The shared directory's manifest names an unsafe file (${JSON.stringify(unsafe)}); kept your current directory.` };
@@ -101,11 +111,12 @@ export async function updateDirectory(dataDir: string, opts: { force?: boolean; 
     if (createHash("sha256").update(gz).digest("hex") !== meta.sha256) return { updated: false, message: `${file} didn't match its checksum; kept your current directory.` };
     staged.push([file.replace(/\.gz$/, ""), gunzipSync(gz)]);
   }
+  const now = new Date().toISOString();
   for (const [name, body] of staged) {
     writeFileSync(safeJoin(dir, `${name}.tmp`), body);
     renameSync(safeJoin(dir, `${name}.tmp`), safeJoin(dir, name));
   }
-  writeFileAtomic(join(dir, "manifest.json"), JSON.stringify({ ...manifest, updated_at: new Date().toISOString() }, null, 2));
+  writeFileAtomic(join(dir, "manifest.json"), JSON.stringify({ ...manifest, updated_at: now, checked_at: now }, null, 2));
   return { updated: true, version: manifest.version, companies: manifest.companies, message: `Updated to ${manifest.companies.toLocaleString()} companies.` };
 }
 

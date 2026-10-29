@@ -66,6 +66,19 @@ describe("updateDirectory", () => {
     expect(await updateDirectory(dir, { fetchImpl: server(manifest("v1")) })).toMatchObject({ updated: false, message: "Already up to date." });
   });
 
+  it("stamps checked_at on an up-to-date check but keeps updated_at", async () => {
+    await updateDirectory(dir, { fetchImpl: server(manifest("v1")) });
+    const before = directoryStatus(dir).local!;
+    writeFileSync(join(dir, "catalog", "manifest.json"), JSON.stringify({ ...before, checked_at: "2020-01-01T00:00:00.000Z" }));
+    await updateDirectory(dir, { fetchImpl: server(manifest("v1")) });
+    const after = directoryStatus(dir).local!;
+    expect(after.updated_at).toBe(before.updated_at);
+    expect(after.checked_at! > "2020-01-01T00:00:00.000Z").toBe(true);
+    // A failed check leaves both alone.
+    await updateDirectory(dir, { fetchImpl: (async () => new Response("", { status: 503 })) as unknown as typeof fetch });
+    expect(directoryStatus(dir).local).toMatchObject({ updated_at: after.updated_at, checked_at: after.checked_at });
+  });
+
   it("keeps the current copy when a file doesn't match its checksum", async () => {
     const r = await updateDirectory(dir, { fetchImpl: server(manifest("v2", true)) });
     expect(r.updated).toBe(false);
