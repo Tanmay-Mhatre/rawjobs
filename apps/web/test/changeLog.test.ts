@@ -64,7 +64,7 @@ describe("change log", () => {
     expect(auto.followUpPicked).toBeUndefined();
     const cleared = applyPatch(auto, job, addActivity(auto, reply), at)!;
     expect(cleared.followUp).toBeUndefined();
-    expect(cleared.changes?.at(-1)?.text).toBe("Follow-up cleared: they replied");
+    expect(cleared.changes?.at(-1)?.text).toBe("Follow-up moved to a week after their reply");
     // A sent touch's own next date, or a move, makes it automatic again.
     const resent = applyPatch(picked, job, addActivity(picked, touch({ id: "s2" }), { followUpDays: 7 }), at)!;
     expect(resent.followUpPicked).toBeUndefined();

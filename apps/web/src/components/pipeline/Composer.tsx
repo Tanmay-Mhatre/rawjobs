@@ -1,6 +1,6 @@
 import { Handshake, type LucideIcon, Mail, MessageCircle, MessageSquare, Phone, StickyNote, Users } from "lucide-react";
 import { type KeyboardEvent, useId, useRef, useState } from "react";
-import { type Activity, activityAt, CAPS, CHANNEL_LABEL, CHANNELS, type Channel, type Contact, dayAfter, type Direction, newId, today } from "../../lib/userState";
+import { type Activity, activityAt, CAPS, CHANNEL_LABEL, CHANNELS, type Channel, type Contact, dayAfter, type Direction, FOLLOW_UP_DAYS, newId, today } from "../../lib/userState";
 import { DateField } from "../DateField";
 import { Button, cx, Select } from "../ui";
 
@@ -45,7 +45,7 @@ export type ComposerProps = {
   contacts: readonly Contact[];
   /** Filled in by Log follow-up and Log thank-you: channel, person and a short text; `followUp` marks the touch as a follow-up. */
   initial?: { channel?: Channel; dir?: Direction; contactId?: string; text?: string; followUp?: boolean };
-  /** An automatic follow-up date is set: a received touch clears it, and the hint says so. */
+  /** An automatic follow-up date is set: a received touch moves it to a week after the reply, and the hint says so. */
   hasFollowUp?: boolean;
   /** False on a Saved job: its date is "Apply by", so a touch neither sets nor clears it, and there's no "Next follow-up in". */
   followUps?: boolean;
@@ -133,7 +133,11 @@ export function Composer({ contacts, initial, hasFollowUp, followUps = true, onL
     };
     const followUpDays = followUps && sent && chase ? days : undefined;
     onLog(activity, { followUpDays });
-    const next = followUpDays ? ` Next follow-up ${shortDay(dayAfter(`${day}T12:00:00`, followUpDays))}.` : followUps && !note && dir === "received" && hasFollowUp ? " Follow-up cleared." : "";
+    const next = followUpDays
+      ? ` Next follow-up ${shortDay(dayAfter(`${day}T12:00:00`, followUpDays))}.`
+      : followUps && !note && dir === "received" && hasFollowUp
+        ? ` Next follow-up ${shortDay(dayAfter(`${day}T12:00:00`, FOLLOW_UP_DAYS))}.`
+        : "";
     onAnnounce?.(`${LOGGED[channel]}.${next}`);
     setText("");
   };
@@ -235,7 +239,7 @@ export function Composer({ contacts, initial, hasFollowUp, followUps = true, onL
             </Select>
           </label>
         )}
-        {followUps && !note && dir === "received" && hasFollowUp && <p className="type-small text-muted">Logging a reply clears the follow-up date.</p>}
+        {followUps && !note && dir === "received" && hasFollowUp && <p className="type-small text-muted">Logging a reply moves the follow-up to a week after it.</p>}
         <span className="ml-auto flex gap-2">
           {onCancel && (
             <Button variant="ghost" onClick={onCancel}>

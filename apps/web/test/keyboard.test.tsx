@@ -61,7 +61,8 @@ describe("Pipeline [ / ] moves (design/components/Pipeline)", () => {
       />
     );
   }
-  const title = () => screen.getByRole("button", { name: j.title });
+  // The card's title: Next steps above the board names the job too.
+  const title = () => screen.getAllByRole("button", { name: j.title }).at(-1)!;
   const column = (name: string) => screen.getByRole("heading", { name: new RegExp(`^${name}`) }).closest("section")!;
 
   it("describes the keys on the card title", () => {

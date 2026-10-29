@@ -1,5 +1,5 @@
 import { fitFeatures } from "@rawjobs/core/learn";
-import { dayAfter, isActive, isDay, PIPELINE, QUIET_DAYS, STATUS_LABEL, type Status, stageSince, today } from "@rawjobs/core/next-steps";
+import { dayAfter, FOLLOW_UP_DAYS, isActive, isDay, PIPELINE, QUIET_DAYS, STATUS_LABEL, type Status, stageSince, today } from "@rawjobs/core/next-steps";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { Job } from "./data";
 import type { Reason } from "./notForMe";
@@ -9,14 +9,12 @@ import { load, save, saveFailed } from "./storage";
 import { useSavedOnDisk } from "./tracking";
 
 // The stages and day helpers are shared with the CLI's daily summary (@rawjobs/core/next-steps).
-export { ACTIVE, dayAfter, isActive, isDay, PIPELINE, type PipelineStatus, QUIET_DAYS, STATUS_LABEL, type Status, stageSince, today } from "@rawjobs/core/next-steps";
+export { ACTIVE, dayAfter, FOLLOW_UP_DAYS, isActive, isDay, PIPELINE, type PipelineStatus, QUIET_DAYS, STATUS_LABEL, type Status, stageSince, today } from "@rawjobs/core/next-steps";
 
 /** How a job you're out of the running for ended (status "rejected", shown as Closed). */
 export const CLOSED_AS = { rejected: "Rejected", withdrew: "I withdrew", "no-response": "No response" } as const;
 export type ClosedAs = keyof typeof CLOSED_AS;
 
-/** Days after you apply that RawJobs reminds you to follow up. */
-export const FOLLOW_UP_DAYS = 7;
 const HISTORY_MAX = 20;
 
 /** One interview round: its day (YYYY-MM-DD), what it is ("Technical", "Final"), its time (HH:MM) and who with. */
@@ -115,8 +113,6 @@ export const CAPS = {
   activities: 100,
   contacts: 30,
   skipped: 50,
-  /** Done task keys whose date is older than this many days are dropped. */
-  skippedDays: 30,
   name: 120,
   company: 120,
   email: 254,
@@ -293,10 +289,8 @@ export function normalizeState(s: unknown): UserState {
   return out ?? state;
 }
 
-const dayIn = (key: string) => key.match(/\d{4}-\d{2}-\d{2}/)?.[0];
-
-/** One entry within the size caps: the newest touches, the first people, recent done-task keys. */
-export function capEntry(e: Entry, now = new Date()): Entry {
+/** One entry within the size caps: the newest touches, the first people, the latest done-task keys. */
+export function capEntry(e: Entry): Entry {
   const next = { ...e };
   if (next.activities) {
     next.activities = [...next.activities]
@@ -313,10 +307,8 @@ export function capEntry(e: Entry, now = new Date()): Entry {
       if (kept.length < Object.keys(next.outreach).length) next.outreach = Object.fromEntries(kept);
     } else delete next.outreach;
   }
-  if (next.skipped) {
-    const oldest = dayAfter(now.toISOString(), -CAPS.skippedDays);
-    next.skipped = [...new Set(next.skipped)].filter((k) => !((dayIn(k) ?? oldest) < oldest)).slice(-CAPS.skipped);
-  }
+  // Done keys are kept however old: an overdue task shows until it's done, so dropping its key would bring it back.
+  if (next.skipped) next.skipped = [...new Set(next.skipped)].slice(-CAPS.skipped);
   if (next.changes) next.changes = next.changes.filter((c) => isText(c?.at) && isText(c.text)).slice(-CAPS.changes);
   return next;
 }
@@ -325,7 +317,7 @@ const dayLabel = (day: string) => new Date(`${day}T12:00:00`).toLocaleDateString
 const timeLabel = (hhmm: string) => new Date(`2000-01-01T${hhmm}:00`).toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" });
 const interviewLabel = (i: Interview) => [i.what || "Interview", dayLabel(i.on), i.time && timeLabel(i.time)].filter(Boolean).join(", ");
 const OFFER_LABEL: Record<(typeof OFFER_FIELDS)[number], string> = { pay: "pay", bonus: "bonus", equity: "equity", location: "location", start: "start date", deadline: "deadline", note: "note" };
-const TASK_LABEL: Record<string, string> = { "follow-up": "Follow-up", "thank-you": "Thank-you", interview: "Interview", deadline: "Deadline" };
+const TASK_LABEL: Record<string, string> = { "follow-up": "Follow-up", reply: "Reply", "thank-you": "Thank-you", interview: "Interview", deadline: "Deadline" };
 
 /**
  * What a change did, in words, for the job's Activity. Stage moves (history) and new touches have
@@ -342,8 +334,8 @@ export function describeChanges(prev: Entry | undefined, next: Entry, patch: Ent
     const word = next.status === "saved" ? "Apply by" : "Follow-up";
     out.push(!next.followUp ? `${word} date cleared` : prev.followUp ? `${word} moved to ${dayLabel(next.followUp)}` : `${word} set for ${dayLabel(next.followUp)}`);
   }
-  // A reply logged on a job being chased clears its automatic date: say so, or the next step just vanishes.
-  if ("activities" in patch && "followUp" in patch && !next.followUp && prev.followUp) out.push("Follow-up cleared: they replied");
+  // A reply logged on a job being chased clears its automatic date, so the follow-up falls a week after the reply: say so.
+  if ("activities" in patch && "followUp" in patch && !next.followUp && prev.followUp) out.push("Follow-up moved to a week after their reply");
   if ("closedAs" in patch && !moved && next.closedAs && next.closedAs !== prev.closedAs) out.push(`Outcome set to ${CLOSED_AS[next.closedAs]}`);
   if (patch.since && isDay(patch.since) && next.status) out.push(`${STATUS_LABEL[next.status]} date set to ${dayLabel(patch.since)}`);
   if ("cv" in patch && (next.cv ?? "") !== (prev.cv ?? "")) out.push(next.cv ? `CV set to ${next.cv}` : "CV removed");
@@ -464,7 +456,7 @@ export function applyPatch(prev: Entry | undefined, job: JobLike, patch: EntryPa
   if (next.offer && !Object.values(next.offer).some(Boolean)) delete next.offer;
   const changes = describeChanges(prev, next, patch).map((text) => ({ at: now, text: text.slice(0, CAPS.text) }));
   if (changes.length) next.changes = [...(prev?.changes ?? []), ...changes];
-  return keep(next) ? capEntry(next, new Date(now)) : null;
+  return keep(next) ? capEntry(next) : null;
 }
 
 /** How far along each status is: shortcuts never move a job back down this order. */
@@ -535,7 +527,7 @@ export function mergeStates(mine: UserState, theirs: UserState, now = new Date()
     const outreach = { ...older.outreach };
     for (const [cid, o] of Object.entries(newer.outreach ?? {})) if (!outreach[cid] || o.at >= outreach[cid].at) outreach[cid] = o;
     if (Object.keys(outreach).length) merged.outreach = outreach;
-    out[id] = capEntry(merged, now);
+    out[id] = capEntry(merged);
   }
   return out;
 }
@@ -753,7 +745,7 @@ function entryFrom(v: unknown, id: string, now: Date): Entry | undefined {
       ...(Array.isArray(snap.fit) && snap.fit.length <= 16 && snap.fit.every((v) => typeof v === "number" && Number.isFinite(v)) ? { fit: snap.fit as number[] } : {}),
     },
   };
-  return keep(entry) ? capEntry(entry, now) : undefined;
+  return keep(entry) ? capEntry(entry) : undefined;
 }
 
 export async function readStateFile(file: File, now = new Date()): Promise<{ state: UserState; prefs?: Partial<Prefs>; skipped: number }> {

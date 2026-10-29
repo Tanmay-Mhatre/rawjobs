@@ -56,7 +56,7 @@ export function stageSince(e: Pick<TaskEntry, "status" | "history" | "updatedAt"
   return h?.at ?? e.updatedAt;
 }
 
-export type TaskKind = "follow-up" | "thank-you" | "interview" | "deadline" | "close";
+export type TaskKind = "follow-up" | "reply" | "thank-you" | "interview" | "deadline" | "close";
 export type Task = {
   /** "follow-up:2026-10-22": marking it done stores this, so a new date brings the task back. */
   key: string;
@@ -74,8 +74,8 @@ export type Task = {
 
 /** After this many sent follow-ups with no reply, RawJobs suggests closing the job as No response. */
 export const MAX_FOLLOW_UPS = 2;
-/** A thank-you is suggested for an interview up to this many days ago. */
-const THANK_YOU_DAYS = 14;
+/** Days to the next follow-up: after you apply, and on an active job with no date, after its last stage move, touch or interview. */
+export const FOLLOW_UP_DAYS = 7;
 /** "This week" in Next steps: due up to this many days ahead. */
 export const WEEK_DAYS = 7;
 
@@ -90,6 +90,8 @@ const isTouch = (a: Touch) => a.channel !== "note" && !!a.dir;
 /** The newest received touch's time (ms), or 0. */
 export const lastReceived = (e: Pick<TaskEntry, "activities">) => Math.max(0, ...(e.activities ?? []).filter((a) => isTouch(a) && a.dir === "received").map((a) => Date.parse(a.at)));
 const lastSent = (e: TaskEntry) => (e.activities ?? []).filter((a) => isTouch(a) && a.dir === "sent").at(-1);
+/** Channels where a received touch asks for an answer: not a meeting or a referral. */
+const ANSWERABLE = new Set(["email", "linkedin", "whatsapp", "call"]);
 
 /** HH:MM of an ISO time, local. */
 const localTime = (iso: string) => {
@@ -109,24 +111,42 @@ export function tasksFor(id: string, e: TaskEntry, now = new Date()): Task[] {
   const week = plusDays(day, WEEK_DAYS);
   const tasks: Task[] = [];
   const sent = lastSent(e);
+  const touches = (e.activities ?? []).filter(isTouch);
+  const last = touches.at(-1);
+  const interviews = (e.interviews ?? []).filter((i) => isDay(i.on));
 
-  if (e.followUp && isDay(e.followUp)) {
-    const saved = e.status === "saved";
+  // Every active job has a follow-up: the date you or a move set, else FOLLOW_UP_DAYS after its last
+  // stage move, touch or interview (a reply clears the date, and older jobs may have none). Applied
+  // gets its date when you apply, so without one only a reply starts it; else "No reply" covers it.
+  const since = [dayAfter(stageSince(e), 0), last ? dayAfter(last.at, 0) : "", ...interviews.map((i) => i.on)].sort().at(-1)!;
+  const followUp = e.followUp && isDay(e.followUp) ? e.followUp : e.status !== "applied" || last?.dir === "received" ? plusDays(since, FOLLOW_UP_DAYS) : undefined;
+  const saved = e.status === "saved";
+  if (followUp)
     tasks.push({
-      key: `follow-up:${e.followUp}`,
+      key: `follow-up:${followUp}`,
       id,
       kind: "follow-up",
-      due: e.followUp,
+      due: followUp,
       label: saved ? "Apply by" : "Follow up",
-      why: saved ? "Saved to apply" : sent ? `You last wrote on ${shortDay(dayAfter(sent.at, 0))}` : `${STATUS_LABEL[e.status!]} since ${shortDay(dayAfter(stageSince(e), 0))}`,
+      why: saved
+        ? "Saved to apply"
+        : last?.dir === "received"
+          ? `They last wrote on ${shortDay(dayAfter(last.at, 0))}`
+          : sent
+            ? `You last wrote on ${shortDay(dayAfter(sent.at, 0))}`
+            : `${STATUS_LABEL[e.status!]} since ${shortDay(dayAfter(stageSince(e), 0))}`,
       ...(sent?.contactId ? { contactId: sent.contactId } : {}),
     });
+
+  // They wrote last, on a channel that asks for an answer: reply, until you log a sent touch.
+  if (last?.dir === "received" && ANSWERABLE.has(last.channel)) {
+    const on = dayAfter(last.at, 0);
+    tasks.push({ key: `reply:${on}`, id, kind: "reply", due: on, label: "Reply", why: `They wrote on ${shortDay(on)}`, ...(last.contactId ? { contactId: last.contactId } : {}) });
   }
 
-  const interviews = (e.interviews ?? []).filter((i) => isDay(i.on));
-  // A thank-you after the latest interview that has passed, until you send a touch after it.
+  // A thank-you after the latest interview that has passed, until you send a touch after it or mark it done.
   const passed = interviews
-    .filter((i) => i.on < day && i.on >= plusDays(day, -THANK_YOU_DAYS))
+    .filter((i) => i.on < day)
     .sort((a, b) => a.on.localeCompare(b.on))
     .at(-1);
   if (passed && !(e.activities ?? []).some((a) => isTouch(a) && a.dir === "sent" && afterInterview(a.at, passed))) {
@@ -155,7 +175,7 @@ export function tasksFor(id: string, e: TaskEntry, now = new Date()): Task[] {
   }
 
   const deadline = e.offer?.deadline;
-  if (e.status === "offer" && isDay(deadline) && deadline >= day && deadline <= week) {
+  if (e.status === "offer" && isDay(deadline) && deadline <= week) {
     tasks.push({ key: `deadline:${deadline}`, id, kind: "deadline", due: deadline, label: "Answer the offer", why: `Answer by ${shortDay(deadline)}` });
   }
 

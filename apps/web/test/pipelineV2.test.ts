@@ -117,23 +117,24 @@ describe("addActivity", () => {
 });
 
 describe("size caps", () => {
-  const now = new Date("2026-10-20T12:00:00Z");
   it("keeps the newest 100 touches, each up to 1,000 characters", () => {
     const many = Array.from({ length: 120 }, (_, i) => touch({ id: `t${i}`, at: new Date(Date.UTC(2026, 8, 1) + i * 3600_000).toISOString(), text: "x".repeat(1500) }));
-    const capped = capEntry(entry({ activities: many.reverse() }), now);
+    const capped = capEntry(entry({ activities: many.reverse() }));
     expect(capped.activities).toHaveLength(CAPS.activities);
     expect(capped.activities![0]!.id).toBe("t20");
     expect(capped.activities!.at(-1)!.id).toBe("t119");
     expect(capped.activities![0]!.text).toHaveLength(CAPS.text);
   });
-  it("keeps 30 people and the last 50 done tasks, dropping dated ones older than 30 days", () => {
+  it("keeps 30 people and the last 50 done tasks, however old", () => {
     const people = Array.from({ length: 35 }, (_, i) => ({ id: `p${i}`, name: `P${i}` }));
-    expect(capEntry(entry({ contacts: people }), now).contacts).toHaveLength(CAPS.contacts);
+    expect(capEntry(entry({ contacts: people })).contacts).toHaveLength(CAPS.contacts);
     const skipped = ["follow-up:2026-09-01", "close:2", "thank-you:2026-10-15", ...Array.from({ length: 60 }, (_, i) => `x:${i}`)];
-    const kept = capEntry(entry({ skipped }), now).skipped!;
+    const kept = capEntry(entry({ skipped })).skipped!;
     expect(kept).toHaveLength(CAPS.skipped);
-    expect(kept).not.toContain("follow-up:2026-09-01");
-    expect(capEntry(entry({ skipped: ["close:2", "thank-you:2026-10-15", "follow-up:2026-09-01"] }), now).skipped).toEqual(["close:2", "thank-you:2026-10-15"]);
+    expect(kept.at(-1)).toBe("x:59");
+    // An old overdue task marked done stays done.
+    const old = ["close:2", "thank-you:2026-10-15", "follow-up:2026-01-01", "close:2"];
+    expect(capEntry(entry({ skipped: old })).skipped).toEqual(["close:2", "thank-you:2026-10-15", "follow-up:2026-01-01"]);
   });
   it("cuts free text and drops structured values that are too long", () => {
     const c = toContact({ name: "N".repeat(200), email: `${"e".repeat(260)}@x.io`, howMet: "h".repeat(600), phone: "1".repeat(40) }, "x")!;

@@ -34,7 +34,10 @@ describe("card chips (section 6.1, 9.2.19)", () => {
     expect(chipOf(entry("applied", "2026-10-10", { followUp: "2026-10-28" }))).toMatch(/^Follow up (Oct 28|28 Oct)$/);
     expect(chipOf(entry("saved", "2026-10-10", { followUp: "2026-10-28" }))).toMatch(/^Apply by (Oct 28|28 Oct)$/);
     expect(chipOf(entry("applied", "2026-09-20"))).toBe("No reply · 30d");
-    expect(chipOf(entry("interviewing", "2026-10-10"))).toBe("No next step");
+    // No date: a follow-up a week after the move, and a Reply when they wrote last.
+    expect(chipOf(entry("interviewing", "2026-10-10"))).toBe("Follow up · 3d overdue");
+    const wrote = { id: "r", at: noon("2026-10-19"), channel: "whatsapp" as const, dir: "received" as const };
+    expect(chipOf(entry("interviewing", "2026-10-10", { activities: [wrote] }))).toBe("Reply · 1d overdue");
     expect(chipOf(entry("rejected", "2026-10-10", { closedAs: "no-response" }))).toBeUndefined();
   });
 });
@@ -179,7 +182,8 @@ describe("a Radar job opened from the board", () => {
         now={now}
       />,
     );
-    fireEvent.click(screen.getByRole("button", { name: job.title }));
+    // The card's title (Next steps above the board names the job too).
+    fireEvent.click(screen.getAllByRole("button", { name: job.title }).at(-1)!);
     expect(onOpen).not.toHaveBeenCalled();
     const dialog = within(screen.getByRole("dialog", { name: job.title }));
     expect(dialog.getByText(/^AED 40K/)).toBeTruthy();
@@ -208,11 +212,11 @@ describe("a Radar job opened from the board", () => {
         now={now}
       />,
     );
-    fireEvent.click(screen.getByRole("button", { name: job.title }));
+    fireEvent.click(screen.getAllByRole("button", { name: job.title }).at(-1)!);
     expect(screen.queryByRole("link", { name: /^Apply at/ })).toBeNull();
     expect(screen.getByRole("button", { name: "Open full job" })).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "Close" }));
-    fireEvent.click(screen.getByRole("button", { name: "By hand" }));
+    fireEvent.click(screen.getAllByRole("button", { name: "By hand" }).at(-1)!);
     expect(screen.queryByRole("button", { name: "Open full job" })).toBeNull();
   });
 });

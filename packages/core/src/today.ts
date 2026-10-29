@@ -15,7 +15,7 @@ import { readTracking } from "./tracking";
 type Fetch = typeof fetch;
 
 /** One titled line, most urgent kinds first. */
-export type TodayKind = "interview" | "offer" | "thank-you" | "overdue" | "follow-up";
+export type TodayKind = "interview" | "offer" | "reply" | "thank-you" | "overdue" | "follow-up";
 export type TodayLine = { kind: TodayKind; title: string; company: string; time?: string; by?: "today" | "tomorrow"; days?: number };
 /** Everything due today: the titled lines in order, and the jobs to apply to or close (counted, not named). */
 export type TodaySummary = { lines: TodayLine[]; apply: number; close: number };
@@ -27,7 +27,7 @@ export const TODAY_TITLE_MAX = 60;
 /** A scheduled run after this local time (minutes after midnight) sends nothing: a morning message that late is no use. */
 export const TODAY_CUTOFF = 12 * 60;
 
-const ORDER: readonly TodayKind[] = ["interview", "offer", "thank-you", "overdue", "follow-up"];
+const ORDER: readonly TodayKind[] = ["interview", "offer", "reply", "thank-you", "overdue", "follow-up"];
 
 const isRecord = (v: unknown): v is Record<string, unknown> => typeof v === "object" && v !== null && !Array.isArray(v);
 
@@ -54,6 +54,7 @@ export function todaySummary(state: Record<string, unknown> | undefined, now = n
     for (const t of tasks) {
       if (t.kind === "interview" && t.due === day) lines.push({ kind: "interview", ...job, ...(t.time ? { time: t.time } : {}) });
       else if (t.kind === "deadline" && (t.due === day || t.due === tomorrow)) lines.push({ kind: "offer", ...job, by: t.due === day ? "today" : "tomorrow" });
+      else if (t.kind === "reply" && t.due <= day) lines.push({ kind: "reply", ...job });
       else if (t.kind === "thank-you" && t.due <= day) lines.push({ kind: "thank-you", ...job });
       else if (t.kind === "follow-up" && t.due <= day) {
         // On Saved the date means "Apply by": counted, not named.
@@ -84,6 +85,7 @@ export function todayLine(l: TodayLine, html = true): string {
   // Only a time as the dashboard writes it (HH:MM); anything else in the file is left out.
   if (l.kind === "interview") return `📅 Interview: ${job}${l.time && /^\d{2}:\d{2}$/.test(l.time) ? ` (${l.time})` : ""}`;
   if (l.kind === "offer") return `⏳ Answer the offer: ${job} (by ${l.by})`;
+  if (l.kind === "reply") return `💬 Reply: ${job}`;
   if (l.kind === "thank-you") return `✉️ Thank-you: ${job}`;
   if (l.kind === "overdue") return `⏰ Follow up: ${job} (${l.days} ${l.days === 1 ? "day" : "days"} overdue)`;
   return `⏰ Follow up: ${job}`;

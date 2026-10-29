@@ -90,7 +90,7 @@ Keyboard: `j`/`k` move, `Enter` open, `s` save, `a` applied, `x` not interested,
 
 Every job you save, apply to or track by hand (**Track a job**, for one RawJobs didn't find) gets a card. Each card shows its next step, worked out from what you logged:
 
-- **Next steps** at the top lists what's overdue, due today and due this week: apply by a date you set, follow up when an application goes quiet, a thank-you after an interview, an interview coming up, answering an offer by its deadline, and closing a job that never answered.
+- **Next steps** at the top lists what's overdue, due today and due this week: apply by a date you set, follow up when an application goes quiet, reply when someone wrote to you, a thank-you after an interview, an interview coming up, answering an offer by its deadline, and closing a job that never answered. Every saved or active job always has a next step: with no date set, a follow-up falls a week after its last move, message or interview. Overdue steps stay until you do them or mark them done.
 - Each job has an **Activity** log (messages sent and received, stage changes, notes), a **People** tab for your contacts there, and an **Interviews** tab for each round.
 - After you open a job's apply page, RawJobs asks **Did you apply?** when you come back, so the Pipeline stays true without typing.
 - Moving a card to **Closed** asks how it ended. A summary shows your week against a weekly plan you set.

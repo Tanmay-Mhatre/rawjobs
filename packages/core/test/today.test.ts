@@ -105,6 +105,14 @@ describe("today's summary", () => {
     expect(todayMessage(s)).toContain("📅 Interview: PM · Acme\n⏳ Answer the offer: Lead · Beta (by today)\n\n👉");
   });
 
+  it("asks for a reply when they wrote last, without naming them", () => {
+    const wrote = { id: "r1", at: new Date(2026, 9, 19, 9, 0).toISOString(), channel: "whatsapp", dir: "received", contactId: "p1", text: "Private reply" };
+    const s = todaySummary({ r: job("Product Manager", "Next ventures", { status: "interviewing", activities: [wrote] }) }, NOW);
+    expect(s.lines).toEqual([{ kind: "reply", title: "Product Manager", company: "Next ventures" }]);
+    expect(todayMessage(s)).toContain("💬 Reply: Product Manager · Next ventures");
+    expect(todayMessage(s)).not.toContain("Private");
+  });
+
   it("leaves out an interview time that isn't HH:MM", () => {
     for (const time of ["2pm", "14:00<b>", "1400"]) {
       const s = todaySummary({ a: job("PM", "Acme", { status: "interviewing", interviews: [{ on: "2026-10-20", what: "Final", time }] }) }, NOW);
