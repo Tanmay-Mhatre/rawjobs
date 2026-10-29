@@ -1,10 +1,17 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { describe, expect, it } from "vitest";
-import { EVAL_DIR, evaluate, loadSet, ndcg, precisionAt, problems, spearman, tieRate, type Baseline } from "../eval/lib";
+import { beforeAll, describe, expect, it } from "vitest";
+import { EVAL_DIR, evaluate, loadSet, ndcg, precisionAt, problems, spearman, tieRate, type Baseline, type Report } from "../eval/lib";
 
 describe("matching eval set", () => {
   const set = loadSet();
+  const base = JSON.parse(readFileSync(join(EVAL_DIR, "baseline.json"), "utf8")) as Baseline;
+  // Scoring the whole set once is the heavy part (the scorer builds its place and topic patterns on
+  // first use): a few seconds alone, half a minute on a busy machine. Both baseline checks share it.
+  let report: Report;
+  beforeAll(() => {
+    report = evaluate(set);
+  }, 90_000);
 
   it("labels every profile x posting pair, 0..4 with a reason", () => {
     expect(problems(set)).toEqual([]);
@@ -21,13 +28,11 @@ describe("matching eval set", () => {
   });
 
   it("doesn't rank worse than the baseline (NDCG@10 within 0.02)", () => {
-    const base = JSON.parse(readFileSync(join(EVAL_DIR, "baseline.json"), "utf8")) as Baseline;
-    expect(evaluate(set).overall.ndcg10).toBeGreaterThanOrEqual(base.overall.ndcg10 - 0.02);
+    expect(report.overall.ndcg10).toBeGreaterThanOrEqual(base.overall.ndcg10 - 0.02);
   });
 
   it("doesn't bunch scores more than the baseline (tie rates within 0.02)", () => {
-    const base = JSON.parse(readFileSync(join(EVAL_DIR, "baseline.json"), "utf8")) as Baseline;
-    const now = evaluate(set).overall;
+    const now = report.overall;
     expect(now.ties).toBeLessThanOrEqual(base.overall.ties + 0.02);
     expect(now.tiesNoTopics).toBeLessThanOrEqual(base.overall.tiesNoTopics + 0.02);
   });
