@@ -62,6 +62,7 @@ const shortDay = (day: string) => new Date(`${day}T12:00:00`).toLocaleDateString
 /** The word for a task on a card chip: "Follow up", "Apply by" (a Saved job's date), "Interview"… */
 function taskWord(t: Task): string {
   if (t.kind === "follow-up") return t.label;
+  if (t.kind === "reply") return "Reply";
   if (t.kind === "thank-you") return "Send thank-you";
   if (t.kind === "interview") return "Interview";
   if (t.kind === "deadline") return "Answer offer";
@@ -292,7 +293,7 @@ export function Pipeline({ user, jobsById, onOpen, onApply, minScore, onPatch, o
             <div className="flex items-start gap-3">
               <div className="min-w-0 flex-1">
                 <h2 id="log-task-title" className="type-subheading font-semibold">
-                  {logging.kind === "thank-you" ? "Log thank-you" : "Log follow-up"}
+                  {logging.kind === "thank-you" ? "Log thank-you" : logging.kind === "reply" ? "Log reply" : "Log follow-up"}
                 </h2>
                 <p className="truncate type-small text-muted">
                   {loggingEntry.snapshot.title} · {displayName(loggingEntry.snapshot.company)}
@@ -574,10 +575,13 @@ function NextSteps({
    * it (or before it), else to the Next steps heading, instead of dropping to the page.
    */
   const pending = useRef<{ from: string; to?: string } | null>(null);
+  /** A row's key: the job and its task, as two jobs can have the same task ("follow-up:2026-10-28"). */
+  const rowKey = (t: Task) => `${t.id} ${t.key}`;
   const leaving = (t: Task) => {
     const list = [...groups.overdue, ...groups.today, ...groups.week];
-    const i = list.findIndex((x) => x.key === t.key);
-    pending.current = { from: t.key, to: (list[i + 1] ?? list[i - 1])?.key };
+    const i = list.findIndex((x) => rowKey(x) === rowKey(t));
+    const to = list[i + 1] ?? list[i - 1];
+    pending.current = { from: rowKey(t), to: to && rowKey(to) };
   };
   useEffect(() => {
     const p = pending.current;
@@ -597,7 +601,7 @@ function NextSteps({
     const e = user[t.id];
     if (!e) return null;
     return (
-      <li key={t.key} data-task-key={t.key} className="flex flex-wrap items-center gap-x-3 gap-y-2 py-2">
+      <li key={rowKey(t)} data-task-key={rowKey(t)} className="flex flex-wrap items-center gap-x-3 gap-y-2 py-2">
         <div className="min-w-0 flex-1 basis-56">
           <p className="type-small">
             <span className="font-semibold">{t.label}</span>

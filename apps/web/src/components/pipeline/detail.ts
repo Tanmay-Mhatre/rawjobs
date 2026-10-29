@@ -122,10 +122,15 @@ export function templateText(kind: "follow-up" | "thank-you" | "check-in", name:
 }
 
 /**
- * What Log follow-up and Log thank-you put in the composer: the channel and person of the last sent
- * touch (or the task's person), the built-in text, and the follow-up mark.
+ * What Log follow-up, Log reply and Log thank-you put in the composer: the channel and person of the
+ * last sent touch (or the task's person), the built-in text, and the follow-up mark. A reply goes
+ * back on the channel they wrote on, with no text and no follow-up mark.
  */
 export function taskPrefill(entry: Entry, task: Task, title: string): { channel: Channel; dir: "sent"; contactId?: string; text: string; followUp: boolean } {
+  if (task.kind === "reply") {
+    const theirs = (entry.activities ?? []).filter((a) => a.dir === "received" && a.channel !== "note").at(-1);
+    return { channel: theirs?.channel ?? "email", dir: "sent", contactId: task.contactId, text: "", followUp: false };
+  }
   const lastSent = (entry.activities ?? []).filter((a) => a.dir === "sent" && a.channel !== "note").at(-1);
   const contactId = task.contactId ?? lastSent?.contactId;
   const name = entry.contacts?.find((c) => c.id === contactId)?.name;

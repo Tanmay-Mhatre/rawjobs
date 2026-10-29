@@ -251,7 +251,8 @@ type TaskActionsProps = {
 
 /**
  * A task's buttons, shared by the job's pinned next step and the Pipeline's Next steps list: Log
- * follow-up and Snooze, Log thank-you and Mark done, Close as no response and Follow up once more, or Open.
+ * follow-up and Snooze, Log reply or Log thank-you and Mark done, Close as no response and Follow up
+ * once more, or Open.
  */
 export function TaskActions({ task, skipped, onLog, onMarkDone, onUpdate, now, onOpen, deadlineLabel = "Open", quiet, saved }: TaskActionsProps) {
   const main = quiet ? undefined : ("primary" as const);
@@ -312,10 +313,10 @@ export function TaskActions({ task, skipped, onLog, onMarkDone, onUpdate, now, o
           )}
         </>
       )}
-      {task.kind === "thank-you" && (
+      {(task.kind === "thank-you" || task.kind === "reply") && (
         <>
           <Button size="sm" variant={main} onClick={() => onLog(task)}>
-            Log thank-you
+            {task.kind === "reply" ? "Log reply" : "Log thank-you"}
           </Button>
           <Button size="sm" onClick={() => onMarkDone(task)}>
             <Check className="rj-icon" aria-hidden /> Mark done

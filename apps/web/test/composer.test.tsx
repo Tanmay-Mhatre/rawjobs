@@ -26,7 +26,7 @@ describe("Composer", () => {
     const onLog = vi.fn();
     render(<Composer contacts={contacts} onLog={onLog} now={now} hasFollowUp />);
     fireEvent.click(screen.getByRole("radio", { name: "Received" }));
-    expect(screen.getByText("Logging a reply clears the follow-up date.")).toBeTruthy();
+    expect(screen.getByText("Logging a reply moves the follow-up to a week after it.")).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "Log email" }));
     expect(onLog.mock.calls[0]![0]).toMatchObject({ channel: "email", dir: "received" });
     expect(onLog.mock.calls[0]![1]).toEqual({ followUpDays: undefined });
