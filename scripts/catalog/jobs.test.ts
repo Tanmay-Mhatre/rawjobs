@@ -83,4 +83,8 @@ describe("slowHosts", () => {
       ]),
     ).toEqual({ "bayer.eightfold.ai": 1250, "explore.jobs.netflix.net": 1250 });
   });
+
+  it("gives every Avature tenant's host the same gap", () => {
+    expect(slowHosts([{ ats: "avature", slug: "Bloomberg" }])).toEqual({ "bloomberg.avature.net": 1250 });
+  });
 });
