@@ -162,10 +162,25 @@ const ALERT_FAILED = 0.3;
 const ALERT_MIN = 20;
 /** This many failed boards in a row stops a system for the run (a blocked runner, across all its hosts). */
 const BREAK_ATS_AFTER = 100;
+/**
+ * Systems that stop the runner's whole IP after a budget of requests, not a rate: Avature answers 406 to every
+ * board once a run has read ~30 of its ~57 (4 Nov: boards 1-32 read, 33-57 all 406, at 1 board and 1.25 s).
+ * They stop after a few failures in a row (one dead board alone mustn't stop them) and read the boards read
+ * longest ago first, so the boards a run doesn't reach go first in the next one.
+ */
+const BUDGETED: Record<string, { breakAfter: number; describes: number }> = { avature: { breakAfter: 3, describes: 5 } };
+const breakAfter = (ats: string) => BUDGETED[ats]?.breakAfter ?? BREAK_ATS_AFTER;
 /** Failed boards printed per system and reason in the run log. */
 const FAIL_EXAMPLES = 3;
 /** Vague-location jobs ("3 Locations") looked up per company per run; the rest wait for the next run. */
 const DESCRIBES_PER_COMPANY = 25;
+
+/** Boards in the order to read them: for BUDGETED systems, the one read longest ago (or never) first. */
+export function readOrder<T>(ats: string, todo: T[], lastRead: (e: T) => string | undefined): T[] {
+  if (!BUDGETED[ats]) return todo;
+  const at = (e: T) => Date.parse(lastRead(e) ?? "") || 0;
+  return [...todo].sort((a, b) => at(a) - at(b));
+}
 
 type Entry = DirectoryEntry & { key: string; status: string };
 type AtsStats = {
@@ -278,13 +293,18 @@ async function crawl(out: string, group: string, generated: string, directoryFil
       const previous = (previousGroup ? readShard(dir, previousGroup.shards, ats) : readShard(out, legacy?.shards, ats))?.companies ?? {};
       const companies: JobFeedShard["companies"] = {};
       const seen = new Set<string>();
-      const todo = directory.filter((e) => {
-        if (e.ats !== ats || e.status !== "live" || denied(e)) return false;
-        const key = jobCompanyKey(e);
-        if (seen.has(key)) return false;
-        seen.add(key);
-        return true;
-      });
+      const todo = readOrder(
+        ats,
+        directory.filter((e) => {
+          if (e.ats !== ats || e.status !== "live" || denied(e)) return false;
+          const key = jobCompanyKey(e);
+          if (seen.has(key)) return false;
+          seen.add(key);
+          return true;
+        }),
+        (e) => previous[jobCompanyKey(e)]?.fetched_at,
+      );
+      const describesPer = BUDGETED[ats]?.describes ?? DESCRIBES_PER_COMPANY;
       const keep = (key: string) => {
         const p = previous[key];
         if (p && now.getTime() - Date.parse(p.fetched_at) <= DROP_AFTER_DAYS * 86_400_000) {
@@ -329,7 +349,7 @@ async function crawl(out: string, group: string, generated: string, directoryFil
               // "3 Locations": look up where once per job id, and carry it from run to run.
               if (connector.vagueLocation?.(raw) && connector.describe) {
                 let resolved = was && was[2] === j.location ? was[5] : undefined;
-                if (resolved === undefined && describes < DESCRIBES_PER_COMPANY && Date.now() < deadline) {
+                if (resolved === undefined && describes < describesPer && Date.now() < deadline) {
                   describes++;
                   try {
                     const d = await connector.describe(raw, ref, { http, now });
@@ -361,8 +381,15 @@ async function crawl(out: string, group: string, generated: string, directoryFil
               if (process.env.FEED_DEBUG || reasons[reason] <= FAIL_EXAMPLES)
                 console.error(`${ats} failed: ${key}: ${(err as Error).message}${err instanceof HttpError && err.detail ? ` [${err.detail}]` : ""}`);
               keep(key);
-              // A blocked runner fails every board of a system, across all its hosts: stop asking.
-              if (++streak >= BREAK_ATS_AFTER) s.tripped = true;
+              // A blocked runner fails every board of a system, across all its hosts: stop asking. For a budgeted
+              // system only refusals count, or a few dead boards (read longest ago, so first) would stop it every run.
+              const refused = err instanceof HttpError && [403, 406, 429].includes(err.status ?? 0);
+              if (BUDGETED[ats] && !refused) streak = 0;
+              else if (++streak >= breakAfter(ats) && !s.tripped) {
+                s.tripped = true;
+                // Measures the budget: how long and how many requests (the whole group's) before the block.
+                console.error(`${ats}: stopped after ${s.fetched} boards read, ${Math.round((Date.now() - t0) / 1000)} s, ${http.stats.requests} requests in the group`);
+              }
             }
           }
         }
@@ -480,7 +507,9 @@ async function merge(out: string, generated: string) {
     if (!s.fresh) continue;
     const tried = s.fetched + s.notModified + s.failed;
     const why = s.reasons ? ` (${describeReasons(s.reasons)})` : "";
-    if (s.tripped) alerts.push({ ats, text: `${ats}: stopped after ${BREAK_ATS_AFTER} failed boards in a row (${s.failed} failed, ${s.skipped} skipped)${why}; a host may be blocking the runner` });
+    // A budgeted system stopping part-way is expected (its skipped boards go first next run): only none read is news.
+    if (s.tripped && !(BUDGETED[ats] && s.fetched > 0))
+      alerts.push({ ats, text: `${ats}: stopped after ${breakAfter(ats)} failed boards in a row (${s.failed} failed, ${s.skipped} skipped)${why}; a host may be blocking the runner` });
     else if (tried >= ALERT_MIN && s.failed / tried > ALERT_FAILED) alerts.push({ ats, text: `${ats}: ${Math.round((100 * s.failed) / tried)}% of ${tried} boards failed${why}` });
     const swing = sameSwing(s.same);
     if (swing) alerts.push({ ats, text: `${ats}: ${swing}` });
