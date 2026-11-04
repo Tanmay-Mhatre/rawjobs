@@ -78,6 +78,8 @@ const WORKERS: Record<string, number> = {
   successfactors: 8,
   join: 6,
   eightfold: 1,
+  // One firewall across tenants, like Eightfold's CDN (CI_BOARD_GAPS). ~30 min, inside enterprise's ~90.
+  avature: 1,
   // Enough boards in flight to reach each shared pace with slow answers (lanes ≈ rate × seconds a board).
   // SmartRecruiters allows 8 requests at once.
   smartrecruiters: 8,
@@ -124,15 +126,20 @@ const CI_HOST_DELAYS: Record<string, number> = {
  * Hiring systems whose every board is its own host, with the gap the feed keeps on each. Eightfold's CDN
  * (CloudFront) refuses (403) a CI runner's IP for every board after a few minutes at ~1.6 requests a second
  * across boards; with one board in flight (WORKERS), 1.25 s keeps it at ~0.8. Home connections aren't refused.
+ * Avature's tenants share one firewall that answers 406 a few pages into most boards once ~50 boards are read
+ * 4 at a time at the 1 s default (27 of 49 on 29 Oct, 37 of 57 on 4 Nov); same pace as Eightfold.
  */
-const CI_BOARD_GAPS: Record<string, number> = { eightfold: 1_250 };
+const CI_BOARD_GAPS: Record<string, number> = { eightfold: 1_250, avature: 1_250 };
 
-/** The gap per board host for CI_BOARD_GAPS' systems, from the directory (slug = host, own hosts included). */
+/** A board's host: Eightfold's slug is its host (own hosts included), Avature's is the tenant. */
+const boardHost = (e: { ats: string; slug: string }) => (e.ats === "avature" ? `${e.slug}.avature.net` : e.slug).toLowerCase();
+
+/** The gap per board host for CI_BOARD_GAPS' systems, from the directory. */
 export function slowHosts(directory: { ats: string; slug: string }[]): Record<string, number> {
   const out: Record<string, number> = {};
   for (const e of directory) {
     const gap = CI_BOARD_GAPS[e.ats];
-    if (gap) out[e.slug.toLowerCase()] = gap;
+    if (gap) out[boardHost(e)] = gap;
   }
   return out;
 }

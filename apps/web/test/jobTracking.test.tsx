@@ -1,7 +1,7 @@
 // @vitest-environment happy-dom
 import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { useState } from "react";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, onTestFinished, vi } from "vitest";
 
 vi.mock("../src/components/Toast", () => ({ toast: vi.fn() }));
 import { contactText, filterTimeline, knownPeople, pasteField, timeline, touchLine } from "../src/components/pipeline/detail";
@@ -223,6 +223,10 @@ describe("JobTracking", () => {
   });
 
   it("adds an interview with its time and person", () => {
+    // The date picker opens on today's month: keep today in October so 23 Oct is on it.
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(now);
+    onTestFinished(() => void vi.useRealTimers());
     const onPatch = vi.fn();
     render(<Harness start={entry({ contacts: [priya] })} onPatch={onPatch} />);
     fireEvent.click(screen.getByRole("tab", { name: "Interviews" }));
