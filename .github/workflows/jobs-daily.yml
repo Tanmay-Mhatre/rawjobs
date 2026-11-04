@@ -263,10 +263,19 @@ jobs:
           shards=$(jq -r '.shards[].file' jobs-manifest.json)
           new=$(ls jobs-v2-snapshot-*.json.br jobs-v2-diff-*.json.br jobs-v3-snapshot-*.txt.br jobs-v3-diff-*.json.br 2> /dev/null || true)
           new="$new $(jq -r '.activity.file // empty' jobs-v3-manifest.json)"
-          gh release upload jobs $shards $new -R "$DATA_REPO" --clobber
+          # --clobber deletes before it uploads, so a 502 in between leaves a file missing: try again.
+          upload() {
+            for i in 1 2 3 4 5; do
+              gh release upload jobs "$@" -R "$DATA_REPO" --clobber && return 0
+              echo "Upload failed (try $i of 5); trying again in 20 s." >&2
+              sleep 20
+            done
+            return 1
+          }
+          upload $shards $new
           # Each manifest together with its signature, so the pair changes as close to together as it can.
           for m in jobs-manifest.json jobs-v2-manifest.json jobs-v3-manifest.json; do
-            gh release upload jobs "$m" "$m.sig" -R "$DATA_REPO" --clobber
+            upload "$m" "$m.sig"
           done
           # Drop files no manifest points to any more (change files: the last 56 runs), except the previous
           # run's full copies and shards: an app may be part-way through downloading them.
