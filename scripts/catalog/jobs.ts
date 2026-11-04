@@ -243,6 +243,22 @@ async function crawl(out: string, group: string, generated: string, directoryFil
   // The group's own saved copy; before the first one, the single-job feed's (the first format, in <out>).
   const previousGroup = readJson<GroupFile>(join(dir, "group.json"));
   const legacy = previousGroup ? undefined : readJson<JobFeedManifest>(join(out, "jobs-manifest.json"));
+  // The first format only has the original systems: without the group's copy (lost, or never saved), the
+  // others' rows come from the published full copy, or every board that fails this run would lose its jobs.
+  let v3: ReturnType<typeof readFeed> | null = null;
+  const fromV3 = (ats: string): JobFeedShard["companies"] => {
+    if (previousGroup) return {};
+    if (v3 === null) v3 = readFeed(out, 3);
+    const state = v3?.state;
+    if (!state) return {};
+    const partial = new Set(state.partial ?? []);
+    const rows: JobFeedShard["companies"] = {};
+    for (const [key, jobs] of Object.entries(state.jobs)) {
+      const at = state.verified[key];
+      if (key.startsWith(`${ats}:`) && at) rows[key] = { fetched_at: at, jobs, ...(partial.has(key) ? { partial: true } : {}) };
+    }
+    return rows;
+  };
   const etags = new EtagStore(join(dir, "etags.json"), join(out, "etags.json"));
   // JOIN's company numbers, read off careers pages once (board-ids.ts).
   const ids = new FileBoardIds(join(dir, "board-ids.json"));
@@ -275,7 +291,7 @@ async function crawl(out: string, group: string, generated: string, directoryFil
       const connector = connectors[ats as CompanyRef["ats"]];
       const s: AtsStats = (result.stats[ats] = { companies: 0, jobs: 0, fetched: 0, notModified: 0, failed: 0, kept: 0, skipped: 0, partial: 0, described: 0, badRows: 0, tripped: false, seconds: 0 });
       if (!connector) return;
-      const previous = (previousGroup ? readShard(dir, previousGroup.shards, ats) : readShard(out, legacy?.shards, ats))?.companies ?? {};
+      const previous = (previousGroup ? readShard(dir, previousGroup.shards, ats) : readShard(out, legacy?.shards, ats))?.companies ?? fromV3(ats);
       const companies: JobFeedShard["companies"] = {};
       const seen = new Set<string>();
       const todo = directory.filter((e) => {

@@ -97,7 +97,14 @@ case "${1:-}" in
     tar czf "$TARBALL" "${present[@]}"
     gh release view state -R "$DATA_REPO" > /dev/null 2>&1 ||
       gh release create state -R "$DATA_REPO" --prerelease --title "Catalog working state" --notes "Internal: lets the catalog runs skip boards checked recently."
-    gh release upload state "$TARBALL" -R "$DATA_REPO" --clobber
+    # --clobber deletes the old asset before uploading: a 502 in between left no state at all (4 Nov), and
+    # the next run started from scratch. A retry after a half-done delete just uploads.
+    for i in 1 2 3 4 5; do
+      gh release upload state "$TARBALL" -R "$DATA_REPO" --clobber && break
+      [ "$i" = 5 ] && { echo "Couldn't save the state after 5 tries." >&2; exit 1; }
+      echo "Upload failed (try $i of 5); trying again in 20 s." >&2
+      sleep 20
+    done
     echo "Saved: ${present[*]}"
     ;;
   *)
