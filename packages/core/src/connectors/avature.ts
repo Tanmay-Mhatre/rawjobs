@@ -19,6 +19,11 @@ const TENANT = /^[a-z0-9][a-z0-9-]*$/i;
 const PORTAL = /^[A-Za-z0-9_-]+$/;
 /** A locale segment some portals put before the portal name ("/en_US/careers/…"). */
 const LOCALE = /^[a-z]{2}_[A-Z]{2}$/;
+/**
+ * Avature's test copies of a customer's portal (sandboxea, uatashfieldhealthcare, trainingforvis): stale
+ * postings whose Apply links open the test site. Not companies: the real portal is the tenant without the prefix.
+ */
+const TEST_TENANT = /^(?:sandbox|uat|training|staging|preprod)[a-z0-9]/;
 
 const base = (tenant: string, portal: string) => `https://${tenant.toLowerCase()}.avature.net/${portal}`;
 
@@ -43,7 +48,7 @@ export const avature: Connector<AvatureJob> = {
 
   detect(url) {
     const tenant = url.hostname.toLowerCase().match(/^([a-z0-9-]+)\.avature\.net$/)?.[1];
-    if (!tenant) return null;
+    if (!tenant || TEST_TENANT.test(tenant)) return null;
     const segs = url.pathname.split("/").filter(Boolean);
     const portal = LOCALE.test(segs[0] ?? "") ? segs[1] : segs[0];
     return { ats: "avature", slug: tenant, ...(portal && PORTAL.test(portal) ? { site: portal } : {}) };

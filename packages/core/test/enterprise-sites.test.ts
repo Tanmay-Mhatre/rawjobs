@@ -24,6 +24,13 @@ describe("avature", () => {
     expect(careersUrl({ ats: "avature", slug: "koch" })).toBe("https://koch.avature.net/careers/SearchJobs/");
   });
 
+  it("leaves out Avature's test copies of a portal, not real tenants that start the same way", () => {
+    for (const host of ["sandboxea", "uatashfieldhealthcare", "trainingforvis", "stagingacme", "preprodacme"])
+      expect(detectCompany(`https://${host}.avature.net/careers/SearchJobs/`)?.ats).not.toBe("avature");
+    expect(detectCompany("https://ea.avature.net/careers")).toMatchObject({ ats: "avature", slug: "ea" });
+    expect(detectCompany("https://uat.avature.net/careers")).toMatchObject({ ats: "avature", slug: "uat" });
+  });
+
   it("pages through the search list by offset until a page adds nothing", async () => {
     const { http, calls } = fakeHttp((url) => {
       if (url.endsWith("/robots.txt")) return robots("Disallow: /careers/*qtvc=");
