@@ -1,6 +1,6 @@
 import { type FeedRow, HostSkippedError, HttpError } from "@rawjobs/core";
 import { describe, expect, it } from "vitest";
-import { describeReasons, failReason, feedCoverage, sameJobs, sameSwing, slowHosts } from "./jobs";
+import { describeReasons, failReason, feedCoverage, readOrder, sameJobs, sameSwing, slowHosts } from "./jobs";
 
 describe("failReason", () => {
   it("groups HTTP errors by status", () => {
@@ -86,5 +86,18 @@ describe("slowHosts", () => {
 
   it("gives every Avature tenant's host the same gap", () => {
     expect(slowHosts([{ ats: "avature", slug: "Bloomberg" }])).toEqual({ "bloomberg.avature.net": 1250 });
+  });
+});
+
+describe("readOrder", () => {
+  const last: Record<string, string> = { a: "2026-11-04T13:16:00Z", b: "2026-10-29T18:14:00Z", c: "2026-11-04T00:14:00Z" };
+  const boards = ["a", "b", "c", "new"];
+
+  it("reads a budgeted system's boards read longest ago first, never-read ones before all", () => {
+    expect(readOrder("avature", boards, (e) => last[e])).toEqual(["new", "b", "c", "a"]);
+  });
+
+  it("keeps the directory order for other systems", () => {
+    expect(readOrder("workday", boards, (e) => last[e])).toEqual(boards);
   });
 });
