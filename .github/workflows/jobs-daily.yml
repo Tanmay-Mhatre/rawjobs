@@ -303,6 +303,48 @@ jobs:
             if [ -n "$n" ]; then gh issue comment "$n" -R "${{ github.repository }}" --body "$body"; else gh issue create -R "${{ github.repository }}" --title "$title" --body "$body"; fi
           done
 
+      - name: Close "needs a look" issues after two healthy runs in a row
+        # A hiring system that recovered (Workday's challenge pages, 31 Oct) left its issue open for good.
+        # Healthy: its group finished this run and it raised no alert. The first healthy run labels the
+        # issue, the second closes it; an alert in between takes the label off again.
+        if: needs.guard.outputs.publish == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          stats=scripts/catalog/out/jobs/stats.json
+          label=feed-healthy-once
+          gh label create "$label" -R "$REPO" --color 0E8A16 --description "Job feed: healthy last run; closes after the next healthy one" --force > /dev/null
+          gh issue list -R "$REPO" --state open --search '"Job feed:" "needs a look" in:title' --limit 100 --json number,title,labels \
+            -q ".[] | select(.title | test(\"^Job feed: .+ needs a look$\")) | \"\(.number)\t\(.title)\t\(any(.labels[]; .name == \"$label\"))\"" |
+            while IFS=$'\t' read -r n title once; do
+              what=${title#Job feed: }
+              what=${what% needs a look}
+              if [ "$what" = "the feed" ]; then
+                healthy=$(jq '[.alerts[] | select(.ats == null)] | length == 0' "$stats")
+              else
+                healthy=$(jq --arg a "$what" '(.ats[$a].fresh == true) and ([.alerts[] | select(.ats == $a)] | length == 0)' "$stats")
+              fi
+              if [ "$healthy" != true ]; then
+                [ "$once" != true ] || gh issue edit "$n" -R "$REPO" --remove-label "$label" > /dev/null
+              elif [ "$once" = true ]; then
+                gh issue close "$n" -R "$REPO" --comment "Healthy two runs in a row, so closing. A new alert opens a new issue. Run: $RUN_URL"
+              else
+                gh issue edit "$n" -R "$REPO" --add-label "$label" > /dev/null
+              fi
+            done
+
+      - name: Close "Job feed run failed" once a run succeeds
+        if: success() && needs.guard.outputs.publish == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          title="Job feed run failed"
+          for n in $(gh issue list -R "${{ github.repository }}" --state open --search "\"$title\" in:title" --json number,title -q ".[] | select(.title == \"$title\") | .number"); do
+            gh issue close "$n" -R "${{ github.repository }}" --comment "This run published the feed: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+          done
+
       - name: Report a failed run
         if: failure() && needs.guard.outputs.publish == 'true'
         env:
