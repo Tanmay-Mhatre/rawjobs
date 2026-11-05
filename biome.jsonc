@@ -1,9 +1,10 @@
 {
   // Lint and format for TypeScript/JavaScript (pnpm lint; pnpm format writes the formatting).
   // CSS (Tailwind) and HTML stay out: design:lint checks the CSS against the design tokens.
+  // Markdown and YAML stay out too: Biome 2.6 started formatting them, and the docs keep their own style.
   "$schema": "./node_modules/@biomejs/biome/configuration_schema.json",
   "vcs": { "enabled": true, "clientKind": "git", "useIgnoreFile": true },
-  "files": { "includes": ["**", "!.claude", "!**/dist", "!**/*.json", "!**/*.css", "!**/*.html", "!**/fixtures"] },
+  "files": { "includes": ["**", "!.claude", "!**/dist", "!**/*.json", "!**/*.css", "!**/*.html", "!**/*.md", "!**/*.yaml", "!**/*.yml", "!**/fixtures"] },
   // 200: the width the code was written to, so formatting it changed as little as possible.
   "formatter": { "indentStyle": "space", "indentWidth": 2, "lineWidth": 200 },
   "javascript": { "formatter": { "quoteStyle": "double", "semicolons": "always", "trailingCommas": "all", "arrowParentheses": "always" } },
@@ -17,10 +18,17 @@
         "noNonNullAssertion": "off",
         "useTemplate": "off"
       },
-      "complexity": { "useArrowFunction": "off" },
+      "complexity": {
+        "useArrowFunction": "off",
+        // Its fix turns `a < b ? a : b` into Math.min, which breaks the ISO date strings compared this way.
+        "useMathMinMax": "off"
+      },
       "correctness": {
         // Function declarations in blocks are block-scoped in modules (strict mode): no hoisting surprise.
-        "noInnerDeclarations": "off"
+        "noInnerDeclarations": "off",
+        // Flags PascalCase keys like `ArrowLeft: () => …` as components, and the test harnesses defined in
+        // describe/it blocks, which render once per test on purpose.
+        "noComponentHookFactories": "off"
       },
       "suspicious": {
         // `cache.get(k) ?? cache.set(k, (v = make()))`-style caching is used on purpose.
