@@ -4,7 +4,7 @@
 #   catalog  the directory runs (weekly rebuild, contributions), which take turns (one concurrency group)
 #   jobs     the job feed's merge job: what it last published (the next change files are made against
 #            it), and the hiring activity recorded so far
-#   jobs-<group>  each feed group's last shards and ETags (sr, payroll, enterprise, join, rest; jobs.ts GROUPS)
+#   jobs-<group>  each feed group's last shards and ETags (sr, payroll, enterprise, join, engage, rest; jobs.ts GROUPS)
 #
 #   state.sh restore [catalog|jobs|jobs-<group>]   download and unpack; fails if it exists but can't be
 #                                     downloaded. Sets the step output restored=true|false.
@@ -16,6 +16,7 @@ set -euo pipefail
 output() { if [ -n "${GITHUB_OUTPUT:-}" ]; then echo "$1" >> "$GITHUB_OUTPUT"; fi; }
 
 cd scripts/catalog
+. ./release-io.sh
 SET="${2:-catalog}"
 ASSET="$SET-state.tar.gz"
 TARBALL="${RUNNER_TEMP:-/tmp}/$ASSET"
@@ -57,11 +58,11 @@ case "$SET" in
     FILES=(out/jobs/jobs-manifest.json out/jobs/jobs-v2-manifest.json out/jobs/jobs-v3-manifest.json out/jobs/stats.json out/jobs/activity-state.json)
     for f in out/jobs/jobs-*.json.gz out/jobs/jobs-v2-snapshot-*.json.br out/jobs/jobs-v3-snapshot-*.txt.br; do FILES+=("$f"); done
     ;;
-  jobs-sr | jobs-payroll | jobs-enterprise | jobs-join | jobs-rest)
-    # One feed group (jobs.ts GROUPS): its last shards, ETags and learned board ids. Saved only by that group's job, so a
+  jobs-sr | jobs-payroll | jobs-enterprise | jobs-join | jobs-engage | jobs-rest)
+    # One feed group (jobs.ts GROUPS): its last shards, ETags, learned board ids and quiet-board counts. Saved only by that group's job, so a
     # failed group leaves its previous copy for the merge job to fall back on.
     g="out/jobs/groups/${SET#jobs-}"
-    FILES=("$g/group.json" "$g/etags.json" "$g/board-ids.json")
+    FILES=("$g/group.json" "$g/etags.json" "$g/board-ids.json" "$g/quiet.json")
     for f in "$g"/jobs-*.json.gz; do FILES+=("$f"); done
     ;;
   *)
@@ -83,7 +84,7 @@ case "${1:-}" in
       exit 0
     fi
     # The state exists: failing to fetch it must stop the run, or its save would overwrite good state.
-    gh release download state -R "$DATA_REPO" -p "$ASSET" -D "$(dirname "$TARBALL")" --clobber
+    retry gh release download state -R "$DATA_REPO" -p "$ASSET" -D "$(dirname "$TARBALL")" --clobber
     tar xzf "$TARBALL"
     echo "Restored the saved state."
     output restored=true
@@ -97,14 +98,9 @@ case "${1:-}" in
     tar czf "$TARBALL" "${present[@]}"
     gh release view state -R "$DATA_REPO" > /dev/null 2>&1 ||
       gh release create state -R "$DATA_REPO" --prerelease --title "Catalog working state" --notes "Internal: lets the catalog runs skip boards checked recently."
-    # --clobber deletes the old asset before uploading: a 502 in between left no state at all (4 Nov), and
-    # the next run started from scratch. A retry after a half-done delete just uploads.
-    for i in 1 2 3 4 5; do
-      gh release upload state "$TARBALL" -R "$DATA_REPO" --clobber && break
-      [ "$i" = 5 ] && { echo "Couldn't save the state after 5 tries." >&2; exit 1; }
-      echo "Upload failed (try $i of 5); trying again in 20 s." >&2
-      sleep 20
-    done
+    # Upload beside the old copy, then swap (release-io.sh): with --clobber a 502 between its delete and
+    # its upload left no state at all (4 Nov), and the next run started from scratch.
+    swap_upload state "$TARBALL" || { echo "Couldn't save the state." >&2; exit 1; }
     echo "Saved: ${present[*]}"
     ;;
   *)

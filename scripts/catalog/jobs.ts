@@ -61,6 +61,8 @@ export const GROUPS: Record<string, string[]> = {
   enterprise: ["workday", "icims", "oracle", "successfactors", "taleo", "phenom", "eightfold", "avature", "radancy"],
   // ~13,000 small boards on one host: in "rest" it used the whole time limit and left half unread.
   join: ["join"],
+  // ~11,600 boards on one host, one request each: in "rest" it took ~195 of the 240 minutes alone (5 Nov).
+  engage: ["engage"],
   rest: [],
 };
 export const atsOfGroup = (group: string): string[] => {
@@ -175,9 +177,24 @@ const FAIL_EXAMPLES = 3;
 /** Vague-location jobs ("3 Locations") looked up per company per run; the rest wait for the next run. */
 const DESCRIBES_PER_COMPANY = 25;
 
-/** Boards in the order to read them: for BUDGETED systems, the one read longest ago (or never) first. */
+/**
+ * Systems whose quiet boards rest between reads. A board whose jobs came back the same QUIET_AFTER reads in a
+ * row (an empty board too) is read again only once its rows are restHours old; any change makes it busy again.
+ * At 20 h that's about every 4th run, well inside the app's 3-day feed age (FEED_MAX_AGE_DAYS) and the 7-day
+ * drop. Engage sends no ETag (Cache-Control: private), so a 304 can't do this for it.
+ */
+const RESTED: Record<string, { restHours: number }> = { engage: { restHours: 20 } };
+export const QUIET_AFTER = 2;
+/** Whether a board can skip this run: quiet long enough, and its rows read recently enough. */
+export function rests(ats: string, quietRuns: number, fetchedAt: string | undefined, now: number): boolean {
+  const r = RESTED[ats];
+  if (!r || quietRuns < QUIET_AFTER || !fetchedAt) return false;
+  return now - Date.parse(fetchedAt) < r.restHours * 3_600_000;
+}
+
+/** Boards in the order to read them: for BUDGETED and RESTED systems, the one read longest ago (or never) first. */
 export function readOrder<T>(ats: string, todo: T[], lastRead: (e: T) => string | undefined): T[] {
-  if (!BUDGETED[ats]) return todo;
+  if (!BUDGETED[ats] && !RESTED[ats]) return todo;
   const at = (e: T) => Date.parse(lastRead(e) ?? "") || 0;
   return [...todo].sort((a, b) => at(a) - at(b));
 }
@@ -191,6 +208,8 @@ type AtsStats = {
   failed: number;
   kept: number;
   skipped: number;
+  /** Quiet boards not read this run (RESTED): their rows stand, with the time they were read. */
+  rested?: number;
   partial: number;
   described: number;
   badRows: number;
@@ -277,6 +296,8 @@ async function crawl(out: string, group: string, generated: string, directoryFil
   const etags = new EtagStore(join(dir, "etags.json"), join(out, "etags.json"));
   // JOIN's company numbers, read off careers pages once (board-ids.ts).
   const ids = new FileBoardIds(join(dir, "board-ids.json"));
+  // RESTED systems: unchanged reads in a row per board.
+  const quiet = readJson<Record<string, number>>(join(dir, "quiet.json")) ?? {};
   const http = new HttpClient({
     cache: etags,
     timeoutMs: 20_000,
@@ -339,6 +360,11 @@ async function crawl(out: string, group: string, generated: string, directoryFil
             keep(key);
             continue;
           }
+          if (previous[key] && rests(ats, quiet[key] ?? 0, previous[key]!.fetched_at, now.getTime())) {
+            companies[key] = previous[key]!;
+            s.rested = (s.rested ?? 0) + 1;
+            continue;
+          }
           // refOfEntry keeps careers_url, which SuccessFactors boards need.
           const ref = refOfEntry(e);
           let partial = false;
@@ -380,6 +406,11 @@ async function crawl(out: string, group: string, generated: string, directoryFil
               rows.push(row);
             }
             companies[key] = { fetched_at: generated, jobs: rows, ...(partial ? { partial: true } : {}) };
+            if (RESTED[ats]) {
+              const same = !partial && previous[key] && JSON.stringify(previous[key]!.jobs) === JSON.stringify(rows);
+              if (same) quiet[key] = (quiet[key] ?? 0) + 1;
+              else delete quiet[key];
+            }
             if (partial) s.partial++;
             s.fetched++;
             streak = 0;
@@ -417,12 +448,15 @@ async function crawl(out: string, group: string, generated: string, directoryFil
       s.seconds = Math.round((Date.now() - t0) / 1000);
       s.same = sameJobs(previous, companies);
       console.error(
-        `${ats}: ${s.companies} companies, ${s.jobs} jobs (${s.fetched} fetched, ${s.notModified} unchanged, ${s.failed} failed${s.failed ? ` [${describeReasons(s.reasons)}]` : ""}, ${s.skipped} skipped${s.tripped ? " after too many failures in a row" : ""}, ${s.partial} partial, ${s.described} places looked up, ${s.badRows} malformed postings) in ${s.seconds} s`,
+        `${ats}: ${s.companies} companies, ${s.jobs} jobs (${s.fetched} fetched, ${s.notModified} unchanged, ${s.failed} failed${s.failed ? ` [${describeReasons(s.reasons)}]` : ""}, ${s.skipped} skipped${s.tripped ? " after too many failures in a row" : ""}, ${s.rested ? `${s.rested} quiet ones rested, ` : ""}${s.partial} partial, ${s.described} places looked up, ${s.badRows} malformed postings) in ${s.seconds} s`,
       );
     }),
   );
   result.seconds = Math.round((Date.now() - started) / 1000);
   writeFileSync(join(dir, "etags.json"), JSON.stringify(etags.etags));
+  // Only boards still in the directory, so the file doesn't grow with removed ones.
+  const listed = new Set(directory.map((e) => jobCompanyKey(e)));
+  writeFileSync(join(dir, "quiet.json"), JSON.stringify(Object.fromEntries(Object.entries(quiet).filter(([k]) => listed.has(k)))));
   ids.save();
   const current = new Set(Object.values(result.shards).map((x) => x.file));
   for (const f of readdirSync(dir)) if (/^jobs-.+\.json\.gz$/.test(f) && !current.has(f)) rmSync(join(dir, f));
@@ -508,7 +542,8 @@ async function merge(out: string, generated: string) {
     if (!fresh) alerts.push({ text: `group ${group} didn't finish this run; ${g ? `kept its copy from ${g.generated_at}` : "no saved copy, so its systems are left out"}` });
     for (const ats of Object.keys(g?.shards ?? {})) {
       const shard = readShard(dir, g!.shards, ats);
-      if (!shard) continue;
+      // A system that moved groups (engage left "rest") can be in an old copy too: this run's read wins.
+      if (!shard || (stats[ats]?.fresh && !fresh)) continue;
       byAts[ats] = shard.companies;
       Object.assign(everyone, shard.companies);
       stats[ats] = { ...g!.stats[ats]!, group, fresh };

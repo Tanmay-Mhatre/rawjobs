@@ -106,7 +106,8 @@ jobs:
           gh release view concepts -R "$DATA_REPO" > /dev/null 2>&1 ||
             gh release create concepts -R "$DATA_REPO" --latest=false --title "Topic word list" \
               --notes "Words that prove each topic, rebuilt weekly from ESCO (European Commission, reused under Decision 2011/833/EU) Read concepts.json with its signature."
-          gh release upload concepts concepts.json concepts.json.sig -R "$DATA_REPO" --clobber
+          . "$GITHUB_WORKSPACE/scripts/catalog/release-io.sh"
+          swap_upload concepts concepts.json concepts.json.sig
 
       - name: Report a failed run
         if: failure()

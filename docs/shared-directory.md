@@ -302,13 +302,13 @@ reads every live directory board on every hiring system with a connector once, f
 publishes slim rows (job id, title, location, workplace, posted date; for Workday's "3 Locations"
 jobs, where they are; no descriptions) on the `jobs` release of the directory repo.
 
-- **Five groups, one merge:** a crawl job per group of systems (`GROUPS` in `jobs.ts`: SmartRecruiters;
+- **Six groups, one merge:** a crawl job per group of systems (`GROUPS` in `jobs.ts`: SmartRecruiters;
   Paylocity, Paycom, Hireology, Workable; Workday and the other enterprise systems; JOIN; everything else)
   runs side by side, each with its own saved state (`jobs-<group>-state.tar.gz` on the `state`
   release). The merge job alone writes, signs and publishes; a group that failed is replaced by its
   previous saved copy. CI paces the shared APIs faster than the app does (`CI_HOST_DELAYS`).
-- **Started twice, run once:** GitHub's cron often starts hours late, so a Cloudflare cron
-  (`services/feed-trigger`) also starts the workflow. The first job skips the run when this schedule
+- **Started twice, run once:** GitHub's cron often starts hours late, so the [scheduler Worker](#scheduler)
+  also starts the workflow, 10 minutes before it. The first job skips the run when this schedule
   slot's feed is already built (`scripts/catalog/slot-covered.mjs`; `force` overrides). `publish: false` runs everything but publishes,
   saves and opens nothing (and a run publishes only from `main`).
 - **Cheap to run:** Greenhouse, Lever and Ashby boards that haven't changed answer an empty 304, and so
@@ -380,6 +380,52 @@ scanned). The job drawer shows "Hiring at {company}"; a company with at least 5 
 days, twice its usual pace or more, gets a "Hiring surge" tag and the Radar's "Only companies with a
 hiring surge" filter. Both stay hidden until some company has 6 weeks of records (`meta.json`
 `hiringReady`), so nobody sees a filter that can only be empty. None of it changes a job's score.
+
+## Scheduler
+
+GitHub's scheduled crons are best effort: from 6 Oct to 5 Nov 2026 they started 3–10 hours late, and
+the contributions workflow (`17 */3 * * *`) got about 110 of its about 238 slots. So a Cloudflare Worker,
+`rawjobs-scheduler` (`services/scheduler`), starts the scheduled workflows on time. It wakes every
+5 minutes and dispatches (`workflow_dispatch` on `main`, input `source: scheduler`) each entry of
+`SCHEDULE` in `src/index.ts` whose time fell in those 5 minutes:
+
+| Workflow | Scheduler (UTC) | GitHub cron (backup) |
+|---|---|---|
+| `jobs-daily.yml` | `13 */6 * * *` | `23 */6 * * *` |
+| `directory-contributions.yml` | `7 */3 * * *` | `17 */3 * * *` |
+| `data-health.yml` | `27 11,23 * * *` | `37 11 * * *`, `37 23 * * *` |
+| `connector-health.yml` | `43 6 * * *` | `53 6 * * *` |
+| `directory-commoncrawl.yml` | `30 13 * * *` | `40 13 * * *` |
+| `concepts-weekly.yml` | `31 3 * * 0` | `41 3 * * 0` |
+
+- **Run once per slot:** each entry is 10 minutes before the workflow's GitHub cron, which stays as the
+  backup. Scheduler runs are named `<workflow> · scheduler`. `scripts/catalog/slot-covered.mjs` puts
+  both triggers in the same slot (from 10 minutes before each cron time), so the later one skips:
+  the feed when this slot's feed is already built, the contributions, URL-index and word-list
+  workflows when another run of the slot is queued, running or succeeded. Data · health and
+  Connectors · health have no guard: a second run repeats cheap checks (a few requests per hiring
+  system for the connectors) and updates the same issue, nothing more.
+- **Not scheduled here:** the weekly rebuild (its backup crons and `watchdog.sh` start it) and the
+  site's Monday backup deploy (the rebuild starts the deploy).
+- **Watching it:** Data · health checks twice a day that every workflow above had a scheduler run
+  recently (12 hours for the feed and contributions, 26 for the daily ones, 8 days for the word list)
+  and opens (or comments on) one "Scheduler: no runs started" issue if not; it closes the issue once
+  they're back. It stays quiet until the Worker has started its first run.
+- **Change a time:** edit the workflow's cron and the `SCHEDULE` entry together (cron minus 10
+  minutes); `services/scheduler/test/scheduler.test.ts` fails when they disagree, or when an entry
+  sends an input the workflow doesn't declare (GitHub refuses those with HTTP 422).
+
+**Deploy** (once, and again when the token expires; not done by CI):
+
+1. Create a fine-grained token (GitHub, Settings, Developer settings, Fine-grained tokens): repository
+   access *Only select repositories*, `Tanmay-Mhatre/rawjobs`; permission *Actions: read and write*,
+   nothing else. Note its expiry date: when it expires, the dispatches fail with HTTP 401 and the
+   "Scheduler: no runs started" issue is what tells you. GitHub's own crons keep running meanwhile.
+2. `cd services/scheduler`, then `npx wrangler@4.151.1 secret put GITHUB_TOKEN` (paste the token) and
+   `npx wrangler@4.151.1 deploy`.
+3. Delete the old feed-only Worker it replaces: `npx wrangler@4.151.1 delete --name rawjobs-feed-trigger`
+   (then the `services/feed-trigger` folder can go too). Running both for a while is harmless: the
+   feed's guard skips the second run of a slot.
 
 ## One-time setup
 

@@ -3,7 +3,7 @@
 # nothing for the user and still fetch the rest live. Unchanged boards cost an empty 304.
 # Setup: docs/shared-directory.md ("Job feed"). The file keeps its old name so its run history stays.
 #
-# Five crawl jobs (one per group of hiring systems, scripts/catalog/jobs.ts GROUPS) run side by side and
+# Six crawl jobs (one per group of hiring systems, scripts/catalog/jobs.ts GROUPS) run side by side and
 # each saves its own state; the merge job alone writes, signs and publishes the feed. A group that fails
 # is replaced by its previous saved copy. GitHub's cron often starts hours late, so a Cloudflare cron
 # (services/feed-trigger) also starts this workflow; the guard skips a run when the feed is fresh.
@@ -37,6 +37,9 @@ on:
 concurrency:
   group: ${{ (github.event_name == 'workflow_dispatch' && !inputs.publish) && format('jobs-test-{0}', github.ref_name) || 'jobs' }}
   cancel-in-progress: false
+  # queue: max — runs wait their turn instead of the default, where a newer waiting run cancels the older
+  # one. Data · sign what's published shares the "jobs" group, so one of its runs could cancel a waiting feed run.
+  queue: max
 
 permissions:
   contents: read
@@ -101,7 +104,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        group: [sr, payroll, enterprise, join, rest]
+        group: [sr, payroll, enterprise, join, engage, rest]
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
@@ -127,7 +130,8 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.DATA_REPO_TOKEN }}
         run: |
-          gh release download -R "$DATA_REPO" -p directory.json.gz -D "$RUNNER_TEMP"
+          . "$GITHUB_WORKSPACE/scripts/catalog/release-io.sh"
+          retry gh release download -R "$DATA_REPO" -p directory.json.gz -D "$RUNNER_TEMP" --clobber
           gunzip -c "$RUNNER_TEMP/directory.json.gz" > "$RUNNER_TEMP/directory.json"
           if ! gh api "repos/$DATA_REPO/contents/denylist.json" -H "Accept: application/vnd.github.raw" > "$RUNNER_TEMP/denylist.json" 2> "$RUNNER_TEMP/denylist.err"; then
             grep -qi "not found" "$RUNNER_TEMP/denylist.err" || { cat "$RUNNER_TEMP/denylist.err"; exit 1; }
@@ -263,20 +267,12 @@ jobs:
           shards=$(jq -r '.shards[].file' jobs-manifest.json)
           new=$(ls jobs-v2-snapshot-*.json.br jobs-v2-diff-*.json.br jobs-v3-snapshot-*.txt.br jobs-v3-diff-*.json.br 2> /dev/null || true)
           new="$new $(jq -r '.activity.file // empty' jobs-v3-manifest.json)"
-          # --clobber deletes before it uploads, so a 502 in between leaves a file missing: try again.
-          upload() {
-            for i in 1 2 3 4 5; do
-              gh release upload jobs "$@" -R "$DATA_REPO" --clobber && return 0
-              echo "Upload failed (try $i of 5); trying again in 20 s." >&2
-              sleep 20
-            done
-            return 1
-          }
-          upload $shards $new
-          # Each manifest together with its signature, so the pair changes as close to together as it can.
-          for m in jobs-manifest.json jobs-v2-manifest.json jobs-v3-manifest.json; do
-            upload "$m" "$m.sig"
-          done
+          . "$GITHUB_WORKSPACE/scripts/catalog/release-io.sh"
+          # Shards and change files have new names each run, so a plain upload (retried) is enough.
+          retry gh release upload jobs $shards $new -R "$DATA_REPO" --clobber
+          # Manifests keep their names: upload them all beside the old ones, then swap each, so apps never
+          # find one missing for more than an API call (--clobber deletes first; a 500 there cost the run on 4 Nov).
+          swap_upload jobs jobs-manifest.json jobs-manifest.json.sig jobs-v2-manifest.json jobs-v2-manifest.json.sig jobs-v3-manifest.json jobs-v3-manifest.json.sig
           # Drop files no manifest points to any more (change files: the last 56 runs), except the previous
           # run's full copies and shards: an app may be part-way through downloading them.
           keep=$(printf '%s\n' $shards jobs-manifest.json jobs-manifest.json.sig jobs-v2-manifest.json jobs-v2-manifest.json.sig jobs-v3-manifest.json jobs-v3-manifest.json.sig \
