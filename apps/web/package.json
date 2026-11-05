@@ -11,10 +11,10 @@
   },
   "dependencies": {
     "@rawjobs/core": "workspace:*",
-    "lucide-react": "^1.61.0",
+    "lucide-react": "^1.66.0",
     "mammoth": "^1.13.0",
     "minisearch": "^7.2.0",
-    "pdfjs-dist": "^6.4.299",
+    "pdfjs-dist": "^6.5.438",
     "react": "^19.3.1",
     "react-dom": "^19.3.1"
   },
