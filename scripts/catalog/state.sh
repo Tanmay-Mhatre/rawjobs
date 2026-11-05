@@ -16,6 +16,7 @@ set -euo pipefail
 output() { if [ -n "${GITHUB_OUTPUT:-}" ]; then echo "$1" >> "$GITHUB_OUTPUT"; fi; }
 
 cd scripts/catalog
+. ./release-io.sh
 SET="${2:-catalog}"
 ASSET="$SET-state.tar.gz"
 TARBALL="${RUNNER_TEMP:-/tmp}/$ASSET"
@@ -83,7 +84,7 @@ case "${1:-}" in
       exit 0
     fi
     # The state exists: failing to fetch it must stop the run, or its save would overwrite good state.
-    gh release download state -R "$DATA_REPO" -p "$ASSET" -D "$(dirname "$TARBALL")" --clobber
+    retry gh release download state -R "$DATA_REPO" -p "$ASSET" -D "$(dirname "$TARBALL")" --clobber
     tar xzf "$TARBALL"
     echo "Restored the saved state."
     output restored=true
@@ -97,14 +98,9 @@ case "${1:-}" in
     tar czf "$TARBALL" "${present[@]}"
     gh release view state -R "$DATA_REPO" > /dev/null 2>&1 ||
       gh release create state -R "$DATA_REPO" --prerelease --title "Catalog working state" --notes "Internal: lets the catalog runs skip boards checked recently."
-    # --clobber deletes the old asset before uploading: a 502 in between left no state at all (4 Nov), and
-    # the next run started from scratch. A retry after a half-done delete just uploads.
-    for i in 1 2 3 4 5; do
-      gh release upload state "$TARBALL" -R "$DATA_REPO" --clobber && break
-      [ "$i" = 5 ] && { echo "Couldn't save the state after 5 tries." >&2; exit 1; }
-      echo "Upload failed (try $i of 5); trying again in 20 s." >&2
-      sleep 20
-    done
+    # Upload beside the old copy, then swap (release-io.sh): with --clobber a 502 between its delete and
+    # its upload left no state at all (4 Nov), and the next run started from scratch.
+    swap_upload state "$TARBALL" || { echo "Couldn't save the state." >&2; exit 1; }
     echo "Saved: ${present[*]}"
     ;;
   *)

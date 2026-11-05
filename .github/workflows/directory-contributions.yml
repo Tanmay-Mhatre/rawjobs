@@ -290,7 +290,8 @@ jobs:
           AUTO_ACCEPT: ${{ vars.MOVES_AUTO_ACCEPT || '' }}
         # The gates need the current directory: the live release's (merged.json isn't kept between runs).
         run: |
-          gh release download -R "$DATA_REPO" -p directory.json.gz -O "$RUNNER_TEMP/live-directory.json.gz" --clobber
+          . "$GITHUB_WORKSPACE/scripts/catalog/release-io.sh"
+          retry gh release download -R "$DATA_REPO" -p directory.json.gz -O "$RUNNER_TEMP/live-directory.json.gz" --clobber
           gunzip -c "$RUNNER_TEMP/live-directory.json.gz" > "$RUNNER_TEMP/live-directory.json"
           GH_TOKEN="$ISSUES_TOKEN" pnpm exec tsx scripts/catalog/moves.ts --items "$RUNNER_TEMP/move-inbox.json" --dir directory-repo \
             --directory "$RUNNER_TEMP/live-directory.json" --issues --max-minutes 10 > "$RUNNER_TEMP/moves-summary.json"
