@@ -302,7 +302,7 @@ reads every live directory board on every hiring system with a connector once, f
 publishes slim rows (job id, title, location, workplace, posted date; for Workday's "3 Locations"
 jobs, where they are; no descriptions) on the `jobs` release of the directory repo.
 
-- **Five groups, one merge:** a crawl job per group of systems (`GROUPS` in `jobs.ts`: SmartRecruiters;
+- **Six groups, one merge:** a crawl job per group of systems (`GROUPS` in `jobs.ts`: SmartRecruiters;
   Paylocity, Paycom, Hireology, Workable; Workday and the other enterprise systems; JOIN; everything else)
   runs side by side, each with its own saved state (`jobs-<group>-state.tar.gz` on the `state`
   release). The merge job alone writes, signs and publishes; a group that failed is replaced by its
