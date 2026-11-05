@@ -297,7 +297,8 @@ scripts/design      design tokens, design lint, screenshots (pnpm design:build |
 scripts/site        the website's share image (pnpm site:og)
 scripts/hooks       the git pre-push hook (pnpm hooks:install)
 services/contribute the contribution inbox (Cloudflare Worker)
-services/feed-trigger  starts the job feed workflow on time every 6 hours (Cloudflare Worker)
+services/scheduler  starts the scheduled workflows on time (Cloudflare Worker)
+services/feed-trigger  the job feed's old on-time starter, replaced by services/scheduler
 services/directory-repo-template  the files the public directory repo starts from
 design/             brand book, component specs and screenshots
 docs/               install, hiring systems, shared directory, self-hosting, plans

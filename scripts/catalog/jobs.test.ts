@@ -1,6 +1,6 @@
 import { type FeedRow, HostSkippedError, HttpError } from "@rawjobs/core";
 import { describe, expect, it } from "vitest";
-import { describeReasons, failReason, feedCoverage, readOrder, sameJobs, sameSwing, slowHosts } from "./jobs";
+import { atsOfGroup, describeReasons, failReason, feedCoverage, QUIET_AFTER, readOrder, rests, sameJobs, sameSwing, slowHosts } from "./jobs";
 
 describe("failReason", () => {
   it("groups HTTP errors by status", () => {
@@ -99,5 +99,37 @@ describe("readOrder", () => {
 
   it("keeps the directory order for other systems", () => {
     expect(readOrder("workday", boards, (e) => last[e])).toEqual(boards);
+  });
+
+  it("reads a rested system's boards read longest ago first too", () => {
+    expect(readOrder("engage", boards, (e) => last[e])).toEqual(["new", "b", "c", "a"]);
+  });
+});
+
+describe("rests", () => {
+  const now = Date.parse("2026-11-05T12:00:00Z");
+
+  it("rests a quiet engage board read within 20 hours", () => {
+    expect(rests("engage", QUIET_AFTER, "2026-11-05T00:13:00Z", now)).toBe(true);
+  });
+
+  it("reads it again once its rows are 20 hours old", () => {
+    expect(rests("engage", QUIET_AFTER + 5, "2026-11-04T15:00:00Z", now)).toBe(false);
+  });
+
+  it("reads a board that changed lately, or was never read", () => {
+    expect(rests("engage", QUIET_AFTER - 1, "2026-11-05T06:13:00Z", now)).toBe(false);
+    expect(rests("engage", QUIET_AFTER, undefined, now)).toBe(false);
+  });
+
+  it("never rests other systems' boards", () => {
+    expect(rests("workday", 10, "2026-11-05T06:13:00Z", now)).toBe(false);
+  });
+});
+
+describe("atsOfGroup", () => {
+  it("gives engage its own group, out of rest", () => {
+    expect(atsOfGroup("engage")).toEqual(["engage"]);
+    expect(atsOfGroup("rest")).not.toContain("engage");
   });
 });
