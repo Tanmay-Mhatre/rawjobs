@@ -4,7 +4,8 @@
 # what they can't: a schedule that silently didn't run, an upload cut off between a manifest and its
 # signature, a release changed by hand. It also reads the daily URL-index runs for a Wayback Machine
 # block, or no Wayback progress over two runs. A problem opens (or updates) one issue; once all is well
-# again it closes it.
+# again it closes it. A second job checks that the scheduler Worker (services/scheduler) keeps
+# starting runs, with its own "Scheduler: no runs started" issue.
 name: Data · health
 # Runs the scheduler Worker starts are named so; empty means GitHub's usual name.
 run-name: ${{ inputs.source == 'scheduler' && format('{0} · scheduler', github.workflow) || '' }}
@@ -74,6 +75,54 @@ jobs:
           if [ "$HEALTHY" = true ]; then
             [ -z "$open" ] || gh issue close "$open" -R "$GITHUB_REPOSITORY" --comment "Healthy again: $GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
           elif [ -n "$open" ]; then
+            gh issue comment "$open" -R "$GITHUB_REPOSITORY" --body "$body"
+          else
+            gh issue create -R "$GITHUB_REPOSITORY" --title "$TITLE" --body "$body"
+          fi
+
+  # Is the scheduler Worker (services/scheduler) still starting runs? It stops when its GitHub token
+  # expires or the Worker is removed; GitHub's own crons then still run everything, but late. Quiet
+  # until the Worker has started its first run, so nothing alerts before it's deployed.
+  scheduler:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    env:
+      TITLE: "Scheduler: no runs started"
+    steps:
+      - name: Look for recent scheduler runs; open, update or close the issue
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          ever=false
+          missing=""
+          # <workflow file> <hours>: a scheduler run must have started within this many hours,
+          # about twice the time between its slots (services/scheduler/src/index.ts, SCHEDULE).
+          for entry in "jobs-daily.yml 12" "directory-contributions.yml 12" "data-health.yml 26" \
+                       "connector-health.yml 26" "directory-commoncrawl.yml 26" "concepts-weekly.yml 192"; do
+            read -r wf hours <<< "$entry"
+            # Prints "<scheduler runs in the list> <of them, started in the window>".
+            read -r total recent <<< "$(gh run list -R "$GITHUB_REPOSITORY" --workflow "$wf" --limit 100 --json displayTitle,createdAt -q "[.[] | select(.displayTitle | endswith(\"· scheduler\"))] | \"\(length) \([.[] | select((.createdAt | fromdateiso8601) > (now - $hours * 3600))] | length)\"")"
+            [ "$total" = 0 ] || ever=true
+            echo "$wf: $recent scheduler run(s) in the last $hours h"
+            [ "$recent" != 0 ] || missing+="- \`$wf\`: none in the last $hours hours"$'\n'
+          done
+          if [ "$ever" != true ]; then
+            echo "No scheduler run yet (the Worker isn't deployed): nothing to check."
+            exit 0
+          fi
+          open="$(gh issue list -R "$GITHUB_REPOSITORY" --state open --search "\"$TITLE\" in:title" --json number -q '.[0].number')"
+          run_url="$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
+          if [ -z "$missing" ]; then
+            [ -z "$open" ] || gh issue close "$open" -R "$GITHUB_REPOSITORY" --comment "The scheduler is starting runs again: $run_url"
+            exit 0
+          fi
+          body="The scheduler Worker (\`services/scheduler\`) started no run of:
+
+          $missing
+          GitHub's own crons still run these workflows, but often hours late. Most likely the Worker's \`GITHUB_TOKEN\` expired or was revoked (its dispatches then fail with HTTP 401 in the Worker's logs), or the Worker was removed. Fix: docs/shared-directory.md, \"Scheduler\".
+
+          Run: $run_url"
+          if [ -n "$open" ]; then
             gh issue comment "$open" -R "$GITHUB_REPOSITORY" --body "$body"
           else
             gh issue create -R "$GITHUB_REPOSITORY" --title "$TITLE" --body "$body"

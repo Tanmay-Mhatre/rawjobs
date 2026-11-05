@@ -1,0 +1,24 @@
+# Starts the scheduled GitHub workflows on time (src/index.ts, SCHEDULE). Replaces services/feed-trigger.
+# Not deployed by CI. To deploy (docs/shared-directory.md, "Scheduler"):
+#   1. Create a fine-grained token: github.com/settings/personal-access-tokens, repository access
+#      "Only select repositories" -> Tanmay-Mhatre/rawjobs, permission "Actions: read and write", nothing else.
+#      Note its expiry date. When it expires the dispatches fail (HTTP 401) and Data · health opens
+#      a "Scheduler: no runs started" issue; GitHub's own crons keep running the workflows, late.
+#   2. cd services/scheduler
+#      npx wrangler@4.151.1 secret put GITHUB_TOKEN
+#      npx wrangler@4.151.1 deploy
+#   3. Delete the old Worker: npx wrangler@4.151.1 delete --name rawjobs-feed-trigger
+# Test once: npx wrangler@4.151.1 dev --test-scheduled, then
+#   curl "http://localhost:8787/__scheduled?cron=*/5+*+*+*+*"
+# (this really dispatches whatever is due in the last 5 minutes by the clock; usually nothing).
+name = "rawjobs-scheduler"
+main = "src/index.ts"
+compatibility_date = "2026-09-01"
+
+# Every 5 minutes; each tick dispatches the SCHEDULE entries due in the 5 minutes ending at it.
+[triggers]
+crons = ["*/5 * * * *"]
+
+[vars]
+REPO = "Tanmay-Mhatre/rawjobs"
+REF = "main"

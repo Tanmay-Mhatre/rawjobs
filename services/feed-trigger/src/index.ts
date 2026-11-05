@@ -1,4 +1,7 @@
 /**
+ * SUPERSEDED by services/scheduler, which starts this workflow and the other scheduled ones.
+ * Delete this folder (and the deployed rawjobs-feed-trigger Worker) once the scheduler is deployed.
+ *
  * Starts the job feed workflow (.github/workflows/jobs-daily.yml) every 6 hours. GitHub's own cron
  * often starts runs hours late; this one is on time. When both fire, the workflow's first job skips
  * the second run (this slot's feed is already built), so nothing runs twice.
