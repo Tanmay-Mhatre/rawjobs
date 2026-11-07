@@ -107,23 +107,40 @@ describe("readOrder", () => {
 });
 
 describe("rests", () => {
-  const now = Date.parse("2026-11-05T12:00:00Z");
+  // Four feed runs a day, 6 hours apart: each 6-hour window is one run's turn.
+  const runs = ["2026-11-08T00:13:00Z", "2026-11-08T06:13:00Z", "2026-11-08T12:13:00Z", "2026-11-08T18:13:00Z"].map(Date.parse);
+  const boards = Array.from({ length: 2000 }, (_, i) => `engage:board-${i}`);
+  const readAt = "2026-11-07T19:00:00Z";
 
-  it("rests a quiet engage board read within 20 hours", () => {
-    expect(rests("engage", QUIET_AFTER, "2026-11-05T00:13:00Z", now)).toBe(true);
+  it("reads each quiet engage board on exactly one run of the four", () => {
+    for (const key of boards.slice(0, 50)) {
+      const reads = runs.filter((t) => !rests("engage", key, QUIET_AFTER, readAt, t)).length;
+      expect(reads).toBe(1);
+    }
   });
 
-  it("reads it again once its rows are 20 hours old", () => {
-    expect(rests("engage", QUIET_AFTER + 5, "2026-11-04T15:00:00Z", now)).toBe(false);
+  it("spreads the boards about evenly over the four runs", () => {
+    for (const t of runs) {
+      const read = boards.filter((key) => !rests("engage", key, QUIET_AFTER, readAt, t)).length;
+      expect(read).toBeGreaterThan(400);
+      expect(read).toBeLessThan(600);
+    }
   });
 
-  it("reads a board that changed lately, or was never read", () => {
-    expect(rests("engage", QUIET_AFTER - 1, "2026-11-05T06:13:00Z", now)).toBe(false);
-    expect(rests("engage", QUIET_AFTER, undefined, now)).toBe(false);
+  it("reads a board whatever its turn once its rows are 26 hours old", () => {
+    const t = Date.parse("2026-11-08T21:00:00Z");
+    for (const key of boards.slice(0, 20)) expect(rests("engage", key, QUIET_AFTER + 5, readAt, t)).toBe(false);
+  });
+
+  it("reads a board that changed lately, or was never read, every run", () => {
+    for (const t of runs) {
+      expect(rests("engage", boards[0]!, QUIET_AFTER - 1, readAt, t)).toBe(false);
+      expect(rests("engage", boards[0]!, QUIET_AFTER, undefined, t)).toBe(false);
+    }
   });
 
   it("never rests other systems' boards", () => {
-    expect(rests("workday", 10, "2026-11-05T06:13:00Z", now)).toBe(false);
+    for (const t of runs) expect(rests("workday", "workday:acme", 10, readAt, t)).toBe(false);
   });
 });
 
