@@ -4,20 +4,23 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Features · RawJobs</title>
-<meta name="description" content="Everything RawJobs does: finds jobs on __COMPANIES_ROUND__ companies' careers pages, scores each one with rules you can read, tracks your applications and alerts you on Telegram. Free, open source, on your computer.">
+<meta name="description" content="Everything RawJobs does: finds jobs on __COMPANIES_ROUND__ companies' careers pages, scores each one with rules you can read, tracks your applications and alerts you on Telegram. Free and open source, for Windows, Mac and Linux.">
 <link rel="canonical" href="__SITE_URL__/features">
 <meta property="og:type" content="website">
 <meta property="og:site_name" content="RawJobs">
 <meta property="og:title" content="Features · RawJobs">
-<meta property="og:description" content="Find, score, track and get alerted. Everything RawJobs does, in one place.">
+<meta property="og:description" content="Find, score, track and get alerted. Everything RawJobs does, free for Windows, Mac and Linux.">
 <meta property="og:url" content="__SITE_URL__/features">
 <meta property="og:image" content="__SITE_URL__/og.png">
 <meta property="og:image:width" content="1200">
 <meta property="og:image:height" content="630">
+<meta property="og:image:alt" content="RawJobs: jobs, straight from the source. A list of job matches, each with its score.">
+<meta name="twitter:image:alt" content="RawJobs: jobs, straight from the source. A list of job matches, each with its score.">
 <meta name="twitter:card" content="summary_large_image">
 <meta name="theme-color" content="#f5f1e8" media="(prefers-color-scheme: light)"><!-- design-lint-ignore: bg-canvas, light (metas can't read tokens) -->
 <meta name="theme-color" content="#120f0b" media="(prefers-color-scheme: dark)"><!-- design-lint-ignore: bg-canvas, dark -->
 <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="/apple-touch-icon.png">
 <link rel="preload" href="/fonts/Geist-400.woff2" as="font" type="font/woff2" crossorigin>
 <link rel="preload" href="/fonts/Geist-600.woff2" as="font" type="font/woff2" crossorigin>
 <link rel="preload" href="/fonts/InstrumentSerif-Italic.woff2" as="font" type="font/woff2" crossorigin>
@@ -90,7 +93,7 @@ h1, h2, h3 { margin: 0; text-wrap: balance; }
 @media (max-width: 480px) { .nav__cta .rj-btn:not(.rj-btn--primary) { display: none; } }
 
 /* hero */
-.hero { position: relative; padding-block: clamp(56px, 9vw, 120px) clamp(40px, 6vw, 72px); isolation: isolate; }
+.hero { position: relative; overflow-x: clip; padding-block: clamp(56px, 9vw, 120px) clamp(40px, 6vw, 72px); isolation: isolate; }
 .hero::before { content: ""; position: absolute; z-index: -1; width: 900px; height: 900px; right: -320px; top: -360px; border-radius: 50%;
   background: repeating-radial-gradient(circle, transparent 0 89px, var(--glass-line) 89px 90px), radial-gradient(closest-side, var(--signal-glow), transparent); }
 .hero h1 { font: var(--text-display-hero); letter-spacing: -0.05em; margin-top: var(--space-4); max-width: 14ch; }
@@ -197,6 +200,12 @@ h1, h2, h3 { margin: 0; text-wrap: balance; }
 .crop { margin: 0; display: grid; gap: var(--space-2); }
 .crop__frame { height: clamp(180px, 22vw, 260px); border: 1px solid var(--border-default); border-radius: var(--radius-md); overflow: hidden; background: var(--bg-raised); box-shadow: var(--shadow-l1); }
 .crop__frame img { display: block; width: 100%; height: 100%; object-fit: none; object-position: var(--at, 0 0); }
+/* Phones: the full-size crop cuts words in half, so show the whole screen instead. Keep the header out of the way too. */
+@media (max-width: 760px) {
+  .nav { position: relative; }
+  .crop__frame { height: auto; }
+  .crop__frame img { height: auto; object-fit: contain; }
+}
 .crop figcaption { font: var(--text-meta); color: var(--text-secondary); }
 
 /* the reading bar: how far down the page you are */
@@ -213,8 +222,20 @@ h1, h2, h3 { margin: 0; text-wrap: balance; }
   .rv-wait { opacity: 1; }
 }
 @media (forced-colors: active) { .mark span { color: CanvasText; background: none; } .mark i, .bar > span > i { background: CanvasText; forced-color-adjust: none; } }
+/* Phones and tablets: say early that RawJobs is a computer app (data-handheld is set in <head>). */
+.handheld-note { display: none; padding: var(--space-4); border: 1px solid var(--border-default); border-radius: var(--radius-md); background: var(--bg-raised); font: var(--text-small); color: var(--text-secondary); text-wrap: pretty; }
+.handheld-note b { color: var(--text-primary); font-weight: 500; }
+[data-handheld] .handheld-note { display: block; margin-top: var(--space-6); }
 </style>
 <!--__ANALYTICS__-->
+<script>
+/* Phones and tablets can't run RawJobs (it installs on a computer). iPads report a Mac, so count touch Macs too. */
+(function () {
+  var ua = navigator.userAgent;
+  if (/android|iphone|ipad|ipod|mobile/i.test(ua) || (navigator.maxTouchPoints > 1 && /mac/i.test(navigator.platform)) ||
+      (matchMedia('(pointer: coarse)').matches && matchMedia('(max-width: 760px)').matches)) document.documentElement.setAttribute('data-handheld', '');
+})();
+</script>
 </head>
 <body>
 <div class="page rj-root">
@@ -233,7 +254,7 @@ h1, h2, h3 { margin: 0; text-wrap: balance; }
     </nav>
     <div class="nav__cta">
       <a class="rj-btn" href="https://github.com/Tanmay-Mhatre/rawjobs" target="_blank" rel="noopener">Star on GitHub<!--__STARS__--><span class="rj-sr"> (opens in a new tab)</span></a>
-      <a class="rj-btn rj-btn--primary" href="/#get">Get RawJobs</a>
+      <a class="rj-btn rj-btn--primary" href="/#get" data-cta-short>Get RawJobs</a>
     </div>
   </div>
 </header>
@@ -243,7 +264,8 @@ h1, h2, h3 { margin: 0; text-wrap: balance; }
   <div class="wrap">
     <p class="eyebrow">Features</p>
     <h1 id="hero-title">Everything it does, in <em class="serif">one</em> place</h1>
-    <p class="hero__lede">RawJobs finds jobs on the careers pages of __COMPANIES_ROUND__ companies, scores each one with rules you can read, and keeps track of what you apply to. Free, open source, and it all runs on your computer.</p>
+    <p class="hero__lede">RawJobs finds jobs on the careers pages of __COMPANIES_ROUND__ companies, scores each one with rules you can read, and keeps track of what you apply to. Free, open source, and it all runs on your own Windows, Mac or Linux computer.</p>
+    <p class="handheld-note" role="note"><b>It's a computer app.</b> RawJobs installs on Windows, Mac or Linux. It won't run on a phone or tablet, so send yourself the link. Once it's set up, new matches can come to your phone on Telegram.</p>
     <div class="hero__ctas">
       <a class="rj-btn rj-btn--primary btn-lg" href="/#get"><span data-cta>Get RawJobs</span></a>
       <a class="rj-btn btn-lg" href="https://github.com/Tanmay-Mhatre/rawjobs" target="_blank" rel="noopener">Star on GitHub<!--__STARS__--><span class="rj-sr"> (opens in a new tab)</span></a>
@@ -593,7 +615,7 @@ h1, h2, h3 { margin: 0; text-wrap: balance; }
     <div class="final">
       <p class="eyebrow">Get started</p>
       <h2 id="final-title">Your next role may <em class="serif">already</em> be on a careers page</h2>
-      <p>Free, open source, and installed in about a minute.</p>
+      <p>Free, open source, and on your computer in about a minute.</p>
       <div class="hero__ctas" style="margin-top:0">
         <a class="rj-btn rj-btn--primary btn-lg" href="/#get"><span data-cta>Get RawJobs</span></a>
         <a class="rj-btn btn-lg" href="https://github.com/Tanmay-Mhatre/rawjobs" target="_blank" rel="noopener">Star on GitHub<!--__STARS__--><span class="rj-sr"> (opens in a new tab)</span></a>
@@ -647,9 +669,23 @@ h1, h2, h3 { margin: 0; text-wrap: balance; }
   }
   /* the buttons that lead to the install say which computer, as on the home page (not on a phone) */
   var ua = ((navigator.userAgentData && navigator.userAgentData.platform) || navigator.platform || '') + ' ' + navigator.userAgent;
-  var phone = /android|iphone|ipod|mobile/i.test(navigator.userAgent) || (matchMedia('(pointer: coarse)').matches && matchMedia('(max-width: 760px)').matches);
+  var phone = document.documentElement.hasAttribute('data-handheld');
   var osName = /iphone|ipad|ipod|mac/i.test(ua) ? 'Mac' : /win/i.test(ua) ? 'Windows' : /linux|x11|cros/i.test(ua) ? 'Linux' : 'Windows';
   if (!phone) Array.prototype.forEach.call(document.querySelectorAll('[data-cta]'), function (el) { el.textContent = 'Get RawJobs for ' + osName; });
+  /* phones and tablets: the buttons that lead to the install send the page to a computer instead */
+  function handheldCtas(href) {
+    Array.prototype.forEach.call(document.querySelectorAll('[data-cta]'), function (el) { el.textContent = 'Send to my computer'; });
+    Array.prototype.forEach.call(document.querySelectorAll('[data-cta-short]'), function (el) { el.textContent = 'Send to computer'; });
+    if (!navigator.share) return;
+    Array.prototype.forEach.call(document.querySelectorAll('a[href="' + href + '"]'), function (a) {
+      if (!a.querySelector('[data-cta]') && !a.hasAttribute('data-cta-short')) return;
+      a.addEventListener('click', function (e) {
+        e.preventDefault();
+        navigator.share({ title: 'Install RawJobs', text: 'Open this on your computer to install RawJobs.', url: location.origin + '/#get' }).catch(function () {});
+      });
+    });
+  }
+  if (phone) handheldCtas('/#get');
   var links = Array.prototype.slice.call(document.querySelectorAll('.toc a'));
   var sio = new IntersectionObserver(function (es) {
     es.forEach(function (e) {
