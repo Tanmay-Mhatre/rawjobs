@@ -179,17 +179,25 @@ const DESCRIBES_PER_COMPANY = 25;
 
 /**
  * Systems whose quiet boards rest between reads. A board whose jobs came back the same QUIET_AFTER reads in a
- * row (an empty board too) is read again only once its rows are restHours old; any change makes it busy again.
- * At 20 h that's about every 4th run, well inside the app's 3-day feed age (FEED_MAX_AGE_DAYS) and the 7-day
- * drop. Engage sends no ETag (Cache-Control: private), so a 304 can't do this for it.
+ * row (an empty board too) is read in one feed run out of `every`, its turn picked from its key, so each run
+ * reads about the same share; any change makes it busy again (read every run). A board whose rows are
+ * maxHours old is read whatever its turn (a missed or failed run). Turns by age alone put every board on the
+ * same run (all read 18:13, 6-7 Nov: 192 min, then ~5 min the other three). Once a day stays well inside the
+ * app's 3-day feed age (FEED_MAX_AGE_DAYS) and the 7-day drop. Engage sends no ETag (Cache-Control: private),
+ * so a 304 can't do this for it.
  */
-const RESTED: Record<string, { restHours: number }> = { engage: { restHours: 20 } };
+const RESTED: Record<string, { every: number; maxHours: number }> = { engage: { every: 4, maxHours: 26 } };
 export const QUIET_AFTER = 2;
-/** Whether a board can skip this run: quiet long enough, and its rows read recently enough. */
-export function rests(ats: string, quietRuns: number, fetchedAt: string | undefined, now: number): boolean {
+/** The feed runs every 6 hours (jobs-daily.yml): a run's turn is its 6-hour window. */
+const RUN_HOURS = 6;
+/** A board's turn, 0 to every-1, the same every run. */
+const turnOf = (key: string, every: number) => createHash("sha1").update(key).digest().readUInt32BE(0) % every;
+/** Whether a board can skip this run: quiet long enough, not its turn, and its rows read recently enough. */
+export function rests(ats: string, key: string, quietRuns: number, fetchedAt: string | undefined, now: number): boolean {
   const r = RESTED[ats];
   if (!r || quietRuns < QUIET_AFTER || !fetchedAt) return false;
-  return now - Date.parse(fetchedAt) < r.restHours * 3_600_000;
+  if (now - Date.parse(fetchedAt) >= r.maxHours * 3_600_000) return false;
+  return turnOf(key, r.every) !== Math.floor(now / (RUN_HOURS * 3_600_000)) % r.every;
 }
 
 /** Boards in the order to read them: for BUDGETED and RESTED systems, the one read longest ago (or never) first. */
@@ -360,7 +368,7 @@ async function crawl(out: string, group: string, generated: string, directoryFil
             keep(key);
             continue;
           }
-          if (previous[key] && rests(ats, quiet[key] ?? 0, previous[key]!.fetched_at, now.getTime())) {
+          if (previous[key] && rests(ats, key, quiet[key] ?? 0, previous[key]!.fetched_at, now.getTime())) {
             companies[key] = previous[key]!;
             s.rested = (s.rested ?? 0) + 1;
             continue;
