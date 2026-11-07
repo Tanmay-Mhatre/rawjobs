@@ -4,20 +4,23 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>RawJobs: jobs, straight from the source</title>
-<meta name="description" content="RawJobs finds jobs on the careers pages of __COMPANIES_ROUND__ companies and scores each one with rules you can read. Free, open source, and it runs on your computer.">
+<meta name="description" content="RawJobs finds jobs on the careers pages of __COMPANIES_ROUND__ companies and scores each one with rules you can read. Free and open source, for Windows, Mac and Linux.">
 <link rel="canonical" href="__SITE_URL__/">
 <meta property="og:type" content="website">
 <meta property="og:site_name" content="RawJobs">
 <meta property="og:title" content="RawJobs: jobs, straight from the source">
-<meta property="og:description" content="Free, open-source job radar. Finds jobs on the careers pages of __COMPANIES_ROUND__ companies and scores every one with rules you can read.">
+<meta property="og:description" content="Free, open-source job radar for Windows, Mac and Linux. Finds jobs on the careers pages of __COMPANIES_ROUND__ companies and scores every one with rules you can read.">
 <meta property="og:url" content="__SITE_URL__/">
 <meta property="og:image" content="__SITE_URL__/og.png">
 <meta property="og:image:width" content="1200">
 <meta property="og:image:height" content="630">
+<meta property="og:image:alt" content="RawJobs: jobs, straight from the source. A list of job matches, each with its score.">
+<meta name="twitter:image:alt" content="RawJobs: jobs, straight from the source. A list of job matches, each with its score.">
 <meta name="twitter:card" content="summary_large_image">
 <meta name="theme-color" content="#f5f1e8" media="(prefers-color-scheme: light)"><!-- design-lint-ignore: bg-canvas, light (metas can't read tokens) -->
 <meta name="theme-color" content="#120f0b" media="(prefers-color-scheme: dark)"><!-- design-lint-ignore: bg-canvas, dark -->
 <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="/apple-touch-icon.png">
 <link rel="preload" href="/fonts/Geist-400.woff2" as="font" type="font/woff2" crossorigin>
 <link rel="preload" href="/fonts/Geist-600.woff2" as="font" type="font/woff2" crossorigin>
 <script>
@@ -28,6 +31,14 @@
   var more = matchMedia('(prefers-contrast: more)').matches;
   r.setAttribute('data-theme', (dark ? 'dark' : 'light') + (more ? '-hc' : ''));
   r.classList.add('js');
+})();
+</script>
+<script>
+/* Phones and tablets can't run RawJobs (it installs on a computer). iPads report a Mac, so count touch Macs too. */
+(function () {
+  var ua = navigator.userAgent;
+  if (/android|iphone|ipad|ipod|mobile/i.test(ua) || (navigator.maxTouchPoints > 1 && /mac/i.test(navigator.platform)) ||
+      (matchMedia('(pointer: coarse)').matches && matchMedia('(max-width: 760px)').matches)) document.documentElement.setAttribute('data-handheld', '');
 })();
 </script>
 <link rel="preload" href="/fonts/GeistMono-500.woff2" as="font" type="font/woff2" crossorigin>
@@ -192,8 +203,10 @@ h1, h2, h3 { margin: 0; text-wrap: balance; }
 
 /* Phones and narrow tablets: the headline first, then the wall as a band right under it, then the rest. */
 @media (max-width: 760px) {
-  .hero { min-height: 0; display: block; overflow: visible; padding-top: var(--space-8); }
+  .hero { min-height: 0; display: block; overflow: visible; overflow-x: clip; padding-top: var(--space-8); }
   .hero__copy { max-width: none; }
+  .hero__copy > .wall { order: 1; }
+  .hero__copy > .hero__note { order: 2; }
   .wall { position: relative; inset: auto; height: 290px; margin: 0 calc(-1 * var(--gutter)); --clear: 0%; }
   .wall__hosts { bottom: 64px; gap: var(--space-1) 14px; font-size: 0.6875rem; line-height: 1.125rem; padding: var(--space-2) var(--gutter);
     -webkit-mask-image: linear-gradient(transparent 0, black 14px, black 72%, transparent 100%); mask-image: linear-gradient(transparent 0, black 14px, black 72%, transparent 100%); }
@@ -400,6 +413,11 @@ label.rj-chip:has(input:focus-visible) { outline: 2px solid var(--focus-ring); o
 .get[data-os="win"] [data-only]:not([data-only~="win"]),
 .get[data-os="mac"] [data-only]:not([data-only~="mac"]),
 .get[data-os="linux"] [data-only]:not([data-only~="linux"]) { display: none !important; }
+
+/* Phones and tablets: say early that RawJobs is a computer app (data-handheld is set in <head>). */
+.handheld-note { display: none; padding: var(--space-4); border: 1px solid var(--border-default); border-radius: var(--radius-md); background: var(--bg-raised); font: var(--text-small); color: var(--text-secondary); text-wrap: pretty; }
+.handheld-note b { color: var(--text-primary); font-weight: 500; }
+[data-handheld] .handheld-note { display: block; }
 
 .handoff { display: none; gap: var(--space-3); padding: var(--space-4); margin-bottom: var(--space-6); border: 1px solid var(--border-default); border-radius: var(--radius-md); background: var(--bg-raised); }
 .handoff[data-show] { display: grid; }
@@ -1374,7 +1392,7 @@ h1 .serif, h2 .serif { font-size: 1.08em; line-height: 0; }
         <svg class="rj-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M15 22v-4a4.8 4.8 0 0 0-1-3.5c3 0 6-2 6-5.5.08-1.25-.27-2.48-1-3.5.28-1.15.28-2.35 0-3.5 0 0-1 0-3 1.5-2.64-.5-5.36-.5-8 0C6 2 5 2 5 2c-.3 1.15-.3 2.35 0 3.5A5.403 5.403 0 0 0 4 9c0 3.5 3 5.5 6 5.5-.39.49-.68 1.05-.85 1.65-.17.6-.22 1.23-.15 1.85v4"/><path d="M9 18c-4.51 2-5-2-7-2"/></svg>
         Star on GitHub<!--__STARS__-->
       <span class="rj-sr"> (opens in a new tab)</span></a>
-      <a class="rj-btn rj-btn--primary" href="#get">Get RawJobs</a>
+      <a class="rj-btn rj-btn--primary" href="#get" data-cta-short>Get RawJobs</a>
     </div>
   </div>
 </header>
@@ -1397,7 +1415,8 @@ h1 .serif, h2 .serif { font-size: 1.08em; line-height: 0; }
         <div class="wall__tip" id="wall-tip" role="tooltip" hidden></div>
         <p class="wall__meter"><strong id="wall-count" class="num">__COMPANIES__</strong> <span id="wall-label">careers pages in the directory</span></p>
       </div>
-      <p class="hero__lede" data-step style="--i:3">RawJobs reads companies' own careers pages, ranks every job by how well it fits you, and sends you straight to apply. Free, and it runs on your computer.</p>
+      <p class="hero__lede" data-step style="--i:3">RawJobs reads companies' own careers pages, ranks every job by how well it fits you, and sends you straight to apply. Free, and it runs on your own Windows, Mac or Linux computer.</p>
+      <p class="handheld-note" role="note"><b>It's a computer app.</b> RawJobs installs on Windows, Mac or Linux. It won't run on a phone or tablet, so send yourself the link. Once it's set up, new matches can come to your phone on Telegram.</p>
       <div class="hero__ctas" data-step style="--i:4">
         <a class="rj-btn rj-btn--primary btn-lg" href="#get">
           <span data-cta>Get RawJobs</span>
@@ -1406,7 +1425,7 @@ h1 .serif, h2 .serif { font-size: 1.08em; line-height: 0; }
         <a class="rj-btn btn-lg" href="https://github.com/Tanmay-Mhatre/rawjobs" target="_blank" rel="noopener">Star on GitHub<!--__STARS__--><span class="rj-sr"> (opens in a new tab)</span></a>
       </div>
       <p class="hero__note" data-step style="--i:5">
-        <span><i class="rj-glyph rj-glyph--full" style="color:var(--success-text)" aria-hidden="true"></i>Windows, Mac and Linux</span>
+        <span><i class="rj-glyph rj-glyph--full" style="color:var(--success-text)" aria-hidden="true"></i>Installs in about a minute</span>
         <span><i class="rj-glyph rj-glyph--full" style="color:var(--success-text)" aria-hidden="true"></i>No account</span>
         <span><i class="rj-glyph rj-glyph--full" style="color:var(--success-text)" aria-hidden="true"></i>Scores you can read</span>
       </p>
@@ -1677,7 +1696,7 @@ h1 .serif, h2 .serif { font-size: 1.08em; line-height: 0; }
     </div>
 
     <div class="handoff" id="handoff" role="note">
-      <p><b>You're on a phone.</b> RawJobs runs on a Windows, Mac or Linux computer. Send yourself this page and open it there.</p>
+      <p><b>You're on a phone or tablet.</b> RawJobs runs on a Windows, Mac or Linux computer. Send yourself this page and open it there.</p>
       <div class="handoff__btns">
         <button class="rj-btn rj-btn--primary" type="button" id="share-link" hidden>Send to my computer</button>
         <a class="rj-btn" id="mail-link" href="mailto:?subject=Install%20RawJobs&amp;body=Open%20this%20on%20your%20computer%3A%20__SITE_URL__%2F%23get">Email me the link</a>
@@ -2294,7 +2313,7 @@ h1 .serif, h2 .serif { font-size: 1.08em; line-height: 0; }
     if (/linux|x11|cros/i.test(p)) return 'linux';
     return 'win';
   }
-  var isPhone = /android|iphone|ipod|mobile/i.test(navigator.userAgent) || (matchMedia('(pointer: coarse)').matches && matchMedia('(max-width: 760px)').matches);
+  var isPhone = document.documentElement.hasAttribute('data-handheld');
   var os = detectOS(), copied = false;
 
   var VERSION = '__SHOWN_VERSION__';
@@ -2398,8 +2417,22 @@ h1 .serif, h2 .serif { font-size: 1.08em; line-height: 0; }
   /* the buttons that lead here say which computer, once we know it (not on a phone) */
   if (!isPhone) $$('[data-cta]').forEach(function (el) { el.textContent = 'Get RawJobs for ' + OS_NAME[os]; });
 
+  /* phones and tablets: the buttons that lead to the install send the page to a computer instead */
+  function handheldCtas(href) {
+    Array.prototype.forEach.call(document.querySelectorAll('[data-cta]'), function (el) { el.textContent = 'Send to my computer'; });
+    Array.prototype.forEach.call(document.querySelectorAll('[data-cta-short]'), function (el) { el.textContent = 'Send to computer'; });
+    if (!navigator.share) return;
+    Array.prototype.forEach.call(document.querySelectorAll('a[href="' + href + '"]'), function (a) {
+      if (!a.querySelector('[data-cta]') && !a.hasAttribute('data-cta-short')) return;
+      a.addEventListener('click', function (e) {
+        e.preventDefault();
+        navigator.share({ title: 'Install RawJobs', text: 'Open this on your computer to install RawJobs.', url: location.origin + '/#get' }).catch(function () {});
+      });
+    });
+  }
   /* phones: RawJobs installs on a computer, so offer to send the page there */
   if (isPhone) {
+    handheldCtas('#get');
     $('#handoff').setAttribute('data-show', '');
     var showSteps = $('#show-steps');
     get.setAttribute('data-phone', ''); showSteps.hidden = false;
