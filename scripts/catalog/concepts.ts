@@ -128,8 +128,7 @@ async function feedTitles(base = "https://github.com/Tanmay-Mhatre/rawjobs-direc
   const manifest = (await json(`${base}/jobs-manifest.json`)) as { shards: Record<string, { file: string }> };
   const out: string[] = [];
   for (const { file } of Object.values(manifest.shards)) {
-    const res = await fetch(`${base}/${file}`, { signal: AbortSignal.timeout(120_000) });
-    if (!res.ok) throw new Error(`${res.status} ${file}`);
+    const res = await get(`${base}/${file}`, { timeoutMs: 120_000 });
     const shard = JSON.parse(gunzipSync(Buffer.from(await res.arrayBuffer())).toString("utf8")) as { companies: Record<string, { jobs: [string, string][] }> };
     // Each company's distinct titles, at most 300: a big employer's thousands of postings repeat themselves.
     for (const c of Object.values(shard.companies)) if (c.jobs.length) out.push([...new Set(c.jobs.map((j) => j[1]))].slice(0, 300).join(" | "));
@@ -159,16 +158,30 @@ export function gate(candidates: Record<string, string[]>, companies?: readonly 
 }
 
 const pause = (ms: number) => new Promise((r) => setTimeout(r, ms));
-async function json(url: string, tries = 3): Promise<unknown> {
-  const res = await fetch(url, { headers: { accept: "application/json", "user-agent": "RawJobs concepts builder (github.com/Tanmay-Mhatre/rawjobs)" }, signal: AbortSignal.timeout(20_000) });
-  // ESCO asks callers to slow down with a 429: wait (at most 10 s) and try again.
-  if (res.status === 429 && tries > 1) {
-    await pause(Math.min(10_000, Number(res.headers.get("retry-after")) * 1000 || 5000));
-    return json(url, tries - 1);
+/**
+ * GET with retries. ESCO asks callers to slow down with a 429: wait (at most 10 s) and try again. A timeout,
+ * a dropped connection or a 5xx is tried again too, after `waitMs`: one slow answer from GitHub's release
+ * download (8 Nov, the feed's manifest past 20 s) failed the whole weekly build.
+ */
+export async function get(url: string, opts: { timeoutMs?: number; tries?: number; waitMs?: number; fetchImpl?: typeof fetch } = {}): Promise<Response> {
+  const { timeoutMs = 20_000, tries = 3, waitMs = 5_000, fetchImpl = fetch } = opts;
+  for (let left = tries; ; left--) {
+    let res: Response;
+    try {
+      res = await fetchImpl(url, { headers: { accept: "application/json", "user-agent": "RawJobs concepts builder (github.com/Tanmay-Mhatre/rawjobs)" }, signal: AbortSignal.timeout(timeoutMs) });
+    } catch (err) {
+      if (left <= 1) throw err;
+      await pause(waitMs);
+      continue;
+    }
+    if (res.ok || left <= 1 || (res.status !== 429 && res.status < 500)) {
+      if (!res.ok) throw new Error(`${res.status} ${url}`);
+      return res;
+    }
+    await pause(res.status === 429 ? Math.min(10_000, Number(res.headers.get("retry-after")) * 1000 || waitMs) : waitMs);
   }
-  if (!res.ok) throw new Error(`${res.status} ${url}`);
-  return res.json();
 }
+const json = async (url: string): Promise<unknown> => (await get(url)).json();
 
 type EscoResult = { preferredLabel?: Record<string, string>; alternativeLabel?: Record<string, string[]> };
 async function fromEsco(topic: string): Promise<string[][]> {
