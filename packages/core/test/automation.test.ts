@@ -4,7 +4,22 @@ import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { availableJobs, digest, findTelegramChat, finishedMessage, looksLikeToken, maskToken, saveTelegramSecrets, sendTelegram, telegramSecrets } from "../src/notify";
 import { acquireScanLock, releaseScanLock } from "../src/scan";
-import { installSchedule, nextRunAt, readScheduledRuns, recordScheduledRun, removeSchedule, runScheduleNow, scheduleStatus, validateSchedule } from "../src/schedule";
+import {
+  installSchedule,
+  lastDueSlot,
+  missedScan,
+  nextRunAt,
+  readScheduledRuns,
+  recordScheduledRun,
+  removeSchedule,
+  repairScheduleTimes,
+  runScheduleNow,
+  type ScheduledRun,
+  scheduledRunKind,
+  scheduleStatus,
+  takeRunRequest,
+  validateSchedule,
+} from "../src/schedule";
 import type { Job } from "../src/schema";
 import { makeJob } from "./helpers";
 
@@ -144,6 +159,9 @@ describe("schedule", () => {
     expect(script).toContain("-ExecutionTimeLimit (New-TimeSpan -Hours 4)");
     expect(script).toContain("New-ScheduledTaskTrigger -Daily -At '08:00'");
     expect(script).toContain("New-ScheduledTaskTrigger -Daily -At '20:00'");
+    // Each start in local wall-clock time, no UTC offset: the times follow the computer's time zone.
+    expect(script).toContain("$x.StartBoundary = (Get-Date -Format 'yyyy-MM-dd') + 'T08:00:00'");
+    expect(script).toContain("$x.StartBoundary = (Get-Date -Format 'yyyy-MM-dd') + 'T20:00:00'");
     expect(script).toContain("-Execute 'conhost.exe' -Argument '--headless ");
     expect(script).toContain("scan --scope all --notify --scheduled --data");
     // A quote in a path is doubled for PowerShell.
@@ -206,6 +224,85 @@ describe("schedule", () => {
     recordScheduledRun(dataDir, { startedAt: "2026-10-08T04:00:00Z", scope: "mine", ok: true, matches: 3 });
     recordScheduledRun(dataDir, { startedAt: "2026-10-09T04:00:00Z", scope: "mine", ok: false, error: "offline" });
     expect(readScheduledRuns(dataDir).map((r) => r.startedAt)).toEqual(["2026-10-09T04:00:00Z", "2026-10-08T04:00:00Z"]);
+  });
+});
+
+describe("catching up on a missed scan", () => {
+  const at = (d: number, h: number, m = 0) => new Date(2026, 10, d, h, m);
+  const run = (startedAt: Date, catchUp?: boolean): ScheduledRun => ({ startedAt: startedAt.toISOString(), scope: "mine", ok: true, ...(catchUp ? { catchUp } : {}) });
+
+  it("finds the latest time that has come: today's, or yesterday's before it", () => {
+    expect(lastDueSlot(["10:00"], at(14, 9))).toEqual(at(13, 10));
+    expect(lastDueSlot(["10:00"], at(14, 10))).toEqual(at(14, 10));
+    expect(lastDueSlot(["08:00", "20:00"], at(14, 12))).toEqual(at(14, 8));
+  });
+
+  it("ten days off, opened at 09:00 before a 10:00 scan: one catch-up for yesterday's time", () => {
+    const runs = [run(at(3, 10))];
+    expect(missedScan(["10:00"], runs, at(14, 9))).toEqual(at(13, 10));
+    // Done once a scan started after that time.
+    expect(missedScan(["10:00"], [run(at(14, 9, 3), true), ...runs], at(14, 9, 30))).toBeUndefined();
+    // The catch-up stands in for today's 10:00 too, so the server doesn't start another…
+    expect(missedScan(["10:00"], [run(at(14, 9, 3), true), ...runs], at(14, 10, 30))).toBeUndefined();
+    // …and the 10:00 scan skips itself.
+    expect(scheduledRunKind(["10:00"], [run(at(14, 9, 3), true)], undefined, at(14, 10)).skip).toMatch(/catch-up scan already ran/);
+  });
+
+  it("an on-time scan never stands in for a later time of the same day", () => {
+    expect(missedScan(["08:00", "12:00"], [run(at(14, 8))], at(14, 12, 20))).toEqual(at(14, 12));
+    expect(scheduledRunKind(["08:00", "12:00"], [run(at(14, 8))], undefined, at(14, 12)).skip).toBeUndefined();
+  });
+
+  it("a catch-up more than 3 hours before the time doesn't stand in for it", () => {
+    expect(missedScan(["10:00"], [run(at(14, 6, 30), true)], at(14, 10, 30))).toEqual(at(14, 10));
+    expect(scheduledRunKind(["10:00"], [run(at(14, 6, 30), true)], undefined, at(14, 10)).skip).toBeUndefined();
+  });
+
+  it("times before the schedule was saved were never due", () => {
+    expect(missedScan(["10:00"], [], at(14, 11), at(14, 10, 30))).toBeUndefined();
+    expect(missedScan(["10:00"], [], at(15, 11), at(14, 10, 30))).toEqual(at(15, 10));
+  });
+
+  it("a scheduled scan that starts late is a catch-up; Run now and the server say which they are", () => {
+    expect(scheduledRunKind(["10:00"], [], undefined, at(14, 10, 1))).toEqual({ catchUp: false });
+    expect(scheduledRunKind(["10:00"], [], undefined, at(14, 10, 30))).toEqual({ catchUp: true });
+    // Run now is never skipped, even right after a catch-up.
+    expect(scheduledRunKind(["10:00"], [run(at(14, 9, 3), true)], "run-now", at(14, 10))).toEqual({ catchUp: false });
+    expect(scheduledRunKind(["10:00"], [], "catch-up", at(14, 9, 3))).toEqual({ catchUp: true });
+  });
+
+  it("Run now leaves a request the scan takes once, while it's fresh", () => {
+    const dataDir = mkdtempSync(join(tmpdir(), "jh-sched-"));
+    const ctx = { repoRoot: "/repo", dataDir, exec: () => ({ status: 0, stdout: "", stderr: "" }), platform: "linux" as const, home: dataDir };
+    runScheduleNow(ctx, "catch-up");
+    expect(takeRunRequest(dataDir)).toBe("catch-up");
+    expect(takeRunRequest(dataDir)).toBeUndefined();
+    runScheduleNow(ctx);
+    expect(takeRunRequest(dataDir, Date.now() + 11 * 60_000)).toBeUndefined();
+  });
+
+  it("Windows: saves a task again when its next run isn't at one of your times (a time zone change)", () => {
+    const dataDir = mkdtempSync(join(tmpdir(), "jh-sched-"));
+    writeFileSync(join(dataDir, "schedule.json"), JSON.stringify({ times: ["10:00"], scope: "mine" }));
+    writeFileSync(join(dataDir, "daily-summary.json"), JSON.stringify({ time: "09:00" }));
+    const scripts: string[] = [];
+    let next = "11:30";
+    const exec = (_cmd: string, args: string[]) => {
+      const script = args.at(-1)!;
+      scripts.push(script);
+      if (script.includes("NextRunTime.ToString('HH:mm')")) return { status: 0, stdout: script.includes("daily summary") ? "09:00\n" : `${next}\n`, stderr: "" };
+      // activeNames: the current task is there.
+      if (script.includes("ConvertTo-Json")) return { status: 0, stdout: '{"next":null}', stderr: "" };
+      return { status: 0, stdout: "", stderr: "" };
+    };
+    const ctx = { repoRoot: "/repo", dataDir, exec, platform: "win32" as const };
+    expect(repairScheduleTimes(ctx)).toEqual(["scheduled scan (11:30 → 10:00)"]);
+    expect(scripts.filter((s) => s.includes("Register-ScheduledTask"))).toEqual([expect.stringContaining("-TaskName 'RawJobs Scan'")]);
+    // Saving again leaves your settings (and when they were saved) alone.
+    expect(JSON.parse(readFileSync(join(dataDir, "schedule.json"), "utf8"))).toEqual({ times: ["10:00"], scope: "mine" });
+    next = "10:00";
+    expect(repairScheduleTimes(ctx)).toEqual([]);
+    expect(repairScheduleTimes({ ...ctx, platform: "darwin" })).toEqual([]);
   });
 });
 
