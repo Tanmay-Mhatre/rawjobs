@@ -55,10 +55,11 @@ export function writeServerState(port: number, home = rawjobsHome()): void {
  * Bring the Windows tasks of a copy installed before this version up to date, on this version's first
  * start (RAWJOBS_HOME/autostart.json): the RawJobs Server task runs at normal priority (Task
  * Scheduler's default, 7, is below normal), and scheduled scans and the daily summary no longer wake
- * a sleeping laptop. One PowerShell in the background; never throws, a failure is logged and tried
- * again on the next start.
+ * a sleeping laptop. A task that's missing (the daily summary is off by default) or already right is
+ * left alone. One PowerShell in the background; never throws, a failure is logged with PowerShell's
+ * error and tried again on the next start.
  */
-export async function ensureAutostart(home: string, version: string, o: { platform?: NodeJS.Platform; run?: (script: string) => Promise<number> } = {}): Promise<void> {
+export async function ensureAutostart(home: string, version: string, o: { platform?: NodeJS.Platform; run?: (script: string) => Promise<PowerShellResult> } = {}): Promise<void> {
   if ((o.platform ?? process.platform) !== "win32") return;
   const file = join(home, "autostart.json");
   try {
@@ -66,27 +67,33 @@ export async function ensureAutostart(home: string, version: string, o: { platfo
   } catch {
     // never done
   }
-  const task = (name: string, edit: string) =>
-    `$t = Get-ScheduledTask -TaskName '${name}' -ErrorAction SilentlyContinue; if ($t) { ${edit}; Set-ScheduledTask -InputObject $t -ErrorAction Stop | Out-Null }`;
+  const task = (name: string, setting: string, value: string) =>
+    `$t = Get-ScheduledTask -TaskName '${name}' -ErrorAction SilentlyContinue; if ($t -and $t.Settings.${setting} -ne ${value}) { $t.Settings.${setting} = ${value}; Set-ScheduledTask -InputObject $t -ErrorAction Stop | Out-Null }`;
   const script = [
     "$ErrorActionPreference = 'Stop'",
-    task(AUTOSTART.windowsTask, "$t.Settings.Priority = 5"),
-    ...[SCHEDULER_NAMES.task, DAILY_SCHEDULER_NAMES.task].map((n) => task(n, "$t.Settings.WakeToRun = $false")),
+    task(AUTOSTART.windowsTask, "Priority", "5"),
+    ...[SCHEDULER_NAMES.task, DAILY_SCHEDULER_NAMES.task].map((n) => task(n, "WakeToRun", "$false")),
+    // Without this, a missing task's silent lookup failure ($? false) becomes the exit code.
+    "exit 0",
   ].join("; ");
   try {
-    const code = await (o.run ?? powershellAsync)(script);
-    if (code !== 0) throw new Error(`PowerShell exited with ${code}`);
+    const { code, error } = await (o.run ?? powershellAsync)(script);
+    if (code !== 0) throw new Error(`PowerShell exited with ${code}${error ? `: ${error}` : ""}`);
     writeFileSync(file, `${JSON.stringify({ version })}\n`);
   } catch (err) {
     console.log(`Couldn't update the RawJobs scheduled tasks: ${(err as Error).message}`);
   }
 }
 
-function powershellAsync(script: string): Promise<number> {
+type PowerShellResult = { code: number; error?: string };
+
+function powershellAsync(script: string): Promise<PowerShellResult> {
   return new Promise((done, fail) => {
-    const child = spawn("powershell.exe", ["-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-Command", script], { stdio: "ignore", windowsHide: true });
+    const child = spawn("powershell.exe", ["-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-Command", script], { stdio: ["ignore", "ignore", "pipe"], windowsHide: true });
+    let stderr = "";
+    child.stderr.setEncoding("utf8").on("data", (d: string) => (stderr += d));
     child.once("error", fail);
-    child.once("exit", (code) => done(code ?? 1));
+    child.once("close", (code) => done({ code: code ?? 1, error: stderr.replace(/\s+/g, " ").trim().slice(0, 500) || undefined }));
   });
 }
 

@@ -1,5 +1,5 @@
 import { spawnSync } from "node:child_process";
-import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import type { ScanScope } from "./scope";
@@ -24,6 +24,8 @@ export type ScheduledRun = {
   notified?: "sent" | "nothing-new" | "off" | string;
   stopped?: boolean;
   error?: string;
+  /** A scan that ran late, for a time missed while the computer was off or asleep. */
+  catchUp?: boolean;
 };
 export type ScheduleStatus = {
   installed: boolean;
@@ -151,7 +153,10 @@ function installWindows(ctx: ScheduleContext, job: SchedulerJob): void {
   const [exe, ...args] = job.command;
   // conhost --headless: run without flashing a console window on the desktop.
   const argument = ["--headless", exe!, ...args].map(winArg).join(" ");
-  const triggers = job.times.map((t) => `(New-ScheduledTaskTrigger -Daily -At ${psq(t)})`).join(",");
+  // Each start written as local wall-clock time, with no UTC offset: -At alone saves it in UTC ("…Z"),
+  // which pins the task to the time zone it was saved in. Without an offset Task Scheduler uses the
+  // computer's time zone, so 10:00 stays 10:00 after you move from Dubai to Mumbai.
+  const triggers = job.times.map((t) => `$($x = New-ScheduledTaskTrigger -Daily -At ${psq(t)}; $x.StartBoundary = (Get-Date -Format 'yyyy-MM-dd') + ${psq(`T${t}:00`)}; $x)`).join(",");
   const script = [
     `$a = New-ScheduledTaskAction -Execute 'conhost.exe' -Argument ${psq(argument)} -WorkingDirectory ${psq(workDir(ctx))}`,
     `$t = @(${triggers})`,
@@ -322,11 +327,131 @@ export function removeSchedule(ctx: ScheduleContext): void {
   rmSync(join(ctx.dataDir, SETTINGS_FILE), { force: true });
 }
 
-/** Start the scheduled scan now, the way the scheduler would (to try it out). */
-export function runScheduleNow(ctx: ScheduleContext): void {
+// ---------- catching up on a missed scan ----------
+
+/** A scan that starts this long after its time is a catch-up (Task Scheduler alone waits 10 minutes). */
+export const CATCH_UP_LATE_MS = 20 * 60_000;
+/** A catch-up this close before the next time stands in for it: no second scan and alert that morning. */
+export const CATCH_UP_COVERS_MS = 3 * 3_600_000;
+/** How long a "run now" request waits for the scan it started to pick it up. */
+const REQUEST_MAX_AGE_MS = 10 * 60_000;
+const REQUEST_FILE = "schedule-run-now.json";
+
+/** Why the scheduled scan was started by hand: the Run now button, or the server catching up. */
+export type RunReason = "run-now" | "catch-up";
+
+export function readScheduleSettings(dataDir: string): ScheduleSettings | undefined {
+  try {
+    const s = JSON.parse(readFileSync(join(dataDir, SETTINGS_FILE), "utf8")) as Partial<ScheduleSettings> | null;
+    return s && Array.isArray(s.times) && s.times.every((t) => typeof t === "string" && TIME.test(t)) && typeof s.scope === "string" ? (s as ScheduleSettings) : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+/** The latest of these daily times (local time) at or before now: today's or yesterday's. */
+export function lastDueSlot(times: readonly string[], now = new Date()): Date | undefined {
+  const slots = times.flatMap((t) => {
+    const [h, m] = t.split(":").map(Number);
+    const today = new Date(now);
+    today.setHours(h!, m!, 0, 0);
+    const yesterday = new Date(today);
+    yesterday.setDate(today.getDate() - 1);
+    return [today, yesterday].filter((d) => d <= now);
+  });
+  return slots.sort((a, b) => b.getTime() - a.getTime())[0];
+}
+
+/**
+ * The scheduled time a scan was missed for (the computer was off or asleep then, however many days
+ * ago), or undefined. A time is done when a scheduled scan started after it, or a catch-up started
+ * up to CATCH_UP_COVERS_MS before it. Times before the schedule was saved (`since`) don't count.
+ */
+export function missedScan(times: readonly string[], runs: readonly ScheduledRun[], now = new Date(), since?: Date): Date | undefined {
+  const slot = lastDueSlot(times, now);
+  if (!slot || (since && slot < since)) return undefined;
+  const done = runs.some((r) => {
+    const at = Date.parse(r.startedAt);
+    return at >= slot.getTime() || (!!r.catchUp && at >= slot.getTime() - CATCH_UP_COVERS_MS);
+  });
+  return done ? undefined : slot;
+}
+
+/** When the schedule was last saved: times before that were never due. */
+export function scheduleSavedAt(dataDir: string): Date | undefined {
+  try {
+    return statSync(join(dataDir, SETTINGS_FILE)).mtime;
+  } catch {
+    return undefined;
+  }
+}
+
+/** The run-now request the scheduled scan picks up as it starts (and removes), if it's fresh. */
+export function takeRunRequest(dataDir: string, now = Date.now()): RunReason | undefined {
+  const path = join(dataDir, REQUEST_FILE);
+  try {
+    const r = JSON.parse(readFileSync(path, "utf8")) as { reason?: RunReason; at?: string };
+    rmSync(path, { force: true });
+    return r.at && now - Date.parse(r.at) <= REQUEST_MAX_AGE_MS && (r.reason === "run-now" || r.reason === "catch-up") ? r.reason : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+/**
+ * What a scheduled scan starting now is: a catch-up (started by the server, or late), on time, or
+ * one to skip because a catch-up shortly before already did its work.
+ */
+export function scheduledRunKind(times: readonly string[], runs: readonly ScheduledRun[], request: RunReason | undefined, now = new Date()): { catchUp: boolean; skip?: string } {
+  if (request) return { catchUp: request === "catch-up" };
+  const slot = lastDueSlot(times, now);
+  if (slot && now.getTime() - slot.getTime() > CATCH_UP_LATE_MS) return { catchUp: true };
+  const recent = runs.find((r) => r.catchUp && now.getTime() - Date.parse(r.startedAt) < CATCH_UP_COVERS_MS);
+  if (recent) return { catchUp: false, skip: `A catch-up scan already ran at ${new Date(recent.startedAt).toLocaleTimeString()}, so this one is skipped.` };
+  return { catchUp: false };
+}
+
+/**
+ * Windows: put the scheduled tasks back on your times when their next run isn't at one of them.
+ * Tasks saved before this version are pinned to the time zone they were saved in (10:00 in Dubai
+ * runs at 11:30 in Mumbai). Saved again, they follow the computer's time zone. Returns what it fixed.
+ */
+export function repairScheduleTimes(ctx: ScheduleContext): string[] {
+  if ((ctx.platform ?? process.platform) !== "win32") return [];
+  const fixed: string[] = [];
+  const nextAt = (n: SchedulerNames) =>
+    powershell(
+      ctx,
+      `$t = Get-ScheduledTask -TaskName ${psq(n.task)} -ErrorAction SilentlyContinue; if ($t) { $i = $t | Get-ScheduledTaskInfo; if ($i.NextRunTime) { $i.NextRunTime.ToString('HH:mm') } }`,
+    ).stdout.trim();
+  const scan = readScheduleSettings(ctx.dataDir);
+  if (scan) {
+    const n = activeNames(ctx, "win32").names;
+    const next = nextAt(n);
+    if (/^\d\d:\d\d$/.test(next) && !scan.times.includes(next)) {
+      installWindows(ctx, scanJob(ctx, scan, n));
+      fixed.push(`scheduled scan (${next} → ${scan.times.join(", ")})`);
+    }
+  }
+  const daily = readDailySettings(ctx.dataDir);
+  if (daily) {
+    const next = nextAt(DAILY_SCHEDULER_NAMES);
+    if (/^\d\d:\d\d$/.test(next) && next !== daily.time) {
+      installWindows(ctx, dailyJob(ctx, daily));
+      fixed.push(`daily summary (${next} → ${daily.time})`);
+    }
+  }
+  return fixed;
+}
+
+/** Start the scheduled scan now, the way the scheduler would: from the Run now button, or to catch up. */
+export function runScheduleNow(ctx: ScheduleContext, reason: RunReason = "run-now"): void {
   const platform = ctx.platform ?? process.platform;
   const exec = ctx.exec ?? defaultExec;
   const n = activeNames(ctx, platform).names;
+  // The scan reads this as it starts: a run by hand is never skipped as already done.
+  mkdirSync(ctx.dataDir, { recursive: true });
+  writeFileAtomic(join(ctx.dataDir, REQUEST_FILE), JSON.stringify({ reason, at: new Date().toISOString() }));
   const r =
     platform === "win32"
       ? powershell(ctx, `Start-ScheduledTask -TaskName ${psq(n.task)}`)
@@ -391,23 +516,20 @@ export function readDailySettings(dataDir: string): DailySettings | undefined {
   }
 }
 
+const dailyJob = (ctx: ScheduleContext, s: DailySettings): SchedulerJob => ({
+  names: DAILY_SCHEDULER_NAMES,
+  command: dailySummaryCommand(ctx),
+  times: [s.time],
+  hours: 1,
+  description: "RawJobs: send what's due in your Pipeline today to Telegram.",
+  title: "RawJobs daily summary",
+  log: "daily-summary.log",
+});
+
 export function installDailySummary(ctx: ScheduleContext, input: Partial<DailySettings>): DailySettings {
   const s = validateDailySummary(input);
   const platform = ctx.platform ?? process.platform;
-  installJob(
-    ctx,
-    platform,
-    {
-      names: DAILY_SCHEDULER_NAMES,
-      command: dailySummaryCommand(ctx),
-      times: [s.time],
-      hours: 1,
-      description: "RawJobs: send what's due in your Pipeline today to Telegram.",
-      title: "RawJobs daily summary",
-      log: "daily-summary.log",
-    },
-    "Daily summaries",
-  );
+  installJob(ctx, platform, dailyJob(ctx, s), "Daily summaries");
   mkdirSync(ctx.dataDir, { recursive: true });
   writeFileAtomic(join(ctx.dataDir, DAILY_SETTINGS_FILE), JSON.stringify(s, null, 1));
   return s;

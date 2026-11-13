@@ -24,6 +24,10 @@ import {
   remindInterviews,
   sendWeeklySummary,
   recordScheduledRun,
+  readScheduledRuns,
+  readScheduleSettings,
+  scheduledRunKind,
+  takeRunRequest,
   type MergeResult,
   type RunResult,
   type ScheduledRun,
@@ -175,7 +179,18 @@ export async function cmdRun(args: string[]): Promise<number> {
   console.error(`Config: ${path}`);
 
   const startedAt = new Date().toISOString();
-  const log = (run: Omit<ScheduledRun, "startedAt" | "scope">) => values.scheduled && recordScheduledRun(dataDir, { startedAt, scope, finishedAt: new Date().toISOString(), ...run });
+  // A scheduled scan: a catch-up for a time the computer missed, or skipped when one just ran.
+  let catchUp = false;
+  if (values.scheduled) {
+    const kind = scheduledRunKind(readScheduleSettings(dataDir)?.times ?? [], readScheduledRuns(dataDir), takeRunRequest(dataDir));
+    if (kind.skip) {
+      console.error(kind.skip);
+      return 0;
+    }
+    catchUp = kind.catchUp;
+  }
+  const log = (run: Omit<ScheduledRun, "startedAt" | "scope">) =>
+    values.scheduled && recordScheduledRun(dataDir, { startedAt, scope, finishedAt: new Date().toISOString(), ...run, ...(catchUp ? { catchUp } : {}) });
   const busy = () => {
     console.error("Another scan is running in this data folder; not starting a second one.");
     log({ ok: false, error: "Another scan was already running." });

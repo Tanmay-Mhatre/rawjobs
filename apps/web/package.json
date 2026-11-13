@@ -11,7 +11,7 @@
   },
   "dependencies": {
     "@rawjobs/core": "workspace:*",
-    "lucide-react": "^1.66.0",
+    "lucide-react": "^1.70.0",
     "mammoth": "^1.13.0",
     "minisearch": "^7.2.0",
     "pdfjs-dist": "^6.5.438",
@@ -20,15 +20,15 @@
   },
   "devDependencies": {
     "@rawjobs/server": "workspace:*",
-    "@tailwindcss/vite": "^4.3.3",
+    "@tailwindcss/vite": "^4.3.5",
     "@testing-library/dom": "^10.4.2",
     "@testing-library/react": "^16.3.3",
     "@testing-library/user-event": "^14.6.8",
     "@types/react": "^19.3.0",
     "@types/react-dom": "^19.3.0",
-    "@vitejs/plugin-react": "^6.2.0",
+    "@vitejs/plugin-react": "^6.2.1",
     "happy-dom": "^21.0.4",
-    "tailwindcss": "^4.3.3",
-    "vite": "^8.3.5"
+    "tailwindcss": "^4.3.5",
+    "vite": "^8.3.6"
   }
 }

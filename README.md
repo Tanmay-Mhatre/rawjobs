@@ -119,7 +119,7 @@ Jobs keep their first-seen date, and a job missing from two successful scans of 
 
 ### Scheduled scans and alerts
 
-- **Scheduled scans** (Settings → Scans): pick one or two times a day and a scope. RawJobs registers the scan with your computer's own scheduler (Windows Task Scheduler, macOS launchd, or a systemd user timer on Linux). It runs while the computer is on and catches up on a missed run. From the terminal: `pnpm rawjobs schedule install --time 08:00 --scope mine`.
+- **Scheduled scans** (Settings → Scans): pick one or two times a day and a scope. RawJobs registers the scan with your computer's own scheduler (Windows Task Scheduler, macOS launchd, or a systemd user timer on Linux). It runs at those times in your computer's time zone (they move with you when you travel). A scan missed while the computer was off or asleep runs once it's back on and online, started by RawJobs itself; a scheduled time within 3 hours after that catch-up is skipped, so you get one alert, not two. From the terminal: `pnpm rawjobs schedule install --time 08:00 --scope mine`.
   - Linux without systemd: add a cron line instead, for example `0 8 * * * ~/.local/share/rawjobs/bin/rawjobs scan --notify` (installed) or `0 8 * * * cd /path/to/rawjobs && pnpm rawjobs scan --notify` (from source).
 - **Telegram alerts** (Settings → Notifications): a 2-minute guided setup with your own bot (make a bot with @BotFather, press Start, done), then a test message. Scan messages give counts, not job details; you open RawJobs to see the jobs:
   - a scan you start from the dashboard sends one message when it finishes or stops, with how many jobs are available to apply;

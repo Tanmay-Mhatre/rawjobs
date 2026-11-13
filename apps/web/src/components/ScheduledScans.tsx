@@ -31,6 +31,7 @@ export function runLine(r: ScheduledRun): string {
   const parts = [`${r.matches ?? 0} matches, ${r.newMatches ?? 0} new`];
   if (r.notified) parts.push(NOTIFIED[r.notified] ?? r.notified);
   if (r.stopped) parts.push("stopped early");
+  if (r.catchUp) parts.push("caught up on a missed time");
   return parts.join(" · ");
 }
 
@@ -47,7 +48,7 @@ type Note = { tone: "ok" | "bad"; text: string; detail?: string; retry?: Kind };
 
 /**
  * Scans on a timer, run by this computer's own scheduler (Task Scheduler on Windows), so they
- * happen with the dashboard closed. They need the computer on (or asleep).
+ * happen with the dashboard closed. One missed while the computer was off or asleep runs once it's back on.
  */
 export function ScheduledScans() {
   const [status, setStatus] = useState<ScheduleStatus | null>(null);
@@ -221,7 +222,7 @@ export function ScheduledScans() {
       </div>
 
       <p className="type-small text-muted">
-        Scans run on this computer, even with this page closed, but only while it's on or asleep (it wakes up for them). A scan missed while it was off runs as soon as it's back on.
+        Scans run on this computer, even with this page closed, at these times in your computer's time zone. A scan missed while it was off or asleep runs once it's back on and online.
       </p>
 
       {status.runs.length > 0 && (
