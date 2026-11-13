@@ -40,6 +40,8 @@ const SOURCES = {
   cryptojobs: { family: "cryptojobs", publishable: true },
   // Our own: the industry seed list and the boards resolve.ts found on those companies' websites.
   seeds: { family: "seeds", publishable: true },
+  // Boards added by hand (seeds/added-boards.json): their portal and name win, and check.ts checks them first.
+  added: { family: "seeds", publishable: true },
   // Boards users added with "Add by link": the shared contributions list, and your own local additions.
   contrib: { family: "contributions", publishable: true },
   feashliaa: { family: "commoncrawl", publishable: false },
@@ -82,6 +84,12 @@ function add(src: SourceId, b: { ats: string; slug: string; region?: string; sha
   const prev = boards.get(key);
   if (prev) {
     prev.sources.add(src);
+    // A board added by hand is the one we checked: its portal and name replace whatever a crawl found first
+    // (an Avature key has no portal, so a crawl's dead or robots-blocked portal would otherwise stick).
+    if (src === "added") {
+      if (b.site) prev.site = b.site;
+      if (b.name) prev.name = b.name;
+    }
     if (!prev.name && b.name) prev.name = b.name;
     if (!prev.region && b.region) prev.region = b.region;
     // E.g. a Zoho board first seen in a list without its data centre, then in a crawl with it.
@@ -304,10 +312,11 @@ withFile(raw("conorscode", "companies.json"), (p) => {
 {
   const seeds = (JSON.parse(readFileSync(join(catalogDir, "seeds", "industries.json"), "utf8")) as { companies: { name: string; careers_url?: string }[] }).companies;
   for (const s of seeds) if (s.careers_url) fromUrl("seeds", s.careers_url, s.name);
-  // Boards added by hand that no crawl or list has found yet.
+  // Boards added by hand, read after the crawl lists so add() can let their portal and name win.
   const addedFile = join(catalogDir, "seeds", "added-boards.json");
   const added = existsSync(addedFile) ? (JSON.parse(readFileSync(addedFile, "utf8")) as { companies: { name: string; careers_url: string }[] }).companies : [];
-  for (const s of added) fromUrl("seeds", s.careers_url, s.name);
+  for (const s of added) fromUrl("added", s.careers_url, s.name);
+  count("added", added.length);
   // resolved.json: the industry seeds; resolved-bulk.json: the Wikidata companies (resolve.ts --bulk).
   for (const file of ["resolved.json", "resolved-bulk.json"]) {
     const path = join(catalogDir, "out", file);
