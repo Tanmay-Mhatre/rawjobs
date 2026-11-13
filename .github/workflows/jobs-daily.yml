@@ -139,6 +139,7 @@ jobs:
           fi
 
       - name: Read the group's boards
+        id: crawl
         env:
           DENYLIST_FILE: ${{ runner.temp }}/denylist.json
           NODE_OPTIONS: --max-old-space-size=6144
@@ -147,19 +148,23 @@ jobs:
           --generated "${{ needs.guard.outputs.run_at }}" --directory "$RUNNER_TEMP/directory.json"
           --out scripts/catalog/out/jobs --max-minutes 240
 
+      # Saved before the hand-over: when GitHub's artifact service fails (11 Nov: join's upload got an HTML
+      # page 5 times), the merge job's stand-in restores this saved copy, so the run's crawl isn't lost.
+      - name: Save the group's shards and ETags for the next run
+        if: needs.guard.outputs.publish == 'true' && steps.state.outcome == 'success'
+        env:
+          GH_TOKEN: ${{ secrets.DATA_REPO_TOKEN }}
+        run: bash scripts/catalog/state.sh save jobs-${{ matrix.group }}
+
       - name: Hand the shards to the merge job
+        # Also when the save failed: the merge job still gets this run's shards.
+        if: always() && steps.crawl.outcome == 'success'
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: ${{ matrix.group }}
           path: scripts/catalog/out/jobs/groups/${{ matrix.group }}/
           retention-days: 1
           if-no-files-found: error
-
-      - name: Save the group's shards and ETags for the next run
-        if: needs.guard.outputs.publish == 'true' && steps.state.outcome == 'success'
-        env:
-          GH_TOKEN: ${{ secrets.DATA_REPO_TOKEN }}
-        run: bash scripts/catalog/state.sh save jobs-${{ matrix.group }}
 
   merge:
     needs: [guard, crawl]
@@ -194,7 +199,8 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.DATA_REPO_TOKEN }}
         run: |
-          for g in sr payroll enterprise join rest; do
+          # Every group in jobs.ts GROUPS (jobs.test.ts checks the lists match).
+          for g in sr payroll enterprise join engage rest; do
             if [ ! -f "scripts/catalog/out/jobs/groups/$g/group.json" ]; then
               echo "::warning::Group $g has no shards from this run; using its previous copy."
               bash scripts/catalog/state.sh restore "jobs-$g"

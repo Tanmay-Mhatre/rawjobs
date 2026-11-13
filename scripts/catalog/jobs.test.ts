@@ -1,6 +1,7 @@
 import { type FeedRow, HostSkippedError, HttpError } from "@rawjobs/core";
+import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
-import { atsOfGroup, describeReasons, failReason, feedCoverage, QUIET_AFTER, readOrder, rests, sameJobs, sameSwing, slowHosts } from "./jobs";
+import { atsOfGroup, describeReasons, GROUPS, failReason, feedCoverage, QUIET_AFTER, readOrder, rests, sameJobs, sameSwing, slowHosts } from "./jobs";
 
 describe("failReason", () => {
   it("groups HTTP errors by status", () => {
@@ -141,6 +142,31 @@ describe("rests", () => {
 
   it("never rests other systems' boards", () => {
     for (const t of runs) expect(rests("workday", "workday:acme", 10, readAt, t)).toBe(false);
+  });
+});
+
+describe("GROUPS in the workflow", () => {
+  // A group missing from one of these lists crawls but isn't saved, or vanishes from the feed when its upload fails.
+  const groups = Object.keys(GROUPS).sort();
+  const workflow = readFileSync(new URL("../../.github/workflows/jobs-daily.yml", import.meta.url), "utf8");
+  const words = (list: string) =>
+    list
+      .split(/[\s,|]+/)
+      .filter(Boolean)
+      .sort();
+
+  it("crawls every group (the matrix)", () => {
+    expect(words(workflow.match(/group: \[([^\]]+)\]/)![1]!)).toEqual(groups);
+  });
+
+  it("stands in for every group in the merge job", () => {
+    expect(words(workflow.match(/for g in ([^;]+); do/)![1]!)).toEqual(groups);
+  });
+
+  it("saves every group's state (state.sh)", () => {
+    const state = readFileSync(new URL("./state.sh", import.meta.url), "utf8");
+    const sets = state.match(/^\s*(jobs-sr \|[^)]+)\)/m)![1]!;
+    expect(words(sets).map((s) => s.replace(/^jobs-/, ""))).toEqual(groups);
   });
 });
 
