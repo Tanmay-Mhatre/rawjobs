@@ -25,6 +25,9 @@ const LOCALE = /^[a-z]{2}_[A-Z]{2}$/;
  */
 const TEST_TENANT = /^(?:sandbox|uat|training|staging|preprod)[a-z0-9]/;
 
+/** True for a board that is a hiring system's test copy, not a company (only Avature has these). */
+export const isTestBoard = (b: { ats: string; slug: string }): boolean => b.ats === "avature" && TEST_TENANT.test(b.slug.toLowerCase());
+
 const base = (tenant: string, portal: string) => `https://${tenant.toLowerCase()}.avature.net/${portal}`;
 
 /** The jobs on one search page: each JobDetail link, with the location shown under it (if any). */
@@ -48,7 +51,7 @@ export const avature: Connector<AvatureJob> = {
 
   detect(url) {
     const tenant = url.hostname.toLowerCase().match(/^([a-z0-9-]+)\.avature\.net$/)?.[1];
-    if (!tenant || TEST_TENANT.test(tenant)) return null;
+    if (!tenant || isTestBoard({ ats: "avature", slug: tenant })) return null;
     const segs = url.pathname.split("/").filter(Boolean);
     const portal = LOCALE.test(segs[0] ?? "") ? segs[1] : segs[0];
     return { ats: "avature", slug: tenant, ...(portal && PORTAL.test(portal) ? { site: portal } : {}) };

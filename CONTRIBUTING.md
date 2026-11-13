@@ -55,7 +55,8 @@ The contribution inbox (`services/contribute`) is a Cloudflare Worker in the sam
 ## Adding a company
 
 Use **Add by link** in the app (shared with the directory if sharing is on), or add it to
-`scripts/catalog/seeds/industries.json` in a pull request.
+`scripts/catalog/seeds/industries.json` in a pull request. A board outside those industries goes in
+`scripts/catalog/seeds/added-boards.json`: a name and the board's link.
 
 ## Reporting
 
