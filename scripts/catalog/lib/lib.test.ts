@@ -1,3 +1,6 @@
+import { readFileSync } from "node:fs";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import { chao2 } from "./estimate";
 import { sameCompany, slugCandidates } from "./slugs";
@@ -33,6 +36,22 @@ describe("boardFromUrl", () => {
     set.add("https://jobs.lever.co/acme/2", "CC-2");
     set.add("https://example.com/", "CC-2");
     expect(set.list()).toEqual([{ ats: "lever", slug: "acme", seen: ["CC-1", "CC-2"] }]);
+  });
+  it("drops test-copy boards saved by earlier runs", () => {
+    const set = new BoardSet([
+      { ats: "avature", slug: "sandboxbnc", site: "careers", seen: ["CC-1"] },
+      { ats: "avature", slug: "bnc", site: "careers", seen: ["CC-1"] },
+    ]);
+    expect(set.list().map((b) => b.slug)).toEqual(["bnc"]);
+  });
+});
+
+describe("seeds/added-boards.json", () => {
+  it("lists only links that read as a board", () => {
+    const file = join(dirname(fileURLToPath(import.meta.url)), "..", "seeds", "added-boards.json");
+    const { companies } = JSON.parse(readFileSync(file, "utf8")) as { companies: { name: string; careers_url: string }[] };
+    expect(companies.length).toBeGreaterThan(0);
+    for (const c of companies) expect(boardFromUrl(c.careers_url), c.careers_url).not.toBeNull();
   });
 });
 
