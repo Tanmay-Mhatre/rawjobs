@@ -2,7 +2,7 @@ import { spawn } from "node:child_process";
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { alreadyRunning, AUTOSTART, ensureAutostart, portTaken, readServerState, serverHolding, serverRunning, writeServerState } from "../src/desktop";
 import { iconIcns, iconIco, iconPng, markPixels } from "../src/icon";
 import { portOrder } from "../src/serve";
@@ -90,7 +90,7 @@ describe("the scheduled tasks of a copy installed before", () => {
     const scripts: string[] = [];
     const run = async (script: string) => {
       scripts.push(script);
-      return 0;
+      return { code: 0 };
     };
     await ensureAutostart(home, "0.7.0", { platform: "win32", run });
     await ensureAutostart(home, "0.7.0", { platform: "win32", run });
@@ -100,6 +100,11 @@ describe("the scheduled tasks of a copy installed before", () => {
     expect(scripts[0]).toContain("Get-ScheduledTask -TaskName 'RawJobs Scan'");
     expect(scripts[0]).toContain("Get-ScheduledTask -TaskName 'RawJobs daily summary'");
     expect(scripts[0]).toContain("$t.Settings.WakeToRun = $false");
+    // A task already right isn't saved again, and a missing one (the daily summary is off by default)
+    // doesn't fail the run: its silent lookup error would otherwise become PowerShell's exit code.
+    expect(scripts[0]).toContain("if ($t -and $t.Settings.Priority -ne 5)");
+    expect(scripts[0]).toContain("if ($t -and $t.Settings.WakeToRun -ne $false)");
+    expect(scripts[0]).toMatch(/; exit 0$/);
     await ensureAutostart(home, "0.7.1", { platform: "win32", run });
     expect(scripts).toHaveLength(2);
     // Only Windows has these tasks.
@@ -107,18 +112,23 @@ describe("the scheduled tasks of a copy installed before", () => {
     expect(scripts).toHaveLength(2);
   });
 
-  it("never throws when PowerShell fails, and tries again next start", async () => {
+  it("never throws when PowerShell fails, logs its error, and tries again next start", async () => {
     const home = mkdtempSync(join(tmpdir(), "rj-autostart-"));
     let tries = 0;
-    const run = (code: number) => async () => {
+    const run = (code: number, error?: string) => async () => {
       tries++;
-      return code;
+      return { code, error };
     };
-    await ensureAutostart(home, "0.7.0", { platform: "win32", run: run(1) });
+    const log = vi.spyOn(console, "log").mockImplementation(() => {});
+    await ensureAutostart(home, "0.7.0", { platform: "win32", run: run(1, "Access is denied.") });
+    expect(log).toHaveBeenCalledWith("Couldn't update the RawJobs scheduled tasks: PowerShell exited with 1: Access is denied.");
     await ensureAutostart(home, "0.7.0", { platform: "win32", run: () => Promise.reject(new Error("no powershell")) });
     expect(tries).toBe(1);
     await ensureAutostart(home, "0.7.0", { platform: "win32", run: run(0) });
     expect(tries).toBe(2);
+    await ensureAutostart(home, "0.7.0", { platform: "win32", run: run(0) });
+    expect(tries).toBe(2);
+    log.mockRestore();
   });
 });
 
