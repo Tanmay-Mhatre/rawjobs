@@ -1,11 +1,11 @@
 {
- "about": "Boards added by hand that no crawl or list has found yet: a name and the board's link. Edit by hand; scripts/catalog/merge.ts reads each link like a pasted one, so it must be a link the app's \"Add by link\" accepts.",
+ "about": "Boards added by hand: a name and the board's link, checked by a person. Edit by hand; scripts/catalog/merge.ts reads each link like a pasted one, so it must be a link the app's \"Add by link\" accepts. Their portal and name replace whatever a crawl found for the same board, and check.ts checks them first, every run until one is found live or dormant.",
  "companies": [
   { "name": "Electronic Arts", "careers_url": "https://ea.avature.net/careers" },
   { "name": "TQL", "careers_url": "https://tql.avature.net/TQLexternalcareers" },
   { "name": "Pomerleau", "careers_url": "https://pomerleau.avature.net/Jobs" },
   { "name": "National Bank of Canada", "careers_url": "https://bnc.avature.net/careers" },
-  { "name": "INO", "careers_url": "https://ino.avature.net/careers" },
+  { "name": "In-N-Out Burger", "careers_url": "https://ino.avature.net/careers" },
   { "name": "Ashfield Health", "careers_url": "https://ashfieldhealthcare.avature.net/careers" }
  ]
 }

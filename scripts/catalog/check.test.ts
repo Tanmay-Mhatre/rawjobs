@@ -3,7 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { HttpClient } from "@rawjobs/core";
-import { checkOrder } from "./check";
+import { checkOrder, isDue } from "./check";
 import { checkBoard } from "./lib/live-check";
 import { dueKind, isCurrent, mergeCheck, readChecks, retryWaitDays, spreadDays } from "./lib/checks";
 
@@ -13,6 +13,29 @@ describe("check order", () => {
   it("checks boards users shared first, then the ones several sources agree on", () => {
     const boards = [board("single", "single"), board("high", "high"), board("shared", "single", ["contrib"]), board("shared-high", "high", ["latmay", "contrib"])];
     expect(boards.sort(checkOrder).map((b) => b.key)).toEqual(["shared-high", "shared", "high", "single"]);
+  });
+  it("checks boards added by hand first too", () => {
+    const boards = [board("high", "high"), board("added", "single", ["added"])];
+    expect(boards.sort(checkOrder).map((b) => b.key)).toEqual(["added", "high"]);
+  });
+});
+
+describe("boards added by hand", () => {
+  const now = Date.parse("2026-11-13T00:00:00Z");
+  const row = (status: string, daysAgo: number) => ({ key: "avature:ea", status, checked_at: new Date(now - daysAgo * 86_400_000).toISOString() });
+  const added = board("avature:ea", "single", ["added"]);
+  const crawled = board("avature:ea", "single", ["ourcrawl"]);
+
+  it("are checked again while an older result says dead or error", () => {
+    expect(isDue(added, row("dead", 19), 30, now)).toBe(true);
+    expect(isDue(added, { ...row("error", 0), errors: 5 }, 30, now)).toBe(true);
+    expect(isDue(crawled, row("dead", 19), 30, now)).toBe(false);
+  });
+
+  it("wait for the monthly recheck once found live or dormant", () => {
+    expect(isDue(added, row("live", 1), 30, now)).toBe(false);
+    expect(isDue(added, row("dormant", 1), 30, now)).toBe(false);
+    expect(isDue(added, undefined, 30, now)).toBe(true);
   });
 });
 

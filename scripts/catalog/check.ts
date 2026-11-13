@@ -1,7 +1,7 @@
 /**
  * Live-check every merged board with the cheapest call each ATS offers. No AI, no descriptions.
  * Resumable: results are appended to out/checks.jsonl; boards already checked are skipped.
- * Order: boards users shared ("contrib"), then boards never checked, then monthly rechecks, then
+ * Order: boards a person added ("contrib", "added"), then boards never checked, then monthly rechecks, then
  * retries of boards that failed (each retried after a growing wait: 1, 2, 4… up to 30 days).
  * `--max-minutes N` stops starting new checks after N minutes (the rest wait for the next run), so
  * a big backlog can't stall a short run.
@@ -15,7 +15,7 @@ import { appendFileSync, readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { HttpClient } from "@rawjobs/core";
-import { dueKind, isCurrent, mergeCheck, readChecks, type Due } from "./lib/checks";
+import { type CheckRow, dueKind, isCurrent, mergeCheck, readChecks, type Due } from "./lib/checks";
 import { checkBoard } from "./lib/live-check";
 import { maxMsFromArgs } from "./lib/time-box";
 
@@ -43,11 +43,17 @@ const WORKERS: Record<string, number> = { workday: 4, greenhouse: 2, lever: 2 };
 
 type Board = { key: string; ats: string; slug: string; region?: string; shard?: string; site?: string; confidence: "high" | "single"; sources?: string[]; due?: Due };
 const DUE_ORDER: Record<Due, number> = { new: 0, recheck: 1, retry: 2 };
-/** Shared by users first; then never checked, monthly rechecks, retries; then boards more than one source agrees on. */
+/** Boards a person added: shared with "Add by link" ("contrib") or listed in seeds/added-boards.json ("added"). */
+const addedByPerson = (b: Board) => !!b.sources?.some((s) => s === "contrib" || s === "added");
+/**
+ * Whether a board needs a check this run. A board added by hand is checked every run until it's found
+ * live or dormant: an older dead or error result may be for another portal of the same Avature tenant.
+ */
+export const isDue = (b: Board, r: CheckRow | undefined, recheckDays: number, now = Date.now()) =>
+  !r || !isCurrent(r, recheckDays, now) || (!!b.sources?.includes("added") && r.status !== "live" && r.status !== "dormant");
+/** Added by a person first; then never checked, monthly rechecks, retries; then boards more than one source agrees on. */
 export const checkOrder = (a: Board, c: Board) =>
-  Number(!!c.sources?.includes("contrib")) - Number(!!a.sources?.includes("contrib")) ||
-  DUE_ORDER[a.due ?? "new"] - DUE_ORDER[c.due ?? "new"] ||
-  (a.confidence === c.confidence ? 0 : a.confidence === "high" ? -1 : 1);
+  Number(addedByPerson(c)) - Number(addedByPerson(a)) || DUE_ORDER[a.due ?? "new"] - DUE_ORDER[c.due ?? "new"] || (a.confidence === c.confidence ? 0 : a.confidence === "high" ? -1 : 1);
 type Result = { key: string; status: "live" | "dormant" | "dead" | "error"; jobs: number | null; name?: string; http?: number; error?: string; checked_at: string; errors?: number };
 
 async function main() {
@@ -55,7 +61,7 @@ async function main() {
   // What's known per board, from every process's results (checks.jsonl and checks-*.jsonl).
   const known = readChecks(OUT_DIR);
   const done = new Set([...known.values()].filter((r) => isCurrent(r, RECHECK_DAYS)).map((r) => r.key));
-  const todo = merged.boards.filter((b) => !done.has(b.key) && (!ONLY || ONLY.has(b.ats))).map((b): Board => ({ ...b, due: dueKind(known.get(b.key)) }));
+  const todo = merged.boards.filter((b) => isDue(b, known.get(b.key), RECHECK_DAYS) && (!ONLY || ONLY.has(b.ats))).map((b): Board => ({ ...b, due: dueKind(known.get(b.key)) }));
   const dueCount = (d: Due) => todo.filter((b) => b.due === d).length;
   console.error(`${merged.boards.length} boards, ${done.size} already checked, ${todo.length} to go (${dueCount("new")} new, ${dueCount("recheck")} rechecks, ${dueCount("retry")} retries)`);
 
