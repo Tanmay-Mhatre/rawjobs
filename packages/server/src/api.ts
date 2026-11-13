@@ -724,7 +724,7 @@ Stopped after ${Math.round(timeoutMs / 1000)} s without finishing.`.trim(),
     for (const res of current.followers) res.end();
   }
 
-  return { handle, startBackground, version, scanning: busy, stop };
+  return { handle, startBackground, version, scanning: busy, cli: collect, stop };
 }
 
 /** The largest LinkedIn import body: the three CSV texts. */

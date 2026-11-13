@@ -1,6 +1,6 @@
 import { resolve } from "node:path";
 import { parseArgs } from "node:util";
-import { defaultDataDir, rawjobsHome, CODE_ROOT, schedulerCommand, installSchedule, removeSchedule, runScheduleNow, scheduleStatus, type ScanScope } from "@rawjobs/core";
+import { defaultDataDir, rawjobsHome, CODE_ROOT, schedulerCommand, installSchedule, removeSchedule, repairScheduleTimes, runScheduleNow, scheduleStatus, type ScanScope } from "@rawjobs/core";
 import { readStdin } from "../util";
 import { parseScope } from "./run";
 
@@ -14,6 +14,7 @@ export async function cmdSchedule(args: string[]): Promise<number> {
       scope: { type: "string" },
       data: { type: "string", short: "d", default: defaultDataDir() },
       stdin: { type: "boolean", default: false },
+      "catch-up": { type: "boolean", default: false },
     },
   });
   const ctx = { repoRoot: CODE_ROOT, workDir: rawjobsHome(), launch: schedulerCommand(), dataDir: resolve(values.data) };
@@ -25,9 +26,13 @@ export async function cmdSchedule(args: string[]): Promise<number> {
       const input = values.stdin ? (JSON.parse((await readStdin()) || "{}") as { times?: string[]; scope?: string }) : { times: values.time, scope: parseScope(values.scope) };
       installSchedule(ctx, { times: input.times, scope: input.scope as ScanScope });
     } else if (action === "remove") removeSchedule(ctx);
-    else if (action === "run") runScheduleNow(ctx);
-    else if (action !== "status") {
-      out({ ok: false, error: "Usage: rawjobs schedule <status|install|remove|run>" });
+    else if (action === "run") runScheduleNow(ctx, values["catch-up"] ? "catch-up" : "run-now");
+    else if (action === "repair") {
+      // The server runs this as it starts and after the computer wakes: tasks back on your local times.
+      out({ ok: true, fixed: repairScheduleTimes(ctx) });
+      return 0;
+    } else if (action !== "status") {
+      out({ ok: false, error: "Usage: rawjobs schedule <status|install|remove|run [--catch-up]|repair>" });
       return 2;
     }
     out({ ok: true, ...scheduleStatus(ctx) });

@@ -27,5 +27,6 @@ describe("runLine", () => {
 
   it("summarises a finished run", () => {
     expect(runLine({ ...failed(), ok: true, matches: 629, newMatches: 0, notified: "nothing-new" })).toBe("629 matches, 0 new · nothing new to send");
+    expect(runLine({ ...failed(), ok: true, matches: 540, newMatches: 12, notified: "sent", catchUp: true })).toBe("540 matches, 12 new · sent to Telegram · caught up on a missed time");
   });
 });
