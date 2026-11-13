@@ -14,6 +14,8 @@ export type ScheduledRun = {
   notified?: string;
   stopped?: boolean;
   error?: string;
+  /** Ran late, for a time missed while the computer was off or asleep. */
+  catchUp?: boolean;
 };
 export type ScheduleStatus = {
   ok: boolean;

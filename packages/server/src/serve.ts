@@ -4,6 +4,7 @@ import { createServer, type Server } from "node:http";
 import { parseArgs } from "node:util";
 import { defaultDataDir, rawjobsHome } from "@rawjobs/core";
 import { APP_VERSION, BUNDLED, migrateData, scanLockHeld, WEB_DIR } from "@rawjobs/core";
+import { watchMissedScans } from "./catch-up";
 import { createApi } from "./api";
 import { createUpdater } from "./updater";
 import { alreadyRunning, DEFAULT_PORT, ensureAutostart, logTo, openBrowser, readServerState, watchEventLoop, writeServerState } from "./desktop";
@@ -106,6 +107,9 @@ export async function serve(args: string[]): Promise<number> {
   if (BUNDLED) ensureShortcuts(home, process.env.RAWJOBS_LAUNCHER, APP_VERSION);
   // Copies installed before: the server task at normal priority, and no scheduled task waking the laptop.
   if (BUNDLED) void ensureAutostart(home, APP_VERSION);
+  // A scheduled scan missed while the computer was off or asleep starts once it's back on and online.
+  // Installed copies only: a dev server must never start your real scheduled task.
+  if (BUNDLED) watchMissedScans({ dataDir, busy: () => api.scanning() || updater.updating(), cli: (args) => api.cli(args) });
   watchEventLoop();
   // Where the shortcut (rawjobs open) finds the dashboard, also when 4317 was taken.
   writeServerState(port, home);
