@@ -1,5 +1,5 @@
 /** Reduce crawled URLs (Common Crawl, Wayback) to job boards, shared by commoncrawl.ts and wayback.ts. */
-import { ATS_TYPES, companyKey, detectCompany } from "@rawjobs/core";
+import { ATS_TYPES, companyKey, detectCompany, isTestBoard } from "@rawjobs/core";
 
 export type UrlBoard = { ats: string; slug: string; region?: string; shard?: string; site?: string };
 /** A board plus the crawls (or snapshots) it was seen in. */
@@ -36,7 +36,8 @@ export class BoardSet {
   private readonly boards = new Map<string, { board: UrlBoard; seen: Set<string> }>();
 
   constructor(previous: SeenBoard[] = []) {
-    for (const { seen, ...board } of previous) this.boards.set(companyKey(board), { board, seen: new Set(seen) });
+    // A saved list can hold boards found before detect() learned to refuse test copies: drop them on load.
+    for (const { seen, ...board } of previous) if (!isTestBoard(board)) this.boards.set(companyKey(board), { board, seen: new Set(seen) });
   }
 
   /** Returns true when the URL was a board. */

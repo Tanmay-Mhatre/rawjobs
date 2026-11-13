@@ -9,7 +9,7 @@
  */
 import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { ATS_TYPES, companyKey, detectCompany, isCareerSiteHost, isTeamtailorHost, type AtsType } from "@rawjobs/core";
+import { ATS_TYPES, companyKey, detectCompany, isCareerSiteHost, isTeamtailorHost, isTestBoard, type AtsType } from "@rawjobs/core";
 import { parse as parseYaml } from "yaml";
 import { BOARD_URL, freehireBoards } from "./lib/freehire";
 import { catalogDir, dataDir } from "./lib/paths";
@@ -73,6 +73,8 @@ const keyOf = (ats: string, slug: string, shard?: string, site?: string) => comp
 
 function add(src: SourceId, b: { ats: string; slug: string; region?: string; shard?: string; site?: string; name?: string }) {
   if (!TRACKED.has(b.ats) || !b.slug) return;
+  // Saved crawl lists and older sources can still hold boards found before detect() learned to refuse these.
+  if (isTestBoard(b)) return;
   if ((b.ats === "workday" || b.ats === "ukg") && (!b.shard || !b.site)) return;
   if ((b.ats === "dayforce" || b.ats === "adp") && !b.site) return;
   if ((b.ats === "taleo" && !b.site) || (b.ats === "oracle" && !b.shard)) return;
@@ -302,6 +304,10 @@ withFile(raw("conorscode", "companies.json"), (p) => {
 {
   const seeds = (JSON.parse(readFileSync(join(catalogDir, "seeds", "industries.json"), "utf8")) as { companies: { name: string; careers_url?: string }[] }).companies;
   for (const s of seeds) if (s.careers_url) fromUrl("seeds", s.careers_url, s.name);
+  // Boards added by hand that no crawl or list has found yet.
+  const addedFile = join(catalogDir, "seeds", "added-boards.json");
+  const added = existsSync(addedFile) ? (JSON.parse(readFileSync(addedFile, "utf8")) as { companies: { name: string; careers_url: string }[] }).companies : [];
+  for (const s of added) fromUrl("seeds", s.careers_url, s.name);
   // resolved.json: the industry seeds; resolved-bulk.json: the Wikidata companies (resolve.ts --bulk).
   for (const file of ["resolved.json", "resolved-bulk.json"]) {
     const path = join(catalogDir, "out", file);

@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import { careersUrl, detectCompany, getConnector } from "../src/connectors";
+import { isTestBoard } from "../src/connectors/avature";
 import { isRadancySite } from "../src/connectors/radancy";
 import { clearRobotsCache } from "../src/robots";
 import type { CompanyRef } from "../src/schema";
@@ -29,6 +30,14 @@ describe("avature", () => {
       expect(detectCompany(`https://${host}.avature.net/careers/SearchJobs/`)?.ats).not.toBe("avature");
     expect(detectCompany("https://ea.avature.net/careers")).toMatchObject({ ats: "avature", slug: "ea" });
     expect(detectCompany("https://uat.avature.net/careers")).toMatchObject({ ats: "avature", slug: "uat" });
+  });
+
+  it("tells a saved test-copy board from a real one", () => {
+    expect(isTestBoard({ ats: "avature", slug: "sandboxbnc" })).toBe(true);
+    expect(isTestBoard({ ats: "avature", slug: "SandboxEA" })).toBe(true);
+    expect(isTestBoard({ ats: "avature", slug: "bnc" })).toBe(false);
+    expect(isTestBoard({ ats: "avature", slug: "uat" })).toBe(false);
+    expect(isTestBoard({ ats: "lever", slug: "sandboxco" })).toBe(false);
   });
 
   it("pages through the search list by offset until a page adds nothing", async () => {
