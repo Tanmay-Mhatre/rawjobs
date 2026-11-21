@@ -44,7 +44,7 @@
 <link rel="preload" href="/fonts/GeistMono-500.woff2" as="font" type="font/woff2" crossorigin>
 <link rel="preload" href="/fonts/InstrumentSerif-Italic.woff2" as="font" type="font/woff2" crossorigin>
 <script>
-/* Intro: on every load and reload, but never with reduced motion, on a link to a section (/#get) or in a background tab.
+/* Intro: once per browser session (sessionStorage), never with reduced motion, on a link to a section (/#get) or in a background tab.
    html.intro shows the overlay (CSS) and makes the wall wait for rawjobs:intro-done. Without JS nothing happens. */
 (function () {
   var r = document.documentElement;
@@ -55,6 +55,9 @@
     var nav = performance.getEntriesByType && performance.getEntriesByType('navigation')[0];
     var reload = nav ? nav.type === 'reload' : (performance.navigation && performance.navigation.type === 1);
     if ((location.hash.length > 1 && !reload) || document.visibilityState === 'hidden') return;
+    /* returning visitors in the same session go straight to the page */
+    if (sessionStorage.getItem('rj-intro')) return;
+    sessionStorage.setItem('rj-intro', '1');
   } catch (e) { return; }
   r.classList.add('intro');
   /* failsafe: if the intro script never runs, the overlay goes and the wall starts anyway */
@@ -114,12 +117,11 @@ h1, h2, h3 { margin: 0; text-wrap: balance; }
 .nav__links a:hover { color: var(--text-primary); background: var(--bg-hover); }
 .nav__cta { display: flex; gap: var(--space-2); }
 @media (max-width: 860px) {
-  /* phones and tablets: the section links become a second row that scrolls sideways */
+  /* phones and tablets: the section links become a second row; it wraps rather than hiding links off screen */
   .nav__in { flex-wrap: wrap; height: auto; padding-top: var(--space-2); column-gap: var(--space-4); row-gap: 0; }
   .nav__cta { margin-left: auto; }
-  .nav__links { order: 3; width: 100%; margin: 0 calc(-1 * var(--space-3)); overflow-x: auto; scrollbar-width: none; }
-  .nav__links::-webkit-scrollbar { display: none; }
-  .nav__links a { white-space: nowrap; padding-block: var(--space-3); }
+  .nav__links { order: 3; width: 100%; margin: 0 calc(-1 * var(--space-1)); flex-wrap: wrap; justify-content: space-between; column-gap: 0; }
+  .nav__links a { white-space: nowrap; padding: var(--space-3) var(--space-1); }
 }
 @media (max-width: 480px) { .nav__cta .rj-btn:not(.rj-btn--primary) { display: none; } }
 
@@ -650,7 +652,7 @@ label.rj-chip:has(input:focus-visible) { outline: 2px solid var(--focus-ring); o
 }
 
 /* ---------- intro and micro-animations (21st.dev Preloader, Scramble Text, Animate Digits, Text Blur Reveal; ported to plain CSS/JS) ---------- */
-/* ---------- intro: every load (html.intro, set by the head script) ----------
+/* ---------- intro: once per session (html.intro, set by the head script) ----------
    A paper sheet over the real page: the cursor blinks, "rawjobs" types itself in from symbols, the directory count
    rolls, then the sheet lifts with a curved edge that flattens (21st.dev Preloader) and the cursor drops into the
    headline. Timing lives in intro.js, computed from the motion tokens. Without html.intro none of this renders. */
@@ -780,7 +782,11 @@ h1 .serif, h2 .serif { font-size: 1.08em; line-height: 0; }
 .marquee { display: grid; gap: var(--space-3); -webkit-mask-image: linear-gradient(90deg, transparent, black 12%, black 88%, transparent); mask-image: linear-gradient(90deg, transparent, black 12%, black 88%, transparent); }
 .marquee__row { list-style: none; margin: 0; padding: 0; display: flex; width: max-content; gap: var(--space-3); animation: marquee var(--duration-marquee) linear infinite; }
 .marquee__row--rev { animation-direction: reverse; animation-duration: calc(var(--duration-marquee) * 1.3); }
-.marquee:hover .marquee__row { animation-play-state: paused; }
+.marquee:hover .marquee__row, .marquee[data-paused] .marquee__row { animation-play-state: paused; }
+.band__label { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--space-3); }
+.band__label p { margin: 0; }
+.marquee[data-off] .marquee__row { animation-play-state: paused; }
+.marquee-toggle[hidden] { display: none; }
 .marquee .ats { font: var(--text-subheading); color: var(--text-secondary); padding: var(--space-2) var(--space-4); border: 1px solid var(--glass-line); border-radius: var(--radius-dot); background: var(--glass); }
 @keyframes marquee { to { transform: translateX(calc(-50% - var(--space-3) / 2)); } }
 
@@ -934,6 +940,9 @@ h1 .serif, h2 .serif { font-size: 1.08em; line-height: 0; }
   transition: opacity var(--duration-base) var(--ease-standard), transform var(--duration-slow) var(--ease-cinematic); }
 .fcta[data-show] { opacity: 1; transform: none; pointer-events: auto; }
 @media (max-width: 560px) { .fcta { left: var(--gutter); right: var(--gutter); justify-content: center; } }
+/* on wide screens it sat over the text; there the nav, with its own Get RawJobs, comes back on any scroll up */
+@media (min-width: 921px) { .fcta { display: none; } }
+@media (max-width: 920px) { .foot { padding-bottom: calc(var(--space-12) + env(safe-area-inset-bottom, 0px)); } }
 /* phones: sending the page to a computer is the action; the steps wait behind a button */
 .get[data-phone] .os-bar, .get[data-phone] .iprogress, .get[data-phone] .installer { display: none; }
 .show-steps { margin-bottom: var(--space-6); }
@@ -1137,7 +1146,7 @@ h1 .serif, h2 .serif { font-size: 1.08em; line-height: 0; }
         });
         h.classList.remove('rj-bw-wait');
       });
-    }, { rootMargin: '0px 0px -10% 0px', threshold: 0.2 });
+    }, { rootMargin: '0px 0px 10% 0px', threshold: 0 });
     Array.prototype.forEach.call(document.querySelectorAll(selector), function (h) {
       if (h._rjWords || h.getBoundingClientRect().top < vh * 0.92) return;
       h._rjWords = wrapWords(h);
@@ -1415,8 +1424,8 @@ h1 .serif, h2 .serif { font-size: 1.08em; line-height: 0; }
         <div class="wall__tip" id="wall-tip" role="tooltip" hidden></div>
         <p class="wall__meter"><strong id="wall-count" class="num">__COMPANIES__</strong> <span id="wall-label">careers pages in the directory</span></p>
       </div>
-      <p class="hero__lede" data-step style="--i:3">RawJobs reads companies' own careers pages, ranks every job by how well it fits you, and sends you straight to apply. Free, and it runs on your own Windows, Mac or Linux computer.</p>
-      <p class="handheld-note" role="note"><b>It's a computer app.</b> RawJobs installs on Windows, Mac or Linux. It won't run on a phone or tablet, so send yourself the link. Once it's set up, new matches can come to your phone on Telegram.</p>
+      <p class="hero__lede" data-step style="--i:3">RawJobs reads companies’ own careers pages, ranks every job by how well it fits you, and sends you straight to apply. Free, and it runs on your own Windows, Mac or Linux computer.</p>
+      <p class="handheld-note" role="note"><b>It’s a computer app.</b> RawJobs installs on Windows, Mac or Linux. It won’t run on a phone or tablet, so send yourself the link. Once it’s set up, new matches can come to your phone on Telegram.</p>
       <div class="hero__ctas" data-step style="--i:4">
         <a class="rj-btn rj-btn--primary btn-lg" href="#get">
           <span data-cta>Get RawJobs</span>
@@ -1449,8 +1458,8 @@ h1 .serif, h2 .serif { font-size: 1.08em; line-height: 0; }
   <div class="wrap">
     <div class="proof__grid">
       <div class="stat" title="Directory build of __DIR_DATE__"><span class="stat__n">__COMPANIES_ROUND__</span><span class="stat__l">companies whose careers pages it knows</span></div>
-      <div class="stat" title="Job feed of __FEED_DATE__"><span class="stat__n">__FEED_JOBS__</span><span class="stat__l">open jobs in today's feed</span></div>
-      <div class="stat"><span class="stat__n">Daily</span><span class="stat__l">new jobs every day, more companies every week</span></div>
+      <div class="stat" title="Job feed of __FEED_DATE__"><span class="stat__n">__FEED_JOBS__</span><span class="stat__l">open jobs in today’s feed</span></div>
+      <div class="stat" title="Directory build of __DIR_DATE__"><span class="stat__n">__LIVE_ROUND__</span><span class="stat__l">with a live careers board this week</span></div>
     </div>
     <p class="open-line"><svg class="rj-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M15 22v-4a4.8 4.8 0 0 0-1-3.5c3 0 6-2 6-5.5.08-1.25-.27-2.48-1-3.5.28-1.15.28-2.35 0-3.5 0 0-1 0-3 1.5-2.64-.5-5.36-.5-8 0C6 2 5 2 5 2c-.3 1.15-.3 2.35 0 3.5A5.403 5.403 0 0 0 4 9c0 3.5 3 5.5 6 5.5-.39.49-.68 1.05-.85 1.65-.17.6-.22 1.23-.15 1.85v4"/><path d="M9 18c-4.51 2-5-2-7-2"/></svg><span><!--__OPEN_LINE__--></span></p>
   </div>
@@ -1459,8 +1468,9 @@ h1 .serif, h2 .serif { font-size: 1.08em; line-height: 0; }
 <!-- ================= HIRING SYSTEMS ================= -->
 <!-- Decorative: the same names are listed for screen readers in the FAQ (Which job sites does it read?). -->
 <section class="band" aria-label="Hiring systems it reads">
-  <p class="wrap band__label">Straight from the careers pages on <b>__SYSTEMS_N__ hiring systems</b></p>
-  <div class="marquee" aria-hidden="true">
+  <div class="wrap band__label"><p>Straight from the careers pages on <b>__SYSTEMS_N__ hiring systems</b></p>
+    <button class="rj-btn rj-btn--quiet rj-btn--sm marquee-toggle" type="button" id="marquee-toggle" hidden>Pause<span class="rj-sr"> the moving list</span></button></div>
+  <div class="marquee" id="marquee" aria-hidden="true">
     <ul class="marquee__row">__ATS____ATS__</ul>
     <ul class="marquee__row marquee__row--rev">__ATS____ATS__</ul>
   </div>
@@ -1475,7 +1485,7 @@ h1 .serif, h2 .serif { font-size: 1.08em; line-height: 0; }
       <p class="prose">Where you applied may be why.</p>
     </div>
     <div class="split__body">
-      <p class="section__lede">Job sites and agencies often repost jobs. Apply there and your resume can stop with the middleman. <strong class="lede-strong">RawJobs links to the company's own careers page</strong>, so it lands in their hiring system.</p>
+      <p class="section__lede">Job sites and agencies often repost jobs. Apply there and your resume can stop with the middleman. <strong class="lede-strong">RawJobs links to the company’s own careers page</strong>, so it lands in their hiring system.</p>
       <div class="rj-panel routes" id="routes" data-play="static">
         <div class="routes__bar">
           <span class="eyebrow">Where your resume goes</span>
@@ -1500,17 +1510,17 @@ h1 .serif, h2 .serif { font-size: 1.08em; line-height: 0; }
         </div>
         <div class="lane lane--good">
           <p class="lane__label">Direct to the company <small>nothing in between</small></p>
-          <p class="rj-sr">Direct to the company: your resume goes to the company's own careers page and into its own hiring system.</p>
+          <p class="rj-sr">Direct to the company: your resume goes to the company’s own careers page and into its own hiring system.</p>
           <div class="track" aria-hidden="true">
             <div class="node node--you"><span class="node__ic" aria-hidden="true"><svg class="rj-icon" viewBox="0 0 24 24"><path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/><path d="M14 2v4a2 2 0 0 0 2 2h4"/><path d="M10 13H8"/><path d="M16 17H8"/></svg></span>Your resume<small>applied on the careers page</small></div>
             <span class="link link--good"><i></i></span>
             <div class="node"><span class="node__ic" aria-hidden="true"><svg class="rj-icon" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M12 2a14.5 14.5 0 0 0 0 20 14.5 14.5 0 0 0 0-20"/><path d="M2 12h20"/></svg></span>Company careers page<small>Lever, Greenhouse, Workday…</small></div>
             <span class="link link--good"><i></i></span>
-            <div class="node node--end node--good"><span class="node__ic" aria-hidden="true"><svg class="rj-icon" viewBox="0 0 24 24"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="m16 11 2 2 4-4"/></svg></span><b>Hiring team</b><small>Goes into the company's own hiring system</small></div>
+            <div class="node node--end node--good"><span class="node__ic" aria-hidden="true"><svg class="rj-icon" viewBox="0 0 24 24"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="m16 11 2 2 4-4"/></svg></span><b>Hiring team</b><small>Goes into the company’s own hiring system</small></div>
           </div>
           <span class="token" aria-hidden="true"><svg class="rj-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/><path d="M14 2v4a2 2 0 0 0 2 2h4"/><path d="M10 13H8"/><path d="M16 17H8"/></svg></span>
         </div>
-        <p class="routes__note">Applying direct doesn't guarantee a reply. It removes the hops where resumes get lost.</p>
+        <p class="routes__note">Applying direct doesn’t guarantee a reply. It removes the hops where resumes get lost.</p>
       </div>
     </div>
   </div>
@@ -1539,7 +1549,7 @@ h1 .serif, h2 .serif { font-size: 1.08em; line-height: 0; }
         <li class="panel step" style="--i:1">
           <span class="step__n">Step 2</span>
           <h3>It checks the careers pages</h3>
-          <p>Straight from each company's own page on Greenhouse, Lever, Workday and 20 more.</p>
+          <p>Straight from each company’s own page on Greenhouse, Lever, Workday and the rest of the __SYSTEMS_N__ hiring systems it reads.</p>
           <div class="step__demo log" aria-hidden="true">
             <div>Acme Exchange <span class="ok">14 jobs</span></div>
             <div>Halcyon Labs <span class="ok">6 jobs</span></div>
@@ -1553,7 +1563,7 @@ h1 .serif, h2 .serif { font-size: 1.08em; line-height: 0; }
           <p>Every job gets a score from 0 to 100, with the reason written out.</p>
           <div class="step__demo" aria-hidden="true">
             <div style="display:flex;gap:8px;align-items:center"><span class="rj-score rj-score--strong"><i class="rj-glyph rj-glyph--full"></i>83</span><span style="font:var(--text-label)">Head of Product, Exchange</span></div>
-            <div class="log"><div>title 30 · place 20 · keywords 27 · industry 10</div></div>
+            <div class="log"><div>title 30 · place 20 · keywords 23.3 · industry 10</div></div>
           </div>
         </li>
       </ol>
@@ -1586,7 +1596,7 @@ h1 .serif, h2 .serif { font-size: 1.08em; line-height: 0; }
       <li><a href="/features#automate"><i>05</i><b>Automate</b><span>Scheduled scans, Telegram alerts</span></a></li>
       <li><a href="/features#setup"><i>06</i><b>Set up</b><span>3 minutes, from your resume</span></a></li>
       <li><a href="/features#yours"><i>07</i><b>Yours</b><span>Private, local, self-updating</span></a></li>
-      <li><a href="/features#next"><i>08</i><b>Coming next</b><span>What's on the roadmap</span></a></li>
+      <li><a href="/features#next"><i>08</i><b>Coming next</b><span>What’s on the roadmap</span></a></li>
     </ul>
   </div>
 </section>
@@ -1637,7 +1647,7 @@ h1 .serif, h2 .serif { font-size: 1.08em; line-height: 0; }
             <div class="rules__in">
               <fieldset aria-describedby="hint-1">
                 <legend>Your seniority word</legend>
-                <p class="hint" id="hint-1">This job is Head level. The same level adds 10, one level off adds 5.</p>
+                <p class="hint" id="hint-1">This job is Head level. Seniority counts toward the title’s 30: the same level adds 10, one level off adds 5.</p>
                 <div class="chips">
                   <label class="rj-chip" for="s-head"><input class="rj-sr" type="radio" name="seniority" id="s-head" value="head" checked><svg class="rj-icon tick" viewBox="0 0 24 24" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg>Head</label>
                   <label class="rj-chip" for="s-lead"><input class="rj-sr" type="radio" name="seniority" id="s-lead" value="lead"><svg class="rj-icon tick" viewBox="0 0 24 24" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg>Lead</label>
@@ -1645,7 +1655,7 @@ h1 .serif, h2 .serif { font-size: 1.08em; line-height: 0; }
                 </div>
               </fieldset>
               <fieldset aria-describedby="hint-4">
-                <legend>The company's industry</legend>
+                <legend>The company’s industry</legend>
                 <p class="hint" id="hint-4">Yours adds 10, unknown adds 5, another adds 0.</p>
                 <div class="chips">
                   <label class="rj-chip" for="i-mine"><input class="rj-sr" type="radio" name="industry" id="i-mine" value="mine" checked><svg class="rj-icon tick" viewBox="0 0 24 24" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg>Yours</label>
@@ -1661,7 +1671,7 @@ h1 .serif, h2 .serif { font-size: 1.08em; line-height: 0; }
             <span class="rj-source">Lever<span class="rj-source__age">5d</span></span>
             <h3 class="jobcard__title">Head of Product, Exchange</h3>
             <p class="jobcard__meta">Acme Exchange · Dubai, Abu Dhabi · Hybrid</p>
-            <p class="jobcard__text" id="lab-text">Own the roadmap for our regulated <mark data-kw="crypto">crypto</mark> <mark data-kw="exchange">exchange</mark>: spot trading, custody and <mark data-kw="tokenization">tokenization</mark> of real-world assets. You'll work with compliance on KYC and launch new markets.</p>
+            <p class="jobcard__text" id="lab-text">Own the roadmap for our regulated <mark data-kw="crypto">crypto</mark> <mark data-kw="exchange">exchange</mark>: spot trading, custody and <mark data-kw="tokenization">tokenization</mark> of real-world assets. You’ll work with compliance on KYC and launch new markets.</p>
           </div>
           <div class="verdict">
             <div class="gauge" aria-hidden="true"><svg viewBox="0 0 120 120" focusable="false"><circle class="gauge__track" cx="60" cy="60" r="52"/><circle class="gauge__fill" id="gauge-fill" cx="60" cy="60" r="52" pathLength="100" style="stroke-dashoffset:17"/></svg><span class="gauge__n num" id="gauge-n">83</span></div>
@@ -1669,13 +1679,13 @@ h1 .serif, h2 .serif { font-size: 1.08em; line-height: 0; }
             <span class="verdict__label" id="lab-verdict">Strong match<span>Shown near the top of your Radar</span></span>
           </div>
           <div class="rj-breakdown">
-            <div class="rj-breakdown__bar" id="lab-bar" role="img" aria-label="Score breakdown: title 30 of 30, place 20 of 20, keywords 27 of 40, industry 10 of 10">
+            <div class="rj-breakdown__bar" id="lab-bar" role="img" aria-label="Score breakdown: title 30 of 30, place 20 of 20, keywords 23.3 of 40, industry 10 of 10">
               <span class="rj-breakdown__seg"><i class="bd-fill" id="lab-bt" style="transform:scaleX(1)"></i></span>
               <span class="rj-breakdown__seg"><i class="bd-fill" id="lab-bp" style="transform:scaleX(1)"></i></span>
               <span class="rj-breakdown__seg"><i class="bd-fill" id="lab-bk" style="transform:scaleX(.675)"></i></span>
               <span class="rj-breakdown__seg"><i class="bd-fill" id="lab-bi" style="transform:scaleX(1)"></i></span>
             </div>
-            <div class="rj-breakdown__legend num" id="lab-legend" aria-hidden="true"><span>Title <b>30</b></span><span>Place <b>20</b></span><span>Keywords <b>27</b>/40</span><span>Industry <b>10</b></span></div>
+            <div class="rj-breakdown__legend num" id="lab-legend" aria-hidden="true"><span>Title <b>30</b></span><span>Place <b>20</b></span><span>Keywords <b>23.3</b>/40</span><span>Industry <b>10</b></span></div>
           </div>
           <p class="why-line num" id="lab-why" aria-live="polite">83: title 30, place 20, keywords 23.3 (crypto, exchange), industry 10</p>
           <p class="lab__fine">A made-up job. 70 and up is a strong match, 40 and up is fair. You can change both.</p>
@@ -1696,7 +1706,7 @@ h1 .serif, h2 .serif { font-size: 1.08em; line-height: 0; }
     </div>
 
     <div class="handoff" id="handoff" role="note">
-      <p><b>You're on a phone or tablet.</b> RawJobs runs on a Windows, Mac or Linux computer. Send yourself this page and open it there.</p>
+      <p><b>You’re on a phone or tablet.</b> RawJobs runs on a Windows, Mac or Linux computer. Send yourself this page and open it there.</p>
       <div class="handoff__btns">
         <button class="rj-btn rj-btn--primary" type="button" id="share-link" hidden>Send to my computer</button>
         <a class="rj-btn" id="mail-link" href="mailto:?subject=Install%20RawJobs&amp;body=Open%20this%20on%20your%20computer%3A%20__SITE_URL__%2F%23get">Email me the link</a>
@@ -1724,13 +1734,13 @@ h1 .serif, h2 .serif { font-size: 1.08em; line-height: 0; }
             <p data-only="mac">Press <kbd class="rj-kbd">⌘</kbd> <kbd class="rj-kbd">Space</kbd>, type <b>Terminal</b> and press <kbd class="rj-kbd">Return</kbd>. A window with a blinking cursor opens.</p>
             <p data-only="linux">Press <kbd class="rj-kbd">Ctrl</kbd> <kbd class="rj-kbd">Alt</kbd> <kbd class="rj-kbd">T</kbd>, or open <b>Terminal</b> from your apps.</p>
             <p class="tip">The terminal is where you type commands. You only need it once.</p>
-            <div class="istep__nav"><button class="rj-btn rj-btn--primary" type="button" data-next>It's open</button></div>
+            <div class="istep__nav"><button class="rj-btn rj-btn--primary" type="button" data-next>It’s open</button></div>
           </div>
         </li>
         <li class="istep" data-step="2">
           <button class="istep__head" type="button" aria-expanded="false" aria-controls="sb2"><span class="istep__n">2</span>Copy the install line</button>
           <div class="istep__body" id="sb2">
-            <p>Click Copy. You don't need to understand the line.</p>
+            <p>Click Copy. You don’t need to understand the line.</p>
             <div class="line" data-only="win"><code>irm https://github.com/Tanmay-Mhatre/rawjobs/releases/latest/download/install.ps1 | iex</code>
               <button class="rj-btn rj-btn--primary" type="button" data-copy="irm https://github.com/Tanmay-Mhatre/rawjobs/releases/latest/download/install.ps1 | iex" data-advance><span class="ic" aria-hidden="true"><svg class="rj-icon ic-copy" viewBox="0 0 24 24"><rect width="14" height="14" x="8" y="8" rx="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></svg><svg class="rj-icon ic-check" viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5"/></svg></span><span>Copy</span></button></div>
             <div class="line" data-only="mac linux"><code>curl -fsSL https://github.com/Tanmay-Mhatre/rawjobs/releases/latest/download/install.sh | sh</code>
@@ -1753,13 +1763,13 @@ h1 .serif, h2 .serif { font-size: 1.08em; line-height: 0; }
             <p data-only="win">Click in the PowerShell window, press <kbd class="rj-kbd">Ctrl</kbd> <kbd class="rj-kbd">V</kbd> (or right-click), then press <kbd class="rj-kbd">Enter</kbd>.</p>
             <p data-only="mac">Click in the Terminal window, press <kbd class="rj-kbd">⌘</kbd> <kbd class="rj-kbd">V</kbd>, then press <kbd class="rj-kbd">Return</kbd>.</p>
             <p data-only="linux">Click in the Terminal window, press <kbd class="rj-kbd">Ctrl</kbd> <kbd class="rj-kbd">Shift</kbd> <kbd class="rj-kbd">V</kbd>, then press <kbd class="rj-kbd">Enter</kbd>.</p>
-            <div class="istep__nav"><button class="rj-btn rj-btn--primary" type="button" data-next>Done, it's running</button></div>
+            <div class="istep__nav"><button class="rj-btn rj-btn--primary" type="button" data-next>Done, it’s running</button></div>
           </div>
         </li>
         <li class="istep" data-step="4">
           <button class="istep__head" type="button" aria-expanded="false" aria-controls="sb4"><span class="istep__n">4</span>Wait about a minute</button>
           <div class="istep__body" id="sb4">
-            <p>It downloads and checks RawJobs. You're done when you see <b>RawJobs is running</b>.</p>
+            <p>It downloads and checks RawJobs. You’re done when you see <b>RawJobs is running</b>.</p>
             <p class="tip">Something else showed up? See <a href="#help" data-open-help>Need help?</a> below.</p>
             <div class="istep__nav"><button class="rj-btn rj-btn--primary" type="button" data-next>I see it</button></div>
           </div>
@@ -1768,8 +1778,8 @@ h1 .serif, h2 .serif { font-size: 1.08em; line-height: 0; }
           <button class="istep__head" type="button" aria-expanded="false" aria-controls="sb5"><span class="istep__n">5</span>Set up your search</button>
           <div class="istep__body" id="sb5">
             <p>Your browser opens RawJobs at <b>127.0.0.1:4317</b>. It walks you through setup in about 3 minutes.</p>
-            <p class="tip">Didn't open? Go to that address, or open <b>RawJobs</b> from <span data-only="win">the Start menu</span><span data-only="mac">~/Applications</span><span data-only="linux">your app menu</span>.</p>
-            <div class="done"><i class="rj-glyph rj-glyph--full" aria-hidden="true"></i><span>That's it. You can close the terminal. RawJobs keeps running in the background and starts when you log in.</span></div>
+            <p class="tip">Didn’t open? Go to that address, or open <b>RawJobs</b> from <span data-only="win">the Start menu</span><span data-only="mac">~/Applications</span><span data-only="linux">your app menu</span>.</p>
+            <div class="done"><i class="rj-glyph rj-glyph--full" aria-hidden="true"></i><span>That’s it. You can close the terminal. RawJobs keeps running in the background and starts when you log in.</span></div>
           </div>
         </li>
       </ol>
@@ -1819,7 +1829,7 @@ h1 .serif, h2 .serif { font-size: 1.08em; line-height: 0; }
           <div class="bwin" aria-hidden="true">
             <div class="btabs">
               <span class="lights only-mac"><i></i><i></i><i></i></span>
-              <span class="btab"><img src="/favicon.svg" alt="">RawJobs</span>
+              <span class="btab"><img src="/favicon.svg" width="16" height="16" alt="">RawJobs</span>
               <span class="wbtns only-win"><i><svg viewBox="0 0 12 12"><path d="M1 6h10"/></svg></i><i><svg viewBox="0 0 12 12"><rect x="1.5" y="1.5" width="9" height="9"/></svg></i><i><svg viewBox="0 0 12 12"><path d="m1 1 10 10M11 1 1 11"/></svg></i></span>
               <span class="gbtns only-linux"><i><svg viewBox="0 0 12 12"><path d="M2 6h8"/></svg></i><i><svg viewBox="0 0 12 12"><rect x="2" y="2" width="8" height="8"/></svg></i><i><svg viewBox="0 0 12 12"><path d="m2 2 8 8M10 2 2 10"/></svg></i></span>
             </div>
@@ -1839,10 +1849,10 @@ h1 .serif, h2 .serif { font-size: 1.08em; line-height: 0; }
         <summary><span>Need help?<small>Fixes for common problems, and how to uninstall</small></span><svg class="rj-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14"/><path d="M12 5v14"/></svg></summary>
         <div class="more__in">
           <div class="fixes">
-            <div class="fix" data-only="win"><h4>“irm” isn't recognised</h4><p>You're in Command Prompt. Open <b>PowerShell</b> instead (step 1) and paste the line again.</p></div>
-            <div class="fix" data-only="mac linux"><h4>“curl” isn't found</h4><p data-only="mac">Run the line in <b>Terminal</b>, not another app.</p><p data-only="linux">Install curl, or use <code>wget -qO- https://github.com/Tanmay-Mhatre/rawjobs/releases/latest/download/install.sh | sh</code></p></div>
+            <div class="fix" data-only="win"><h4>“irm” isn’t recognised</h4><p>You’re in Command Prompt. Open <b>PowerShell</b> instead (step 1) and paste the line again.</p></div>
+            <div class="fix" data-only="mac linux"><h4>“curl” isn’t found</h4><p data-only="mac">Run the line in <b>Terminal</b>, not another app.</p><p data-only="linux">Install curl, or use <code>wget -qO- https://github.com/Tanmay-Mhatre/rawjobs/releases/latest/download/install.sh | sh</code></p></div>
             <div class="fix"><h4>Your antivirus or work laptop blocks it</h4><p>Download the script from the <a href="https://github.com/Tanmay-Mhatre/rawjobs/releases/latest" target="_blank" rel="noopener">latest release<span class="rj-sr"> (opens in a new tab)</span></a>, read it, and run it from the file.</p></div>
-            <div class="fix"><h4>The dashboard didn't open</h4><p>Open <b>RawJobs</b> from <span data-only="win">the Start menu</span><span data-only="mac">~/Applications</span><span data-only="linux">your app menu</span>. Still nothing? Run the install line again: it repairs RawJobs and keeps your data.</p></div>
+            <div class="fix"><h4>The dashboard didn’t open</h4><p>Open <b>RawJobs</b> from <span data-only="win">the Start menu</span><span data-only="mac">~/Applications</span><span data-only="linux">your app menu</span>. Still nothing? Run the install line again: it repairs RawJobs and keeps your data.</p></div>
             <div class="fix"><h4>Port 4317 is busy</h4><p>RawJobs uses the next free one (4318, 4319…), and the shortcut finds it for you.</p></div>
             <div class="fix" id="uninstall"><h4>Uninstall</h4><p>Paste this into <span data-only="win">PowerShell</span><span data-only="mac linux">Terminal</span>. It asks whether to keep your data.</p>
               <div class="line" data-only="win"><code>&amp; "$env:LOCALAPPDATA\RawJobs\bin\rawjobs.cmd" uninstall</code><button class="rj-btn rj-btn--sm" type="button" data-copy='&amp; "$env:LOCALAPPDATA\RawJobs\bin\rawjobs.cmd" uninstall'>Copy</button></div>
@@ -1864,7 +1874,7 @@ h1 .serif, h2 .serif { font-size: 1.08em; line-height: 0; }
             <ol>
               <li><code>pnpm rawjobs scan --notify</code>: send new matches to Telegram</li>
               <li><code>pnpm rawjobs schedule install --time 08:00</code>: scan every morning</li>
-              <li><code>pnpm rawjobs detect &lt;careers-url&gt;</code>: find a company's hiring system</li>
+              <li><code>pnpm rawjobs detect &lt;careers-url&gt;</code>: find a company’s hiring system</li>
             </ol>
           </div>
           <p class="tip"><a href="https://github.com/Tanmay-Mhatre/rawjobs#getting-started" target="_blank" rel="noopener">Read the README<span class="rj-sr"> (opens in a new tab)</span></a> · <a href="https://github.com/Tanmay-Mhatre/rawjobs/blob/main/CONTRIBUTING.md" target="_blank" rel="noopener">Write a connector<span class="rj-sr"> (opens in a new tab)</span></a></p>
@@ -1915,11 +1925,11 @@ h1 .serif, h2 .serif { font-size: 1.08em; line-height: 0; }
       <div class="faq">
         <details><summary>Is it free?<svg class="rj-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14"/><path d="M12 5v14"/></svg></summary><p class="ans">Yes. RawJobs is open source (MIT), with no paid tier and no account.</p></details>
         <details><summary>Does it use AI?<svg class="rj-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14"/><path d="M12 5v14"/></svg></summary><p class="ans">No. Scores come from rules you can read and change. An optional AI re-rank, with your own key, is on the roadmap.</p></details>
-        <details><summary>Which job sites does it read?<svg class="rj-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14"/><path d="M12 5v14"/></svg></summary><div class="ans"><p>Companies' own careers pages on __SYSTEMS_N__ hiring systems, plus __BOARDS_N__ public job boards: __BOARD_NAMES__. A shared directory, updated weekly, tells it where to look.</p><ul class="ats-grid" aria-label="Supported hiring systems">__ATS__</ul></div></details>
+        <details><summary>Which job sites does it read?<svg class="rj-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14"/><path d="M12 5v14"/></svg></summary><div class="ans"><p>Companies’ own careers pages on __SYSTEMS_N__ hiring systems, plus __BOARDS_N__ public job boards: __BOARD_NAMES__. When a job is on both, RawJobs shows the company’s own posting. A shared directory, updated weekly, tells it where to look.</p><ul class="ats-grid" aria-label="Supported hiring systems">__ATS__</ul></div></details>
         <details><summary>Is my data sent anywhere?<svg class="rj-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14"/><path d="M12 5v14"/></svg></summary><p class="ans">No. Your resume and settings stay on your computer, and the app sends no usage data. One optional exception: when you add a company by its link, that careers page address is shared so everyone can find it. You can turn that off. <a href="https://github.com/Tanmay-Mhatre/rawjobs/blob/main/PRIVACY.md" target="_blank" rel="noopener">Full details<span class="rj-sr"> (opens in a new tab)</span></a>.</p></details>
         <details><summary>Is the install line safe?<svg class="rj-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14"/><path d="M12 5v14"/></svg></summary><p class="ans">It downloads RawJobs from GitHub and Node from nodejs.org, checks both against signed checksums before running anything, and installs only into your user folder. You can read the script first: <a href="https://github.com/Tanmay-Mhatre/rawjobs/blob/main/packaging/install.ps1" target="_blank" rel="noopener">Windows<span class="rj-sr"> (opens in a new tab)</span></a>, <a href="https://github.com/Tanmay-Mhatre/rawjobs/blob/main/packaging/install.sh" target="_blank" rel="noopener">Mac and Linux<span class="rj-sr"> (opens in a new tab)</span></a>.</p></details>
         <details><summary>How fresh are the jobs?<svg class="rj-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14"/><path d="M12 5v14"/></svg></summary><p class="ans">As fresh as your last scan. Scan whenever you like, or schedule a scan every morning and get new matches on Telegram.</p></details>
-        <details><summary>How do I uninstall it?<svg class="rj-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14"/><path d="M12 5v14"/></svg></summary><p class="ans">One line removes it and asks whether to keep your data. It's under <a href="#uninstall" data-open-help>Need help?</a> in Get it.</p></details>
+        <details><summary>How do I uninstall it?<svg class="rj-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14"/><path d="M12 5v14"/></svg></summary><p class="ans">One line removes it and asks whether to keep your data. It’s under <a href="#uninstall" data-open-help>Need help?</a> in Get it.</p></details>
         <details><summary>Can I add a company, or help build it?<svg class="rj-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14"/><path d="M12 5v14"/></svg></summary><p class="ans">Yes. Paste a careers link in the app, or <a href="https://github.com/Tanmay-Mhatre/rawjobs/issues/new?template=suggest_company.yml" target="_blank" rel="noopener">suggest a company<span class="rj-sr"> (opens in a new tab)</span></a> for the shared directory so everyone gets it. Each hiring system is one small file in the repo: see <a href="https://github.com/Tanmay-Mhatre/rawjobs/blob/main/CONTRIBUTING.md" target="_blank" rel="noopener">Contributing<span class="rj-sr"> (opens in a new tab)</span></a>.</p></details>
       </div>
     </div>
@@ -1952,6 +1962,9 @@ h1 .serif, h2 .serif { font-size: 1.08em; line-height: 0; }
       <nav class="foot__links" aria-label="Project links">
         <a href="https://github.com/Tanmay-Mhatre/rawjobs" target="_blank" rel="noopener">GitHub<span class="rj-sr"> (opens in a new tab)</span></a>
         <a href="https://github.com/Tanmay-Mhatre/rawjobs/blob/main/docs/install.md" target="_blank" rel="noopener">Install guide<span class="rj-sr"> (opens in a new tab)</span></a>
+        <a href="https://github.com/Tanmay-Mhatre/rawjobs/releases" target="_blank" rel="noopener">Changelog<span class="rj-sr"> (opens in a new tab)</span></a>
+        <a href="/features#next">Roadmap</a>
+        <a href="https://github.com/Tanmay-Mhatre/rawjobs/issues/new/choose" target="_blank" rel="noopener">Report a problem<span class="rj-sr"> (opens in a new tab)</span></a>
         <a href="https://github.com/Tanmay-Mhatre/rawjobs/blob/main/PRIVACY.md" target="_blank" rel="noopener">Privacy<span class="rj-sr"> (opens in a new tab)</span></a>
         <a href="https://github.com/Tanmay-Mhatre/rawjobs/blob/main/CONTRIBUTING.md" target="_blank" rel="noopener">Contributing<span class="rj-sr"> (opens in a new tab)</span></a>
         <a href="https://github.com/Tanmay-Mhatre/rawjobs/blob/main/SECURITY.md" target="_blank" rel="noopener">Security<span class="rj-sr"> (opens in a new tab)</span></a>
@@ -1993,6 +2006,20 @@ h1 .serif, h2 .serif { font-size: 1.08em; line-height: 0; }
   };
   addEventListener('scroll', onScroll, { passive: true }); onScroll();
 
+  /* ---------- the hiring systems marquee: a pause button, and it rests while off screen ---------- */
+  var mq = $('#marquee'), mqBtn = $('#marquee-toggle');
+  if (mq && mqBtn && !reduce) {
+    mqBtn.hidden = false;
+    mqBtn.addEventListener('click', function () {
+      var paused = !mq.hasAttribute('data-paused');
+      mqBtn.innerHTML = (paused ? 'Play' : 'Pause') + '<span class="rj-sr"> the moving list</span>';
+      if (paused) mq.setAttribute('data-paused', ''); else mq.removeAttribute('data-paused');
+    });
+    if ('IntersectionObserver' in window) new IntersectionObserver(function (es) {
+      if (es[0].isIntersecting) mq.removeAttribute('data-off'); else mq.setAttribute('data-off', '');
+    }).observe(mq);
+  }
+
   /* ---------- scroll reveals: only below-the-fold blocks, revealed once ---------- */
   var revealSel = '.step, .lab';
   var io = 'IntersectionObserver' in window ? new IntersectionObserver(function (es) {
@@ -2001,7 +2028,7 @@ h1 .serif, h2 .serif { font-size: 1.08em; line-height: 0; }
       var el = e.target; io.unobserve(el);
       el.classList.remove('rv-wait'); el.classList.add('rv-in');
     });
-  }, { rootMargin: '0px 0px -8% 0px', threshold: 0.12 }) : null;
+  }, { rootMargin: '0px 0px 10% 0px', threshold: 0 }) : null;
   if (io && !reduce) {
     var vh = innerHeight;
     $$(revealSel).forEach(function (el) {
@@ -2691,7 +2718,7 @@ h1 .serif, h2 .serif { font-size: 1.08em; line-height: 0; }
     var vh0 = innerHeight;
     var seq = new IntersectionObserver(function (es) {
       es.forEach(function (e) { if (!e.isIntersecting) return; seq.unobserve(e.target); e.target.classList.remove('rv-wait'); e.target.classList.add('rv-in'); });
-    }, { rootMargin: '0px 0px -8% 0px', threshold: 0.1 });
+    }, { rootMargin: '0px 0px 10% 0px', threshold: 0 });
     var stage = function (sel, i, step) {
       Array.prototype.forEach.call(document.querySelectorAll(sel), function (el, k) {
         if (el.getBoundingClientRect().top < vh0 * 0.92 || el.classList.contains('rv-wait')) return;

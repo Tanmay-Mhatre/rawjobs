@@ -178,13 +178,16 @@ async function projectNumbers() {
 const proj = await projectNumbers();
 /** 1234 -> "1.2k" */
 const compact = (x) => (x >= 1000 ? `${Math.floor(x / 100) / 10}k` : String(x));
-const STARS = proj.stars === null ? "" : `<span class="stars num" aria-label="${int(proj.stars)} ${proj.stars === 1 ? "star" : "stars"}">${compact(proj.stars)}</span>`;
+// A tiny count reads as "nobody uses this", so the star count shows only from STAR_MIN up.
+const STAR_MIN = 50;
+const showStars = proj.stars !== null && proj.stars >= STAR_MIN;
+const STARS = !showStars ? "" : `<span class="stars num" aria-label="${int(proj.stars)} ${proj.stars === 1 ? "star" : "stars"}">${compact(proj.stars)}</span>`;
 const escAttr = (x) => String(x).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);
 const releaseBits = [
   proj.release
     ? `Latest release <a href="https://github.com/${APP_REPO}/releases/latest" target="_blank" rel="noopener">${escAttr(proj.release.tag)}<span class="rj-sr"> (opens in a new tab)</span></a>, ${day(proj.release.at)}`
     : "",
-  proj.stars === null ? "" : `${int(proj.stars)} ${proj.stars === 1 ? "star" : "stars"} on GitHub`,
+  !showStars ? "" : `${int(proj.stars)} ${proj.stars === 1 ? "star" : "stars"} on GitHub`,
   "MIT licensed, built in the open",
 ].filter(Boolean);
 const OPEN_LINE = releaseBits.join(" · ");
