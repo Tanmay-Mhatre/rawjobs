@@ -32,6 +32,7 @@ import {
   jobCompanyKey,
   JOB_FEED_SCHEMA,
   HttpError,
+  HostSkippedError,
   NotModifiedError,
   refOfEntry,
   type CompanyRef,
@@ -75,7 +76,8 @@ export const atsOfGroup = (group: string): string[] => {
  * Eightfold one at a time: its CDN refuses a CI runner's whole IP past about a request a second overall.
  */
 const WORKERS: Record<string, number> = {
-  workday: 20,
+  // 20 until Workday began answering 429 to the runner after ~700 boards (16 Nov 2026; see BUDGETED).
+  workday: 10,
   icims: 10,
   successfactors: 8,
   join: 6,
@@ -157,18 +159,26 @@ const ALERT_FAILED = 0.3;
 const ALERT_MIN = 20;
 /** This many failed boards in a row stops a system for the run (a blocked runner, across all its hosts). */
 const BREAK_ATS_AFTER = 100;
+/** Vague-location jobs ("3 Locations") looked up per company per run; the rest wait for the next run. */
+const DESCRIBES_PER_COMPANY = 25;
 /**
  * Systems that stop the runner's whole IP after a budget of requests, not a rate: Avature answers 406 to every
  * board once a run has read ~30 of its ~57 (4 Nov: boards 1-32 read, 33-57 all 406, at 1 board and 1.25 s).
  * They stop after a few failures in a row (one dead board alone mustn't stop them) and read the boards read
  * longest ago first, so the boards a run doesn't reach go first in the next one.
+ * Workday (from 16 Nov 2026) and Personio (from 16 Nov 18:13) do the same at a larger budget: Workday answers 429
+ * on every tenant after ~700 boards (run 44842336209: 725 read, then 4,877 × 429), Personio's CDN after ~1,000
+ * (1,023 read, then 103 × 429), and both answer from a home connection. Read in turns, every board is still
+ * read within about three days (Workday: ~7,400 boards at ~700 a run, 4 runs a day), inside the 7-day drop.
  */
-const BUDGETED: Record<string, { breakAfter: number; describes: number }> = { avature: { breakAfter: 3, describes: 5 } };
+const BUDGETED: Record<string, { breakAfter: number; describes: number }> = {
+  avature: { breakAfter: 3, describes: 5 },
+  workday: { breakAfter: 25, describes: DESCRIBES_PER_COMPANY },
+  personio: { breakAfter: 10, describes: DESCRIBES_PER_COMPANY },
+};
 const breakAfter = (ats: string) => BUDGETED[ats]?.breakAfter ?? BREAK_ATS_AFTER;
 /** Failed boards printed per system and reason in the run log. */
 const FAIL_EXAMPLES = 3;
-/** Vague-location jobs ("3 Locations") looked up per company per run; the rest wait for the next run. */
-const DESCRIBES_PER_COMPANY = 25;
 
 /**
  * Systems whose quiet boards rest between reads. A board whose jobs came back the same QUIET_AFTER reads in a
@@ -431,7 +441,8 @@ async function crawl(out: string, group: string, generated: string, directoryFil
               keep(key);
               // A blocked runner fails every board of a system, across all its hosts: stop asking. For a budgeted
               // system only refusals count, or a few dead boards (read longest ago, so first) would stop it every run.
-              const refused = err instanceof HttpError && [403, 406, 429].includes(err.status ?? 0);
+              // A host skipped for failing again and again (Workday's tenants after their 429s) counts as a refusal too.
+              const refused = err instanceof HostSkippedError || (err instanceof HttpError && [403, 406, 429].includes(err.status ?? 0));
               if (BUDGETED[ats] && !refused) streak = 0;
               else if (++streak >= breakAfter(ats) && !s.tripped) {
                 s.tripped = true;
