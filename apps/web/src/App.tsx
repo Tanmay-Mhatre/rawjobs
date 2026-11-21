@@ -18,6 +18,7 @@ import { ServerNotices } from "./components/Updates";
 import { UpdatePill } from "./components/WhatsNew";
 import { ScanButton } from "./components/ScanButton";
 import { FeedStaleNotice } from "./components/FeedStaleNotice";
+import { TelegramBanner } from "./components/TelegramBanner";
 import { ReminderNotice } from "./components/referral/ReminderNotice";
 import { Settings } from "./components/Settings";
 import { settingsHash } from "./components/settings/registry";
@@ -107,7 +108,7 @@ export function App() {
     onFinished: announceBackgroundScan,
   });
 
-  const { tg, notifyFailed, notifyNow } = useScanNotify(scan, notifyScan);
+  const { tg, notifyFailed, notifyNow, refreshTg } = useScanNotify(scan, notifyScan);
   /** Setup just saved and started the first scan: say how it went when it ends. */
   const announceScan = useScanAnnouncement(scan);
 
@@ -437,6 +438,7 @@ export function App() {
                   {setupState === "invalid" && <ConfigProblemCard errors={status?.errors} onFix={() => goStep(0)} />}
                   {setupState === "configured" && personal && <SetupChecklist items={items} onStep={goStep} onScan={requestScan} onCompanies={goCompanies} />}
                   {setupState === "configured" && personal && state.kind === "empty" && <FirstScanCard scan={scan} onScan={requestScan} />}
+                  {canRunLocally && setupState === "configured" && personal && lastRun && <TelegramBanner tg={tg} onConnected={refreshTg} />}
                   {/* Laptops show this as a chip next to "Last scan" in the header, so the jobs start higher. */}
                   {state.kind === "ready" && failing > 0 && <FailingBanner className="lg:hidden" count={failing} onOpen={goFailing} />}
                   {state.kind === "ready" && lastRun && matched === 0 && <NoMatches jobs={otherJobs ? [...jobs, ...otherJobs] : jobs} onStep={goStep} onCompanies={goCompanies} />}

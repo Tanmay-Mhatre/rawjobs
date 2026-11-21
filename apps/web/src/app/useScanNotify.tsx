@@ -40,5 +40,5 @@ export function useScanNotify(scan: ScanState, notifyScan: () => Promise<boolean
     void notifyScan().then((ok) => setNotifyFailed(!ok));
     notifyAsked.current = true;
   }, [refreshTg, notifyScan]);
-  return { tg, notifyFailed, notifyNow };
+  return { tg, notifyFailed, notifyNow, refreshTg };
 }
