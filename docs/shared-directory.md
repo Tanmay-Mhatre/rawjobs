@@ -311,8 +311,7 @@ jobs, where they are; no descriptions) on the `jobs` release of the directory re
   also starts the workflow, 10 minutes before it. The first job skips the run when this schedule
   slot's feed is already built (`scripts/catalog/slot-covered.mjs`; `force` overrides). `publish: false` runs everything but publishes,
   saves and opens nothing (and a run publishes only from `main`).
-- **Cheap to run:** Greenhouse, Lever and Ashby boards that haven't changed answer an empty 304, and so
-  does JOIN's first page (its company numbers are read off careers pages once and kept in the group's state).
+- **Cheap to run:** Greenhouse, Lever and Ashby boards that haven't changed answer an empty 304.
   A board that fails, or that the 4-hour limit leaves out, keeps its previous rows and time. A system
   with 100 failed boards in a row is stopped for the run (a blocked runner).
 - **How apps use it** (`packages/core/src/job-feed.ts`): every scan brings its copy up to date, then

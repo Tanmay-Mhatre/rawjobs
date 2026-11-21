@@ -1,11 +1,12 @@
 import { employmentType } from "../catalog/employment";
-import type { CompanyRef, NormalizedJob, Workplace } from "../schema";
-import { firstPageFingerprint, jobCompanyKey, jobId, type BoardIds, type Connector } from "./types";
+import type { NormalizedJob, Workplace } from "../schema";
+import { htmlToText } from "../text";
+import { jsonAfter } from "./parse";
+import { firstPageFingerprint, jobId, type Connector } from "./types";
 
 /**
  * JOIN (join.com), big with small and mid-size employers in Germany, Austria and Switzerland.
- * Careers pages are join.com/companies/{slug}; the public API is keyed by the company's numeric
- * id, kept in `shard` when a list gives it, else read once from the careers page.
+ * Careers pages are join.com/companies/{slug}, five jobs a page (?page=2, …).
  */
 export type JoinJob = {
   id: number;
@@ -19,30 +20,25 @@ export type JoinJob = {
   employmentType?: { name?: string };
 };
 
-type Page = { items?: JoinJob[]; pagination?: { pageCount?: number; rowCount?: number } };
+type Page = { items?: JoinJob[]; pagination?: { pageCount?: number; total?: number } };
+/** The data a join.com page embeds for its own rendering (Next.js). */
+type PageData = { jobs?: Page; job?: { description?: string } };
 
-const API = "https://join.com/api/public";
-/** JOIN refuses any larger page (HTTP 422). */
+/** A careers page lists 5 jobs and takes no larger page size. */
 const PAGE = 5;
 /** Beyond this we stop paging (a page holds only 5 jobs). */
 const MAX_POSTINGS = 500;
 
 const WORKPLACE: Record<string, Workplace> = { ONSITE: "onsite", HYBRID: "hybrid", REMOTE: "remote" };
 
+const careersUrl = (slug: string) => `https://join.com/companies/${encodeURIComponent(slug)}`;
+
 /**
- * The numeric company id the API needs: from `shard`, else one learned before (ids), else from the
- * careers page's embedded data, which is then kept in ids so the next run skips that page.
+ * The page's embedded data. JOIN closed its public API (/api/public answers 404 since 13 Nov 2026), so
+ * the jobs, a page at a time, and each job's description come from the pages people see.
  */
-async function companyId(ref: CompanyRef, http: { getText(url: string): Promise<string> }, ids?: BoardIds): Promise<string> {
-  if (ref.shard && /^\d+$/.test(ref.shard)) return ref.shard;
-  const key = jobCompanyKey(ref);
-  const known = ids?.get(key);
-  if (known) return known;
-  const html = await http.getText(`https://join.com/companies/${encodeURIComponent(ref.slug)}`);
-  const id = html.match(/"company":\{"id":(\d+)/)?.[1];
-  if (!id) throw new Error(`JOIN company "${ref.slug}" not found`);
-  ids?.set(key, id);
-  return id;
+function pageData(html: string): PageData | undefined {
+  return jsonAfter<{ props?: { pageProps?: { pageData?: PageData } } }>(html, 'id="__NEXT_DATA__"')?.props?.pageProps?.pageData;
 }
 
 export const join: Connector<JoinJob> = {
@@ -56,16 +52,17 @@ export const join: Connector<JoinJob> = {
     return parts[0] === "companies" && parts[1] && /^[a-z0-9][a-z0-9_-]*$/i.test(parts[1]) ? { ats: "join", slug: parts[1].toLowerCase() } : null;
   },
 
-  async fetch(ref, { http, partial, firstPage, ids }) {
-    const id = await companyId(ref, http, ids);
+  async fetch(ref, { http, partial, firstPage }) {
     const out: JoinJob[] = [];
     let total = 0;
     for (let page = 1, pages = 1; page <= pages && out.length < MAX_POSTINGS; page++) {
-      const res = await http.getJson<Page>(`${API}/companies/${id}/jobs?page=${page}&pageSize=${PAGE}`);
+      const html = await http.getText(page === 1 ? careersUrl(ref.slug) : `${careersUrl(ref.slug)}?page=${page}`);
+      const res = pageData(html)?.jobs;
+      if (!res) throw new Error(`JOIN company "${ref.slug}" not found`);
       if (!Array.isArray(res.items)) throw new Error("unexpected JOIN response: no items array");
       out.push(...res.items);
       pages = res.pagination?.pageCount ?? 1;
-      total = res.pagination?.rowCount ?? 0;
+      total = res.pagination?.total ?? 0;
       // A board of several pages whose first is as the last full read saw it: that read's jobs stand.
       if (
         page === 1 &&
@@ -86,14 +83,10 @@ export const join: Connector<JoinJob> = {
     return out;
   },
 
-  async describe(raw, _ref, { http }) {
-    const d = await http.getJson<{ description?: string }>(`${API}/jobs/${raw.id}`);
-    // Markdown: keep the words, drop the markup.
-    return (d.description ?? "")
-      .replace(/[*_#>`]+/g, "")
-      .replace(/\[([^\]]*)\]\([^)]*\)/g, "$1")
-      .replace(/\n{3,}/g, "\n\n")
-      .trim();
+  async describe(raw, ref, { http }) {
+    // The job's page (an old idParam redirects to the current one); its description is HTML.
+    const html = await http.getText(`${careersUrl(ref.slug)}/${raw.idParam}`);
+    return htmlToText(pageData(html)?.job?.description);
   },
 
   normalize(raw, ref): NormalizedJob {
