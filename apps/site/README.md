@@ -15,7 +15,7 @@ The marketing page at <https://www.rawjobs.workers.dev>. One static HTML page bu
 - the hiring systems marquee under the numbers repeats the FAQ's list (`__ATS__` is filled everywhere it appears) and is hidden from screen readers, which get the FAQ list
 - Get it: a step bar over the five steps, and the mock screen sits in a frame shaped like the visitor's machine (a MacBook, a Windows monitor on a stand, a Linux laptop). Like the mock screen, the frame's hardware colors are fixed values marked for the design lint
 - Where your resume goes is full width: each stop is an icon card, the middlemen stamp the resume ("Copied", "Held") as it passes, "No reply" lands with a jolt and "Hiring team" with a green pulse, over a dotted grid with a red and a green glow
-- an intro animation can hold the wall's scan: add the `intro` class to `<html>`, then dispatch `rawjobs:intro-done` on `window` (or call `window.rawjobsWall.start()`); it starts on its own after 4.5s
+- the intro plays once per browser session (`sessionStorage`); it can hold the wall's scan: add the `intro` class to `<html>`, then dispatch `rawjobs:intro-done` on `window` (or call `window.rawjobsWall.start()`); it starts on its own after 4.5s
 
 `pnpm design:lint` checks `src/` too, with CSS-aware rules: no accent tokens outside their four jobs, durations only from the motion tokens, no px type sizes.
 
@@ -53,6 +53,6 @@ To deploy without pushing, run the workflow from the Actions tab with **Run work
 
 Jobs in the scoring demo and the dashboard screenshots are made-up examples. The hero's stamped matches are real postings from the 11 Oct 2026 feed with example scores for a sample resume, and the page says so. The scoring demo's rules are in `src/score.js`, and `packages/core/test/site-demo.test.ts` checks them against `packages/core/src/score.ts` for every choice the demo offers: change the scorer and that test tells you to update the demo.
 
-Next to every "Star on GitHub" the build shows the repo's star count, and under the numbers a line with the latest release (tag and date) and the star count, all read from the GitHub API at build time (with `GITHUB_TOKEN` when set). When GitHub can't be reached, each is left out rather than shown stale.
+Next to every "Star on GitHub" the build shows the repo's star count, and under the numbers a line with the latest release (tag and date) and the star count, all read from the GitHub API at build time (with `GITHUB_TOKEN` when set). The star count shows only from 50 stars up (`STAR_MIN` in `build.mjs`); below that the buttons and the line leave it out. When GitHub can't be reached, each is left out rather than shown stale.
 
 The page's numbers (companies in the directory, companies hiring, jobs in the job feed, build dates) are read from the directory repo's latest release at build time. The directory rebuild starts a site deploy when it publishes, and the Monday run is the backup, so they stay current. Without network access the build uses the last known numbers and says so.
