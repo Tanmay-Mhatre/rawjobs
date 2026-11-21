@@ -128,7 +128,11 @@ const seeThem = (n: number) => `Open RawJobs on your computer to see ${n === 1 ?
 
 /** The connect confirmation: what the bot will send, and where to choose. */
 export const connectedMessage = () =>
-  message("🔔 <b>Connected</b>", "RawJobs will message you here when a scan finds new jobs or an update is ready.", "Choose which alerts you get in RawJobs settings.");
+  message(
+    "🔔 <b>Connected</b>",
+    "RawJobs will message you here when a scan finds new jobs or finishes, when an update is ready, and with reminders for follow-ups, interviews and offers.",
+    "Choose which alerts you get in RawJobs settings.",
+  );
 
 export const testMessage = () => message("👋 <b>Test alert</b>", "Alerts from RawJobs are working.", "Go back to RawJobs on your computer.");
 

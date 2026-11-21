@@ -1,0 +1,291 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Telegram banner mockup</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600&family=Geist+Mono:wght@500;600&display=swap">
+<style>
+[data-theme="light"] {
+  --sand-1:#fffbf5;--sand-2:#f5f1e8;--sand-3:#ede9e2;--sand-4:#e5e1db;--sand-5:#dddad3;--sand-6:#d4d0c9;--sand-7:#c4c0ba;--sand-8:#aca9a2;--sand-9:#888681;--sand-10:#77746f;--sand-11:#605d59;--sand-12:#151412;
+  --orange-3:#ffe2da;--orange-7:#ffa88c;--orange-8:#ff7e56;--orange-9:#ff5a1f;--orange-10:#dd4400;--orange-11:#a33100;
+  --green-3:#d3f3da;--green-9:#007d3e;--green-11:#007137;
+  --amber-3:#fde5c7;--amber-9:#f3aa36;--amber-11:#7f5300;
+  --red-3:#ffe1e4;--red-9:#b11f47;--red-11:#a12b46;
+  --bg-canvas:var(--sand-2);--bg-raised:var(--sand-1);--bg-overlay:var(--sand-1);--bg-hover:var(--sand-3);--bg-active:var(--sand-4);--bg-inset:var(--sand-3);
+  --border-subtle:var(--sand-6);--border-default:var(--sand-7);--border-control:var(--sand-9);--border-control-hover:var(--sand-11);
+  --text-primary:var(--sand-12);--text-secondary:var(--sand-11);--text-disabled:var(--sand-9);
+  --accent-solid:var(--orange-9);--accent-solid-hover:var(--orange-8);--brand-signal:var(--orange-9);--accent-mark:var(--orange-10);--accent-text:var(--orange-11);--accent-subtle:var(--orange-3);--on-accent:var(--sand-12);--focus-ring:var(--orange-11);
+  --success-solid:var(--green-9);--success-text:var(--green-11);--success-subtle:var(--green-3);
+  --warning-solid:var(--amber-9);--warning-text:var(--amber-11);--warning-subtle:var(--amber-3);
+  --danger-solid:var(--red-9);--danger-text:var(--red-11);--danger-subtle:var(--red-3);
+  --scrim:rgba(21,20,18,.32);
+  --shadow-l1:none;--shadow-l2:0 4px 12px rgba(21,20,18,.06);--shadow-l3:0 8px 24px rgba(21,20,18,.07);
+}
+[data-theme="dark"] {
+  --sand-1:#120f0b;--sand-2:#181611;--sand-3:#201d18;--sand-4:#27241f;--sand-5:#2e2b26;--sand-6:#37342e;--sand-7:#45423c;--sand-8:#5c5953;--sand-9:#6b6964;--sand-10:#7d7a75;--sand-11:#cac7c2;--sand-12:#ecebe8;
+  --orange-3:#351005;--orange-7:#762100;--orange-8:#9c2e00;--orange-9:#ff5a1f;--orange-10:#ff7a51;--orange-11:#ff9d7f;
+  --green-3:#082412;--green-9:#5bcc80;--green-11:#89dea1;
+  --amber-3:#2b1901;--amber-9:#f3aa36;--amber-11:#f6bb6a;
+  --red-3:#331016;--red-9:#f86680;--red-11:#ffaeb7;
+  --bg-canvas:var(--sand-1);--bg-raised:var(--sand-2);--bg-overlay:var(--sand-3);--bg-hover:var(--sand-3);--bg-active:var(--sand-4);--bg-inset:var(--sand-1);
+  --border-subtle:var(--sand-6);--border-default:var(--sand-7);--border-control:var(--sand-9);--border-control-hover:var(--sand-11);
+  --text-primary:var(--sand-12);--text-secondary:var(--sand-11);--text-disabled:var(--sand-9);
+  --accent-solid:var(--orange-9);--accent-solid-hover:var(--orange-10);--brand-signal:var(--orange-9);--accent-mark:var(--orange-9);--accent-text:var(--orange-11);--accent-subtle:var(--orange-3);--on-accent:var(--sand-1);--focus-ring:var(--orange-10);
+  --success-solid:var(--green-9);--success-text:var(--green-11);--success-subtle:var(--green-3);
+  --warning-solid:var(--amber-9);--warning-text:var(--amber-11);--warning-subtle:var(--amber-3);
+  --danger-solid:var(--red-9);--danger-text:var(--red-11);--danger-subtle:var(--red-3);
+  --scrim:rgba(0,0,0,.6);
+  --shadow-l1:inset 0 1px 0 rgba(255,255,255,.04);--shadow-l2:inset 0 1px 0 rgba(255,255,255,.06),0 4px 12px rgba(0,0,0,.32);--shadow-l3:inset 0 1px 0 rgba(255,255,255,.06),0 12px 32px rgba(0,0,0,.4);
+}
+* { box-sizing: border-box; }
+body { margin: 0; font: 400 1rem/1.5rem "Geist", ui-sans-serif, system-ui, sans-serif; background: #e9e5dd; color: #151412; }
+.page { max-width: 1180px; margin: 0 auto; padding: 32px 16px 64px; }
+.page > h1 { font: 600 1.5rem/1.875rem "Geist", sans-serif; margin: 0 0 4px; }
+.page > p.lede { margin: 0 0 28px; color: #605d59; max-width: 72ch; }
+.stack { display: grid; gap: 36px; margin-bottom: 36px; }
+.row { display: grid; grid-template-columns: repeat(auto-fit, minmax(400px, 1fr)); gap: 24px; margin-bottom: 36px; }
+.label { font: 500 .875rem/1.25rem "Geist", sans-serif; margin: 0 0 8px; }
+.label small { font-weight: 400; color: #605d59; }
+
+/* Fake app window */
+.frame { position: relative; background: var(--bg-canvas); color: var(--text-primary); border: 1px solid var(--border-subtle); overflow: hidden; border-radius: 4px; }
+.frame.phone { width: 375px; margin: 0 auto; }
+.bar { display: flex; align-items: center; gap: 10px; height: 48px; padding: 0 16px; border-bottom: 1px solid var(--border-subtle); background: var(--bg-canvas); }
+.word { font: 600 1.0625rem "Geist Mono", monospace; letter-spacing: -.02em; display: inline-flex; align-items: center; gap: 2px; }
+.word::after { content: ""; width: 7px; height: 14px; background: var(--brand-signal); }
+.bar nav { display: flex; gap: 18px; margin-left: 16px; font-size: .875rem; color: var(--text-secondary); }
+.bar nav .on { color: var(--text-primary); font-weight: 500; }
+.bar .right { margin-left: auto; display: flex; gap: 8px; align-items: center; }
+.frame.phone .bar nav { display: none; }
+.body { padding: 16px; display: grid; gap: 12px; }
+
+/* Radar toolbar + job rows (context only) */
+.tools { display: flex; gap: 6px; align-items: center; font-size: .8125rem; color: var(--text-secondary); }
+.tools span { padding: 4px 10px; border: 1px solid var(--border-subtle); border-radius: 4px; background: var(--bg-raised); }
+.tools span.on { color: var(--text-primary); border-color: var(--border-default); font-weight: 500; }
+.jobs { border: 1px solid var(--border-subtle); background: var(--bg-raised); border-radius: 4px; }
+.job { display: flex; align-items: center; gap: 12px; padding: 12px 14px; border-top: 1px solid var(--border-subtle); }
+.job:first-child { border-top: 0; }
+.job .score { flex: none; width: 34px; height: 24px; display: grid; place-items: center; font: 600 .75rem "Geist Mono", monospace; border: 1px solid var(--border-subtle); border-radius: 4px; color: var(--text-secondary); }
+.job .score.hi { color: var(--accent-text); background: var(--accent-subtle); border-color: transparent; }
+.job b { font-weight: 500; font-size: .875rem; display: block; }
+.job small { color: var(--text-secondary); font-size: .75rem; }
+
+/* Buttons */
+.btn { white-space: nowrap; font: 500 .875rem/1.25rem "Geist", sans-serif; height: 36px; padding: 0 14px; display: inline-flex; align-items: center; justify-content: center; gap: 6px; border-radius: 4px; border: 1px solid var(--border-control); background: var(--bg-raised); color: var(--text-primary); }
+.btn.sm { height: 30px; padding: 0 10px; font-size: .8125rem; }
+.btn.primary { background: var(--accent-solid); border-color: var(--accent-solid); color: var(--on-accent); }
+.btn.ghost { border-color: transparent; background: none; color: var(--text-secondary); }
+.btn svg, .ico svg { width: 14px; height: 14px; }
+
+/* THE BANNER */
+.tg { display: grid; grid-template-columns: auto 1fr auto; gap: 16px; align-items: start; padding: 18px 20px; background: var(--bg-raised); border: 1px solid var(--border-subtle); border-radius: 4px; box-shadow: var(--shadow-l1); }
+.tg .icon { width: 40px; height: 40px; display: grid; place-items: center; background: var(--bg-inset); border: 1px solid var(--border-subtle); color: var(--text-primary); border-radius: 4px; }
+.tg .icon svg { width: 20px; height: 20px; }
+.tg h2 { font: 600 1rem/1.5rem "Geist", sans-serif; margin: 0 0 4px; }
+.tg p { margin: 0; font-size: .875rem; line-height: 1.3125rem; max-width: 68ch; }
+.tg .muted { color: var(--text-secondary); }
+.tg .fine { margin-top: 8px; font-size: .75rem; line-height: 1rem; color: var(--text-secondary); display: flex; gap: 6px; align-items: center; }
+.tg .fine svg { width: 12px; height: 12px; flex: none; }
+.tg .extra { margin-top: 12px; padding: 8px 10px; background: var(--bg-inset); border: 1px solid var(--border-subtle); border-radius: 4px; font-size: .8125rem; line-height: 1.25rem; color: var(--text-secondary); }
+.tg .extra a { color: var(--text-primary); font-weight: 500; text-decoration: underline; text-underline-offset: 2px; }
+.tg .acts { display: flex; gap: 8px; align-items: center; }
+.frame.phone .tg { grid-template-columns: auto 1fr; padding: 16px; }
+.frame.phone .tg .acts { grid-column: 1 / -1; flex-direction: column-reverse; align-items: stretch; }
+.frame.phone .tg .btn { height: 44px; }
+
+/* Phone: collapsed with Read more */
+.frame.phone .tg.compact { gap: 6px 12px; padding: 14px; }
+.frame.phone .tg.compact .icon { width: 32px; height: 32px; }
+.frame.phone .tg.compact .icon svg { width: 16px; height: 16px; }
+.frame.phone .tg.compact h2 { font-size: .9375rem; margin: 4px 0 2px; }
+.tg .clamp { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.tg .more { font: 500 .8125rem/1.25rem "Geist", sans-serif; color: var(--text-primary); background: none; border: 0; padding: 0; margin-top: 4px; min-height: 24px; text-decoration: underline; text-underline-offset: 2px; }
+.frame.phone .tg .acts.row2 { flex-direction: row; margin-top: 6px; }
+.frame.phone .tg .acts.row2 .btn { flex: 1; height: 40px; }
+.frame.phone .tg .acts.row2 .btn.ghost { flex: none; }
+
+/* Done + slim states */
+.ok { display: flex; gap: 10px; align-items: center; padding: 12px 16px; background: var(--success-subtle); border: 1px solid var(--border-subtle); border-radius: 4px; font-size: .875rem; }
+.ok .dot { width: 8px; height: 8px; background: var(--success-solid); flex: none; }
+.ok .x { margin-left: auto; color: var(--text-secondary); }
+.slim { display: flex; gap: 8px; align-items: center; font-size: .8125rem; color: var(--text-secondary); padding: 2px 2px; }
+.slim svg { width: 14px; height: 14px; flex: none; }
+.slim a { color: var(--text-primary); font-weight: 500; text-decoration: underline; text-underline-offset: 2px; }
+.slim .x { margin-left: auto; }
+
+/* Telegram chat */
+.tgchat { background: #0e1621; color: #fff; padding: 16px; border-radius: 4px; font: 15px/1.45 -apple-system, "Segoe UI", Roboto, sans-serif; }
+.tgchat .h { display: flex; gap: 10px; align-items: center; border-bottom: 1px solid #1f2b38; padding-bottom: 10px; margin-bottom: 14px; }
+.tgchat .av { width: 36px; height: 36px; border-radius: 50%; background: #ff5a1f; display: grid; place-items: center; font-weight: 700; }
+.tgchat .s { color: #7f91a4; font-size: 13px; }
+.tgchat .me { background: #2b5278; border-radius: 12px 12px 4px 12px; padding: 6px 12px; margin: 0 0 10px auto; width: max-content; }
+.tgchat .b { background: #182533; border-radius: 12px 12px 12px 4px; padding: 8px 12px 6px; max-width: 380px; }
+.tgchat .t { color: #7f91a4; font-size: 12px; text-align: right; }
+
+.new { outline: 2px dashed var(--accent-mark); outline-offset: 3px; }
+
+/* Notes */
+.logic { background: #fffbf5; border: 1px solid #d4d0c9; padding: 20px 24px; border-radius: 4px; }
+.logic h2 { font: 600 1.125rem/1.5rem "Geist", sans-serif; margin: 0 0 12px; }
+.logic ol, .logic ul { margin: 0 0 12px; padding-left: 20px; }
+.logic li { margin: 4px 0; font-size: .9375rem; }
+.logic code { font: 500 .8125rem "Geist Mono", monospace; background: #ede9e2; padding: 1px 4px; }
+@media (max-width: 520px) { .row { grid-template-columns: 1fr; } .frame.phone { width: 100%; } .tg { grid-template-columns: auto 1fr; } .tg .acts { grid-column: 1 / -1; } }
+</style>
+</head>
+<body>
+<svg width="0" height="0" style="position:absolute">
+  <symbol id="send" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14.5 21.5 22 2 2 9.5l8 3.5 4.5 8.5Z"/><path d="M22 2 10 13"/></symbol>
+  <symbol id="lock" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="11" width="16" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></symbol>
+  <symbol id="x" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M18 6 6 18M6 6l12 12"/></symbol>
+  <symbol id="scan" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M21 12a9 9 0 1 1-3-6.7L21 8"/><path d="M21 3v5h-5"/></symbol>
+</svg>
+
+<div class="page">
+  <h1>Telegram banner on the Radar</h1>
+  <p class="lede">Shown on the Radar to people who haven't connected Telegram, after their first scan. The copy is the approved option A, fact-checked against the code. Dashed outlines mark what's new.</p>
+
+  <div class="stack">
+    <div>
+      <p class="label">1 · Desktop, dark <small>· daily scans and daily summary both off, so the extra line shows</small></p>
+      <div class="frame" data-theme="dark">
+        <div class="bar"><span class="word">rawjobs</span><nav><span class="on">Radar</span><span>Pipeline</span><span>Companies</span><span>Settings</span></nav><div class="right"><span class="btn sm"><svg><use href="#scan"/></svg> Scan now</span></div></div>
+        <div class="body">
+          <section class="tg new" aria-labelledby="h1">
+            <span class="icon"><svg><use href="#send"/></svg></span>
+            <div>
+              <h2 id="h1">Get RawJobs on your phone</h2>
+              <p class="muted">Connect Telegram and RawJobs will message you when a scan finds new jobs, when a scan you started finishes, and when an update is ready or required. It can also remind you to follow up, prepare for interviews and answer offers in time.</p>
+              <p class="fine"><svg><use href="#lock"/></svg> Free. Two steps in Telegram. Your bot token stays on this computer.</p>
+              <p class="extra">For reminders, also turn on <a>daily scans</a> or the <a>daily summary</a> after you connect.</p>
+            </div>
+            <div class="acts"><span class="btn ghost">Not now</span><span class="btn primary">Connect Telegram</span></div>
+          </section>
+          <div class="tools"><span class="on">All 214</span><span>New 12</span><span>Strong 20</span></div>
+          <div class="jobs">
+            <div class="job"><span class="score hi">92</span><div><b>Senior Product Manager, Payments</b><small>Northwind · London · 2 days ago</small></div></div>
+            <div class="job"><span class="score hi">88</span><div><b>Product Lead, Growth</b><small>Contoso · Remote · 3 days ago</small></div></div>
+            <div class="job"><span class="score">74</span><div><b>Product Manager, Platform</b><small>Fabrikam · London · 5 days ago</small></div></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div>
+      <p class="label">2 · Desktop, light <small>· daily scans already on, so no extra line</small></p>
+      <div class="frame" data-theme="light">
+        <div class="bar"><span class="word">rawjobs</span><nav><span class="on">Radar</span><span>Pipeline</span><span>Companies</span><span>Settings</span></nav><div class="right"><span class="btn sm"><svg><use href="#scan"/></svg> Scan now</span></div></div>
+        <div class="body">
+          <section class="tg new" aria-labelledby="h2">
+            <span class="icon"><svg><use href="#send"/></svg></span>
+            <div>
+              <h2 id="h2">Get RawJobs on your phone</h2>
+              <p class="muted">Connect Telegram and RawJobs will message you when a scan finds new jobs, when a scan you started finishes, and when an update is ready or required. It can also remind you to follow up, prepare for interviews and answer offers in time.</p>
+              <p class="fine"><svg><use href="#lock"/></svg> Free. Two steps in Telegram. Your bot token stays on this computer.</p>
+            </div>
+            <div class="acts"><span class="btn ghost">Not now</span><span class="btn primary">Connect Telegram</span></div>
+          </section>
+          <div class="tools"><span class="on">All 214</span><span>New 12</span><span>Strong 20</span></div>
+          <div class="jobs">
+            <div class="job"><span class="score hi">92</span><div><b>Senior Product Manager, Payments</b><small>Northwind · London · 2 days ago</small></div></div>
+            <div class="job"><span class="score">74</span><div><b>Product Manager, Platform</b><small>Fabrikam · London · 5 days ago</small></div></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="row">
+    <div>
+      <p class="label">3a · Phone, collapsed (default) <small>· two lines and Read more, so jobs stay in view</small></p>
+      <div class="frame phone" data-theme="light">
+        <div class="bar"><span class="word">rawjobs</span><div class="right"><span class="btn sm"><svg><use href="#scan"/></svg> Scan</span></div></div>
+        <div class="body">
+          <section class="tg compact new" aria-labelledby="h3">
+            <span class="icon"><svg><use href="#send"/></svg></span>
+            <div>
+              <h2 id="h3">Get RawJobs on your phone</h2>
+              <p class="muted clamp">Connect Telegram and RawJobs will message you when a scan finds new jobs, when a scan you started finishes, and when an update is ready or required. It can also remind you to follow up, prepare for interviews and answer offers in time.</p>
+              <button class="more" type="button" aria-expanded="false">Read more</button>
+            </div>
+            <div class="acts row2"><span class="btn ghost">Not now</span><span class="btn primary">Connect Telegram</span></div>
+          </section>
+          <div class="tools"><span class="on">All 214</span><span>New 12</span><span>Strong 20</span></div>
+          <div class="jobs">
+            <div class="job"><span class="score hi">92</span><div><b>Senior Product Manager, Payments</b><small>Northwind · London</small></div></div>
+            <div class="job"><span class="score hi">88</span><div><b>Product Lead, Growth</b><small>Contoso · Remote</small></div></div>
+            <div class="job"><span class="score">74</span><div><b>Product Manager, Platform</b><small>Fabrikam · London</small></div></div>
+            <div class="job"><span class="score">71</span><div><b>Product Manager, Data</b><small>Tailspin · London</small></div></div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div>
+      <p class="label">3b · Phone, after Read more <small>· full text, lock line and reminders tip; Show less folds it</small></p>
+      <div class="frame phone" data-theme="light">
+        <div class="bar"><span class="word">rawjobs</span><div class="right"><span class="btn sm"><svg><use href="#scan"/></svg> Scan</span></div></div>
+        <div class="body">
+          <section class="tg compact new" aria-labelledby="h3b">
+            <span class="icon"><svg><use href="#send"/></svg></span>
+            <div>
+              <h2 id="h3b">Get RawJobs on your phone</h2>
+              <p class="muted">Connect Telegram and RawJobs will message you when a scan finds new jobs, when a scan you started finishes, and when an update is ready or required. It can also remind you to follow up, prepare for interviews and answer offers in time.</p>
+              <p class="fine"><svg><use href="#lock"/></svg> Free. Two steps in Telegram. Your bot token stays on this computer.</p>
+              <p class="extra">For reminders, also turn on <a>daily scans</a> or the <a>daily summary</a> after you connect.</p>
+              <button class="more" type="button" aria-expanded="true">Show less</button>
+            </div>
+            <div class="acts row2"><span class="btn ghost">Not now</span><span class="btn primary">Connect Telegram</span></div>
+          </section>
+          <div class="jobs">
+            <div class="job"><span class="score hi">92</span><div><b>Senior Product Manager, Payments</b><small>Northwind · London</small></div></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="row">
+    <div style="display:grid;gap:24px;align-content:start">
+      <div>
+        <p class="label">4 · Just connected <small>· replaces the banner, closes itself after 8 s</small></p>
+        <div class="frame" data-theme="dark"><div class="body">
+          <div class="ok new" role="status"><span class="dot"></span><span><b>Connected.</b> A welcome message is waiting in Telegram.</span><span class="x"><svg width="14" height="14"><use href="#x"/></svg></span></div>
+          <div class="tools"><span class="on">All 214</span><span>New 12</span><span>Strong 20</span></div>
+        </div></div>
+      </div>
+      <div>
+        <p class="label">5 · After "Not now" twice <small>· one quiet line above the toolbar</small></p>
+        <div class="frame" data-theme="dark"><div class="body">
+          <div class="slim new"><svg><use href="#send"/></svg><span>Get new jobs and reminders on your phone.</span><a>Connect Telegram</a><span class="x"><svg width="14" height="14"><use href="#x"/></svg></span></div>
+          <div class="tools"><span class="on">All 214</span><span>New 12</span><span>Strong 20</span></div>
+        </div></div>
+      </div>
+      <div>
+        <p class="label">6 · First message from the bot <small>· updated text, sent on connect</small></p>
+        <div class="tgchat new">
+          <div class="h"><div class="av">R</div><div><b>my_rawjobs_bot</b><div class="s">bot</div></div></div>
+          <div class="me">/start</div>
+          <div class="b">🔔 <b>Connected</b><br><br>RawJobs will message you here when a scan finds new jobs or finishes, when an update is ready, and with reminders for follow-ups, interviews and offers.<br><br>👉 <i>Choose which alerts you get in RawJobs settings.</i><div class="t">10:42</div></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <section class="logic">
+    <h2>How it behaves</h2>
+    <ul>
+      <li><b>Shows when:</b> Telegram isn't connected, RawJobs runs on this computer, and the first scan has finished. Never during setup: the checklist row already covers that.</li>
+      <li><b>On phones (under 640 px):</b> starts folded: headline, two lines of text, Read more, then the buttons on one row. About a third of the screen, so jobs stay in view. Read more shows the full text, the lock line and the reminders tip; Show less folds it again. Wider screens always show it in full.</li>
+      <li><b>Connect Telegram:</b> opens the same two-step dialog as the scan bell (BotFather token, then say hi). The user stays on the Radar.</li>
+      <li><b>Extra line:</b> only when daily scans and the daily summary are both off. Its links open Settings → Scans and Settings → Notifications.</li>
+      <li><b>Not now:</b> hides it for 7 days. The second "Not now" switches to the quiet line (5). Its × hides it for good. Settings → Notifications still works any time.</li>
+      <li><b>After connecting:</b> the success line (4), then nothing. The bot sends the updated first message (6).</li>
+      <li><b>Disconnecting later</b> doesn't bring the banner back. The quiet line (5) does, unless it was closed with ×.</li>
+      <li><b>Copy facts:</b> new-job messages come from scheduled scans and the background check. "Scan finished" messages come from scans you start. Update messages need the installed app. Reminders only go out with scheduled scans or the daily summary.</li>
+    </ul>
+  </section>
+</div>
+</body>
+</html>

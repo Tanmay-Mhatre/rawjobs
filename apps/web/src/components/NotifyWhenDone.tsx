@@ -72,30 +72,61 @@ export function NotifyBell({
         )}
       </RjIconButton>
 
-      <Dialog open={setup} onClose={() => setSetup(false)} labelledBy="tg-setup-title" placement="bottom">
-        <Card className="relative max-h-[90vh] overflow-y-auto p-5 shadow-l3 sm:p-6">
-          <div className="mb-4 flex items-start gap-3">
-            <div className="min-w-0 flex-1">
-              <h2 id="tg-setup-title" className="type-subheading font-semibold">
-                Get a Telegram message when it's done
-              </h2>
-              <p className="mt-0.5 type-small text-muted">Two quick steps, once. Your scan keeps running meanwhile, and every scan after it sends a message too.</p>
-            </div>
-            <IconButton label="Close" className="-mr-2 -mt-1" onClick={() => setSetup(false)}>
-              <X className="size-4" />
-            </IconButton>
-          </div>
-          <TelegramAlerts
-            footnote="Once it's connected, you get a message when this scan finishes, and after every scan from then on."
-            onChanged={onSaved}
-            onConnected={() => {
-              onConnected();
-              setSetup(false);
-            }}
-          />
-        </Card>
-      </Dialog>
+      <TelegramSetupDialog
+        open={setup}
+        onClose={() => setSetup(false)}
+        title="Get a Telegram message when it's done"
+        intro="Two quick steps, once. Your scan keeps running meanwhile, and every scan after it sends a message too."
+        footnote="Once it's connected, you get a message when this scan finishes, and after every scan from then on."
+        onChanged={onSaved}
+        onConnected={onConnected}
+      />
     </>
+  );
+}
+
+/** The two Telegram setup steps in a dialog, over the page (the scan bell and the Radar's banner). Closes once connected. */
+export function TelegramSetupDialog({
+  open,
+  onClose,
+  title,
+  intro,
+  footnote,
+  onChanged,
+  onConnected,
+}: {
+  open: boolean;
+  onClose: () => void;
+  title: string;
+  intro: string;
+  footnote?: string;
+  onChanged: () => Promise<void>;
+  onConnected: () => void;
+}) {
+  return (
+    <Dialog open={open} onClose={onClose} labelledBy="tg-setup-title" placement="bottom">
+      <Card className="relative max-h-[90vh] overflow-y-auto p-5 shadow-l3 sm:p-6">
+        <div className="mb-4 flex items-start gap-3">
+          <div className="min-w-0 flex-1">
+            <h2 id="tg-setup-title" className="type-subheading font-semibold">
+              {title}
+            </h2>
+            <p className="mt-0.5 type-small text-muted">{intro}</p>
+          </div>
+          <IconButton label="Close" className="-mr-2 -mt-1" onClick={onClose}>
+            <X className="size-4" />
+          </IconButton>
+        </div>
+        <TelegramAlerts
+          footnote={footnote}
+          onChanged={onChanged}
+          onConnected={() => {
+            onConnected();
+            onClose();
+          }}
+        />
+      </Card>
+    </Dialog>
   );
 }
 
