@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>Features · RawJobs</title>
+<title>RawJobs features: careers-page job search, match scores, alerts and tracking</title>
 <meta name="description" content="Everything RawJobs does: finds jobs on __COMPANIES_ROUND__ companies' careers pages, scores each one with rules you can read, tracks your applications and alerts you on Telegram. Free and open source, for Windows, Mac and Linux.">
 <link rel="canonical" href="__SITE_URL__/features">
 <meta property="og:type" content="website">
@@ -34,9 +34,8 @@
   r.classList.add('js');
 })();
 </script>
+<link rel="stylesheet" href="__SHARED_CSS__">
 <style>
-/*__TOKENS__*/
-/*__BUNDLE__*/
 
 /* ===== Features page =====
    Same tokens and cinematic layer as the home page (display type, one serif accent, glass, glow), laid out as a
@@ -67,7 +66,7 @@ p { margin: 0; }
 h1, h2, h3 { margin: 0; text-wrap: balance; }
 .serif { font-family: var(--font-serif); font-style: italic; font-weight: 400; letter-spacing: -0.01em; font-size: 1.08em; line-height: 0; }
 .eyebrow { font: var(--text-label); font-family: var(--font-mono); color: var(--text-secondary); }
-.eyebrow::before { content: "// "; color: var(--text-secondary); }
+.eyebrow::before { content: "// " / ""; color: var(--text-secondary); }
 .skip { position: absolute; left: var(--space-4); top: -100px; z-index: 50; }
 .skip:focus-visible { top: var(--space-4); }
 .btn-lg { height: var(--control-lg); padding: 0 var(--space-6); font: var(--text-body-strong); }
@@ -439,6 +438,16 @@ h1, h2, h3 { margin: 0; text-wrap: balance; }
         <span class="card__ic" aria-hidden="true"><svg class="rj-icon" viewBox="0 0 24 24"><path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/><path d="M14 2v4a2 2 0 0 0 2 2h4"/><path d="M10 13H8"/><path d="M16 17H8"/></svg></span>
         <h3>Job detail, ready for your CV</h3>
         <p>Why it matched, the description, salary, your notes and status. Copy the description in one click to tailor your CV.</p>
+      </li>
+      <li class="card">
+        <span class="card__ic" aria-hidden="true"><svg class="rj-icon" viewBox="0 0 24 24"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg></span>
+        <h3>Who you know there</h3>
+        <p>Import your own LinkedIn data export and each job shows your connections at that company, with people search links and message drafts you copy and send yourself. Read on your computer only.</p>
+      </li>
+      <li class="card">
+        <span class="card__ic" aria-hidden="true"><svg class="rj-icon" viewBox="0 0 24 24"><path d="M3 3v16a2 2 0 0 0 2 2h16"/><path d="m19 9-5 5-4-4-3 3"/></svg></span>
+        <h3>Learns what you like</h3>
+        <p>Best match learns from the jobs you save, apply to or move along, against the ones you mark Not interested, and reorders your Radar. On your computer only.</p>
       </li>
       <li class="card card--wide">
         <span class="card__ic" aria-hidden="true"><svg class="rj-icon" viewBox="0 0 24 24"><rect width="20" height="16" x="2" y="4" rx="2"/><path d="M6 8h.01"/><path d="M10 8h.01"/><path d="M14 8h.01"/><path d="M18 8h.01"/><path d="M8 12h.01"/><path d="M12 12h.01"/><path d="M16 12h.01"/><path d="M7 16h10"/></svg></span>

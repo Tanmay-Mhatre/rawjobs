@@ -1,2 +1,9 @@
 # Short link for the install steps, for the README and for sharing.
 /install /#get 302
+
+# One short link per place we share the site, so each shows up as its own page in Web Analytics.
+/hn /#get 302
+/reddit /#get 302
+/ph /#get 302
+/gh /#get 302
+/li /#get 302

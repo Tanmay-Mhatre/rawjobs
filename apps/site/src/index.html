@@ -3,12 +3,12 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>RawJobs: jobs, straight from the source</title>
-<meta name="description" content="RawJobs finds jobs on the careers pages of __COMPANIES_ROUND__ companies and scores each one with rules you can read. Free and open source, for Windows, Mac and Linux.">
+<title>RawJobs: free job search app that checks __COMPANIES_ROUND__ company careers pages</title>
+<meta name="description" content="Find jobs on companies’ own careers pages, scored 0 to 100 for you, then apply on the company site. Free, open source, no account. Windows, Mac and Linux.">
 <link rel="canonical" href="__SITE_URL__/">
 <meta property="og:type" content="website">
 <meta property="og:site_name" content="RawJobs">
-<meta property="og:title" content="RawJobs: jobs, straight from the source">
+<meta property="og:title" content="RawJobs: free job search app that checks __COMPANIES_ROUND__ company careers pages">
 <meta property="og:description" content="Free, open-source job radar for Windows, Mac and Linux. Finds jobs on the careers pages of __COMPANIES_ROUND__ companies and scores every one with rules you can read.">
 <meta property="og:url" content="__SITE_URL__/">
 <meta property="og:image" content="__SITE_URL__/og.png">
@@ -20,6 +20,7 @@
 <meta name="theme-color" content="#f5f1e8" media="(prefers-color-scheme: light)"><!-- design-lint-ignore: bg-canvas, light (metas can't read tokens) -->
 <meta name="theme-color" content="#120f0b" media="(prefers-color-scheme: dark)"><!-- design-lint-ignore: bg-canvas, dark -->
 <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<!--__JSONLD__-->
 <link rel="apple-touch-icon" href="/apple-touch-icon.png">
 <link rel="preload" href="/fonts/Geist-400.woff2" as="font" type="font/woff2" crossorigin>
 <link rel="preload" href="/fonts/Geist-600.woff2" as="font" type="font/woff2" crossorigin>
@@ -64,9 +65,8 @@
   setTimeout(function () { if (r.classList.contains('intro')) { r.classList.remove('intro'); dispatchEvent(new Event('rawjobs:intro-done')); } }, 6000);
 })();
 </script>
+<link rel="stylesheet" href="__SHARED_CSS__">
 <style>
-/*__TOKENS__*/
-/*__BUNDLE__*/
 
 /* ===== Site layer =====
    Layout: a source log on paper. The hero's copy sits on clean paper over a wall of real careers-page addresses,
@@ -796,7 +796,7 @@ h1 .serif, h2 .serif { font-size: 1.08em; line-height: 0; }
 .split { grid-template-columns: minmax(0, 5fr) minmax(0, 7fr); }
 .section h2 { font: var(--text-display-section); letter-spacing: -0.045em; }
 .section .eyebrow, .hero .eyebrow { font-family: var(--font-mono); font-weight: 500; letter-spacing: 0; }
-.section .eyebrow::before, .hero .eyebrow::before { content: "// "; color: var(--text-secondary); }
+.section .eyebrow::before, .hero .eyebrow::before { content: "// " / ""; color: var(--text-secondary); }
 @media (max-width: 920px) { .split { grid-template-columns: minmax(0, 1fr); } }
 /* how it works gets the full width: three steps side by side, then the dashboard big */
 #how .split { grid-template-columns: minmax(0, 1fr); gap: var(--space-12); }
@@ -934,6 +934,15 @@ h1 .serif, h2 .serif { font-size: 1.08em; line-height: 0; }
 .open-line .rj-icon { flex: none; }
 /* the score's "why" line: read out to screen readers on every change, not shown (the gauge and bar say it) */
 .lab .why-line { position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
+/* ---------- compare: a plain table that scrolls sideways on small screens ---------- */
+.cmp-wrap { overflow-x: auto; border: 1px solid var(--border-default); border-radius: var(--radius-md); }
+.cmp { width: 100%; min-width: 640px; border-collapse: collapse; font: var(--text-small); }
+.cmp th, .cmp td { padding: var(--space-3) var(--space-4); text-align: left; vertical-align: top; border-bottom: 1px solid var(--border-default); }
+.cmp tbody tr:last-child th, .cmp tbody tr:last-child td { border-bottom: 0; }
+.cmp thead th { font-weight: 600; color: var(--text-primary); background: var(--bg-inset); }
+.cmp tbody th { font-weight: 500; color: var(--text-primary); }
+.cmp td { color: var(--text-secondary); }
+.cmp td:nth-child(2) { color: var(--text-primary); font-weight: 500; }
 /* the floating "Get RawJobs": appears while the nav is tucked away */
 .fcta { position: fixed; z-index: var(--z-sticky); right: max(var(--gutter), env(safe-area-inset-right, 0px)); bottom: calc(var(--space-6) + env(safe-area-inset-bottom, 0px));
   box-shadow: var(--shadow-l2), 0 12px 40px -8px var(--signal-glow); opacity: 0; transform: translateY(16px); pointer-events: none;
@@ -1005,7 +1014,7 @@ h1 .serif, h2 .serif { font-size: 1.08em; line-height: 0; }
 <div class="rj-intro" id="rj-intro" aria-hidden="true">
   <div class="rj-intro__sheet">
     <div class="rj-intro__mark"><span class="rj-intro__word"><span>r</span><span>a</span><span>w</span><span>j</span><span>o</span><span>b</span><span>s</span></span><span class="rj-intro__cursor"></span></div>
-    <p class="rj-intro__line">reading <span class="rj-intro__n">__COMPANIES__</span> careers pages</p>
+    <p class="rj-intro__line">checking <span class="rj-intro__n">__COMPANIES__</span> companies</p>
     <button class="rj-intro__skip" type="button" tabindex="-1">Skip</button>
     <svg class="rj-intro__edge" viewBox="0 0 100 100" preserveAspectRatio="none" focusable="false"><path class="rj-intro__fill" d="M0 0H100Q50 200 0 0Z"/><path class="rj-intro__rule" d="M100 0Q50 200 0 0"/></svg>
   </div>
@@ -1422,7 +1431,7 @@ h1 .serif, h2 .serif { font-size: 1.08em; line-height: 0; }
         <div class="wall__scan" id="wall-scan" aria-hidden="true"></div>
         <ul class="wall__stamps" id="wall-stamps" aria-label="Example matches marked on the wall"></ul>
         <div class="wall__tip" id="wall-tip" role="tooltip" hidden></div>
-        <p class="wall__meter"><strong id="wall-count" class="num">__COMPANIES__</strong> <span id="wall-label">careers pages in the directory</span></p>
+        <p class="wall__meter"><strong id="wall-count" class="num">__COMPANIES__</strong> <span id="wall-label">companies in the directory</span></p>
       </div>
       <p class="hero__lede" data-step style="--i:3">RawJobs reads companies’ own careers pages, ranks every job by how well it fits you, and sends you straight to apply. Free, and it runs on your own Windows, Mac or Linux computer.</p>
       <p class="handheld-note" role="note"><b>It’s a computer app.</b> RawJobs installs on Windows, Mac or Linux. It won’t run on a phone or tablet, so send yourself the link. Once it’s set up, new matches can come to your phone on Telegram.</p>
@@ -1431,7 +1440,7 @@ h1 .serif, h2 .serif { font-size: 1.08em; line-height: 0; }
           <span data-cta>Get RawJobs</span>
           <svg class="rj-icon rj-icon--nudge" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></svg>
         </a>
-        <a class="rj-btn btn-lg" href="https://github.com/Tanmay-Mhatre/rawjobs" target="_blank" rel="noopener">Star on GitHub<!--__STARS__--><span class="rj-sr"> (opens in a new tab)</span></a>
+        <a class="rj-btn btn-lg" href="#scoring">See how it scores</a>
       </div>
       <p class="hero__note" data-step style="--i:5">
         <span><i class="rj-glyph rj-glyph--full" style="color:var(--success-text)" aria-hidden="true"></i>Installs in about a minute</span>
@@ -1440,16 +1449,17 @@ h1 .serif, h2 .serif { font-size: 1.08em; line-height: 0; }
       </p>
     </div>
   </div>
-  <!-- Example matches stamped on the wall: real postings from the 11 Oct 2026 feed, with scores for an example
-       product manager's resume. b: title, place, keywords, industry (they add up to s). build.mjs puts each host in the wall. -->
+  <!-- Example matches stamped on the wall: real postings from the 21 Nov 2026 feed, across fields, with scores for
+       example searches. st: the short title shown on the stamp. b: title, place, keywords, industry (they add up to s).
+       build.mjs puts each host in the wall. -->
   <script type="application/json" id="wall-data">[
-    {"s": 92, "t": "Senior Product Manager, Liquidity Platform", "co": "Airwallex", "loc": "Singapore", "host": "jobs.ashbyhq.com/airwallex", "b": [30, 18, 34, 10]},
-    {"s": 87, "t": "Senior Product Manager, Onchain", "co": "Meshpay", "loc": "United States, remote", "host": "job-boards.greenhouse.io/mesh", "b": [30, 20, 28, 9]},
-    {"s": 84, "t": "Staff Product Manager, Payments", "co": "Stripe", "loc": "SF, SEA, NYC, remote", "host": "job-boards.greenhouse.io/stripe", "b": [26, 20, 30, 8]},
-    {"s": 77, "t": "Senior Product Manager", "co": "Polymarket", "loc": "New York", "host": "jobs.ashbyhq.com/polymarket", "b": [30, 12, 27, 8]},
-    {"s": 71, "t": "Product Manager, Orderly", "co": "Orderly Network", "loc": "Remote", "host": "job-boards.greenhouse.io/orderly", "b": [24, 16, 24, 7]},
-    {"s": 62, "t": "Product Manager II, Growth", "co": "Coinbase", "loc": "Remote, USA", "host": "job-boards.greenhouse.io/coinbase", "b": [22, 14, 20, 6]},
-    {"s": 49, "t": "Senior Product Manager, Consumer Payments", "co": "Affirm", "loc": "Remote, US", "host": "job-boards.greenhouse.io/affirm", "b": [18, 10, 16, 5]}
+    {"s": 92, "st": "Senior PM", "t": "Senior Product Manager, Liquidity Platform", "co": "Airwallex", "loc": "Singapore", "host": "jobs.ashbyhq.com/airwallex", "b": [30, 18, 34, 10]},
+    {"s": 89, "st": "Nurse Practitioner", "t": "Intake Psychiatric Mental Health Nurse Practitioner - PMHNP", "co": "Blackbird Health", "loc": "Remote", "host": "job-boards.greenhouse.io/blackbirdhealth", "b": [30, 20, 30, 9]},
+    {"s": 86, "st": "Data Analyst", "t": "Senior Data Analyst for Lab Production Support", "co": "Natera", "loc": "US Remote", "host": "job-boards.greenhouse.io/natera", "b": [28, 20, 30, 8]},
+    {"s": 81, "st": "Teacher", "t": "Early Childhood Teacher", "co": "Think Academy", "loc": "Remote", "host": "job-boards.greenhouse.io/thinkacademyus", "b": [26, 18, 29, 8]},
+    {"s": 76, "st": "Product Designer", "t": "Senior Product Designer, International Commerce", "co": "Oura", "loc": "Hybrid, London", "host": "job-boards.greenhouse.io/oura", "b": [30, 20, 20, 6]},
+    {"s": 68, "st": "Accountant", "t": "Senior Accountant", "co": "Faire", "loc": "San Francisco, CA", "host": "job-boards.greenhouse.io/faire", "b": [24, 14, 24, 6]},
+    {"s": 57, "st": "Warehouse Supervisor", "t": "Warehouse Supervisor", "co": "ChargePoint", "loc": "Campbell, CA", "host": "job-boards.greenhouse.io/chargepoint", "b": [22, 12, 18, 5]}
   ]</script>
 </section>
 
@@ -1559,7 +1569,7 @@ h1 .serif, h2 .serif { font-size: 1.08em; line-height: 0; }
         </li>
         <li class="panel step" style="--i:2">
           <span class="step__n">Step 3</span>
-          <h3>Your Radar, best match first</h3>
+          <h3>Your Radar: your matches, best first</h3>
           <p>Every job gets a score from 0 to 100, with the reason written out.</p>
           <div class="step__demo" aria-hidden="true">
             <div style="display:flex;gap:8px;align-items:center"><span class="rj-score rj-score--strong"><i class="rj-glyph rj-glyph--full"></i>83</span><span style="font:var(--text-label)">Head of Product, Exchange</span></div>
@@ -1695,6 +1705,36 @@ h1 .serif, h2 .serif { font-size: 1.08em; line-height: 0; }
   </div>
 </section>
 
+<!-- ================= DEALBREAKERS ================= -->
+<section class="section" id="dealbreakers" aria-labelledby="dealbreakers-title">
+  <div class="wrap split">
+    <div class="split__head">
+      <p class="eyebrow">Dealbreakers</p>
+      <h2 id="dealbreakers-title">Skips the jobs that <em class="serif">waste</em> your time</h2>
+      <p class="prose">Tell it once. A job that breaks a rule still shows, with the reason, but it’s never a strong match and never sends an alert.</p>
+    </div>
+    <div class="split__body">
+      <div class="facts">
+        <div class="fact">
+          <svg class="rj-icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="M12 2a14.5 14.5 0 0 0 0 20 14.5 14.5 0 0 0 0-20"/><path d="M2 12h20"/></svg>
+          <h3>Won’t sponsor your visa</h3>
+          <p>List the countries you can work in. A posting that says it can’t sponsor anywhere else is flagged.</p>
+        </div>
+        <div class="fact">
+          <svg class="rj-icon" viewBox="0 0 24 24" aria-hidden="true"><rect width="20" height="12" x="2" y="6" rx="2"/><circle cx="12" cy="12" r="2"/><path d="M6 12h.01M18 12h.01"/></svg>
+          <h3>Pays below your floor</h3>
+          <p>Set your minimum pay. A posted range that tops out under it is flagged. No salary posted never counts against a job.</p>
+        </div>
+        <div class="fact">
+          <svg class="rj-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M20 10c0 4.993-5.539 10.193-7.399 11.799a1 1 0 0 1-1.202 0C9.539 20.193 4 14.993 4 10a8 8 0 0 1 16 0"/><circle cx="12" cy="10" r="3"/></svg>
+          <h3>Residents only</h3>
+          <p>“US residents only” when you live elsewhere? Flagged, so you don’t find out after applying.</p>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
 <!-- ================= GET IT ================= -->
 <section class="section get" id="get" data-os="win" aria-labelledby="get-title">
   <span id="install" aria-hidden="true"></span>
@@ -1709,7 +1749,7 @@ h1 .serif, h2 .serif { font-size: 1.08em; line-height: 0; }
       <p><b>You’re on a phone or tablet.</b> RawJobs runs on a Windows, Mac or Linux computer. Send yourself this page and open it there.</p>
       <div class="handoff__btns">
         <button class="rj-btn rj-btn--primary" type="button" id="share-link" hidden>Send to my computer</button>
-        <a class="rj-btn" id="mail-link" href="mailto:?subject=Install%20RawJobs&amp;body=Open%20this%20on%20your%20computer%3A%20__SITE_URL__%2F%23get">Email me the link</a>
+        <a class="rj-btn" id="mail-link" href="mailto:?subject=Install%20RawJobs&amp;body=Open%20this%20on%20your%20computer%3A%20__SITE_URL__%2F%23get">Email this link to myself</a>
         <button class="rj-btn" type="button" data-copy="__SITE_URL__/#get"><span class="ic" aria-hidden="true"><svg class="rj-icon ic-copy" viewBox="0 0 24 24"><rect width="14" height="14" x="8" y="8" rx="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></svg><svg class="rj-icon ic-check" viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5"/></svg></span><span>Copy link</span></button>
       </div>
     </div>
@@ -1740,12 +1780,12 @@ h1 .serif, h2 .serif { font-size: 1.08em; line-height: 0; }
         <li class="istep" data-step="2">
           <button class="istep__head" type="button" aria-expanded="false" aria-controls="sb2"><span class="istep__n">2</span>Copy the install line</button>
           <div class="istep__body" id="sb2">
-            <p>Click Copy. You don’t need to understand the line.</p>
+            <p>Click Copy. This line downloads RawJobs from its GitHub page, checks its signature and installs it in your user folder. Only paste install lines you got from this site.</p>
             <div class="line" data-only="win"><code>irm https://github.com/Tanmay-Mhatre/rawjobs/releases/latest/download/install.ps1 | iex</code>
               <button class="rj-btn rj-btn--primary" type="button" data-copy="irm https://github.com/Tanmay-Mhatre/rawjobs/releases/latest/download/install.ps1 | iex" data-advance><span class="ic" aria-hidden="true"><svg class="rj-icon ic-copy" viewBox="0 0 24 24"><rect width="14" height="14" x="8" y="8" rx="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></svg><svg class="rj-icon ic-check" viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5"/></svg></span><span>Copy</span></button></div>
             <div class="line" data-only="mac linux"><code>curl -fsSL https://github.com/Tanmay-Mhatre/rawjobs/releases/latest/download/install.sh | sh</code>
               <button class="rj-btn rj-btn--primary" type="button" data-copy="curl -fsSL https://github.com/Tanmay-Mhatre/rawjobs/releases/latest/download/install.sh | sh" data-advance><span class="ic" aria-hidden="true"><svg class="rj-icon ic-copy" viewBox="0 0 24 24"><rect width="14" height="14" x="8" y="8" rx="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></svg><svg class="rj-icon ic-check" viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5"/></svg></span><span>Copy</span></button></div>
-            <details class="what">
+            <details class="what" open>
               <summary>What does this line do?</summary>
               <ul>
                 <li>Downloads RawJobs from GitHub and the Node it runs on from nodejs.org, and checks both against signed checksums before running anything.</li>
@@ -1915,6 +1955,30 @@ h1 .serif, h2 .serif { font-size: 1.08em; line-height: 0; }
 </section>
 
 <!-- ================= FAQ ================= -->
+<section class="section" id="compare" aria-labelledby="compare-title">
+  <div class="wrap">
+    <div class="get__head">
+      <p class="eyebrow">Compare</p>
+      <h2 id="compare-title">How it’s <em class="serif">different</em></h2>
+      <p class="section__lede">An honest look, including the one thing it asks of you: an install.</p>
+    </div>
+    <div class="cmp-wrap" tabindex="0" role="region" aria-labelledby="compare-title">
+      <table class="cmp">
+        <thead><tr><th scope="col"><span class="rj-sr">Question</span></th><th scope="col">RawJobs</th><th scope="col">Big job sites</th><th scope="col">Careers-page search websites</th></tr></thead>
+        <tbody>
+          <tr><th scope="row">Where the jobs come from</th><td>Companies’ own careers pages</td><td>Posted there, or copied from elsewhere</td><td>Companies’ own careers pages</td></tr>
+          <tr><th scope="row">Who sees your search</th><td>Only you, on your computer</td><td>The site</td><td>The site</td></tr>
+          <tr><th scope="row">Why a job ranks high</th><td>Rules you can read and change</td><td>The site’s own ranking</td><td>The site’s own ranking</td></tr>
+          <tr><th scope="row">Your own list of target companies</th><td>Starred, with their newest jobs on top</td><td>Follow companies</td><td>Depends on the site</td></tr>
+          <tr><th scope="row">Alerts and tracking</th><td>Scheduled scans, Telegram alerts, a pipeline</td><td>Email alerts, saved jobs</td><td>Depends on the site</td></tr>
+          <tr><th scope="row">Cost</th><td>Free, no paid tier</td><td>Free, with paid upgrades</td><td>Usually free</td></tr>
+          <tr><th scope="row">Install</th><td>Yes, one line on your computer</td><td>No, in your browser</td><td>No, in your browser</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</section>
+
 <section class="section" id="faq" aria-labelledby="faq-title">
   <div class="wrap split">
     <div class="split__head">
@@ -1923,6 +1987,10 @@ h1 .serif, h2 .serif { font-size: 1.08em; line-height: 0; }
     </div>
     <div class="split__body">
       <div class="faq">
+        <details><summary>How is it different from LinkedIn or Indeed?<svg class="rj-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14"/><path d="M12 5v14"/></svg></summary><p class="ans">Those sites show jobs posted on them or copied from elsewhere, ranked their own way. RawJobs goes to each company’s own careers page, scores every job with rules you can read, and sends you there to apply. Your search stays on your computer. See <a href="#compare">How it’s different</a>.</p></details>
+        <details><summary>Why an app, not a website?<svg class="rj-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14"/><path d="M12 5v14"/></svg></summary><p class="ans">So it can check your companies on a schedule, keep your resume and search on your computer, and message you on Telegram when something new fits. It runs in the background and uses very little.</p></details>
+        <details><summary>Does it work for my job and my country?<svg class="rj-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14"/><path d="M12 5v14"/></svg></summary><p class="ans">Most likely. Setup offers 33 job families, from healthcare, education and logistics to engineering, sales and finance, and any place in the world, or remote. It works best where companies post jobs on an online hiring system; roles filled only through agencies or on paper won’t be in it.</p></details>
+        <details><summary>Does it apply for me?<svg class="rj-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14"/><path d="M12 5v14"/></svg></summary><p class="ans">No. You read the job and apply yourself on the company’s site. RawJobs opens the right page, and its Pipeline tracks what you applied to and what’s next.</p></details>
         <details><summary>Is it free?<svg class="rj-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14"/><path d="M12 5v14"/></svg></summary><p class="ans">Yes. RawJobs is open source (MIT), with no paid tier and no account.</p></details>
         <details><summary>Does it use AI?<svg class="rj-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14"/><path d="M12 5v14"/></svg></summary><p class="ans">No. Scores come from rules you can read and change. An optional AI re-rank, with your own key, is on the roadmap.</p></details>
         <details><summary>Which job sites does it read?<svg class="rj-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14"/><path d="M12 5v14"/></svg></summary><div class="ans"><p>Companies’ own careers pages on __SYSTEMS_N__ hiring systems, plus __BOARDS_N__ public job boards: __BOARD_NAMES__. When a job is on both, RawJobs shows the company’s own posting. A shared directory, updated weekly, tells it where to look.</p><ul class="ats-grid" aria-label="Supported hiring systems">__ATS__</ul></div></details>
@@ -1957,7 +2025,7 @@ h1 .serif, h2 .serif { font-size: 1.08em; line-height: 0; }
     <div class="foot__grid">
       <div>
         <a class="brand" href="#top" aria-label="RawJobs, back to top">__WORDMARK__</a>
-        <p class="foot__small">Built by Tanmay Mhatre. MIT licensed. Not affiliated with LinkedIn or any job site or hiring system named here; names and trademarks belong to their owners. Jobs on this page are made-up examples. This site uses cookieless Cloudflare Web Analytics; the app uses none.</p>
+        <p class="foot__small">Built by Tanmay Mhatre. MIT licensed. Not affiliated with LinkedIn or any job site or hiring system named here; names and trademarks belong to their owners. The matches on the hero wall are real postings with example scores; jobs in the other demos are made up. This site uses cookieless Cloudflare Web Analytics; the app uses none.</p>
       </div>
       <nav class="foot__links" aria-label="Project links">
         <a href="https://github.com/Tanmay-Mhatre/rawjobs" target="_blank" rel="noopener">GitHub<span class="rj-sr"> (opens in a new tab)</span></a>
@@ -2149,7 +2217,7 @@ h1 .serif, h2 .serif { font-size: 1.08em; line-height: 0; }
       '<div class="rj-breakdown"><div class="rj-breakdown__bar" role="img" aria-label="' + barLabel(j.b) + '">' +
       PARTS.map(function (p, i) { return '<span class="rj-breakdown__seg"><i style="transform:scaleX(' + (j.b[i] / p[1]).toFixed(3) + ')"></i></span>'; }).join('') +
       '</div><div class="rj-breakdown__legend num" aria-hidden="true">' + legend(j.b) + '</div></div>' +
-      '<div class="wall__tip-apply"><span>Apply opens</span><code>' + wallEsc(j.host) + '</code><span>Real job; example score for a sample resume</span></div>';
+      '<div class="wall__tip-apply"><span>Apply opens</span><code>' + wallEsc(j.host) + '</code><span>Real job; example score for a sample search</span></div>';
     wallTip.hidden = false;
     var fr = wall.getBoundingClientRect(), br = btn.getBoundingClientRect(), tr = wallTip.getBoundingClientRect();
     var top = br.bottom - fr.top + 10;
@@ -2165,12 +2233,13 @@ h1 .serif, h2 .serif { font-size: 1.08em; line-height: 0; }
     wallSlots(jobs.length).forEach(function (row, i) {
       var j = jobs[i];
       /* in that row, the address closest in length to the match's, so the swap barely changes either line */
-      var slot = row.slice().sort(function (a, b) { return Math.abs(a.textContent.length - j.host.length) - Math.abs(b.textContent.length - j.host.length); })[0];
+      var label = j.st + ' · ' + j.co;
+      var slot = row.slice().sort(function (a, b) { return Math.abs(a.textContent.length - label.length) - Math.abs(b.textContent.length - label.length); })[0];
       var r = slot.getBoundingClientRect();
       var li = document.createElement('li'), b = document.createElement('button');
       b.type = 'button'; b.className = 'stamp'; b.setAttribute('aria-expanded', 'false');
       b.setAttribute('aria-label', 'Example match, score ' + j.s + ': ' + j.t + ' at ' + j.co + '. Apply opens ' + j.host);
-      b.innerHTML = '<b data-band="' + wallBand(j.s) + '">' + j.s + '</b>' + wallEsc(j.host);
+      b.innerHTML = '<b data-band="' + wallBand(j.s) + '">' + j.s + '</b>' + wallEsc(label);
       b.style.setProperty('--d', (first + i * gap) + 'ms');
       li.style.top = (r.top - fr.top) + 'px';
       li.appendChild(b); stampsEl.appendChild(li);
@@ -2190,7 +2259,7 @@ h1 .serif, h2 .serif { font-size: 1.08em; line-height: 0; }
   document.addEventListener('keydown', function (e) { if (e.key === 'Escape') hideTip(); });
   document.addEventListener('pointerdown', function (e) { if (!e.target.closest('.stamp')) hideTip(); });
 
-  function wallDone() { wallCount.textContent = WALL_TOTAL.toLocaleString('en-US'); wallLabel.textContent = 'careers pages read, ' + stampsEl.children.length + ' example matches'; }
+  function wallDone() { wallCount.textContent = WALL_TOTAL.toLocaleString('en-US'); wallLabel.textContent = 'companies checked, ' + stampsEl.children.length + ' example matches'; }
   function startWall() {
     var my = ++wallRun; wallStarted = true;
     wallTimers.forEach(clearTimeout); wallTimers = [];
@@ -2209,7 +2278,7 @@ h1 .serif, h2 .serif { font-size: 1.08em; line-height: 0; }
     });
     placeStamps(FIRST, GAP);
     var t0 = performance.now();
-    wallLabel.textContent = 'careers pages read';
+    wallLabel.textContent = 'companies checked';
     if (window.rawjobsMotion) window.rawjobsMotion.rollNumber(wallCount, WALL_TOTAL, { from: 0, duration: SWEEP, ease: ease })
       .finished.then(function () { if (my === wallRun) wallDone(); });
     else (function count(t) {

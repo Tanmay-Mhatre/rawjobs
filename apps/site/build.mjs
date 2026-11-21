@@ -249,6 +249,28 @@ const ats = SYSTEMS.map((s) => `<li class="ats">${s}</li>`).join("");
 const score = read(join(SITE, "src/score.js")).replace(/^export /gm, "");
 const analytics = ANALYTICS_TOKEN ? `<script defer src="https://static.cloudflareinsights.com/beacon.min.js" data-cf-beacon='${JSON.stringify({ token: ANALYTICS_TOKEN })}'></script>` : "";
 
+// Tokens and components, shared by the home and features pages: one file named by its content, so a
+// visitor's browser keeps it across pages and visits (public/_headers caches /css/* for good).
+const sharedCss = `${tokens}\n${bundle}`;
+const SHARED_CSS = `/css/${createHash("sha256").update(sharedCss).digest("hex").slice(0, 16)}.css`;
+// What search engines read about the app (schema.org). A data block, so the CSP never runs it.
+const jsonLd = JSON.stringify({
+  "@context": "https://schema.org",
+  "@type": "SoftwareApplication",
+  name: "RawJobs",
+  description: "Free, open-source job search app that checks companies' own careers pages and scores every job with rules you can read.",
+  url: `${SITE_URL}/`,
+  applicationCategory: "BusinessApplication",
+  operatingSystem: "Windows, macOS, Linux",
+  softwareVersion: SHOWN_VERSION,
+  license: "https://opensource.org/licenses/MIT",
+  isAccessibleForFree: true,
+  offers: { "@type": "Offer", price: "0", priceCurrency: "USD" },
+  downloadUrl: `https://github.com/${APP_REPO}/releases/latest`,
+  author: { "@type": "Person", name: "Tanmay Mhatre" },
+}).replace(/</g, "\\u003c");
+const JSONLD = `<script type="application/ld+json">${jsonLd}</script>`;
+
 const page = (name) => {
   let out = read(join(SITE, "src", name))
     .replace("/*__TOKENS__*/", () => tokens)
@@ -258,6 +280,8 @@ const page = (name) => {
     .replaceAll("__ATS__", () => ats)
     .replace("<!--__WALL__-->", () => wallMarkup)
     .replace("<!--__ANALYTICS__-->", () => analytics)
+    .replace("<!--__JSONLD__-->", () => JSONLD)
+    .replaceAll("__SHARED_CSS__", () => SHARED_CSS)
     .replaceAll("<!--__STARS__-->", () => STARS)
     .replaceAll("<!--__OPEN_LINE__-->", () => OPEN_LINE)
     .replaceAll("__SHOWN_VERSION__", () => SHOWN_VERSION)
@@ -289,6 +313,8 @@ if (/<script>/.test(html + notFound + features)) throw new Error("An inline scri
 rmSync(DIST, { recursive: true, force: true });
 mkdirSync(join(DIST, "fonts"), { recursive: true });
 mkdirSync(join(DIST, "js"), { recursive: true });
+mkdirSync(join(DIST, "css"), { recursive: true });
+writeFileSync(join(DIST, SHARED_CSS.slice(1)), sharedCss);
 for (const [name, code] of scripts) writeFileSync(join(DIST, "js", name), code);
 writeFileSync(join(DIST, "index.html"), html);
 writeFileSync(join(DIST, "404.html"), notFound);
@@ -302,10 +328,12 @@ cpSync(join(SITE, "public"), DIST, { recursive: true });
 mkdirSync(join(DIST, "images"));
 for (const f of ["radar-light.png", "radar-dark.png"]) copyFileSync(join(ROOT, "docs/images", f), join(DIST, "images", f));
 await writeBeacon();
+// Every deploy rebuilds both pages (their numbers change), so the build day is their last change.
+const BUILT_ON = new Date().toISOString().slice(0, 10);
 writeFileSync(join(DIST, "robots.txt"), `User-agent: *\nAllow: /\n\nSitemap: ${SITE_URL}/sitemap.xml\n`);
 writeFileSync(
   join(DIST, "sitemap.xml"),
-  `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n  <url><loc>${SITE_URL}/</loc></url>\n  <url><loc>${SITE_URL}/features</loc></url>\n</urlset>\n`,
+  `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n  <url><loc>${SITE_URL}/</loc><lastmod>${BUILT_ON}</lastmod></url>\n  <url><loc>${SITE_URL}/features</loc><lastmod>${BUILT_ON}</lastmod></url>\n</urlset>\n`,
 );
 
 console.log(
