@@ -96,10 +96,12 @@ describe("readOrder", () => {
 
   it("reads a budgeted system's boards read longest ago first, never-read ones before all", () => {
     expect(readOrder("avature", boards, (e) => last[e])).toEqual(["new", "b", "c", "a"]);
+    expect(readOrder("workday", boards, (e) => last[e])).toEqual(["new", "b", "c", "a"]);
+    expect(readOrder("personio", boards, (e) => last[e])).toEqual(["new", "b", "c", "a"]);
   });
 
   it("keeps the directory order for other systems", () => {
-    expect(readOrder("workday", boards, (e) => last[e])).toEqual(boards);
+    expect(readOrder("icims", boards, (e) => last[e])).toEqual(boards);
   });
 
   it("reads a rested system's boards read longest ago first too", () => {
