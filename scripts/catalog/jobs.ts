@@ -10,9 +10,9 @@
  *
  * crawl: one group of hiring systems (GROUPS), in parallel with the others on CI. Writes
  *   <out>/groups/<group>/: jobs-<ats>-<stamp>.json.gz (one shard per system), group.json, etags.json,
- *   board-ids.json. Unchanged boards cost an empty 304 (ETags: the one-request feeds, and JOIN's first
- *   page). A board that fails, or that the time limit leaves out, keeps its previous rows and time:
- *   clients fetch stale ones live.
+ *   board-ids.json. Unchanged boards cost an empty 304 (ETags: the one-request feeds). A board that
+ *   fails, or that the time limit leaves out, keeps its previous rows and time: clients fetch stale
+ *   ones live.
  * merge: every group's shards (a group that failed: its previous saved copy) into the published files:
  *   the first format (jobs-manifest.json + shards, the five original systems only), the second
  *   (jobs-v2-*, the same five) and the third (jobs-v3-*, every system); see lib/feed-v2.ts. Plus stats.json
@@ -149,14 +149,7 @@ export function slowHosts(directory: { ats: string; slug: string }[]): Record<st
 }
 /** Feeds that are one request per board, so a 304 means nothing changed. */
 const ETAG_HOSTS = new Set(["boards-api.greenhouse.io", "api.lever.co", "api.eu.lever.co", "api.ashbyhq.com"]);
-/**
- * JOIN's first page carries the board's total and its newest jobs: the same page means the same board.
- * Later pages aren't sent an ETag (a 304 there would stand for the whole board).
- */
-const etagFor = (url: string) => {
-  const u = new URL(url);
-  return ETAG_HOSTS.has(u.host) || (u.host === "join.com" && u.pathname.endsWith("/jobs") && u.searchParams.get("page") === "1");
-};
+const etagFor = (url: string) => ETAG_HOSTS.has(new URL(url).host);
 /** Entries not refreshed for this long are dropped. */
 const DROP_AFTER_DAYS = 7;
 /** A run-over-run change this large in the jobs of the same companies (or a fall this large in companies) is flagged. */
@@ -312,7 +305,7 @@ async function crawl(out: string, group: string, generated: string, directoryFil
     return rows;
   };
   const etags = new EtagStore(join(dir, "etags.json"), join(out, "etags.json"));
-  // JOIN's company numbers, read off careers pages once (board-ids.ts).
+  // Ids some boards' APIs need, learned once (board-ids.ts).
   const ids = new FileBoardIds(join(dir, "board-ids.json"));
   // RESTED systems: unchanged reads in a row per board.
   const quiet = readJson<Record<string, number>>(join(dir, "quiet.json")) ?? {};

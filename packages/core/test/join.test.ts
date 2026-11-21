@@ -2,9 +2,14 @@ import { describe, expect, it } from "vitest";
 import { detectCompany, getConnector } from "../src/connectors";
 import { firstPageFingerprint } from "../src/connectors/types";
 import type { CompanyRef } from "../src/schema";
-import { fakeHttp, json } from "./helpers";
+import { fakeHttp } from "./helpers";
 
 const text = (body: string) => new Response(body, { status: 200, headers: { "content-type": "text/html" } });
+/** A join.com page: Next.js data in a script tag, as the site renders it. */
+const nextPage = (pageData: unknown) =>
+  text(
+    `<html><head></head><body><div id="__next"></div><script id="__NEXT_DATA__" type="application/json" nonce="YjJiYzM4">${JSON.stringify({ props: { pageProps: { pageData } } })}</script></body></html>`,
+  );
 const job = (id: number, title: string) => ({
   id,
   idParam: `${id}-${title.toLowerCase().replace(/ /g, "-")}`,
@@ -14,27 +19,27 @@ const job = (id: number, title: string) => ({
   city: { cityName: "Berlin", countryName: "Germany" },
   category: { name: "Engineering" },
 });
+/** Six jobs over two careers pages. */
+const twoPages = (url: string) => {
+  const page = Number(new URL(url).searchParams.get("page") ?? 1);
+  return nextPage({
+    company: { id: 30107, name: "Acme" },
+    jobs: { items: page === 1 ? [1, 2, 3, 4, 5].map((i) => job(i, `Role ${i}`)) : [job(6, "Platform Engineer")], pagination: { page, pageCount: 2, pageSize: 5, perPage: 5, total: 6 } },
+  });
+};
 
-async function run(ref: Partial<CompanyRef>, route: (url: string) => Response) {
+async function run(route: (url: string) => Response) {
   const { http, calls } = fakeHttp(route);
   const c = getConnector("join")!;
-  const r = { name: "Acme", enabled: true, ats: "join", slug: "acme", ...ref } as CompanyRef;
+  const r = { name: "Acme", enabled: true, ats: "join", slug: "acme" } as CompanyRef;
   const raws = await c.fetch(r, { http, now: new Date() });
   return { jobs: raws.map((x) => c.normalize(x, r)), raws, calls, c, r, http };
 }
 
 describe("join", () => {
-  it("reads the company id from the careers page, then pages the public API five at a time", async () => {
-    const { jobs, calls } = await run({}, (url) => {
-      if (url === "https://join.com/companies/acme") return text('<script id="__NEXT_DATA__">{"props":{"company":{"id":30107,"name":"Acme"}}}</script>');
-      const page = Number(new URL(url).searchParams.get("page"));
-      return json({ items: page === 1 ? [1, 2, 3, 4, 5].map((i) => job(i, `Role ${i}`)) : [job(6, "Platform Engineer")], pagination: { pageCount: 2, rowCount: 6 } });
-    });
-    expect(calls).toEqual([
-      "https://join.com/companies/acme",
-      "https://join.com/api/public/companies/30107/jobs?page=1&pageSize=5",
-      "https://join.com/api/public/companies/30107/jobs?page=2&pageSize=5",
-    ]);
+  it("reads the jobs off the careers page, five a page", async () => {
+    const { jobs, calls } = await run(twoPages);
+    expect(calls).toEqual(["https://join.com/companies/acme", "https://join.com/companies/acme?page=2"]);
     expect(jobs).toHaveLength(6);
     expect(jobs[5]).toMatchObject({
       id: "join:acme:6",
@@ -49,47 +54,37 @@ describe("join", () => {
     });
   });
 
-  it("uses the id a list gave (shard) without loading the careers page, and reads descriptions from the job API", async () => {
-    const { calls, raws, c, r, http } = await run({ shard: "54" }, (url) =>
-      url.includes("/api/public/jobs/") ? json({ description: "## About us\n\nWe build **heat pumps**. [Apply](https://x)" }) : json({ items: [job(7, "PM")], pagination: { pageCount: 1 } }),
-    );
-    expect(calls).toEqual(["https://join.com/api/public/companies/54/jobs?page=1&pageSize=5"]);
-    expect(await c.describe!(raws[0]!, r, { http, now: new Date() })).toBe("About us\n\nWe build heat pumps. Apply");
-  });
-
-  it("keeps the id it read off the careers page, so the next run asks the API straight away", async () => {
-    const ids = new Map<string, string>();
-    const route = (url: string) => (url === "https://join.com/companies/acme" ? text('{"company":{"id":30107}}') : json({ items: [job(1, "PM")], pagination: { pageCount: 1, rowCount: 1 } }));
-    const c = getConnector("join")!;
-    const r = { name: "Acme", enabled: true, ats: "join", slug: "acme" } as CompanyRef;
-    const first = fakeHttp(route);
-    await c.fetch(r, { http: first.http, now: new Date(), ids });
-    expect(ids.get("join:acme")).toBe("30107");
-    const second = fakeHttp(route);
-    await c.fetch(r, { http: second.http, now: new Date(), ids });
-    expect(second.calls).toEqual(["https://join.com/api/public/companies/30107/jobs?page=1&pageSize=5"]);
+  it("reads a description off the job's page", async () => {
+    const { raws, c, r } = await run(twoPages);
+    const { http, calls } = fakeHttp(() => nextPage({ job: { id: 1, description: "<h2>About us</h2><p>We build <strong>heat pumps</strong>.</p>" } }));
+    const d = await c.describe!(raws[0]!, r, { http, now: new Date() });
+    expect(calls).toEqual(["https://join.com/companies/acme/1-role-1"]);
+    expect(d).toContain("About us");
+    expect(d).toContain("We build heat pumps.");
   });
 
   it("stops after the first page when it's as the last full read saw it", async () => {
     const seen: [string, number][] = [];
-    const { http, calls } = fakeHttp((url) => {
-      const page = Number(new URL(url).searchParams.get("page"));
-      return json({ items: page === 1 ? [1, 2, 3, 4, 5].map((i) => job(i, `Role ${i}`)) : [job(6, "PM")], pagination: { pageCount: 2, rowCount: 6 } });
-    });
+    const { http, calls } = fakeHttp(twoPages);
     const c = getConnector("join")!;
-    const r = { name: "Acme", enabled: true, ats: "join", slug: "acme", shard: "54" } as CompanyRef;
+    const r = { name: "Acme", enabled: true, ats: "join", slug: "acme" } as CompanyRef;
     const firstPage = (f: string, n: number) => {
       seen.push([f, n]);
       return true;
     };
     const raws = await c.fetch(r, { http, now: new Date(), firstPage });
-    expect(calls).toEqual(["https://join.com/api/public/companies/54/jobs?page=1&pageSize=5"]);
+    expect(calls).toEqual(["https://join.com/companies/acme"]);
     expect(raws).toHaveLength(5);
     expect(seen).toEqual([[firstPageFingerprint(6, ["1", "2", "3", "4", "5"]), 6]]);
   });
 
-  it("says so when the company doesn't exist", async () => {
-    await expect(run({}, () => text("<html>404</html>"))).rejects.toThrow('JOIN company "acme" not found');
+  it("reads an empty board as no jobs", async () => {
+    const { jobs } = await run(() => nextPage({ jobs: { items: [], pagination: { total: 0, page: 1, pageCount: 0, pageSize: 0, perPage: 0 } } }));
+    expect(jobs).toEqual([]);
+  });
+
+  it("says so when the page has no job list", async () => {
+    await expect(run(() => text("<html>404</html>"))).rejects.toThrow('JOIN company "acme" not found');
   });
 
   it("is recognised from a careers or job link", () => {
