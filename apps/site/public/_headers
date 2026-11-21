@@ -18,3 +18,22 @@
 # Scripts are named by their content, so a changed one gets a new name: cache them for good.
 /js/*
   Cache-Control: public, max-age=31536000, immutable
+
+# Shared CSS is named by its content too (build.mjs): cache it for good.
+/css/*
+  Cache-Control: public, max-age=31536000, immutable
+
+# Fonts only change with a new font release; a year, revalidated after that.
+/fonts/*
+  Cache-Control: public, max-age=31536000
+
+# Screenshots, the share image and the icon keep their names when they change, so cache them for a
+# while, not for good.
+/images/*
+  Cache-Control: public, max-age=604800, stale-while-revalidate=86400
+/og.png
+  Cache-Control: public, max-age=86400
+/favicon.svg
+  Cache-Control: public, max-age=604800
+/apple-touch-icon.png
+  Cache-Control: public, max-age=604800
