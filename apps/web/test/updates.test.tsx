@@ -163,8 +163,12 @@ describe("ServerNotices", () => {
         <UpdatePill />
       </>,
     );
-    expect((await screen.findByRole("button", { name: /Update after scan/ })).hasAttribute("disabled")).toBe(true);
+    const pill = await screen.findByRole("button", { name: /Updates after the scan/ });
     expect(screen.queryByRole("heading", { name: /Update to RawJobs/ })).toBeNull();
+    // A click says what it waits for, and offers to stop the scan and update now.
+    fireEvent.click(pill);
+    expect(screen.getByText("A scan is running: RawJobs updates as soon as it's done.")).toBeTruthy();
+    expect(screen.getByRole("button", { name: /Stop the scan and update now/ })).toBeTruthy();
   });
 
   it("answers a click that couldn't get the update right under the pill, with Try again", async () => {

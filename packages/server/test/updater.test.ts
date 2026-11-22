@@ -58,10 +58,13 @@ describe("the updater", () => {
   it("waits for a running scan, installs once it's done, and only once", async () => {
     vi.useFakeTimers();
     let busy = true;
-    const u = createUpdater({ home, isBusy: () => busy, exit: () => {} });
+    const pauseBackground = vi.fn();
+    const u = createUpdater({ home, isBusy: () => busy, pauseBackground, exit: () => {} });
     await u.apply();
     await u.apply();
     expect(u.status().state).toBe("waiting");
+    // A background check is asked to pause right away: the update doesn't wait hours for it.
+    expect(pauseBackground).toHaveBeenCalledOnce();
     expect(fake.startUpdate).not.toHaveBeenCalled();
     await vi.advanceTimersByTimeAsync(15_000);
     expect(fake.startUpdate).not.toHaveBeenCalled();

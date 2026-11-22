@@ -73,7 +73,7 @@ export async function serve(args: string[]): Promise<number> {
 
   let shutdown: () => void = () => process.exit(0);
   // Busy: a scan the dashboard started, or one the computer's schedule started (it holds data/scan.lock).
-  const updater = createUpdater({ home, isBusy: () => api.scanning() || scanLockHeld(dataDir), exit: () => shutdown() });
+  const updater = createUpdater({ home, isBusy: () => api.scanning() || scanLockHeld(dataDir), pauseBackground: () => api.pauseBackground(), exit: () => shutdown() });
   // The "RawJobs isn't running" window and page offer a Start button only when rawjobs://open works here.
   const startLink = () => BUNDLED && startLinkInstalled(home);
   const api = createApi({ home, dataDir, updater, startLink });
