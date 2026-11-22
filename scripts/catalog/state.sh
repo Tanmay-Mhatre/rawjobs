@@ -35,6 +35,9 @@ case "$SET" in
       out/resolved-bulk.json
       out/probe.jsonl
       out/probe-found.json
+      # Workday companies' own careers sites (own-sites.ts): every attempt, and the sites accepted.
+      out/own-sites.jsonl
+      out/own-sites.json
       raw/commoncrawl/boards.json
       raw/wayback/boards.json
       # Boards the job boards' jobs linked to, and when each feed was last read (feed-boards.ts).

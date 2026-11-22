@@ -49,7 +49,7 @@ Overrides: `RAWJOBS_DIRECTORY_URL` (download base) and `RAWJOBS_CONTRIBUTE_URL` 
 ## Coverage
 
 The goal is to hold at least 90% of the companies on each hiring system the directory tracks
-(Greenhouse, Lever, Ashby; at least 80% for SmartRecruiters and Workday). The weekly rebuild and the daily URL-index run grow the list from six directions:
+(Greenhouse, Lever, Ashby; at least 80% for SmartRecruiters and Workday). The weekly rebuild and the daily URL-index run grow the list from seven directions:
 
 | Step | Script | What it adds | Per run |
 |---|---|---|---|
@@ -57,6 +57,7 @@ The goal is to hold at least 90% of the companies on each hiring system the dire
 | Wayback Machine URL index | `wayback.ts --max-minutes 25` (Tue, Thu, Sat) | Board URLs the Internet Archive kept (snapshots from the last 3 years). Resumable; a full pass takes a few weeks, then starts again after 30 days. | 25 min, 3 days a week |
 | Wikidata companies | `seeds-bulk.ts`, `resolve.ts --bulk --limit 1500` | Companies with 50+ staff or listed (CC0), resolved from their own websites. Results are reused for 90 days. | 1,500 companies |
 | Try known companies elsewhere | `crossprobe.ts --max-minutes 45` | Dead or empty boards (the company usually moved systems), companies whose site had no readable board, and Workday tenants whose site is dead. A board counts only if it is live and its own name matches the company. Attempts are kept for 90 days. | 45 min |
+| Workday companies' own careers sites | `own-sites.ts --max-minutes 15` (in the rebuild's resolve job) | Workday turns automated readers away (since 16 Nov 2026), so for each Workday company with a known website (the one its careers page led from, its Wikidata website, else `{tenant}.com`) it reads that website and the careers pages it links on the company's own domains, never a Workday host: robots.txt honoured, at most 10 pages. A careers site on a system we can read (Phenom, Radancy, Eightfold, iCIMS, Avature, SuccessFactors…) is added when it is live and its host or board id carries the company's name. The site then leads the company: `publish.ts` sets `same_as` on it and on the tenant's Workday boards, so the Radar shows each opening once, scans fetch the site instead of the Workday board, and a failing Workday board in your companies is offered the site. Biggest companies first; attempts are kept for 90 days (`out/own-sites.jsonl`). | 15 min |
 | Job board links | `feed-boards.ts --max-minutes 5` (contributions workflow, every 3 hours) | Boards the public job boards' jobs link to (apply links, links in Hacker News posts), kept in `raw/feeds/boards.json` with which feed saw each and when. Only the board is kept, never the jobs. Each feed is read at most as often as its connector allows (Himalayas daily, Hacker News twice a day, the rest every 6 hours). | every public job board |
 | Add by link | contributions | Boards users add (see above). | – |
 
