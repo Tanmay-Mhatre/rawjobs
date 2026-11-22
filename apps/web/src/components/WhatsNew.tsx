@@ -247,13 +247,19 @@ export function UpdatePill() {
     if (s?.state === "waiting") toast({ message: "RawJobs updates when the scan finishes. Keep working." });
     else if (s && s.state === "idle" && s.error) setFailed(s.error);
   };
+  // The full words are the button's name and its card; the header shows them only where there's room
+  // (the version from 1536px, a word from 1280px, the icon and the new dot below that).
+  const name = updating ? "Updating…" : waiting ? "Update after scan" : `Update to ${a.version}`;
   const label = updating ? (
     "Updating…"
   ) : waiting ? (
-    // The header is tight: the percent only where there's room (the scan button shows it too).
-    <>Update after scan{scan?.percent != null && <span className="max-xl:hidden"> · {scan.percent}%</span>}</>
+    <>
+      Update<span className="max-2xl:hidden"> after scan</span>
+    </>
   ) : (
-    `Update to ${a.version}`
+    <>
+      Update<span className="max-2xl:hidden"> to {a.version}</span>
+    </>
   );
   const top = sortedItems(a.notes, a.changes).slice(0, 2);
   return (
@@ -268,12 +274,19 @@ export function UpdatePill() {
         disabled={updating}
         aria-describedby={hint && !updating ? "update-pill-preview" : undefined}
         aria-expanded={waiting ? hint : undefined}
-        className="inline-flex h-7 shrink-0 items-center gap-1.5 rounded-md border border-control bg-raised px-2 type-label text-ink transition-colors duration-150 hover:bg-hover disabled:cursor-default disabled:text-muted"
+        aria-label={name}
+        className={cx(
+          // Quiet, so it doesn't compete with Scan now; a required update waiting on a scan keeps the outline.
+          "inline-flex h-7 min-w-7 shrink-0 items-center justify-center gap-1.5 rounded-md border px-1.5 type-label transition-colors duration-150 hover:bg-hover disabled:cursor-default disabled:text-muted xl:px-2",
+          a.critical ? "border-control bg-raised text-ink" : "border-transparent text-muted hover:text-ink",
+        )}
       >
-        {/* The new dot (the app's mark for something new), then what clicking does. */}
-        {!updating && !waiting && <span className="rj-dot" aria-hidden />}
-        {updating || waiting ? <LoaderCircle className="size-3.5 animate-spin motion-reduce:animate-none" aria-hidden /> : <ArrowDownToLine className="size-3.5" aria-hidden />}
-        <span className="whitespace-nowrap">{label}</span>
+        {/* What clicking does, with the new dot (the app's mark for something new) on its corner. */}
+        <span className="relative inline-flex">
+          {updating || waiting ? <LoaderCircle className="size-3.5 animate-spin motion-reduce:animate-none" aria-hidden /> : <ArrowDownToLine className="size-3.5" aria-hidden />}
+          {!updating && !waiting && <span className="rj-dot absolute -right-1 -top-1" aria-hidden />}
+        </span>
+        <span className="whitespace-nowrap max-xl:hidden">{label}</span>
       </button>
       {hint && waiting && (
         <div id="update-pill-preview" className={POP}>

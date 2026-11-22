@@ -26,6 +26,7 @@ import { settingsHash } from "./components/settings/registry";
 import { ShortcutList } from "./components/ShortcutList";
 import { Toaster, toast } from "./components/Toast";
 import { offerWhat } from "./lib/notForMe";
+import { Tooltip } from "./components/primitives";
 import { Button, Card, cx, IconButton } from "./components/ui";
 import { keyOf } from "./lib/companies";
 import { canRunLocally, useData, useOtherJobs, type Job } from "./lib/data";
@@ -315,7 +316,7 @@ export function App() {
                 ))}
               </nav>
             )}
-            <div className="ml-auto flex items-center gap-1.5">
+            <div className="ml-auto flex min-w-0 items-center gap-3 whitespace-nowrap">
               {/* A new version, downloaded and ready: one click updates (like the Claude desktop app's). */}
               {canRunLocally && <UpdatePill />}
               {inSetup ? (
@@ -324,41 +325,44 @@ export function App() {
                 </Button>
               ) : (
                 <>
-                  {lastRun && (
-                    <span className="hidden type-meta text-muted lg:inline" title={lastRun.startedAt}>
-                      Last scan {timeAgo(lastRun.startedAt)}
-                    </span>
-                  )}
-                  {state.kind === "ready" && failing > 0 && (
-                    <button
-                      type="button"
-                      onClick={goFailing}
-                      title="Review failing companies: usually the careers page moved"
-                      className="hidden h-7 items-center gap-1.5 rounded-md border border-warning/40 bg-warning-subtle/40 px-2 type-label text-warning-text hover:bg-warning-subtle/60 lg:inline-flex"
-                    >
-                      <TriangleAlert className="size-3.5" aria-hidden />
-                      {failing} failing<span className="sr-only">: {failing === 1 ? "1 company" : `${failing} companies`} couldn't be scanned last time. Review failing companies</span>
-                    </button>
-                  )}
-                  {canRunLocally && (setupState === "none" || setupState === "invalid") && (
-                    <Button size="sm" variant="primary" onClick={toSetup}>
-                      {setupState === "invalid" ? "Fix setup" : progress.started ? "Finish setup" : "Set up radar"} <ArrowRight className="size-3.5" />
-                    </Button>
-                  )}
-                  {canRunLocally && setupState === "configured" && (
-                    <ScanButton
-                      scan={scan}
-                      background={otherScan}
-                      onStart={(scope) => void startScan(scope)}
-                      onSettings={() => {
-                        location.hash = settingsHash("scans");
-                      }}
-                      onStop={() => void stopScan()}
-                      onResume={() => void resumeBackground()}
-                      notifyLine={notifyLine(tg, scan, notifyFailed)}
-                      notify={(openDetails) => <NotifyBell tg={tg} scan={scan} failed={notifyFailed} onDetails={openDetails} onSaved={() => setup.refresh()} onConnected={notifyNow} />}
-                    />
-                  )}
+                  {/* Everything about scanning sits together, next to the Scan button: when it last ran, what failed, what's running. */}
+                  <div className="flex items-center gap-1">
+                    {/* While a scan runs its status replaces the time; below 1280px the time moves into the Scan button's tooltip. */}
+                    {lastRun && scan.phase !== "running" && scan.phase !== "background" && (
+                      <span className="mr-1 hidden type-meta text-muted xl:inline" title={lastRun.startedAt}>
+                        Last scan {timeAgo(lastRun.startedAt)}
+                      </span>
+                    )}
+                    {state.kind === "ready" && failing > 0 && (
+                      <button type="button" onClick={goFailing} className="rj-btn rj-btn--quiet rj-btn--sm relative hidden gap-1 px-2 text-warning-text hover:text-warning-text lg:inline-flex">
+                        <TriangleAlert className="size-3.5" aria-hidden />
+                        <span className="tabular">{failing}</span>
+                        <span className="max-xl:sr-only">failing</span>
+                        <span className="sr-only">: {failing === 1 ? "1 company" : `${failing} companies`} couldn't be scanned last time. Review failing companies</span>
+                        <Tooltip label="Review failing companies: usually the careers page moved" />
+                      </button>
+                    )}
+                    {canRunLocally && (setupState === "none" || setupState === "invalid") && (
+                      <Button size="sm" variant="primary" onClick={toSetup}>
+                        {setupState === "invalid" ? "Fix setup" : progress.started ? "Finish setup" : "Set up radar"} <ArrowRight className="size-3.5" />
+                      </Button>
+                    )}
+                    {canRunLocally && setupState === "configured" && (
+                      <ScanButton
+                        scan={scan}
+                        background={otherScan}
+                        onStart={(scope) => void startScan(scope)}
+                        onSettings={() => {
+                          location.hash = settingsHash("scans");
+                        }}
+                        onStop={() => void stopScan()}
+                        onResume={() => void resumeBackground()}
+                        notifyLine={notifyLine(tg, scan, notifyFailed)}
+                        notify={(openDetails) => <NotifyBell tg={tg} scan={scan} failed={notifyFailed} onDetails={openDetails} onSaved={() => setup.refresh()} onConnected={notifyNow} />}
+                        lastScan={lastRun && timeAgo(lastRun.startedAt)}
+                      />
+                    )}
+                  </div>
                   <span className="hidden sm:contents">
                     <IconButton label="Keyboard shortcuts (?)" onClick={() => setShowKeys((v) => !v)}>
                       <Keyboard className="size-4" />
