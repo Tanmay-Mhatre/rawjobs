@@ -48,13 +48,20 @@ export function ownerLabels(t: Pick<Tenant, "tenant" | "websites">): string[] {
 
 /**
  * Whether a board belongs to the company: its host (careers.adobe.com, jobs.disneycareers.com,
- * explore.jobs.netflix.net) or its id on a hiring system's host (careers-cvshealth.icims.com,
- * mastercard.avature.net) contains one of the company's names. Keeps a page's links to partners,
+ * explore.jobs.netflix.net) contains one of the company's names, or its id on a hiring system's host
+ * (careers-cvshealth.icims.com, mastercard.avature.net) is one. Keeps a page's links to partners,
  * parents and job boards out.
  */
 export function ownedBy(board: { slug: string }, labels: readonly string[]): boolean {
-  const id = board.slug.includes(".") ? domainLabel(board.slug) : norm(board.slug);
-  return !!id && labels.some((l) => id.includes(l));
+  // The company's own host: its name may carry more ("disneycareers").
+  if (board.slug.includes(".")) {
+    const host = domainLabel(board.slug);
+    return !!host && labels.some((l) => host.includes(l));
+  }
+  // An id on a hiring system's host is exactly the name, give or take "careers"/"jobs" and a number:
+  // "rakutenpayment" is a part of Rakuten, not all of it.
+  const id = norm(board.slug).replace(/^(careers?|jobs?)\d*|(careers?|jobs?)?\d*$/g, "");
+  return !!id && labels.includes(id);
 }
 
 /** A link on a careers page we follow: on a host the company owns, and about jobs. */

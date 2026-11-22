@@ -14,6 +14,8 @@ describe("own careers sites of Workday companies", () => {
     expect(ownedBy({ slug: "careers-disney" }, labels)).toBe(true);
     expect(ownedBy({ slug: "careers.marvel.com" }, labels)).toBe(false);
     expect(ownedBy({ slug: "indeed" }, labels)).toBe(false);
+    expect(ownedBy({ slug: "disneyparks" }, labels)).toBe(false);
+    expect(ownedBy({ slug: "jobs1-disney" }, labels)).toBe(true);
     // Short names match too much by accident: left out.
     expect(ownerLabels({ tenant: "ngc", websites: [] })).toEqual([]);
   });
