@@ -21,7 +21,7 @@ import {
   type Step,
 } from "../lib/scan";
 import { scanPlan, type ScanPlan, type ScanScope } from "../lib/setup";
-import { IconButton as RjIconButton, Menu } from "./primitives";
+import { IconButton as RjIconButton, Menu, Tooltip } from "./primitives";
 import { ScanBars } from "./ScanBars";
 import { Button, cx } from "./ui";
 
@@ -74,6 +74,7 @@ export function ScanButton({
   onSettings,
   notify,
   notifyLine,
+  lastScan,
 }: {
   scan: ScanState;
   /** A scan this page can't follow (an older CLI's, which writes no progress) is running: no second scan until it ends. */
@@ -87,6 +88,8 @@ export function ScanButton({
   notify?: (openDetails: () => void) => ReactNode;
   /** What happens when the scan ends, for the details. */
   notifyLine?: string;
+  /** When the last scan ran ("2h ago"), for the Scan now tooltip (the header shows it as text only where there's room). */
+  lastScan?: string;
 }) {
   const prefs = useScanPrefs();
   const plan = useScanPlan(scan.phase);
@@ -100,11 +103,12 @@ export function ScanButton({
   }
   const hints = scanHints(plan);
   return (
-    <div className="flex items-center gap-2">
+    <div className="flex items-center gap-1">
       {scan.bg && (scan.phase === "background" || (scan.phase === "done" && scan.bg.summary?.stopped)) && <BackgroundPill scan={scan} bg={scan.bg} onPause={onStop} onResume={onResume} />}
       <div className="inline-flex">
-        <Button size="sm" className="rounded-r-0" onClick={() => onStart(prefs.scope)} title={prefs.scope === "yours" ? "Scan now: only my companies" : "Scan now"}>
+        <Button size="sm" className="relative rounded-r-0" onClick={() => onStart(prefs.scope)} aria-keyshortcuts="R">
           <RefreshCw className="size-3.5" /> Scan now
+          <Tooltip label={`${prefs.scope === "yours" ? "Scan only my companies" : "Scan now"}${lastScan ? ` · last scan ${lastScan}` : ""}`} shortcut="R" />
         </Button>
         <Menu
           label="Scan options"
@@ -305,7 +309,7 @@ export function ScanStatus({ scan, onStop, notify, notifyLine }: { scan: ScanSta
     <div {...rootProps} className="relative flex items-center gap-1">
       <Button size="sm" {...triggerProps} aria-controls="scan-details" aria-label={`Scan ${percent === null ? "starting" : `${percent}% done`}: show details`}>
         <ProgressRing value={value} />
-        <span className="max-sm:hidden">{label}</span>
+        <span className="max-lg:hidden">{label}</span>
         {percent !== null && <span className="tabular text-muted">{percent}%</span>}
       </Button>
       {notify?.(() => setOpen("pinned"))}
@@ -385,10 +389,11 @@ export function BackgroundPill({ scan, bg, onPause, onResume }: { scan: ScanStat
         {...triggerProps}
         aria-controls="background-details"
         aria-label={`Background check ${paused ? "paused" : percent === null ? "starting" : `${percent}% done`}: show details`}
-        className="inline-flex h-7 items-center gap-1.5 rounded-md border border-line bg-raised px-2 type-meta font-medium text-muted hover:text-ink"
+        className="rj-btn rj-btn--quiet rj-btn--sm gap-1.5 px-2 type-meta font-medium text-muted hover:text-ink"
       >
         {paused ? <Pause className="rj-icon" aria-hidden /> : <ProgressRing value={value} />}
-        <span className="max-sm:hidden">{label}</span>
+        {/* "Checking the rest" is long: below 1280px the ring and percent say it; "Pausing…" and "Paused" stay. */}
+        <span className={cx("max-sm:hidden", !bg.pausing && !paused && "max-xl:hidden")}>{label}</span>
         {percent !== null && !paused && <span className="tabular">{percent}%</span>}
       </button>
       {open && (
