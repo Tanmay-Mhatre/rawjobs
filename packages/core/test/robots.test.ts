@@ -1,4 +1,5 @@
-import { beforeEach, describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+import { HttpClient } from "../src/http";
 import { assertRobotsAllow, clearRobotsCache, parseRobots, robotsAllows, robotsAllowsPath } from "../src/robots";
 import { fakeHttp } from "./helpers";
 
@@ -34,5 +35,25 @@ describe("robots", () => {
     await expect(assertRobotsAllow(http, "https://a.test/api/jobs")).rejects.toThrow(/robots\.txt/);
     expect(await robotsAllows(http, "https://b.test/api/jobs")).toBe(true);
     expect(calls).toEqual(["https://a.test/robots.txt", "https://b.test/robots.txt"]);
+  });
+
+  it("keeps a Crawl-delay as the host's gap between requests", async () => {
+    let now = 1_000_000;
+    const sleeps: number[] = [];
+    const http = new HttpClient({
+      hostDelayMs: 0,
+      sleep: async (ms) => {
+        sleeps.push(ms);
+        now += ms;
+      },
+      fetchImpl: (async (url: string) => (url.endsWith("/robots.txt") ? txt("User-agent: *\nCrawl-delay: 7\n") : txt("ok"))) as unknown as typeof fetch,
+    });
+    const spy = vi.spyOn(Date, "now").mockImplementation(() => now);
+    expect(await robotsAllows(http, "https://slow.test/jobs")).toBe(true);
+    await http.getText("https://slow.test/jobs/1");
+    await http.getText("https://slow.test/jobs/2");
+    await http.getText("https://other.test/jobs");
+    spy.mockRestore();
+    expect(sleeps).toEqual([7_000]);
   });
 });

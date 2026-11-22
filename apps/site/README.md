@@ -38,13 +38,17 @@ pnpm site:og        # re-render public/og.png from src/og.html (uses the system 
 | `GITHUB_TOKEN` | unset | Sent with the GitHub API calls, for the higher rate limit. The Site workflow sets it. |
 | `REQUIRE_BEACON` | unset | `1` makes the build fail when it can't write the update beacon, so a deploy never drops it. The Site workflow sets it on every run except pull requests. |
 
+## Key directory (Web Bot Auth)
+
+`/.well-known/http-message-signatures-directory` is the one path that runs code: `worker.ts` serves the job feed's public key there, signed on each read (`run_worker_first` in `wrangler.toml`). It needs the `WEB_BOT_AUTH_KEY` Worker secret and answers 404 without it. Every other path is static files. Setup: [Web Bot Auth](../../docs/shared-directory.md#web-bot-auth).
+
 ## Update beacon
 
 The build also writes `dist/v1/latest.json`, served at `/v1/latest.json`: the newest RawJobs version on each channel (`stable`, and `beta` when a newer pre-release exists), read from the app's GitHub releases. Installed copies read it to find out an update is out (`fetchBeacon` in `packages/core/src/update.ts`). The release workflow starts a site deploy when it publishes a release, so the beacon follows each release.
 
 ## Deploy
 
-`.github/workflows/site.yml` builds on every pull request that touches the site, and deploys on every push to `main` that touches it (`apps/site/`, `apps/web/src/design/`, `design/components/bundle.css` or the workflow itself), every Monday (to refresh the numbers), and when the release workflow or the directory rebuild starts it. It deploys the `www` Worker, which is static assets only, so requests don't count against the Workers request quota.
+`.github/workflows/site.yml` builds on every pull request that touches the site, and deploys on every push to `main` that touches it (`apps/site/`, `apps/web/src/design/`, `design/components/bundle.css` or the workflow itself), every Monday (to refresh the numbers), and when the release workflow or the directory rebuild starts it. It deploys the `www` Worker: static assets, so requests don't count against the Workers request quota, except the key directory path above.
 
 One-time setup, in the repo's **Settings → Secrets and variables → Actions**:
 
