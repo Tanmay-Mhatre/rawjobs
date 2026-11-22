@@ -417,6 +417,8 @@ Stopped after ${Math.round(timeoutMs / 1000)} s without finishing.`.trim(),
       pump();
       if (scanLockHolder(dataDir) === other.pid) return;
       clearInterval(timer);
+      // It wrote new results and its run log: answers kept from before it ended are out of date.
+      readers.clear();
       res.end();
     }, 1000);
     // A tab that goes away just stops following; the scan carries on.

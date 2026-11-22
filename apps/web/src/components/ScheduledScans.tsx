@@ -2,7 +2,7 @@ import { CircleAlert, Clock, LoaderCircle, Plus, Power, Play, RefreshCw, X } fro
 import { useCallback, useEffect, useState } from "react";
 import { removeSchedule, runScheduleNow, saveSchedule, scheduleStatus, type ScheduledRun, type ScheduleStatus } from "../lib/automation";
 import { formatDateTime, timeAgo } from "../lib/format";
-import { aboutTime, scopeLabel } from "../lib/scan";
+import { aboutTime, SCAN_ENDED, scopeLabel } from "../lib/scan";
 import { scanPlan, type ScanPlan, type ScanScope } from "../lib/setup";
 import { toast } from "./Toast";
 import { Button, cx } from "./ui";
@@ -18,11 +18,13 @@ const REASONS: [RegExp, string][] = [
     "Another program, often antivirus or a backup app, was using RawJobs' files when the scan tried to save. Your earlier results are safe. It tries again at the next scheduled time, or press Scan now.",
   ],
   [/\bENOSPC\b/, "Your disk is full. Free up some space, then press Scan now."],
+  [/^Stopped before the end/, "It ran past its time limit, or the computer went to sleep or shut down. What it checked is saved; the next scan carries on from there."],
   [/\b(ENOTFOUND|ETIMEDOUT|ECONNRESET|EAI_AGAIN|ENETUNREACH)\b|fetch failed/, "No internet connection during the scan. It tries again at the next scheduled time."],
 ];
 
 /** One history row's text. Exported for tests. */
 export function runLine(r: ScheduledRun): string {
+  if (r.running) return "Running now. Its progress is on the scan button.";
   if (!r.ok) {
     if (r.error === SKIPPED) return "Skipped. Another scan was already running.";
     const reason = REASONS.find(([pattern]) => pattern.test(r.error ?? ""))?.[1];
@@ -70,6 +72,12 @@ export function ScheduledScans() {
   useEffect(() => {
     void refresh();
     void scanPlan().then(setPlan);
+  }, [refresh]);
+  // A scan ending (a scheduled one too) adds to the runs below.
+  useEffect(() => {
+    const ended = () => void refresh();
+    window.addEventListener(SCAN_ENDED, ended);
+    return () => window.removeEventListener(SCAN_ENDED, ended);
   }, [refresh]);
 
   const run = async (kind: Kind) => {
@@ -234,7 +242,7 @@ export function ScheduledScans() {
                 <span className="w-32 shrink-0 text-muted" title={formatDateTime(r.startedAt)}>
                   {timeAgo(r.startedAt)}
                 </span>
-                <span className={cx("min-w-0 flex-1", !r.ok && r.error !== SKIPPED && "text-danger-text")}>
+                <span className={cx("min-w-0 flex-1", !r.ok && !r.running && r.error !== SKIPPED && "text-danger-text")}>
                   {runLine(r)}
                   {!r.ok && r.error && r.error !== SKIPPED && (
                     <details className="type-meta text-muted">

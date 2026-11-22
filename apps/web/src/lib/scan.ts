@@ -116,6 +116,9 @@ const IDLE: ScanState = { phase: "idle", companies: [], total: 0, done: 0, resum
 const newBackground = (): Background => ({ total: 0, done: 0, resumed: 0, found: 0, failed: 0, startedAt: Date.now() });
 const running = (scope?: ScanScope, origin: ScanOrigin = "page"): ScanState => ({ ...IDLE, phase: "running", scope, origin, startedAt: Date.now() });
 
+/** Sent on window when a scan the page started or followed has ended and its results are on screen. */
+export const SCAN_ENDED = "rawjobs:scan-ended";
+
 /** How a scan is named on the page: "Scheduled scan" for the schedule's, "Scan" for the rest. */
 export const scanName = (origin?: ScanOrigin) => (origin === "scheduled" ? "Scheduled scan" : "Scan");
 
@@ -329,6 +332,7 @@ export function useScan(onFinished: () => void | Promise<void>) {
     if (followed !== false) {
       await finished.current();
       if (!current()) return;
+      window.dispatchEvent(new Event(SCAN_ENDED));
       // The saved files now hold the scan's jobs: the streamed copies go.
       setScan((s) => (failed && !s.summary ? { ...s, phase: "error", error: failed, live: [] } : { ...s, phase: "done", stopping: false, live: [] }));
       const by = origin.current;

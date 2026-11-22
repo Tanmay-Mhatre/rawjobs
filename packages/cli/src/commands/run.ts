@@ -216,6 +216,8 @@ export async function cmdRun(args: string[]): Promise<number> {
   };
   try {
     return await scanSession(values, dataDir, { busy, sync }, async (syncMs) => {
+      // Logged as it starts (with this process), so a run the scheduler kills still shows in Settings.
+      if (values.scheduled) recordScheduledRun(dataDir, { startedAt, scope, ok: false, pid: process.pid, ...(catchUp ? { catchUp } : {}) });
       const stage1Started = Date.now();
       let fallback = false;
       const session = sessionOptions(values, dataDir, scope);

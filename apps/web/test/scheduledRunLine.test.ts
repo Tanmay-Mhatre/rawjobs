@@ -16,6 +16,11 @@ describe("runLine", () => {
     expect(runLine(failed("getaddrinfo ENOTFOUND boards.greenhouse.io"))).toMatch(/No internet connection/);
   });
 
+  it("says a run is going, and why one stopped before logging its end", () => {
+    expect(runLine({ ...failed(), running: true })).toBe("Running now. Its progress is on the scan button.");
+    expect(runLine(failed("Stopped before the end: it ran past its time limit, or the computer went to sleep or shut down."))).toMatch(/^Didn't finish\. It ran past its time limit/);
+  });
+
   it("calls a run that found another scan going skipped, not failed", () => {
     expect(runLine(failed("Another scan was already running."))).toBe("Skipped. Another scan was already running.");
   });
