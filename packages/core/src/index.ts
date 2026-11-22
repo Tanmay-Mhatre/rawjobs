@@ -29,6 +29,7 @@ export * from "./suggest";
 export * from "./suggest-cache";
 export * from "./discover";
 export * from "./scan";
+export * from "./live";
 export * from "./migrate";
 export * from "./resume-parse";
 export * from "./catalog/roles";
