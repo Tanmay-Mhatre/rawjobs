@@ -22,10 +22,10 @@ export class HttpError extends Error {
   }
 }
 
-/** Headers that say who answered a 403: the server, a CDN, or a firewall in front of it. */
-const REFUSAL_HEADERS = /^(server|x-cache|retry-after|cf-ray|x-amzn-waf-.*|x-amz-cf-pop)$/i;
+/** Headers that say who answered a 403 or 429: the server, a CDN, or a firewall in front of it. */
+const REFUSAL_HEADERS = /^(server|x-cache|retry-after|cf-ray|cf-mitigated|x-ratelimit-.*|x-amzn-waf-.*|x-amz-cf-pop)$/i;
 
-/** A 403's headers and the start of its body, on one line. The body read has its own short clock. */
+/** A 403's or 429's headers and the start of its body, on one line. The body read has its own short clock. */
 async function refusalDetail(res: Response, ctrl: AbortController, ms: number): Promise<string> {
   const headers = [...res.headers].filter(([k]) => REFUSAL_HEADERS.test(k)).map(([k, v]) => `${k}: ${v}`);
   const timer = setTimeout(() => ctrl.abort(), ms);
@@ -500,6 +500,8 @@ export class HttpClient {
         throw lastError;
       }
       if (pushback) {
+        // Who said "too many": kept on the error the last attempt throws.
+        if (res.status === 429) lastError = new HttpError(lastError.message, url, 429, await refusalDetail(res, ctrl, 5_000));
         this.stats.rateLimited++;
         this.slowDown(host, parseRetryAfter(res.headers.get("retry-after")) ?? backoffMs * 2 ** attempt);
         hostPaused = true;

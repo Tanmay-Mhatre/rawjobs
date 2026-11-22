@@ -186,7 +186,18 @@ export async function runRadar(config: Config, opts: RunOptions = {}): Promise<R
 
   const fetchOne = async (company: CompanyRef, extra: boolean) => {
     const started = Date.now();
-    const h: CompanyHealth = { company: company.name, ats: company.ats, slug: company.slug, key: jobCompanyKey(company), ok: false, jobsFound: 0, matches: 0, durationMs: 0 };
+    const h: CompanyHealth = {
+      company: company.name,
+      ats: company.ats,
+      slug: company.slug,
+      ...(company.shard ? { shard: company.shard } : {}),
+      ...(company.site ? { site: company.site } : {}),
+      key: jobCompanyKey(company),
+      ok: false,
+      jobsFound: 0,
+      matches: 0,
+      durationMs: 0,
+    };
     const kept: Job[] = [];
     const connector = getConnector(company.ats);
     // Extra checks are directory companies; the rest are yours, which always count as your industry.
@@ -393,6 +404,8 @@ export function failureOf(err: unknown): CompanyHealth["failure"] {
   if (err instanceof TypeError || err instanceof SyntaxError) return "parse";
   if (!(err instanceof HttpError)) return err instanceof Error && /\bunexpected\b/i.test(err.message) ? "parse" : "other";
   if (err.status === 404 || err.status === 410) return "gone";
+  // A bot challenge (http.ts keeps the refusal's headers in detail): the site turned us away, the board may be fine.
+  if ((err.status === 403 || err.status === 429) && /cf-mitigated: challenge/.test(err.detail ?? "")) return "blocked";
   if (err.status !== undefined) return err.status === 429 || err.status >= 500 ? "server" : "other";
   if (/^timed out/.test(err.message)) return "timeout";
   return /^not JSON/.test(err.message) ? "parse" : "network";

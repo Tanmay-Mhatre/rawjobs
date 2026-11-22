@@ -178,6 +178,17 @@ const BUDGETED: Record<string, { breakAfter: number; describes: number }> = {
   personio: { breakAfter: 10, describes: DESCRIBES_PER_COMPANY },
 };
 const breakAfter = (ats: string) => BUDGETED[ats]?.breakAfter ?? BREAK_ATS_AFTER;
+/**
+ * Systems that may refuse every reader, read only after a probe. Workday's Cloudflare has answered 429 with a bot
+ * challenge (cf-mitigated: challenge) to every request since ~16 Nov 2026, from the runner and from a home
+ * connection alike (it lets a browser through, not our HTTP client), so pacing can't help and we don't try to get
+ * past it. A run first reads boards one at a time: one read means the system is open again and the rest follow as
+ * usual; `refusals` refused first means it is paused for the run: its rows age out (DROP_AFTER_DAYS) and no "needs a
+ * look" issue is opened (Connectors · health keeps reporting it). The app tells users and links the careers page.
+ * A board that fails another way (a dead one) doesn't decide; at most PROBE_MAX boards are tried.
+ */
+const PROBED: Record<string, { refusals: number }> = { workday: { refusals: 3 } };
+const PROBE_MAX = 10;
 /** Failed boards printed per system and reason in the run log. */
 const FAIL_EXAMPLES = 3;
 
@@ -226,6 +237,8 @@ type AtsStats = {
   described: number;
   badRows: number;
   tripped: boolean;
+  /** PROBED: the probe's boards were all refused (a bot challenge), so the system wasn't read this run. */
+  paused?: boolean;
   seconds: number;
   /** Failed boards by reason ("HTTP 429", "timeout"), so an alert says what went wrong. */
   reasons?: Record<string, number>;
@@ -365,9 +378,10 @@ async function crawl(out: string, group: string, generated: string, directoryFil
         }
       };
       let streak = 0;
+      let refusals = 0;
       let next = 0;
-      const worker = async () => {
-        while (next < todo.length) {
+      const worker = async (done: () => boolean) => {
+        while (next < todo.length && !done()) {
           const e = todo[next++]!;
           const key = jobCompanyKey(e);
           if (Date.now() > deadline || s.tripped) {
@@ -447,6 +461,7 @@ async function crawl(out: string, group: string, generated: string, directoryFil
               // system only refusals count, or a few dead boards (read longest ago, so first) would stop it every run.
               // A host skipped for failing again and again (Workday's tenants after their 429s) counts as a refusal too.
               const refused = err instanceof HostSkippedError || (err instanceof HttpError && [403, 406, 429].includes(err.status ?? 0));
+              if (refused) refusals++;
               if (BUDGETED[ats] && !refused) streak = 0;
               else if (++streak >= breakAfter(ats) && !s.tripped) {
                 s.tripped = true;
@@ -457,14 +472,23 @@ async function crawl(out: string, group: string, generated: string, directoryFil
           }
         }
       };
-      await Promise.all(Array.from({ length: Math.min(WORKERS[ats] ?? 4, todo.length || 1) }, worker));
+      const probe = PROBED[ats];
+      if (probe) {
+        const read = () => s.fetched + s.notModified > 0;
+        await worker(() => read() || refusals >= probe.refusals || next >= PROBE_MAX);
+        if (!read() && refusals >= probe.refusals) {
+          s.paused = s.tripped = true;
+          console.error(`${ats}: paused for this run: ${refusals} boards refused (bot challenge) before any was read`);
+        }
+      }
+      await Promise.all(Array.from({ length: Math.min(WORKERS[ats] ?? 4, todo.length || 1) }, () => worker(() => false)));
       result.shards[ats] = writeShard(dir, ats, stamp, { schema: JOB_FEED_SCHEMA, ats, generated_at: generated, companies });
       s.companies = result.shards[ats]!.companies;
       s.jobs = result.shards[ats]!.jobs;
       s.seconds = Math.round((Date.now() - t0) / 1000);
       s.same = sameJobs(previous, companies);
       console.error(
-        `${ats}: ${s.companies} companies, ${s.jobs} jobs (${s.fetched} fetched, ${s.notModified} unchanged, ${s.failed} failed${s.failed ? ` [${describeReasons(s.reasons)}]` : ""}, ${s.skipped} skipped${s.tripped ? " after too many failures in a row" : ""}, ${s.rested ? `${s.rested} quiet ones rested, ` : ""}${s.partial} partial, ${s.described} places looked up, ${s.badRows} malformed postings) in ${s.seconds} s`,
+        `${ats}: ${s.companies} companies, ${s.jobs} jobs (${s.fetched} fetched, ${s.notModified} unchanged, ${s.failed} failed${s.failed ? ` [${describeReasons(s.reasons)}]` : ""}, ${s.skipped} skipped${s.paused ? " (paused: refused by a bot challenge)" : s.tripped ? " after too many failures in a row" : ""}, ${s.rested ? `${s.rested} quiet ones rested, ` : ""}${s.partial} partial, ${s.described} places looked up, ${s.badRows} malformed postings) in ${s.seconds} s`,
       );
     }),
   );
@@ -574,6 +598,8 @@ async function merge(out: string, generated: string) {
     if (!s.fresh) continue;
     const tried = s.fetched + s.notModified + s.failed;
     const why = s.reasons ? ` (${describeReasons(s.reasons)})` : "";
+    // A paused system (PROBED) raises no feed alert: Connectors · health already reports the block, and the app tells users.
+    if (s.paused) continue;
     // A budgeted system stopping part-way is expected (its skipped boards go first next run): only none read is news.
     if (s.tripped && !(BUDGETED[ats] && s.fetched > 0))
       alerts.push({ ats, text: `${ats}: stopped after ${breakAfter(ats)} failed boards in a row (${s.failed} failed, ${s.skipped} skipped)${why}; a host may be blocking the runner` });

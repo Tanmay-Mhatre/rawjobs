@@ -83,6 +83,8 @@ export function isChronic(r: BoardRecord | undefined, now: number): boolean {
 
 /** How long a failing board rests after its last failure: 1 h after the first, then 2, 4, 8, 16, 24 h at most. 0 when it isn't failing. */
 export function restHours(r: BoardRecord | undefined): number {
+  // Refused by bot protection: trying sooner can't help, so once a day until it lets us in again.
+  if (r?.fails && r.reason === "blocked") return MAX_REST_HOURS;
   return r?.fails ? backoff(r.fails, 1, MAX_REST_HOURS) : 0;
 }
 
