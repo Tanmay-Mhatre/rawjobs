@@ -4,6 +4,7 @@ import { homedir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import type { ScanScope } from "./scope";
 import { writeFileAtomic } from "./atomic";
+import { isRunning } from "./pid";
 
 /**
  * Scheduled scans on this computer: the operating system's own scheduler runs
@@ -26,6 +27,10 @@ export type ScheduledRun = {
   error?: string;
   /** A scan that ran late, for a time missed while the computer was off or asleep. */
   catchUp?: boolean;
+  /** The scan's process while it runs (no finishedAt yet): it's logged when it starts, so one that's killed still shows. */
+  pid?: number;
+  /** Status only: still running now. */
+  running?: boolean;
 };
 export type ScheduleStatus = {
   installed: boolean;
@@ -58,6 +63,21 @@ export function validateSchedule(s: Partial<ScheduleSettings>): ScheduleSettings
 }
 
 // ---------- run log (written by the scheduled scan itself) ----------
+
+/** Said of a scheduled scan that started and never got to log how it ended. */
+export const UNFINISHED_RUN = "Stopped before the end: it ran past its time limit, or the computer went to sleep or shut down.";
+
+/**
+ * The run log as Settings shows it: a run still going says so, and one that started but never logged
+ * how it ended (its process is gone: the scheduler's time limit, sleep, a shutdown) says it stopped.
+ */
+export function scheduledRunsNow(runs: ScheduledRun[], alive: (pid: number) => boolean = isRunning): ScheduledRun[] {
+  return runs.map((r) => {
+    if (r.finishedAt || r.pid === undefined) return r;
+    if (alive(r.pid)) return { ...r, running: true };
+    return { ...r, ok: false, error: r.error ?? UNFINISHED_RUN };
+  });
+}
 
 export function readScheduledRuns(dataDir: string): ScheduledRun[] {
   try {
@@ -470,7 +490,7 @@ export function scheduleStatus(ctx: ScheduleContext, now = new Date()): Schedule
   } catch {
     settings = undefined;
   }
-  const runs = readScheduledRuns(ctx.dataDir);
+  const runs = scheduledRunsNow(readScheduledRuns(ctx.dataDir));
   let installed = !!settings;
   let nextRun = settings ? nextRunAt(settings.times, now) : undefined;
   let problem: string | undefined;
