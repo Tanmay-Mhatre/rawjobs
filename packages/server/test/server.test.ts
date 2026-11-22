@@ -79,7 +79,7 @@ if (args[0] !== "scan" || args.includes("--plan")) {
   console.log(JSON.stringify({ cwd: process.cwd(), args, stdin }));
   process.exit(0);
 }
-const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+const wait = (ms) => new Promise((r) => setTimeout(r, process.env.FAKE_SCAN_SLOW ? ms * 20 : ms));
 console.log(JSON.stringify({ type: "start", companies: ["A", "B"], total: 2 }));
 await wait(150);
 console.log(JSON.stringify({ type: "progress", done: 1 }));
@@ -169,6 +169,34 @@ console.log(JSON.stringify({ type: "done", scope: args[args.indexOf("--scope") +
     // Read from the file's start; a generatedAt past the first 4 KB still counts (the whole file is read).
     writeFileSync(join(dataDir, "meta.json"), JSON.stringify({ pad: "x".repeat(5000), generatedAt: "2026-10-14T06:00:00.000Z" }));
     expect((await health()).dataVersion).toBe("2026-10-14T06:00:00.000Z");
+  });
+
+  // Every way a scan starts gets the same: who started it, its progress, Stop, "tell me when done", and no second scan.
+  it.each(["page", "scheduled", "terminal"] as const)("treats a scan started from the %s like any other", async (origin) => {
+    const { port, dataDir } = await start();
+    let page: Promise<unknown> | undefined;
+    if (origin === "page") {
+      process.env.FAKE_SCAN_SLOW = "1";
+      page = call(port, "POST", "/api/run", "{}", (abort) => abort());
+      await page;
+    } else {
+      writeFileSync(join(dataDir, "scan.lock"), String(process.ppid));
+      const head = { origin, scope: "mine", pid: process.ppid, startedAt: "2026-11-22T06:00:00.000Z" };
+      writeFileSync(join(dataDir, "scan-live.ndjson"), `${JSON.stringify(head)}\n${JSON.stringify({ type: "start", companies: [], total: 2, stage: "quick" })}\n`);
+    }
+    try {
+      expect(JSON.parse((await call(port, "GET", "/api/health")).text).scanOrigin).toBe(origin);
+      const followed = await call(port, "GET", "/api/run", undefined, (abort) => abort());
+      expect(followed.status).toBe(200);
+      expect(JSON.parse(followed.text.split("\n")[0]!)).toMatchObject({ type: "start" });
+      expect(JSON.parse((await call(port, "POST", "/api/run/notify")).text)).toEqual({ ok: true });
+      expect((await call(port, "POST", "/api/run", '{"scope":"yours"}')).text).toMatch(/is running|already running/);
+      expect(JSON.parse((await call(port, "POST", "/api/run/stop")).text)).toEqual({ ok: true });
+      expect(existsSync(join(dataDir, "scan-stop"))).toBe(true);
+    } finally {
+      delete process.env.FAKE_SCAN_SLOW;
+      rmSync(join(dataDir, "scan.lock"), { force: true });
+    }
   });
 
   it("shows, stops and makes way for a scan it didn't start (a scheduled one) through its live file", async () => {
