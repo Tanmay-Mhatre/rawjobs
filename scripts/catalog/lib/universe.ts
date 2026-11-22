@@ -12,7 +12,7 @@ import { ATS_TYPES } from "@rawjobs/core";
 import { chao2 } from "./estimate";
 
 /** Families that pick companies rather than crawl URLs: excluded from estimates and from "already known". */
-export const COMPANY_FIRST = new Set(["seeds", "probe", "contributions"]);
+export const COMPANY_FIRST = new Set(["seeds", "probe", "ownsite", "contributions"]);
 export const SYSTEMS = ATS_TYPES;
 
 export type UniverseInput = {

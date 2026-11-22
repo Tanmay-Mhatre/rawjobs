@@ -86,19 +86,28 @@ export function refOfEntry(c: DirectoryEntry): CompanyRef {
   };
 }
 
+/** Directory boards that lead their company (`same_as` is their own key), are live and we can read: by key. */
+function readableLeads(directory: readonly DirectoryEntry[]): Map<string, DirectoryEntry> {
+  return new Map(directory.filter((d) => d.same_as === d.key && d.status === "live" && readable(d)).map((d) => [d.key, d]));
+}
+
 /**
  * The directory companies a scan fetches beyond yours: live boards on hiring systems we can read,
  * not muted, not one of yours (by board or by name), not a sandbox/test board, one board per company
- * (the one with most jobs). Your own companies are always scanned, placeholder or not.
+ * (the board that leads it, else the one with most jobs). Your own companies are always scanned,
+ * placeholder or not.
  */
 export function scopeCompanies(config: Config, directory: readonly DirectoryEntry[], scope: ScanScope): CompanyRef[] {
   const yours = new Set(config.companies.map(companyKey));
   const yourNames = new Set(config.companies.map((c) => nameKey(c.name)));
   const muted = new Set(config.companies_muted);
   if (scope === "yours") return [];
+  const leads = readableLeads(directory);
   const best = new Map<string, DirectoryEntry>();
   for (const c of directory) {
     if (c.status !== "live" || !readable(c) || muted.has(c.key) || yours.has(c.key)) continue;
+    // Another board leads this company (a Workday company's own careers site): that one is fetched.
+    if (c.same_as && c.same_as !== c.key && leads.has(c.same_as)) continue;
     if (c.origin !== "user" && isPlaceholderBoard(c.name)) continue;
     const name = nameKey(c.name) || c.key;
     if (yourNames.has(name)) continue;
@@ -252,6 +261,8 @@ export function findMoves(config: Config, directory: readonly DirectoryEntry[], 
   // Boards you have, and old ones you replaced with a new link: never suggested as where a company moved.
   const yours = new Set([...config.companies.map(companyKey), ...(config.companies_replaced ?? [])]);
   const byBoard = new Map(directory.map((d) => [boardKey(d), d]));
+  const byKey = new Map(directory.map((d) => [d.key, d]));
+  const leads = readableLeads(directory);
   const acceptedFrom = new Map(accepted.map((m) => [m.from.toLowerCase(), m]));
   const moves: BoardMove[] = [];
   for (const c of config.companies) {
@@ -260,6 +271,14 @@ export function findMoves(config: Config, directory: readonly DirectoryEntry[], 
     const target = known && byBoard.get(known.to.toLowerCase());
     if (known && target && failing.has(`${c.ats}:${c.slug}`.toLowerCase()) && !yours.has(target.key) && readable(target)) {
       moves.push({ name: c.name, from: c, to: { ...refOfEntry(target), name: c.name }, checked_at: known.accepted_at });
+      continue;
+    }
+    // The directory knows another board leads this company (a Workday company's own careers site, found
+    // on its website): offered whenever your board fails, e.g. while Workday turns automated checks away.
+    const lead = byKey.get(companyKey(c))?.same_as;
+    const site = lead && lead !== companyKey(c) ? leads.get(lead) : undefined;
+    if (site && failing.has(`${c.ats}:${c.slug}`.toLowerCase()) && !yours.has(site.key)) {
+      moves.push({ name: c.name, from: c, to: { ...refOfEntry(site), name: c.name } });
       continue;
     }
     if (!gone.has(`${c.ats}:${c.slug}`.toLowerCase())) continue;

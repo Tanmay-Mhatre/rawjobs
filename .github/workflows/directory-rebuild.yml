@@ -15,8 +15,9 @@
 # under `timeout`):
 #
 #   job          stage              soft  hard
-#   resolve      industry resolve     10    15     (job limit 100)
+#   resolve      industry resolve     10    15     (job limit 110)
 #                bulk resolve         45    57
+#                own careers sites    15    20
 #   check-known  check 1              60    70     (job limit 110)
 #                crossprobe           20    25
 #   collect      check 2              25    30     (job limit 120)
@@ -109,7 +110,7 @@ jobs:
     needs: due
     if: needs.due.outputs.run == 'true'
     runs-on: ubuntu-24.04
-    timeout-minutes: 100
+    timeout-minutes: 110
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: pnpm/action-setup@73e46992e05b19abd31f2f3c20e0e7370d762115 # v6.1.1
@@ -141,6 +142,16 @@ jobs:
           UV_THREADPOOL_SIZE: 32
         run: bash scripts/catalog/capped.sh "Wikidata companies" ${{ inputs.smoke && 8 || 57 }} bash -c "pnpm exec tsx scripts/catalog/seeds-bulk.ts && pnpm exec tsx scripts/catalog/resolve.ts --bulk --limit ${{ inputs.smoke && 20 || 2400 }} --max-minutes ${{ inputs.smoke && 2 || 45 }}"
 
+      # Workday companies' own careers sites (Phenom, Radancy, Eightfold…), read from their websites:
+      # Workday turns automated readers away. Biggest companies first; continues next week.
+      - name: Own careers sites of Workday companies
+        id: ownsites
+        continue-on-error: true
+        timeout-minutes: 22
+        env:
+          UV_THREADPOOL_SIZE: 16
+        run: bash scripts/catalog/capped.sh "Own careers sites" ${{ inputs.smoke && 5 || 20 }} pnpm exec tsx scripts/catalog/own-sites.ts --max-minutes ${{ inputs.smoke && 2 || 15 }}
+
       # Only from a restored state, so a run that started from nothing never replaces good state.
       # Also after a step ran out of time: the scripts save what they have.
       - name: Hand the results to collect
@@ -152,6 +163,8 @@ jobs:
           [ ! -f raw/wikidata/companies.json ] || cp raw/wikidata/companies.json "$h/raw/wikidata/companies.json"
           [ ! -f out/resolved.json ] || cp out/resolved.json "$h/out/resolved.json"
           [ ! -f out/resolved-bulk.json ] || cp out/resolved-bulk.json "$h/out/resolved-bulk.json"
+          [ ! -f out/own-sites.jsonl ] || cp out/own-sites.jsonl "$h/out/own-sites.jsonl"
+          [ ! -f out/own-sites.json ] || cp out/own-sites.json "$h/out/own-sites.json"
 
       - name: Upload the hand-off
         if: ${{ !cancelled() && steps.state.outcome == 'success' }}

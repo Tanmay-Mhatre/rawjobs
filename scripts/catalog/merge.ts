@@ -26,6 +26,8 @@ const SOURCES = {
   wayback: { family: "wayback", publishable: true },
   // Boards found by trying known company names on other hiring systems (crossprobe.ts).
   probe: { family: "probe", publishable: true },
+  // Workday companies' own careers sites, read from their websites (own-sites.ts).
+  ownsite: { family: "ownsite", publishable: true },
   // Boards the public job boards' jobs link to (feed-boards.ts): only the board, never the feed's jobs.
   feeds: { family: "feeds", publishable: true },
   latmay: { family: "latmay", publishable: true },
@@ -173,6 +175,13 @@ if (existsSync(raw("feeds", "boards.json"))) {
   const found = existsSync(file) ? (JSON.parse(readFileSync(file, "utf8")) as { boards: { ats: string; slug: string; region?: string; shard?: string; site?: string; name?: string }[] }).boards : [];
   for (const b of found) add("probe", b);
   count("probe", found.length);
+}
+{
+  // own-sites.ts: Workday companies' own careers sites, live and named like the company.
+  const file = join(catalogDir, "out", "own-sites.json");
+  const found = existsSync(file) ? (JSON.parse(readFileSync(file, "utf8")) as { boards: { ats: string; slug: string; region?: string; shard?: string; site?: string; name?: string }[] }).boards : [];
+  for (const b of found) add("ownsite", { ats: b.ats, slug: b.slug, region: b.region, shard: b.shard, site: b.site, name: b.name });
+  count("ownsite", found.length);
 }
 
 withFile(raw("latmay", "ats_career_page_urls.csv"), (p) => {

@@ -34,6 +34,7 @@ import type { Resolved, Seed } from "./resolve";
 import type { BulkSeed } from "./seeds-bulk";
 import { type DirectoryMove, dirKeyOf } from "./lib/moves";
 import { catalogDir, dataDir } from "./lib/paths";
+import { ownSiteLinks } from "./lib/own-sites";
 import { sameAsLinks } from "./lib/same-as";
 import { matchVisa, type RegisterFile } from "./lib/visa";
 import { readCheckTitles, readFeedTitles, TagBook, TITLES_SOURCE, WIKIDATA_SOURCE } from "./lib/tags";
@@ -249,6 +250,14 @@ for (const c of indexed) {
 // ---- same company on several boards (lib/same-as.ts): same name *and* the same job titles ----
 // `same_as` is new in directory.json and index.json; the Radar groups those boards' jobs as one company.
 const sameAs = sameAsLinks(indexed.map((c) => ({ key: c.key, name: c.name, open_jobs: c.open_jobs, titles: c.rows.map((r) => r[0]) })));
+// Workday companies' own careers sites (own-sites.ts): the site leads its company, so the Radar shows
+// each opening once and scans read the site instead of the Workday board (blocked by Workday since Nov 2026).
+const ownSites = ownSiteLinks(
+  readJson<{ boards: { key: string; replaces?: string[] }[] }>(join(catalogDir, "out", "own-sites.json"), { boards: [] }).boards,
+  new Set(slim.filter((c) => c.status === "live").map((c) => c.key)),
+  sameAs,
+);
+for (const [k, v] of ownSites) sameAs.set(k, v);
 for (const c of [...slim, ...indexed] as { key: string; same_as?: string }[]) {
   const s = sameAs.get(c.key);
   if (s) c.same_as = s;
@@ -271,7 +280,7 @@ const perIndustry = INDUSTRIES.map((i) => {
   return `${i.id} ${n} (${scannable} scannable) + ${hiring} from job titles only`;
 });
 console.log(
-  `Published to ${OUT}: directory ${slim.length} companies (${additions.length} added by you, ${unverified.length} seed companies not scannable yet), index ${indexed.length} companies (${indexed.reduce((s, c) => s + c.rows.length, 0)} job rows). ${sameAs.size} boards joined to another board of the same company (same_as).`,
+  `Published to ${OUT}: directory ${slim.length} companies (${additions.length} added by you, ${unverified.length} seed companies not scannable yet), index ${indexed.length} companies (${indexed.reduce((s, c) => s + c.rows.length, 0)} job rows). ${sameAs.size} boards joined to another board of the same company (same_as), ${ownSites.size} of them by a Workday company's own careers site.`,
 );
 console.log(
   `Tagged ${slim.filter((c) => c.tags?.length).length} companies by industry (+${slim.filter((c) => !c.tags?.length && c.title_tags?.length).length} from job titles only):\n  ${perIndustry.join("\n  ")}`,

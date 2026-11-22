@@ -5,7 +5,7 @@ import { describe, expect, it } from "vitest";
 import { parseConfig } from "../src/config";
 import { readLedger } from "../src/discover";
 import { readProgress, resumable, scan, type ScanStart } from "../src/scan";
-import { estimateScan, estimateSeconds, readSpeeds, recordSpeeds, scopeCompanies, type DirectoryEntry } from "../src/scope";
+import { estimateScan, estimateSeconds, findMoves, readSpeeds, recordSpeeds, scopeCompanies, type DirectoryEntry } from "../src/scope";
 import { fakeHttp, fixture, json } from "./helpers";
 import type { DataMeta } from "../src/schema";
 
@@ -75,6 +75,18 @@ describe("scopeCompanies", () => {
   it("one board per company (the one with most jobs), and none for a company you watch under another board", () => {
     const dir = [entry("lever:binance", { name: "Binance", open_jobs: 40 }), entry("ashby:binance", { name: "Binance", open_jobs: 3 }), entry("ashby:ghco2", { name: "GH Co" })];
     expect(scopeCompanies(cfg, dir, "all").map((c) => `${c.ats}:${c.slug}`)).toEqual(["lever:binance"]);
+  });
+
+  it("a company's lead board stands in for the boards joined to it (a Workday company's own careers site)", () => {
+    const wd = "workday:acme|wd5|external";
+    const dir = [
+      entry(wd, { name: "Acme", ats: "workday", slug: "acme", shard: "wd5", site: "external", open_jobs: 900, same_as: "phenom:careers.acme.com" }),
+      entry("phenom:careers.acme.com", { name: "Acme Corp", ats: "phenom", slug: "careers.acme.com", open_jobs: 300, same_as: "phenom:careers.acme.com" }),
+    ];
+    expect(scopeCompanies(cfg, dir, "all").map((c) => `${c.ats}:${c.slug}`)).toEqual(["phenom:careers.acme.com"]);
+    // A lead that isn't live leaves the joined board in.
+    const dead = [dir[0]!, { ...dir[1]!, status: "dead" }];
+    expect(scopeCompanies(cfg, dead, "all").map((c) => c.ats)).toEqual(["workday"]);
   });
 
   it("skips sandbox and training boards, unless you added them yourself", () => {
@@ -367,5 +379,25 @@ ${extra}`);
     expect(lever(on)?.why.industry).toBe(0);
     expect(lever(off)?.why.industry).toBe(10);
     expect(off.result.jobs.length).toBe(on.result.jobs.length);
+  });
+});
+
+describe("findMoves", () => {
+  const wd = { name: "Acme", ats: "workday" as const, slug: "acme", shard: "wd5", site: "external", enabled: true };
+  const dir = [
+    entry("workday:acme|wd5|external", { name: "Acme", ats: "workday", slug: "acme", shard: "wd5", site: "external", same_as: "phenom:careers.acme.com" }),
+    entry("phenom:careers.acme.com", { name: "Acme", ats: "phenom", slug: "careers.acme.com", same_as: "phenom:careers.acme.com" }),
+  ];
+  const cfg = { ...config(), companies: [wd] };
+  const failing = [{ company: "Acme", ats: "workday", slug: "acme", ok: false, jobsFound: 0, matches: 0, durationMs: 1, error: "HTTP 429" }] as never;
+
+  it("offers the company's own careers site when your Workday board fails", () => {
+    const moves = findMoves(cfg, dir, failing);
+    expect(moves.map((m) => `${m.to.ats}:${m.to.slug}`)).toEqual(["phenom:careers.acme.com"]);
+    expect(moves[0]!.checked_at).toBeUndefined();
+  });
+
+  it("offers nothing while your board works", () => {
+    expect(findMoves(cfg, dir, [])).toEqual([]);
   });
 });
