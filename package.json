@@ -34,6 +34,7 @@
     "design:build": "tsx scripts/design/tokens.ts",
     "design:lint": "tsx scripts/design/lint.ts",
     "design:shots": "tsx scripts/design/shots.ts",
+    "feed:bot-auth": "tsx scripts/catalog/web-bot-auth.ts",
     "catalog:crawl": "tsx scripts/catalog/commoncrawl.ts",
     "catalog:wayback": "tsx scripts/catalog/wayback.ts",
     "catalog:feed-boards": "tsx scripts/catalog/feed-boards.ts",

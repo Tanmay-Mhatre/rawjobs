@@ -88,6 +88,16 @@ Before you open or queue a PR (or publish anything), check your own work:
 3. Run `pnpm check`, and test the change in the running app when the user can see it.
 4. Fix what you find, then say in the PR what you checked.
 
+## Scans: cover every way a scan starts
+
+A scan can start in three ways: from the page (the server runs it), from the computer's schedule,
+or from `rawjobs scan` in a terminal. The last two are separate processes that hold `data/scan.lock`
+and write their progress to `data/scan-live.ndjson`, which `GET /api/run` serves to the page. Any
+change to scans (progress, time left, Stop, alerts, what's blocked while one runs, what's shown when
+it ends or fails) must work for all three. In the plan, say how each one behaves. In the tests,
+cover the page and the scheduled case (`packages/server/test/server.test.ts` runs the same checks
+for both). Gate UI on the page's scan state (`scan.phase`), not on a flag only page scans set.
+
 ## UI and UX changes: show the user a screenshot
 
 After any change the user can see (layout, copy, styling, a new state or interaction), once the

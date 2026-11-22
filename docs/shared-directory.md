@@ -381,6 +381,51 @@ days, twice its usual pace or more, gets a "Hiring surge" tag and the Radar's "O
 hiring surge" filter. Both stay hidden until some company has 6 weeks of records (`meta.json`
 `hiringReady`), so nobody sees a filter that can only be empty. None of it changes a job's score.
 
+### Web Bot Auth
+
+The feed can prove who it is with [Web Bot Auth](https://developers.cloudflare.com/bots/reference/bot-verification/web-bot-auth/),
+so it can be registered as a Cloudflare verified bot instead of looking like any script that copied
+its User-Agent. It's off until the key is set: without it nothing changes.
+
+- **Requests** (`scripts/catalog/lib/web-bot-auth.ts`, used by `jobs.ts` through `HttpClient`'s `sign`
+  option): every attempt carries an Ed25519 HTTP Message Signature (RFC 9421) over `@authority` and
+  `signature-agent`, tagged `web-bot-auth`, valid 5 minutes, with a nonce and `keyid` = the key's JWK
+  thumbprint. `Signature-Agent` is a quoted string naming the site (`"https://www.rawjobs.workers.dev"`,
+  or the `SITE_URL` variable), the form Cloudflare's docs ask for. The User-Agent stays as it was.
+  The feed signs only in GitHub Actions (`GITHUB_ACTIONS=true`) with the `WEB_BOT_AUTH_KEY` secret
+  set. The desktop app never loads the key or this code.
+- **Key directory**: the site serves the public key at
+  `/.well-known/http-message-signatures-directory` (`application/http-message-signatures-directory+json`,
+  a JWK set), signed on every read over `"@authority";req` and tagged
+  `http-message-signatures-directory`. That one path runs `apps/site/worker.ts`
+  (`run_worker_first` in `apps/site/wrangler.toml`), which needs the same key as a Worker secret.
+  Every other path is still served as static files. Without the secret the path is a 404.
+- **robots.txt**: 17 connectors (`avature`, `pageup`, `radancy` and others; `robotsAllows` in
+  `packages/core/src/robots.ts`) skip what robots.txt disallows for `rawjobs` or `*`, and keep its
+  `Crawl-delay` as the host's minimum gap. The others, Workday included, call the vendor's public job
+  API (`/wday/cxs/...` on Workday) without reading robots.txt. Workday's robots.txt lists careers-site paths, not that API.
+  The feed reads each board once per run (every 6 hours) and backs off on 429s and 5xx.
+
+**Setup (once):**
+
+1. Make a key, outside the repo: `pnpm feed:bot-auth keygen ~/rawjobs-web-bot-auth.pem`. It prints the
+   `keyid` and public key. (`openssl genpkey -algorithm ed25519 -out <file>` makes the same kind of key.)
+2. Add it to the repo: `gh secret set WEB_BOT_AUTH_KEY < ~/rawjobs-web-bot-auth.pem`.
+3. Add it to the site's Worker: `cd apps/site`, then
+   `npx wrangler@4.151.1 secret put WEB_BOT_AUTH_KEY < ~/rawjobs-web-bot-auth.pem`. Then deploy the
+   site (push to `main`, or run **Site** from the Actions tab).
+4. Check: `pnpm feed:bot-auth check ~/rawjobs-web-bot-auth.pem`. Cloudflare's test endpoint
+   (`crawltest.com/cdn-cgi/web-bot-auth`) answers 401 for a well-formed signature from a key it doesn't
+   know yet, 200 once the key is registered, 400 when it can't read the signature. The check also reads
+   the site's key directory and says whether it lists the key.
+5. Register: in the Cloudflare dashboard, **Manage Account → Configurations → Bot Submission Form**:
+   verification method **Request Signature**, validation instructions = the key directory URL
+   (`https://www.rawjobs.workers.dev/.well-known/http-message-signatures-directory`). Follow the request
+   under **BotBase → Submission history**.
+
+To rotate the key, repeat steps 1 to 4 with a new file; the next feed run and site deploy use it.
+To stop signing, delete the `WEB_BOT_AUTH_KEY` repo secret.
+
 ## Scheduler
 
 GitHub's scheduled crons are best effort: from 6 Oct to 5 Nov 2026 they started 3–10 hours late, and

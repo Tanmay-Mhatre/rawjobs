@@ -7,6 +7,7 @@ import { HttpError } from "./http";
  * the longest matching rule wins, Allow wins a tie, `*` matches anything and `$` anchors the end.
  * A missing robots.txt (4xx) allows everything; so does one we can't reach, so a flaky host only
  * fails at the real request. Some sites serve robots.txt as an HTML page: its text is read out.
+ * A Crawl-delay is kept as the host's minimum gap between requests (HttpClient.keepGap).
  */
 export type RobotsRules = { allow: string[]; disallow: string[]; crawlDelay?: number };
 
@@ -90,14 +91,18 @@ async function load(http: HttpClient, origin: string): Promise<RobotsRules> {
   }
 }
 
-/** The robots rules for a URL's host, fetched at most once a day. */
-export function robotsFor(http: HttpClient, url: string): Promise<RobotsRules> {
-  const origin = new URL(url).origin;
+/** The robots rules for a URL's host, fetched at most once a day; its Crawl-delay paces `http` from then on. */
+export async function robotsFor(http: HttpClient, url: string): Promise<RobotsRules> {
+  const { origin, host } = new URL(url);
   const hit = cache.get(origin);
-  if (hit && Date.now() - hit.at < TTL_MS) return hit.rules;
-  const rules = load(http, origin);
-  cache.set(origin, { at: Date.now(), rules });
-  return rules;
+  let rules = hit && Date.now() - hit.at < TTL_MS ? hit.rules : undefined;
+  if (!rules) {
+    rules = load(http, origin);
+    cache.set(origin, { at: Date.now(), rules });
+  }
+  const found = await rules;
+  if (found.crawlDelay && found.crawlDelay > 0) http.keepGap(host, found.crawlDelay * 1000);
+  return found;
 }
 
 /** Whether robots.txt lets us fetch `url`. */

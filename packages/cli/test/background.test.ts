@@ -5,7 +5,7 @@ import { describe, expect, it } from "vitest";
 import { parseConfig } from "../../core/src/config";
 import { HttpClient } from "../../core/src/http";
 import { JOB_FEED_SCHEMA } from "../../core/src/job-feed";
-import { backgroundCheck, parseScope, wantsBackground, type RunValues } from "../src/commands/run";
+import { backgroundCheck, parseScope, progressEvents, wantsBackground, type RunValues } from "../src/commands/run";
 
 const config = (yaml = "") =>
   parseConfig(`
@@ -70,5 +70,20 @@ describe("the background check", () => {
     expect(parseScope("all")).toBe("all");
     expect(parseScope("yours")).toBe("yours");
     expect(() => parseScope("every")).toThrow(/--scope/);
+  });
+});
+
+describe("a scan's progress lines", () => {
+  it("are the same for the dashboard's scans and the live file: start, then a line per company", () => {
+    const sent: { type: string; done?: number }[] = [];
+    const p = progressEvents(config("companies:\n  - { name: Acme, ats: greenhouse, slug: acme }"), (e) => sent.push(e as (typeof sent)[number]));
+    const quick = p.hooks("quick");
+    type Start = Parameters<NonNullable<typeof quick.onStart>>[0];
+    type Health = Parameters<NonNullable<typeof quick.onCompanyDone>>[0];
+    quick.onStart?.({ yours: ["Acme"], total: 2, extra: 1, resumed: 0, scope: "mine", seconds: 60, byAts: { greenhouse: 2 }, resumedByAts: {}, fallback: true } as unknown as Start);
+    quick.onCompanyDone?.({ company: "Acme", ats: "greenhouse", slug: "acme", ok: true, matches: 0 } as unknown as Health);
+    expect(p.state.fallback).toBe(true);
+    expect(sent.map((e) => e.type)).toEqual(["start", "company"]);
+    expect(sent[1]).toMatchObject({ done: 1 });
   });
 });

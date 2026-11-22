@@ -13,6 +13,7 @@ import {
   scanPlan,
   acquireScanLock,
   releaseScanLock,
+  startLiveLog,
   alertJobs,
   digest,
   availableJobs,
@@ -196,22 +197,40 @@ export async function cmdRun(args: string[]): Promise<number> {
     log({ ok: false, error: "Another scan was already running." });
     return 0;
   };
+  // Nobody reads this scan's output (a scheduled one, or a terminal's): its progress goes to the
+  // live file too, for the dashboard to show. Started once the lock is held, so it never overwrites another scan's.
+  let liveSend: ((event: RunEvent) => void) | undefined;
+  const live = (event: RunEvent) => {
+    if (values["dry-run"]) return;
+    liveSend ??= startLiveLog(dataDir, { origin: values.scheduled ? "scheduled" : "terminal", scope });
+    liveSend(event);
+  };
   const sync = async () => {
     console.error("Syncing the company directory…");
-    console.error(`  ${(await syncDirectory(dataDir)).message}`);
-    if (!values.full) console.error(`  ${(await syncJobFeed(dataDir)).message}`);
+    live({ type: "sync" });
+    const directory = await syncDirectory(dataDir);
+    console.error(`  ${directory.message}`);
+    const feed = values.full ? undefined : (await syncJobFeed(dataDir)).message;
+    if (feed) console.error(`  ${feed}`);
+    live({ type: "synced", ...directory, ...(feed ? { feed } : {}) });
   };
   try {
     return await scanSession(values, dataDir, { busy, sync }, async (syncMs) => {
+      // Logged as it starts (with this process), so a run the scheduler kills still shows in Settings.
+      if (values.scheduled) recordScheduledRun(dataDir, { startedAt, scope, ok: false, pid: process.pid, ...(catchUp ? { catchUp } : {}) });
       const stage1Started = Date.now();
       let fallback = false;
       const session = sessionOptions(values, dataDir, scope);
-      const { result, merged, summary, checks, moves, stopped, resting, quiet, chronic, openCheck, stats } = await scan(config, {
+      const progress = progressEvents(config, live);
+      const quick = progress.hooks("quick");
+      const first = await scan(config, {
         ...session,
         syncMs,
         // Only when an alert will go out: the check costs requests the alert-less scan doesn't need.
         checkBeforeAlert: values.notify && alertsOn(config),
+        onCompanyResult: quick.onCompanyResult,
         onStart: (s) => {
+          quick.onStart?.(s);
           fallback = !!s.fallback;
           if (s.fallback) console.error(`The shared job feed is ${s.feedAgeDays === undefined ? "missing" : `${Math.floor(s.feedAgeDays)} days old`}, so this scan checks every company itself.`);
           console.error(
@@ -219,11 +238,14 @@ export async function cmdRun(args: string[]): Promise<number> {
           );
         },
         onCompanyDone: (h) => {
+          quick.onCompanyDone?.(h);
           // A whole-directory scan prints your companies, matches and failures, not 17,000 lines.
           if (checks_quiet(h)) return;
           console.error(`  ${h.ok ? "ok " : "ERR"} ${h.company.padEnd(24)} ${healthLine(h)}`);
         },
       });
+      const { result, merged, summary, checks, moves, stopped, resting, quiet, chronic, openCheck, stats } = first;
+      progress.doneEvent(first, "quick");
 
       const min = config.profile.min_score;
       const shown = result.jobs.filter((j) => values.all || !j.why.gate).slice(0, Number.isFinite(Number(values.limit)) ? Number(values.limit) : 50);
@@ -286,9 +308,17 @@ export async function cmdRun(args: string[]): Promise<number> {
         const weekly = await sendWeeklySummary(dataDir, telegramSecrets());
         if (weekly === "sent" || weekly.startsWith("failed")) console.error(`Telegram: ${weekly === "sent" ? "sent the weekly summary" : weekly}`);
       }
+      // "Tell me when it's done", asked on the dashboard while it followed this scan.
+      if (existsSync(notifyFile(dataDir))) {
+        rmSync(notifyFile(dataDir), { force: true });
+        live({ type: "notified", result: await notifyFinished(availableJobs(merged.jobs).length, stopped, scope) });
+      }
       let newMatches = fresh;
       if (wantsBackground(config, values, scope, { stopped, fallback })) {
-        const bg = await backgroundCheck(config, session, stage1Started);
+        live({ type: "background" });
+        const { onCompanyResult: _, ...bgHooks } = progress.hooks("background");
+        const bg = await backgroundCheck(config, { ...session, ...bgHooks }, stage1Started);
+        progress.doneEvent(bg, "background");
         const found = bg.result.jobs.filter((j) => !j.why.gate && bg.merged.newIds.has(j.id)).length;
         newMatches += found;
         console.log(
@@ -327,6 +357,108 @@ export function printPlan(values: { config?: string; data: string }): number {
 /** One line of the dashboard's scan progress: @rawjobs/core/protocol's RunEvent. */
 export const emit = (event: RunEvent) => process.stdout.write(`${JSON.stringify(event)}\n`);
 
+/**
+ * A scan's progress as the dashboard's lines (RunEvent), sent to `send`: the NDJSON scan's stdout, or
+ * the live file a scan nobody's reading writes (startLiveLog). `hooks(stage)` go in the scan's options;
+ * `doneEvent` sends how a stage ended; `state.fallback` says Scan now checked every company itself.
+ */
+export function progressEvents(config: Config, send: (event: RunEvent) => void) {
+  const yours = new Set(config.companies.map((c) => `${c.ats}:${c.slug}`));
+  const state = { fallback: false };
+  /** One stage's progress lines: start, a line per company (or a count), its matches as they come. */
+  const hooks = (stage: "quick" | "background"): Pick<ScanOptions, "onStart" | "onCompanyDone" | "onCompanyResult"> => {
+    let done = 0;
+    /** When the last progress line went out. */
+    let lastLine = 0;
+    /** Companies done per hiring system, including ones a resumed scan already did. */
+    let doneByAts: Record<string, number> = {};
+    /** Scan now's companies by where they come from (yours, past matches, feed picks), and how many are done. */
+    let sourceOf = new Map<string, ScanSource>();
+    let doneBySource: Record<ScanSource, number> | undefined;
+    return {
+      onStart: (s) => {
+        done = s.resumed;
+        doneByAts = { ...s.resumedByAts };
+        if (stage === "quick") state.fallback = !!s.fallback;
+        if (s.sources) {
+          sourceOf = new Map(Object.entries(s.sources));
+          doneBySource = sourceCounts();
+        }
+        const bySource = s.sources ? sourceCounts() : undefined;
+        if (bySource) {
+          bySource.yours = s.yours.length;
+          for (const src of sourceOf.values()) bySource[src]++;
+        }
+        send({
+          type: "start",
+          companies: s.yours,
+          total: s.total,
+          extra: s.extra,
+          resumed: s.resumed,
+          scope: s.scope,
+          stage,
+          seconds: s.seconds,
+          stages: s.stages,
+          skippedByFeed: s.skippedByFeed,
+          byAts: s.byAts,
+          doneByAts,
+          ...(bySource ? { bySource, doneBySource } : {}),
+          ...(s.fallback ? { fallback: true } : {}),
+          feedAgeDays: s.feedAgeDays ?? null,
+        });
+      },
+      onCompanyDone: (h) => {
+        done++;
+        doneByAts[h.ats] = (doneByAts[h.ats] ?? 0) + 1;
+        const mine = yours.has(`${h.ats}:${h.slug}`);
+        if (doneBySource) {
+          const src = mine ? "yours" : sourceOf.get(h.key ?? "");
+          if (src) doneBySource[src]++;
+        }
+        const counts = { doneByAts, ...(doneBySource ? { doneBySource } : {}) };
+        // Every one of yours, and directory companies that matched or failed; the rest only as a count
+        // (every 25, or after 2 s without a line, so a slow stretch still shows it's moving).
+        if (mine || h.matches > 0 || (!h.ok && !h.unsupported)) send({ type: "company", done, ...counts, ...h });
+        else if (done % 25 === 0 || Date.now() - lastLine > 2000) send({ type: "progress", done, ats: h.ats, last: h.company, ...counts });
+        else return;
+        lastLine = Date.now();
+      },
+      // Matches as each company finishes, so the Radar shows them before the scan ends.
+      onCompanyResult: (_h, jobs) => {
+        const matches = jobs.filter((j) => !j.why.gate);
+        if (matches.length) send({ type: "jobs", jobs: matches.map(toDashboardJob) });
+      },
+    };
+  };
+  const doneEvent = (r: ScanResult, stage: "quick" | "background") => {
+    const matches = r.result.jobs.filter((j) => !j.why.gate);
+    const newMatches = r.summary?.newMatches ?? matches.filter((j) => r.merged.newIds.has(j.id)).length;
+    send({
+      type: "done",
+      stage,
+      jobsFound: r.result.jobs.length,
+      matches: matches.length,
+      strong: matches.filter((j) => j.score >= config.profile.min_score).length,
+      newMatches,
+      failed: r.result.health.filter(failedHealth).length,
+      checked: r.checks.length,
+      stopped: r.stopped,
+      ...(r.result.everyCompany ? { everyCompany: true } : {}),
+      moves: r.moves.map((m) => ({ name: m.name, from: `${m.from.ats}:${m.from.slug}`, to: `${m.to.ats}:${m.to.slug}` })),
+      stats: {
+        stages: r.stats.stages,
+        wallMs: r.stats.wallMs,
+        requests: r.stats.http.requests,
+        notModified: r.stats.http.notModified,
+        rateLimited: r.stats.http.rateLimited,
+        timeouts: r.stats.http.timeouts,
+      },
+    });
+    return { matches, newMatches };
+  };
+  return { hooks, doneEvent, state };
+}
+
 /** Machine-readable scan for the dashboard: sync, start, one line per company (yours, plus matches and failures), done (or error). */
 export async function runNdjson(values: RunValues): Promise<number> {
   try {
@@ -344,101 +476,9 @@ export async function runNdjson(values: RunValues): Promise<number> {
       emit({ type: "synced", ...(await syncDirectory(dataDir)), ...(values.full ? {} : { feed: (await syncJobFeed(dataDir)).message }) });
     };
     return await scanSession(values, dataDir, { busy, sync }, async (syncMs) => {
-      const yours = new Set(config.companies.map((c) => `${c.ats}:${c.slug}`));
       const session = sessionOptions(values, dataDir, scope);
       const stage1Started = Date.now();
-      let fallback = false;
-      /** One stage's progress lines: start, a line per company (or a count), its matches as they come. */
-      const hooks = (stage: "quick" | "background"): Pick<ScanOptions, "onStart" | "onCompanyDone" | "onCompanyResult"> => {
-        let done = 0;
-        /** When the last progress line went out. */
-        let lastLine = 0;
-        /** Companies done per hiring system, including ones a resumed scan already did. */
-        let doneByAts: Record<string, number> = {};
-        /** Scan now's companies by where they come from (yours, past matches, feed picks), and how many are done. */
-        let sourceOf = new Map<string, ScanSource>();
-        let doneBySource: Record<ScanSource, number> | undefined;
-        return {
-          onStart: (s) => {
-            done = s.resumed;
-            doneByAts = { ...s.resumedByAts };
-            if (stage === "quick") fallback = !!s.fallback;
-            if (s.sources) {
-              sourceOf = new Map(Object.entries(s.sources));
-              doneBySource = sourceCounts();
-            }
-            const bySource = s.sources ? sourceCounts() : undefined;
-            if (bySource) {
-              bySource.yours = s.yours.length;
-              for (const src of sourceOf.values()) bySource[src]++;
-            }
-            emit({
-              type: "start",
-              companies: s.yours,
-              total: s.total,
-              extra: s.extra,
-              resumed: s.resumed,
-              scope: s.scope,
-              stage,
-              seconds: s.seconds,
-              stages: s.stages,
-              skippedByFeed: s.skippedByFeed,
-              byAts: s.byAts,
-              doneByAts,
-              ...(bySource ? { bySource, doneBySource } : {}),
-              ...(s.fallback ? { fallback: true } : {}),
-              feedAgeDays: s.feedAgeDays ?? null,
-            });
-          },
-          onCompanyDone: (h) => {
-            done++;
-            doneByAts[h.ats] = (doneByAts[h.ats] ?? 0) + 1;
-            const mine = yours.has(`${h.ats}:${h.slug}`);
-            if (doneBySource) {
-              const src = mine ? "yours" : sourceOf.get(h.key ?? "");
-              if (src) doneBySource[src]++;
-            }
-            const counts = { doneByAts, ...(doneBySource ? { doneBySource } : {}) };
-            // Every one of yours, and directory companies that matched or failed; the rest only as a count
-            // (every 25, or after 2 s without a line, so a slow stretch still shows it's moving).
-            if (mine || h.matches > 0 || (!h.ok && !h.unsupported)) emit({ type: "company", done, ...counts, ...h });
-            else if (done % 25 === 0 || Date.now() - lastLine > 2000) emit({ type: "progress", done, ats: h.ats, last: h.company, ...counts });
-            else return;
-            lastLine = Date.now();
-          },
-          // Matches as each company finishes, so the Radar shows them before the scan ends.
-          onCompanyResult: (_h, jobs) => {
-            const matches = jobs.filter((j) => !j.why.gate);
-            if (matches.length) emit({ type: "jobs", jobs: matches.map(toDashboardJob) });
-          },
-        };
-      };
-      const doneEvent = (r: ScanResult, stage: "quick" | "background") => {
-        const matches = r.result.jobs.filter((j) => !j.why.gate);
-        const newMatches = r.summary?.newMatches ?? matches.filter((j) => r.merged.newIds.has(j.id)).length;
-        emit({
-          type: "done",
-          stage,
-          jobsFound: r.result.jobs.length,
-          matches: matches.length,
-          strong: matches.filter((j) => j.score >= config.profile.min_score).length,
-          newMatches,
-          failed: r.result.health.filter(failedHealth).length,
-          checked: r.checks.length,
-          stopped: r.stopped,
-          ...(r.result.everyCompany ? { everyCompany: true } : {}),
-          moves: r.moves.map((m) => ({ name: m.name, from: `${m.from.ats}:${m.from.slug}`, to: `${m.to.ats}:${m.to.slug}` })),
-          stats: {
-            stages: r.stats.stages,
-            wallMs: r.stats.wallMs,
-            requests: r.stats.http.requests,
-            notModified: r.stats.http.notModified,
-            rateLimited: r.stats.http.rateLimited,
-            timeouts: r.stats.http.timeouts,
-          },
-        });
-        return { matches, newMatches };
-      };
+      const { hooks, doneEvent, state } = progressEvents(config, emit);
 
       /** The background check: its progress lines, but not its matches (it's quiet: they show when it ends). */
       const background = async (since: number) => {
@@ -465,7 +505,7 @@ export async function runNdjson(values: RunValues): Promise<number> {
           result: await notifyFinished(availableJobs(first.merged.jobs).length, first.stopped, scope),
         });
       }
-      if (wantsBackground(config, values, scope, { stopped: first.stopped, fallback })) await background(stage1Started);
+      if (wantsBackground(config, values, scope, { stopped: first.stopped, fallback: state.fallback })) await background(stage1Started);
       return 0;
     });
   } catch (err) {

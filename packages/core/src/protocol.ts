@@ -13,6 +13,9 @@ import type { AtsType, CompanyHealth, Config, DashboardJob } from "./schema";
  */
 export type ScanScope = "mine" | "all" | "yours";
 
+/** Who started a scan: this dashboard, the computer's schedule, or `rawjobs scan` in a terminal. */
+export type ScanOrigin = "page" | "scheduled" | "terminal";
+
 /** Where a Scan now company comes from: yours, a past match, or picked by the shared job feed. */
 export type ScanSource = "yours" | "past" | "feed";
 

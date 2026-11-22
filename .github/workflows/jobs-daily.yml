@@ -143,6 +143,11 @@ jobs:
         env:
           DENYLIST_FILE: ${{ runner.temp }}/denylist.json
           NODE_OPTIONS: --max-old-space-size=6144
+          # Web Bot Auth (scripts/catalog/lib/web-bot-auth.ts): with this secret set, every request is
+          # signed, pointing at the key directory on the site (SITE_URL, else www.rawjobs.workers.dev).
+          # Unset: requests go out unsigned, as before. Setup: docs/shared-directory.md#web-bot-auth
+          WEB_BOT_AUTH_KEY: ${{ secrets.WEB_BOT_AUTH_KEY }}
+          WEB_BOT_AUTH_AGENT: ${{ vars.SITE_URL }}
         run: >-
           pnpm exec tsx scripts/catalog/jobs.ts crawl --group ${{ matrix.group }}
           --generated "${{ needs.guard.outputs.run_at }}" --directory "$RUNNER_TEMP/directory.json"
@@ -234,7 +239,7 @@ jobs:
             echo
             echo "| System | Companies | Jobs | Fetched | Unchanged | Failed | Skipped | Capped | Places looked up | Minutes |"
             echo "|---|---|---|---|---|---|---|---|---|---|"
-            jq -r '.ats | to_entries[] | "| \(.key) | \(.value.companies) | \(.value.jobs) | \(.value.fetched) | \(.value.notModified) | \(.value.failed) | \(.value.skipped)\(if .value.tripped then " (stopped)" else "" end) | \(.value.partial) | \(.value.described) | \(.value.seconds / 60 | floor) |"' stats.json
+            jq -r '.ats | to_entries[] | "| \(.key) | \(.value.companies) | \(.value.jobs) | \(.value.fetched) | \(.value.notModified) | \(.value.failed) | \(.value.skipped)\(if .value.paused then " (paused)" elif .value.tripped then " (stopped)" else "" end) | \(.value.partial) | \(.value.described) | \(.value.seconds / 60 | floor) |"' stats.json
             echo
             # Coverage: no company may drop. Kept = rows from an earlier run (a board that failed or wasn't reached).
             # These two report lines must never stop the feed from publishing, hence `|| true`.
@@ -246,6 +251,7 @@ jobs:
             jq -r '.groups | to_entries[] | select(.value.http) | .key as $g | .value.http | "| \($g) | \(.requests) | \(.notModified) | \(.failures) | \(.rateLimited) | \(.timeouts) | \(.slowedHosts | length) | \(.brokenHosts | join(", ")) | \((.paces // {}) | to_entries | map("\(.key) \(.value.rate) (\(.value.downs))") | join(", ")) |"' stats.json || true
             echo
             jq -r '.alerts[] | "- \(.text)"' stats.json
+            jq -r '.ats | to_entries[] | select(.value.paused) | "- \(.key): paused this run (refused by a bot challenge); its rows age out."' stats.json || true
           } >> "$GITHUB_STEP_SUMMARY"
           jq '{generated_at, groups, alerts, coverage, v2, v3}' stats.json
 
