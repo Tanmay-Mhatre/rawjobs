@@ -2,7 +2,7 @@ import { existsSync, mkdirSync, mkdtempSync, readFileSync, utimesSync, writeFile
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-import { availableJobs, digest, findTelegramChat, finishedMessage, looksLikeToken, maskToken, saveTelegramSecrets, sendTelegram, telegramSecrets } from "../src/notify";
+import { availableJobs, digest, findTelegramChat, finishedMessage, looksLikeToken, scheduledFailedMessage, maskToken, saveTelegramSecrets, sendTelegram, telegramSecrets } from "../src/notify";
 import { acquireScanLock, releaseScanLock, scanLockHeld } from "../src/scan";
 import {
   installSchedule,
@@ -59,6 +59,12 @@ describe("digest", () => {
     expect(digest([job("A", 80), job("B", 90)], { minScore: 70, onlyNew: false, scope: "all" })).toBe(
       "💼 <b>Strong fits · Every company</b>\n\n<b>2</b> strong fits\n\n👉 <i>Open RawJobs on your computer to see them.</i>",
     );
+  });
+});
+
+describe("scheduledFailedMessage", () => {
+  it("says a scheduled scan didn't finish, without details, and what to do", () => {
+    expect(scheduledFailedMessage()).toBe("⚠️ <b>Scheduled scan didn't finish</b>\n\nYour earlier results are safe.\n\n👉 <i>Open RawJobs on your computer to see why and scan again.</i>");
   });
 });
 
