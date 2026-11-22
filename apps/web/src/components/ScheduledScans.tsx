@@ -22,6 +22,9 @@ const REASONS: [RegExp, string][] = [
   [/\b(ENOTFOUND|ETIMEDOUT|ECONNRESET|EAI_AGAIN|ENETUNREACH)\b|fetch failed/, "No internet connection during the scan. It tries again at the next scheduled time."],
 ];
 
+/** A run that didn't finish (not one still going, nor one skipped because another scan was running). */
+export const failedRun = (r: ScheduledRun) => !r.ok && !r.running && r.error !== SKIPPED;
+
 /** One history row's text. Exported for tests. */
 export function runLine(r: ScheduledRun): string {
   if (r.running) return "Running now. Its progress is on the scan button.";
