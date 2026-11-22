@@ -52,6 +52,9 @@ import { TalkToSomeone } from "./referral/TalkToSomeone";
 import { OfferFields } from "./TrackedJob";
 import { cx, Select } from "./ui";
 
+/** An open job its board hasn't confirmed for this long may be gone: even the quietest boards are read every 3 days (board-health.ts). */
+const RECHECK_DAYS = 4;
+
 export type JobDetailProps = {
   job: Job;
   entry?: Entry;
@@ -217,7 +220,14 @@ export function JobDetail(p: JobDetailProps) {
         ]
       : job.estimated
         ? []
-        : [`listed on ${source}, checked ${timeAgo(job.lastSeen)}`]),
+        : // Not rechecked for days (its board failed, or bot protection turned scans away): it may have closed meanwhile.
+          Date.now() - Date.parse(job.lastSeen) > RECHECK_DAYS * 86_400_000
+          ? [
+              <span key="checked" className="text-warning-text" title="RawJobs hasn't confirmed this job on the company's board lately, so it may have closed since.">
+                listed on {source}, last checked {timeAgo(job.lastSeen)}, may be outdated
+              </span>,
+            ]
+          : [`listed on ${source}, checked ${timeAgo(job.lastSeen)}`]),
     ...(evergreen === "pool"
       ? [
           <span key="pool" className="text-warning-text" title="A talent pool or open application: it collects applications rather than filling one role">

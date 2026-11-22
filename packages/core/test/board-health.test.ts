@@ -30,6 +30,10 @@ describe("rest after failures", () => {
     expect(restHours(undefined)).toBe(0);
   });
 
+  it("rests a board refused by bot protection a whole day from the first refusal", () => {
+    expect(restHours(failing(1, { reason: "blocked" }))).toBe(24);
+  });
+
   it("uses the same doubling as the directory's retries", () => {
     expect([0, 1, 2, 5, 6, 9].map((n) => backoff(n, 1, 30))).toEqual([0, 1, 2, 16, 30, 30]);
   });
@@ -128,6 +132,10 @@ describe("failureOf", () => {
     expect(failureOf(new HttpError("timed out after 15s (u)", "u"))).toBe("timeout");
     expect(failureOf(new HttpError("fetch failed (u)", "u"))).toBe("network");
     expect(failureOf(new HttpError("HTTP 403", "u", 403))).toBe("other");
+    // A Cloudflare bot challenge (Workday since Nov 2026): the site turned us away, the board may be fine.
+    expect(failureOf(new HttpError("HTTP 429", "u", 429, "cf-mitigated: challenge; server: cloudflare; body: <!DOCTYPE html>"))).toBe("blocked");
+    expect(failureOf(new HttpError("HTTP 403", "u", 403, "cf-mitigated: challenge; cf-ray: x"))).toBe("blocked");
+    expect(failureOf(new HttpError("HTTP 403", "u", 403, "server: cloudflare; body: {}"))).toBe("other");
     expect(failureOf(new Error("boom"))).toBe("other");
     expect(failureOf(new TypeError("Cannot read properties of undefined (reading 'jobs')"))).toBe("parse");
     expect(failureOf(new HttpError("not JSON (text/html): <html> (u)", "u"))).toBe("parse");

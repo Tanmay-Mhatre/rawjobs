@@ -1,4 +1,4 @@
-import { failedHealth, notReached } from "@rawjobs/core/health";
+import { blockedHealth, failedHealth, notReached } from "@rawjobs/core/health";
 import type { CompanyHealth } from "./data";
 
 /** A company with nothing for you in at least this many scans in a row, over at least QUIET_DAYS, gets a "remove?" flag. */
@@ -34,6 +34,8 @@ export const isQuiet = (q: Quiet, now = Date.now()) => q.scans >= QUIET_SCANS &&
  * - notFound: its careers page answered 404 (it isn't at the saved address), since the first scan of the streak.
  * - notAnswering: any other failure, on the last scan or since the first of several.
  * - cantRead: a hiring system RawJobs can't read yet. Not the company's fault, and nothing to fix.
+ * - blocked: its hiring system's bot protection turned the last scan away (Workday since Nov 2026). Nothing to fix;
+ *   RawJobs tries again by itself (once a day) and the company reads normally once it's let in.
  * - notChecked: no scan has included it yet.
  * A failing one is chronic once it has failed for CHRONIC_DAYS.
  */
@@ -41,6 +43,7 @@ export type Problem =
   | { kind: "notFound"; since: string; chronic?: boolean }
   | { kind: "notAnswering"; since: string; scans: number; chronic?: boolean }
   | { kind: "cantRead" }
+  | { kind: "blocked"; ats: string; since: string }
   | { kind: "notChecked"; afterLastScan: boolean }
   | null;
 
@@ -57,6 +60,14 @@ export function problemOf(seen: readonly Seen[], opts: { unreadable?: boolean; a
   const last = seen[0];
   if (!last) return opts.unreadable ? { kind: "cantRead" } : { kind: "notChecked", afterLastScan: opts.anyScans };
   if (last.h.unsupported) return { kind: "cantRead" };
+  if (blockedHealth(last.h)) {
+    let since = last.at;
+    for (const { h, at } of seen) {
+      if (!blockedHealth(h)) break;
+      since = at;
+    }
+    return { kind: "blocked", ats: last.h.ats, since };
+  }
   if (!failed(last.h)) return null;
   let scans = 0;
   let since = last.at;
@@ -103,7 +114,8 @@ export function barsOf(runs: readonly { startedAt: string; health: readonly Comp
     .slice(0, n)
     .map((run): Bar => {
       const h = find(run.health);
-      return { state: !h || h.unsupported || notReached(h) ? "none" : h.ok ? "worked" : "failed", at: run.startedAt };
+      // Turned away by bot protection: not checked, rather than the company failing.
+      return { state: !h || h.unsupported || notReached(h) || blockedHealth(h) ? "none" : h.ok ? "worked" : "failed", at: run.startedAt };
     })
     .reverse();
 }

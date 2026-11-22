@@ -641,6 +641,9 @@ function Status({
       );
     case "cantRead":
       return line("Can't read this hiring system yet");
+    case "blocked":
+      // Not the company's fault and nothing to fix: plain words, no warning colour, no "Update link".
+      return line(`${atsLabel(problem.ats)} is blocking automated checks`, `since ${shortDate(problem.since)} · RawJobs tries again daily`);
     case "notChecked":
       return line("Not checked yet", problem.afterLastScan ? "Added after the last scan" : "Checked on your next scan");
   }

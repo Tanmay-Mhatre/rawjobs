@@ -200,6 +200,12 @@ export type CompanyHealth = {
   company: string;
   ats: AtsType;
   slug: string;
+  /**
+   * Workday's data centre and career site, Oracle's shard, Taleo's section…: with ats and slug they make
+   * companyKey(), so the run history finds a Workday company again. Older runs don't have them.
+   */
+  shard?: string;
+  site?: string;
   /** jobCompanyKey() of the company: the prefix of its job ids. Older runs don't have it. */
   key?: string;
   ok: boolean;
@@ -221,9 +227,11 @@ export type CompanyHealth = {
   /**
    * What kind of failure, for resting the board (board-health.ts): "gone" only for a definite answer
    * (404, 410 or the hiring system saying the board is closed); "parse" when our connector couldn't
-   * read the answer (not the board's fault). Absent when no request was made.
+   * read the answer (not the board's fault); "blocked" when the site's bot protection refused us (a
+   * Cloudflare challenge: Workday since Nov 2026), not the board's fault and nothing the user can fix.
+   * Absent when no request was made.
    */
-  failure?: "gone" | "timeout" | "server" | "network" | "parse" | "other";
+  failure?: "gone" | "timeout" | "server" | "network" | "parse" | "blocked" | "other";
   /** No request was made: the board's site had stopped answering for other boards this run (http.ts HostSkippedError). Neither worked nor failed. */
   notReached?: boolean;
   /** A hash of the board's job ids, when its whole list was read: board-health.ts notes when it changes. */

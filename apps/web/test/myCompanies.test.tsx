@@ -10,7 +10,7 @@ vi.mock("../src/lib/setup", async (orig) => ({
 }));
 import { MyCompanies } from "../src/components/Companies";
 import type { CompanyHealth, DataMeta } from "../src/lib/data";
-import { barsOf, barsSummary, filterCounts, pageOf, problemOf, quietOf, type Seen } from "../src/lib/myCompanies";
+import { barsOf, barsSummary, filterCounts, needsAttention, pageOf, problemOf, quietOf, type Seen } from "../src/lib/myCompanies";
 import type { CompanyRow } from "../src/lib/setup";
 
 afterEach(cleanup);
@@ -73,6 +73,10 @@ describe("status mapping", () => {
 
   it("knows hiring systems it can't read yet, and companies no scan has included", () => {
     expect(problemOf(seen({ ok: false, unsupported: true }), { anyScans: true })).toEqual({ kind: "cantRead" });
+    // Bot protection turned the scans away: its own state, from the first blocked scan, never "needs attention".
+    const blocked = seen({ ok: false, failure: "blocked", error: "HTTP 429" }, { ok: false, failure: "blocked", error: "HTTP 429" }, {});
+    expect(problemOf(blocked, { anyScans: true })).toEqual({ kind: "blocked", ats: "greenhouse", since: blocked[1]!.at });
+    expect(needsAttention(problemOf(blocked, { anyScans: true }))).toBe(false);
     expect(problemOf([], { unreadable: true, anyScans: true })).toEqual({ kind: "cantRead" });
     expect(problemOf([], { anyScans: true })).toEqual({ kind: "notChecked", afterLastScan: true });
     expect(problemOf([], { anyScans: false })).toEqual({ kind: "notChecked", afterLastScan: false });
