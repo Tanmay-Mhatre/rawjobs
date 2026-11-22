@@ -92,7 +92,7 @@ export function App() {
   const afterScan = useCallback(async () => {
     await Promise.all([reload(), setup.refresh()]);
   }, [reload, setup.refresh]);
-  const { scan, start: startScan, stop: stopScan, restart: restartScan, notify: notifyScan, resume: resumeBackground } = useScan(afterScan);
+  const { scan, start: startScan, stop: stopScan, restart: restartScan, notify: notifyScan, resume: resumeBackground, follow: followScan } = useScan(afterScan);
   const afterBackgroundScan = useCallback(async () => {
     const [m] = await Promise.all([reload(), setup.refresh()]);
     return m;
@@ -107,6 +107,12 @@ export function App() {
     reload: afterBackgroundScan,
     onFinished: announceBackgroundScan,
   });
+  // A scan the schedule (or a terminal) started: followed like one of this page's, progress and all.
+  useEffect(() => {
+    if (background.running) followScan();
+  }, [background.running, followScan]);
+  /** A scan this page can't show (an older CLI writes no progress): the header just says one is running. */
+  const otherScan = background.running && scan.phase !== "running" && scan.phase !== "background";
 
   const { tg, notifyFailed, notifyNow, refreshTg } = useScanNotify(scan, notifyScan);
   /** Setup just saved and started the first scan: say how it went when it ends. */
@@ -241,7 +247,7 @@ export function App() {
   // Global keys: Esc closes, ? shows shortcuts, R scans now, 1-4 switch sections (the Radar uses 1-3 for
   // its views instead), and "g" then r/p/c/s goes to a section from anywhere. Dialogs close themselves on
   // Escape too.
-  const canScanNow = canRunLocally && setupState === "configured" && !scanning && !background.running;
+  const canScanNow = canRunLocally && setupState === "configured" && !scanning && !otherScan;
   const onPage = !openId && !showKeys && !inSetup;
   useGoToKeys(
     (section) => go({ tab: section }),
@@ -341,7 +347,7 @@ export function App() {
                   {canRunLocally && setupState === "configured" && (
                     <ScanButton
                       scan={scan}
-                      background={background.running}
+                      background={otherScan}
                       onStart={(scope) => void startScan(scope)}
                       onSettings={() => {
                         location.hash = settingsHash("scans");
@@ -381,7 +387,7 @@ export function App() {
           <ServerNotices
             onRadar={!inSetup && tab === "radar" && !openId && !showKeys && status !== undefined}
             // Once the scans are read (not mid-scan): the star question dates your first use from them.
-            star={state.kind !== "loading" && !scanning && !background.running ? { state: user.state, runs: meta?.runs ?? [] } : undefined}
+            star={state.kind !== "loading" && !scanning && !otherScan ? { state: user.state, runs: meta?.runs ?? [] } : undefined}
           />
           {!inSetup && tab === "radar" && <FeedStaleNotice scan={scan} onOnlyMine={() => void restartScan("yours")} />}
           {!inSetup && tab === "radar" && <ReminderNotice />}

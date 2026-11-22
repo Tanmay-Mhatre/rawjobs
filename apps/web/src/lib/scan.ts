@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import type { CompanyHealth, Job } from "./data";
 import { toast } from "../components/Toast";
 import { refreshHealth } from "./health";
-import { followScan, notifyWhenDone, runScan, stopScan, type RunEvent, type ScanScope, type ScanSource } from "./setup";
+import { followScan, notifyWhenDone, runScan, stopScan, type RunEvent, type ScanOrigin, type ScanScope, type ScanSource } from "./setup";
 import { load, save } from "./storage";
 
 export type ScanState = {
@@ -17,6 +17,8 @@ export type ScanState = {
   /** Directory companies the job feed let this scan skip. */
   skippedByFeed?: number;
   scope?: ScanScope;
+  /** Who started it: this page (or another tab), the computer's schedule, or a terminal. */
+  origin?: ScanOrigin;
   /** Your companies' names, in run order; health arrives as each finishes. */
   companies: string[];
   /** Companies this scan covers (yours + directory ones), and how many are done. */
@@ -112,7 +114,10 @@ export function measuredRate(p: Pace | undefined, done: number, at: number): num
 
 const IDLE: ScanState = { phase: "idle", companies: [], total: 0, done: 0, resumed: 0, results: {}, live: [] };
 const newBackground = (): Background => ({ total: 0, done: 0, resumed: 0, found: 0, failed: 0, startedAt: Date.now() });
-const running = (scope?: ScanScope): ScanState => ({ ...IDLE, phase: "running", scope, startedAt: Date.now() });
+const running = (scope?: ScanScope, origin: ScanOrigin = "page"): ScanState => ({ ...IDLE, phase: "running", scope, origin, startedAt: Date.now() });
+
+/** How a scan is named on the page: "Scheduled scan" for the schedule's, "Scan" for the rest. */
+export const scanName = (origin?: ScanOrigin) => (origin === "scheduled" ? "Scheduled scan" : "Scan");
 
 /** No company finished for this long: say a slow site is holding it up. */
 export const STALL_MS = 45_000;
@@ -282,6 +287,8 @@ export function useScan(onFinished: () => void | Promise<void>) {
   /** A scan to start once the running one has stopped ("Only my companies" on the stale-feed notice). */
   const next = useRef<ScanScope | null>(null);
   const startRef = useRef<(scope: ScanScope) => Promise<void>>(async () => {});
+  /** Who started the scan being shown: a scheduled or terminal scan says how it went when it ends. */
+  const origin = useRef<ScanOrigin>("page");
   phase.current = scan.phase;
   /**
    * Show a scan's events as they arrive, then refresh the page's data when it ends. `following`: a scan
@@ -292,6 +299,8 @@ export function useScan(onFinished: () => void | Promise<void>) {
     const mine = ++generation.current;
     const current = () => generation.current === mine;
     let failed: string | undefined;
+    let quickDone = false;
+    let quickStopped = false;
     let quickNew = 0;
     let bgDone: Extract<RunEvent, { type: "done" }> | undefined;
     // biome-ignore lint/suspicious/noConfusingVoidType: holds what `stream` returns (see above)
@@ -301,7 +310,11 @@ export function useScan(onFinished: () => void | Promise<void>) {
         if (!current()) return;
         if (e.type === "error") failed = e.message;
         else setScan((s) => applyScanEvent(s, e));
-        if (e.type === "done" && e.stage !== "background") quickNew = e.newMatches;
+        if (e.type === "done" && e.stage !== "background") {
+          quickDone = true;
+          quickStopped = !!e.stopped;
+          quickNew = e.newMatches;
+        }
         if (e.type === "done" && e.stage === "background") bgDone = e;
         if (e.type === "background") {
           // Scan now is saved: show it, then say the rest is being checked.
@@ -318,8 +331,23 @@ export function useScan(onFinished: () => void | Promise<void>) {
       if (!current()) return;
       // The saved files now hold the scan's jobs: the streamed copies go.
       setScan((s) => (failed && !s.summary ? { ...s, phase: "error", error: failed, live: [] } : { ...s, phase: "done", stopping: false, live: [] }));
+      const by = origin.current;
+      if (following && by !== "page") {
+        // A scheduled (or terminal) scan the page followed: one message for the whole run.
+        const found = quickNew + (bgDone?.newMatches ?? 0);
+        toast({
+          message:
+            failed && !quickDone
+              ? `${scanName(by)} didn't finish: ${failed}`
+              : quickStopped
+                ? `${scanName(by)} stopped. What it checked is saved; the next one carries on from there.`
+                : found
+                  ? `${scanName(by)} done: ${found === 1 ? "1 new job" : `${found.toLocaleString()} new jobs`}.`
+                  : `${scanName(by)} done. No new jobs this time.`,
+        });
+      }
       // Quiet unless it found something: no toast for a background check that found nothing or was paused.
-      if (bgDone && !bgDone.stopped && bgDone.newMatches > 0)
+      else if (bgDone && !bgDone.stopped && bgDone.newMatches > 0)
         toast({
           message: `Background check found ${bgDone.newMatches === 1 ? "1 more match" : `${bgDone.newMatches.toLocaleString()} more matches`}.`,
           actionLabel: "Show",
@@ -340,6 +368,7 @@ export function useScan(onFinished: () => void | Promise<void>) {
       // A background check gives way to a new scan (the server stops it; it carries on after).
       if (busy.current && phase.current !== "background") return;
       busy.current = true;
+      origin.current = "page";
       save(SCOPE_KEY, scope);
       setScan(running(scope));
       refreshHealth();
@@ -348,12 +377,23 @@ export function useScan(onFinished: () => void | Promise<void>) {
     [watch],
   );
 
-  // A scan keeps running when the page is closed or reloaded: pick it up again when the page opens.
-  useEffect(() => {
+  /**
+   * Show a scan that's already running: one this page started before a reload (a scan keeps running
+   * when the page closes), or one the schedule or a terminal started (the page hears of it from health).
+   */
+  const follow = useCallback(() => {
     if (busy.current) return;
     busy.current = true;
-    void watch((onEvent) => followScan((scope) => setScan(running(scope)), onEvent), true);
+    void watch(
+      (onEvent) =>
+        followScan((scope, by) => {
+          origin.current = by;
+          setScan(running(scope, by));
+        }, onEvent),
+      true,
+    );
   }, [watch]);
+  useEffect(follow, [follow]);
 
   startRef.current = start;
 
@@ -367,6 +407,7 @@ export function useScan(onFinished: () => void | Promise<void>) {
   const resume = useCallback(async () => {
     if (busy.current) return;
     busy.current = true;
+    origin.current = "page";
     setScan((s) => ({ ...s, phase: "background", bg: newBackground(), summary: undefined }));
     refreshHealth();
     // `following`: no "Scan done" toast, as no Scan now ran.
@@ -392,7 +433,7 @@ export function useScan(onFinished: () => void | Promise<void>) {
   );
 
   const reset = useCallback(() => setScan(IDLE), []);
-  return { scan, start, stop, restart, notify, reset, resume };
+  return { scan, start, stop, restart, notify, reset, resume, follow };
 }
 
 /** "about 2 min", "about 1.9 h", "about 14 h", "about 10 days". */

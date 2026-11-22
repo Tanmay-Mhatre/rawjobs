@@ -40,7 +40,12 @@ export function useBackgroundScan({
       const { loaded, paused, reload, onFinished } = latest.current;
       // Mid-scan results are partial, and a scan or "Check now" the page runs reloads by itself.
       if (background || h.scanning || paused || reloading || loaded === undefined) return;
-      if (!h.dataVersion || h.dataVersion === loaded) return;
+      if (!h.dataVersion || h.dataVersion === loaded) {
+        // It ended without new results (it failed, or the page followed it and reloaded already): a
+        // later change isn't its to announce.
+        sawScan = false;
+        return;
+      }
       reloading = true;
       try {
         const meta = await reload();

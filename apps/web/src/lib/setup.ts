@@ -2,10 +2,10 @@ import { useCallback, useEffect, useState } from "react";
 import { ROLE_FAMILIES } from "@rawjobs/core/catalog/roles";
 import { careersUrl, companyKey, connectors, detectCompany } from "@rawjobs/core/detect";
 import type { AiProfile } from "@rawjobs/core/resume-parse";
-import type { CompanyCheck, RunEvent, SaveResult, ScanPlan, ScanScope, ScanSource, SetupStatus } from "@rawjobs/core/protocol";
+import type { CompanyCheck, RunEvent, SaveResult, ScanPlan, ScanOrigin, ScanScope, ScanSource, SetupStatus } from "@rawjobs/core/protocol";
 import type { AtsType, Config } from "@rawjobs/core/schema";
 
-export type { CompanyCheck, RunEvent, SaveResult, ScanPlan, ScanScope, ScanSource, SetupStatus };
+export type { CompanyCheck, RunEvent, SaveResult, ScanPlan, ScanOrigin, ScanScope, ScanSource, SetupStatus };
 import { canRunLocally } from "./data";
 
 // ---------- API (dev server only, see apps/web/vite.config.ts) ----------
@@ -103,10 +103,11 @@ export async function runScan(onEvent: (e: RunEvent) => void, opts: { scope?: Sc
 }
 
 /**
- * Follow the scan the server is already running (started before this page was opened or reloaded),
- * from its first event. False when no scan is running; `started` gets the scope before any event.
+ * Follow the scan that's already running (started before this page was opened or reloaded, by the
+ * schedule, or in a terminal), from its first event. False when no scan is running; `started` gets
+ * the scope and who started it before any event.
  */
-export async function followScan(started: (scope: ScanScope) => void, onEvent: (e: RunEvent) => void): Promise<boolean> {
+export async function followScan(started: (scope: ScanScope, origin: ScanOrigin) => void, onEvent: (e: RunEvent) => void): Promise<boolean> {
   let res: Response;
   try {
     res = await fetch("/api/run", { cache: "no-store" });
@@ -115,7 +116,8 @@ export async function followScan(started: (scope: ScanScope) => void, onEvent: (
   }
   if (res.status !== 200 || !res.body) return false;
   const scope = res.headers.get("x-rawjobs-scope");
-  started(scope === "all" || scope === "yours" ? scope : "mine");
+  const origin = res.headers.get("x-rawjobs-origin");
+  started(scope === "all" || scope === "yours" ? scope : "mine", origin === "scheduled" || origin === "terminal" ? origin : "page");
   await readEvents(res.body, onEvent);
   return true;
 }
