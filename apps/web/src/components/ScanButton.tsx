@@ -76,7 +76,7 @@ export function ScanButton({
   notifyLine,
 }: {
   scan: ScanState;
-  /** A scheduled scan (one this page didn't start) is running: no second scan until it ends. */
+  /** A scan this page can't follow (an older CLI's, which writes no progress) is running: no second scan until it ends. */
   background?: boolean;
   onStart: (scope: ScanScope) => void;
   onStop: () => void;
@@ -297,7 +297,7 @@ export function ScanStatus({ scan, onStop, notify, notifyLine }: { scan: ScanSta
   const sources = sourceRows(scan);
   const bars = sources ? null : progressRows(scan);
   const found = Object.values(scan.results).reduce((n, h) => n + (h.ok ? h.matches : 0), 0);
-  const label = scan.stopping ? "Stopping…" : scan.syncing ? "Updating…" : "Scanning";
+  const label = scan.stopping ? "Stopping…" : scan.syncing ? "Updating…" : scan.origin === "scheduled" ? "Scheduled scan" : "Scanning";
   const now = useNow(!!open);
   const steps = scan.total ? null : startingSteps(scan, now);
 
@@ -344,6 +344,8 @@ export function ScanStatus({ scan, onStop, notify, notifyLine }: { scan: ScanSta
               </div>
             </>
           )}
+          {scan.origin === "scheduled" && <p className="mt-2 type-meta text-muted">Started by your scan schedule.</p>}
+          {scan.origin === "terminal" && <p className="mt-2 type-meta text-muted">Started in a terminal.</p>}
           {scan.total > 0 && (
             <p className="mt-3 border-t border-line pt-3 type-small text-muted">
               <b className="tabular font-semibold text-ink">{found.toLocaleString()}</b> {found === 1 ? "match" : "matches"} so far. Stop any time: the next scan carries on from here.

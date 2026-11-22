@@ -1,6 +1,6 @@
 import { spawn, type ChildProcess } from "node:child_process";
 import { createHash } from "node:crypto";
-import { closeSync, openSync, readFileSync, readSync, statSync, writeFileSync } from "node:fs";
+import { closeSync, fstatSync, openSync, readFileSync, readSync, statSync, writeFileSync } from "node:fs";
 import type { IncomingMessage, ServerResponse } from "node:http";
 import { resolve } from "node:path";
 import {
@@ -19,6 +19,10 @@ import {
   pruneCache,
   queueMove,
   scanLockHeld,
+  scanLockHolder,
+  readLiveHead,
+  liveInBackground,
+  LIVE_FILE,
   setupStatus,
   suggestCacheDir,
   telegramStatus,
@@ -26,6 +30,7 @@ import {
 } from "@rawjobs/core";
 import { readTracking, saveTracking, suggestPoolSize, type ScanScope } from "@rawjobs/core";
 import { CONNECTION_ID, createNetworkStore, createReminder, createWatcher, nodeWatchDeps, type ReminderDeps, sendTelegram, telegramSecrets, type WatchDeps } from "@rawjobs/core";
+import type { ScanOrigin } from "@rawjobs/core/protocol";
 import { folderId } from "@rawjobs/core/update";
 import { refuse } from "./guard";
 import { createReaders } from "./readers";
@@ -75,6 +80,7 @@ function readHead(path: string, bytes: number): string {
  *   GET  /api/health          { ok, version, scanning, background, dataVersion, update, startLink, platform, home, pid }: is the server up,
  *                             which version, one waiting to install, and (for the page to remember while it's down) how to
  *                             start it again. background: a scan this server didn't start (a scheduled one) is running.
+ *                             scanOrigin: who started the running scan ("page", "scheduled", "terminal"; null: none)
  *                             dataVersion: meta.json's generatedAt, so an open page sees when a scan wrote new results
  *   GET/PUT /api/tracking     your statuses, notes and Radar preferences (profile/tracking.json)
  *   GET  /api/network         your LinkedIn connections: { status, me, watchable, reminder } (me: your own positions and schools, or
@@ -106,11 +112,12 @@ function readHead(path: string, bytes: number): string {
  *   POST /api/companies/suggest  companies that fit a profile ({ profile?, watched?, hidden? }), with lookalikes of past employers
  *   GET  /api/companies/suggest/size  { companies }: how many companies a suggestion request checks (null when unknown)
  *   POST /api/run             scan ({ scope: "mine" | "yours" | "all", fresh? }); streams NDJSON progress. A background
- *                             check (after Scan now) is stopped first: it carries on after the new scan.
+ *                             check (after Scan now, this server's or a scheduled scan's) is stopped first: it carries on after.
  *                             { background: true }: only the background check, carrying on a paused one (Resume now)
- *   GET  /api/run             follow the running scan from the start (204 when none is running)
- *   POST /api/run/stop        stop the running scan within seconds (it can be resumed)
- *   POST /api/run/notify      send a Telegram message when the running scan finishes
+ *   GET  /api/run             follow the running scan from the start (204 when none is running). A scan this server
+ *                             didn't start is followed through its live file (data/scan-live.ndjson); x-rawjobs-origin says whose
+ *   POST /api/run/stop        stop the running scan within seconds (it can be resumed), whoever started it
+ *   POST /api/run/notify      send a Telegram message when the running scan finishes, whoever started it
  *   GET  /api/scan/plan       what each scan type covers: companies, about how long, a stopped scan to resume
  *   GET  /api/alerts/telegram Telegram alerts: set up? on? (the token is never sent back, only masked)
  *   POST /api/alerts/telegram/{token|connect|test|on|off|forget}   set up and manage Telegram alerts
@@ -318,7 +325,19 @@ Stopped after ${Math.round(timeoutMs / 1000)} s without finishing.`.trim(),
   let scan: { scope: string; lines: Line[]; partial: string; followers: Set<ServerResponse>; child: ChildProcess; background?: boolean } | null = null;
   /** "Check now" runs: they share the one-at-a-time rule with scans. */
   let checking = false;
-  const busy = () => scan !== null || checking;
+  /**
+   * Another process's scan: a scheduled one, or `rawjobs scan` in a terminal. It holds the lock, and
+   * its live file says who started it (an older CLI writes none: counted as scheduled).
+   */
+  function otherScan(): { pid: number; origin: ScanOrigin; scope: ScanScope } | null {
+    if (scan) return null;
+    const pid = scanLockHolder(dataDir);
+    if (pid === undefined) return null;
+    const head = readLiveHead(dataDir);
+    return head?.pid === pid ? { pid, origin: head.origin, scope: head.scope } : { pid, origin: "scheduled", scope: "mine" };
+  }
+  /** Any scan or "Check now" running, this server's or another process's: one at a time. */
+  const busy = () => scan !== null || checking || scanLockHeld(dataDir);
 
   /** meta.json's generatedAt, read again only when the file changes (open pages ask every few seconds). It's
    *  the file's second key, so its first 4 KB are enough; the whole file is parsed only when it isn't there. */
@@ -351,6 +370,59 @@ Stopped after ${Math.round(timeoutMs / 1000)} s without finishing.`.trim(),
     const current = scan;
     // A tab that goes away just stops following; the scan carries on.
     res.on("close", () => current.followers.delete(res));
+  }
+
+  /**
+   * Follow another process's scan through its live file: what it wrote so far, then each new line (read
+   * every second) until it lets go of the lock. Without a live file (an older CLI) there's nothing to show.
+   */
+  function followOther(res: ServerResponse, other: { pid: number; origin: ScanOrigin; scope: ScanScope }) {
+    const path = resolve(dataDir, LIVE_FILE);
+    if (readLiveHead(dataDir)?.pid !== other.pid) {
+      res.statusCode = 204;
+      res.end();
+      return;
+    }
+    res.setHeader("content-type", "application/x-ndjson");
+    res.setHeader("cache-control", "no-cache");
+    res.setHeader("x-rawjobs-scope", other.scope);
+    res.setHeader("x-rawjobs-origin", other.origin);
+    let offset = 0;
+    let partial = "";
+    let head = true;
+    const pump = () => {
+      let fd: number | undefined;
+      try {
+        fd = openSync(path, "r");
+        const size = fstatSync(fd).size;
+        if (size <= offset) return;
+        const buf = Buffer.alloc(size - offset);
+        readSync(fd, buf, 0, buf.length, offset);
+        offset = size;
+        const lines = (partial + buf.toString("utf8")).split("\n");
+        partial = lines.pop() ?? "";
+        for (const line of lines) {
+          // Line 1 is the head (who started it), not an event.
+          if (head) head = false;
+          else if (line.trim() && !res.writableEnded) res.write(`${line}\n`);
+        }
+      } catch {
+        // The file went (a new scan starting it over): what was sent stays.
+      } finally {
+        if (fd !== undefined) closeSync(fd);
+      }
+    };
+    pump();
+    const timer = setInterval(() => {
+      pump();
+      if (scanLockHolder(dataDir) === other.pid) return;
+      clearInterval(timer);
+      // It wrote new results and its run log: answers kept from before it ended are out of date.
+      readers.clear();
+      res.end();
+    }, 1000);
+    // A tab that goes away just stops following; the scan carries on.
+    res.on("close", () => clearInterval(timer));
   }
 
   function broadcast(line: Line) {
@@ -437,8 +509,9 @@ Stopped after ${Math.round(timeoutMs / 1000)} s without finishing.`.trim(),
       return json(res, {
         ok: true,
         version,
-        scanning: busy(),
+        scanning: scan !== null || checking,
         background: scan === null && scanLockHeld(dataDir),
+        scanOrigin: scan ? "page" : (otherScan()?.origin ?? null),
         dataVersion: dataVersion(),
         update: opts.updater?.updateHint() ?? null,
         startLink: opts.startLink?.() ?? false,
@@ -553,26 +626,39 @@ Stopped after ${Math.round(timeoutMs / 1000)} s without finishing.`.trim(),
     if (url === "/api/schedule" && req.method === "GET") return await respondRead(res, () => readCli("schedule", 5 * 60_000, ["schedule", "status", "--data", dataDir]));
     if (url === "/api/schedule" && req.method === "POST") return await respondJson(res, ["schedule", "install", "--stdin", "--data", dataDir], await readBody(req));
     if (url === "/api/schedule" && req.method === "DELETE") return await respondJson(res, ["schedule", "remove", "--data", dataDir]);
-    if (url === "/api/schedule/run" && req.method === "POST") return await respondJson(res, ["schedule", "run", "--data", dataDir]);
+    if (url === "/api/schedule/run" && req.method === "POST") {
+      // Started now, it would find this scan running and log a failed run.
+      if (busy()) return json(res, { ok: false, errors: "A scan is running; try again when it's done." });
+      return await respondJson(res, ["schedule", "run", "--data", dataDir]);
+    }
     if (url === "/api/daily-summary" && req.method === "GET") return await respondJson(res, ["today", "status", "--data", dataDir]);
     if (url === "/api/daily-summary" && req.method === "POST") return await respondJson(res, ["today", "install", "--stdin", "--data", dataDir], await readBody(req));
     if (url === "/api/daily-summary" && req.method === "DELETE") return await respondJson(res, ["today", "remove", "--data", dataDir]);
     if (url === "/api/daily-summary/test" && req.method === "POST") return await respondJson(res, ["today", "--test", "--json", "--data", dataDir]);
     if (url === "/api/run/notify" && req.method === "POST") {
       // The running scan sends a Telegram message when it finishes (it checks for this file at the end).
-      if (scan) writeFileSync(resolve(dataDir, "scan-notify"), "");
-      return json(res, { ok: scan !== null });
+      // Any scan holding the lock: this server's, a scheduled one or a terminal's.
+      const any = scan !== null || otherScan() !== null;
+      if (any) writeFileSync(resolve(dataDir, "scan-notify"), "");
+      return json(res, { ok: any });
     }
     if (url === "/api/run/stop" && req.method === "POST") {
       // The scan checks for this file between companies, saves its progress and stops.
-      if (scan) writeFileSync(resolve(dataDir, "scan-stop"), "");
-      return json(res, { ok: scan !== null });
+      // Any scan holding the lock: this server's, a scheduled one or a terminal's.
+      const any = scan !== null || otherScan() !== null;
+      if (any) writeFileSync(resolve(dataDir, "scan-stop"), "");
+      return json(res, { ok: any });
     }
     if (url === "/api/run" && req.method === "GET") {
-      if (!scan) {
-        res.statusCode = 204;
-        res.end();
-      } else follow(res);
+      if (scan) follow(res);
+      else {
+        const other = otherScan();
+        if (other) followOther(res, other);
+        else {
+          res.statusCode = 204;
+          res.end();
+        }
+      }
       return;
     }
     if (url === "/api/run" && req.method === "POST") {
@@ -583,9 +669,18 @@ Stopped after ${Math.round(timeoutMs / 1000)} s without finishing.`.trim(),
         writeFileSync(resolve(dataDir, "scan-stop"), "");
         await Promise.race([closed, new Promise((done) => setTimeout(done, 60_000))]);
       }
+      // So does another process's scan in its background check (the next one carries it on).
+      const other = otherScan();
+      if (other && !checking && liveInBackground(dataDir)) {
+        writeFileSync(resolve(dataDir, "scan-stop"), "");
+        for (let waited = 0; waited < 60_000 && scanLockHolder(dataDir) === other.pid; waited += 500) await new Promise((done) => setTimeout(done, 500));
+      }
       if (busy()) {
+        const running = otherScan();
         res.setHeader("content-type", "application/x-ndjson");
-        res.end(`${JSON.stringify({ type: "error", message: "A scan is already running." })}\n`);
+        res.end(
+          `${JSON.stringify({ type: "error", message: running ? `A ${running.origin === "terminal" ? "scan started in a terminal" : "scheduled scan"} is running. Follow it from the scan button; its new jobs show up when it's done.` : "A scan is already running." })}\n`,
+        );
         return;
       }
       const body = (JSON.parse((await readBody(req)) || "{}") ?? {}) as { scope?: unknown; fresh?: unknown; background?: unknown };

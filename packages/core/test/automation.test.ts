@@ -1,9 +1,9 @@
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, utimesSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { availableJobs, digest, findTelegramChat, finishedMessage, looksLikeToken, maskToken, saveTelegramSecrets, sendTelegram, telegramSecrets } from "../src/notify";
-import { acquireScanLock, releaseScanLock } from "../src/scan";
+import { acquireScanLock, releaseScanLock, scanLockHeld } from "../src/scan";
 import {
   installSchedule,
   lastDueSlot,
@@ -16,6 +16,8 @@ import {
   runScheduleNow,
   type ScheduledRun,
   scheduledRunKind,
+  scheduledRunsNow,
+  UNFINISHED_RUN,
   scheduleStatus,
   takeRunRequest,
   validateSchedule,
@@ -326,5 +328,36 @@ describe("scan lock", () => {
     writeFileSync(join(dataDir, "scan.lock"), "");
     expect(acquireScanLock(dataDir)).toBe(true);
     expect(readFileSync(join(dataDir, "scan.lock"), "utf8")).toBe(String(process.pid));
+    releaseScanLock(dataDir);
+  });
+
+  it("takes over a lock nobody touched for a while, even when its process id is in use again", () => {
+    const dataDir = mkdtempSync(join(tmpdir(), "jh-lock-"));
+    const lock = join(dataDir, "scan.lock");
+    // A live process id (the test runner's parent), but the scan that wrote it stopped touching it 20 minutes ago.
+    writeFileSync(lock, String(process.ppid));
+    const old = new Date(Date.now() - 20 * 60_000);
+    utimesSync(lock, old, old);
+    expect(scanLockHeld(dataDir)).toBe(false);
+    expect(acquireScanLock(dataDir)).toBe(true);
+    expect(readFileSync(lock, "utf8")).toBe(String(process.pid));
+    releaseScanLock(dataDir);
+  });
+});
+
+describe("the scheduled run log", () => {
+  it("says a run is going while its process lives, and that it stopped when the process went without logging an end", () => {
+    const base: ScheduledRun = { startedAt: "2026-11-22T06:00:00Z", scope: "mine", ok: false, pid: 4242 };
+    const done: ScheduledRun = { ...base, startedAt: "2026-11-21T06:00:00Z", ok: true, finishedAt: "2026-11-21T06:20:00Z", pid: undefined };
+    expect(scheduledRunsNow([base, done], () => true)).toEqual([{ ...base, running: true }, done]);
+    expect(scheduledRunsNow([base], () => false)[0]).toMatchObject({ ok: false, error: UNFINISHED_RUN });
+    expect(scheduledRunsNow([{ ...base, error: "fetch failed" }], () => false)[0]!.error).toBe("fetch failed");
+  });
+
+  it("replaces the started entry with how it ended", () => {
+    const dataDir = mkdtempSync(join(tmpdir(), "jh-sched-"));
+    recordScheduledRun(dataDir, { startedAt: "2026-11-22T06:00:00Z", scope: "mine", ok: false, pid: process.pid });
+    recordScheduledRun(dataDir, { startedAt: "2026-11-22T06:00:00Z", scope: "mine", ok: true, matches: 3, finishedAt: "2026-11-22T06:10:00Z" });
+    expect(readScheduledRuns(dataDir)).toEqual([{ startedAt: "2026-11-22T06:00:00Z", scope: "mine", ok: true, matches: 3, finishedAt: "2026-11-22T06:10:00Z" }]);
   });
 });
