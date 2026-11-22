@@ -545,10 +545,15 @@ function isRunning(pid: number): boolean {
   }
 }
 
+/** The process id of the scan holding the lock right now (not this process): a scheduled one, or one the dashboard started. */
+export function scanLockHolder(dataDir: string): number | undefined {
+  const holder = lockHolder(join(dataDir, "scan.lock"));
+  return holder !== undefined && holder !== process.pid && isRunning(holder) ? holder : undefined;
+}
+
 /** Whether a scan holds the lock right now: a scheduled one, or one the dashboard started. */
 export function scanLockHeld(dataDir: string): boolean {
-  const holder = lockHolder(join(dataDir, "scan.lock"));
-  return holder !== undefined && holder !== process.pid && isRunning(holder);
+  return scanLockHolder(dataDir) !== undefined;
 }
 
 export function releaseScanLock(dataDir: string): void {

@@ -1,4 +1,4 @@
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
+import { appendFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { createServer, request, type IncomingMessage, type Server } from "node:http";
 import type { AddressInfo } from "node:net";
 import { tmpdir } from "node:os";
@@ -128,6 +128,7 @@ console.log(JSON.stringify({ type: "done", scope: args[args.indexOf("--scope") +
       version: "9.9.9",
       scanning: false,
       background: false,
+      scanOrigin: null,
       dataVersion: null,
       update: null,
       startLink: false,
@@ -168,6 +169,58 @@ console.log(JSON.stringify({ type: "done", scope: args[args.indexOf("--scope") +
     // Read from the file's start; a generatedAt past the first 4 KB still counts (the whole file is read).
     writeFileSync(join(dataDir, "meta.json"), JSON.stringify({ pad: "x".repeat(5000), generatedAt: "2026-10-14T06:00:00.000Z" }));
     expect((await health()).dataVersion).toBe("2026-10-14T06:00:00.000Z");
+  });
+
+  it("shows, stops and makes way for a scan it didn't start (a scheduled one) through its live file", async () => {
+    const { port, dataDir } = await start();
+    const other = process.ppid;
+    writeFileSync(join(dataDir, "scan.lock"), String(other));
+    writeFileSync(
+      join(dataDir, "scan-live.ndjson"),
+      `${[
+        { origin: "scheduled", scope: "mine", pid: other, startedAt: "2026-11-22T06:00:00.000Z" },
+        { type: "start", companies: ["A"], total: 2, stage: "quick" },
+        { type: "progress", done: 1 },
+      ]
+        .map((l) => JSON.stringify(l))
+        .join("\n")}\n`,
+    );
+    expect(JSON.parse((await call(port, "GET", "/api/health")).text)).toMatchObject({ scanning: false, background: true, scanOrigin: "scheduled" });
+
+    // A tab follows it from the start, then each new line, until it lets go of the lock.
+    const follow = call(port, "GET", "/api/run");
+    await new Promise((r) => setTimeout(r, 300));
+    appendFileSync(join(dataDir, "scan-live.ndjson"), `${JSON.stringify({ type: "done", stage: "quick" })}\n`);
+    await new Promise((r) => setTimeout(r, 1200));
+    rmSync(join(dataDir, "scan.lock"));
+    const followed = await follow;
+    expect(followed.headers["x-rawjobs-scope"]).toBe("mine");
+    expect(followed.headers["x-rawjobs-origin"]).toBe("scheduled");
+    expect(
+      followed.text
+        .trim()
+        .split("\n")
+        .map((l) => (JSON.parse(l) as { type: string }).type),
+    ).toEqual(["start", "progress", "done"]);
+
+    // Running again: Stop and "tell me when done" reach it through the files it checks.
+    writeFileSync(join(dataDir, "scan.lock"), String(other));
+    expect(JSON.parse((await call(port, "POST", "/api/run/stop")).text)).toEqual({ ok: true });
+    expect(existsSync(join(dataDir, "scan-stop"))).toBe(true);
+    expect(JSON.parse((await call(port, "POST", "/api/run/notify")).text)).toEqual({ ok: true });
+    rmSync(join(dataDir, "scan-stop"));
+
+    // No second scan, no "Run now" and no Check now while it runs: each says why.
+    expect((await call(port, "POST", "/api/run", "{}")).text).toMatch(/scheduled scan is running/);
+    expect(JSON.parse((await call(port, "POST", "/api/schedule/run")).text)).toMatchObject({ ok: false });
+    expect(JSON.parse((await call(port, "POST", "/api/check", '{"keys":["greenhouse:acme"]}')).text)).toMatchObject({ type: "error" });
+
+    // In its background check it gives way to Scan now: asked to stop, then the new scan starts once it has.
+    appendFileSync(join(dataDir, "scan-live.ndjson"), `${JSON.stringify({ type: "background" })}\n`);
+    setTimeout(() => rmSync(join(dataDir, "scan.lock")), 700);
+    const scanNow = await call(port, "POST", "/api/run", "{}");
+    expect(existsSync(join(dataDir, "scan-stop"))).toBe(true);
+    expect(scanNow.text).toMatch(/"done"/);
   });
 
   it("runs the CLI in your RawJobs folder", async () => {
