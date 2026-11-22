@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
 import type { CompanyHealth, Job } from "./data";
 import { toast } from "../components/Toast";
 import { refreshHealth } from "./health";
@@ -115,6 +115,47 @@ export function measuredRate(p: Pace | undefined, done: number, at: number): num
 const IDLE: ScanState = { phase: "idle", companies: [], total: 0, done: 0, resumed: 0, results: {}, live: [] };
 const newBackground = (): Background => ({ total: 0, done: 0, resumed: 0, found: 0, failed: 0, startedAt: Date.now() });
 const running = (scope?: ScanScope, origin: ScanOrigin = "page"): ScanState => ({ ...IDLE, phase: "running", scope, origin, startedAt: Date.now() });
+
+/**
+ * The scan the page shows, in short, for parts of the page that don't own it (the update button):
+ * who started it, how far along it is and about how long is left. Null when none is running.
+ */
+export type ScanProgress = { origin: ScanOrigin; percent: number | null; secondsLeft: number; background: boolean };
+let progressNow: ScanProgress | null = null;
+const progressSubs = new Set<() => void>();
+
+export function scanProgressOf(s: ScanState): ScanProgress | null {
+  const origin = s.origin ?? "page";
+  if (s.phase === "running") {
+    const percent = s.syncing || !s.total ? null : Math.floor((Math.min(s.done, s.total) / s.total) * 100);
+    return { origin, percent, secondsLeft: s.total ? Math.round(timeLeft(s)) : 0, background: false };
+  }
+  if (s.phase === "background" && s.bg && !s.bg.summary) {
+    const percent = s.bg.total ? Math.floor((Math.min(s.bg.done, s.bg.total) / s.bg.total) * 100) : null;
+    return { origin, percent, secondsLeft: s.bg.total ? Math.round(timeLeft(s.bg)) : 0, background: true };
+  }
+  return null;
+}
+
+function publishProgress(s: ScanState) {
+  const next = scanProgressOf(s);
+  const same = next && progressNow ? Object.keys(next).every((k) => next[k as keyof ScanProgress] === progressNow![k as keyof ScanProgress]) : next === progressNow;
+  if (same) return;
+  progressNow = next;
+  for (const fn of progressSubs) fn();
+}
+
+/** The running scan's progress (see ScanProgress), for any part of the page. */
+export function useScanProgress(): ScanProgress | null {
+  return useSyncExternalStore(
+    (fn) => {
+      progressSubs.add(fn);
+      return () => progressSubs.delete(fn);
+    },
+    () => progressNow,
+    () => null,
+  );
+}
 
 /** Sent on window when a scan the page started or followed has ended and its results are on screen. */
 export const SCAN_ENDED = "rawjobs:scan-ended";
@@ -280,6 +321,7 @@ export function splitProgress<R extends { done: number; total: number; feed?: tr
 /** One scan at a time, shared by the header button, the wizard and Radar cards. */
 export function useScan(onFinished: () => void | Promise<void>) {
   const [scan, setScan] = useState<ScanState>(IDLE);
+  useEffect(() => publishProgress(scan), [scan]);
   const busy = useRef(false);
   const finished = useRef(onFinished);
   finished.current = onFinished;

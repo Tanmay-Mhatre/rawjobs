@@ -100,9 +100,14 @@ export function readChangelog(): ChangelogEntry[] {
  * checks. A version that didn't start here (the update went back) isn't offered again by itself;
  * Settings → About offers to try it again. The dashboard reads and drives it through /api/update.
  */
+/** How often a waiting update looks whether the scan is done: soon after Stop, it installs. */
+const WAIT_POLL_MS = 5_000;
+
 export function createUpdater(o: {
   home: string;
   isBusy: () => boolean;
+  /** Pause a scan's background check, if that's what's running: an update doesn't wait hours for it (it carries on later). */
+  pauseBackground?: () => void;
   exit: () => void;
   /** Tests: act as an installed copy without being one. */
   installed?: boolean;
@@ -216,6 +221,7 @@ export function createUpdater(o: {
     if (state === "updating" || state === "waiting") return;
     error = undefined;
     if (!o.isBusy() && state === "idle") return install();
+    o.pauseBackground?.();
     state = "waiting";
     clearInterval(waiter);
     waiter = setInterval(() => {
@@ -223,7 +229,7 @@ export function createUpdater(o: {
       clearInterval(waiter);
       state = "idle";
       void install();
-    }, 15 * 1000);
+    }, WAIT_POLL_MS);
   }
 
   /**

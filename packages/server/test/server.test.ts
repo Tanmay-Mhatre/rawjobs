@@ -199,6 +199,19 @@ console.log(JSON.stringify({ type: "done", scope: args[args.indexOf("--scope") +
     }
   });
 
+  it("pauses a scheduled scan for an update only once it's in its background check", async () => {
+    const { api, dataDir } = await start();
+    writeFileSync(join(dataDir, "scan.lock"), String(process.ppid));
+    const head = { origin: "scheduled", scope: "mine", pid: process.ppid, startedAt: "2026-11-22T06:00:00.000Z" };
+    writeFileSync(join(dataDir, "scan-live.ndjson"), `${JSON.stringify(head)}\n${JSON.stringify({ type: "start", companies: [], total: 2, stage: "quick" })}\n`);
+    expect(api.pauseBackground()).toBe(false);
+    expect(existsSync(join(dataDir, "scan-stop"))).toBe(false);
+    appendFileSync(join(dataDir, "scan-live.ndjson"), `${JSON.stringify({ type: "background" })}\n`);
+    expect(api.pauseBackground()).toBe(true);
+    expect(existsSync(join(dataDir, "scan-stop"))).toBe(true);
+    rmSync(join(dataDir, "scan.lock"));
+  });
+
   it("shows, stops and makes way for a scan it didn't start (a scheduled one) through its live file", async () => {
     const { port, dataDir } = await start();
     const other = process.ppid;

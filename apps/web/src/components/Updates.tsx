@@ -18,7 +18,9 @@ import {
   useUpdateStatus,
   type UpdateStatus,
 } from "../lib/update";
+import { useScanProgress } from "../lib/scan";
 import { DesktopShortcutNotice, Row } from "./DesktopShortcut";
+import { StopScanAndUpdate, waitLabel, waitLine } from "./UpdateWait";
 import { RequiredUpdate } from "./RequiredUpdate";
 import { type StarInput, StarPrompt } from "./StarPrompt";
 import { ServerDownWindow } from "./ServerDown";
@@ -41,14 +43,26 @@ function CopyInstallLine() {
   );
 }
 
-/** The Update button, saying what's happening: waiting for a scan, updating. */
+/** The Update button, saying what's happening: waiting for a scan (how far along it is), updating. */
 function UpdateButton({ status, onClick, busy, label }: { status: UpdateStatus; onClick: () => void; busy: boolean; label: string }) {
   const working = busy || status.state === "updating" || status.state === "waiting";
+  const scan = useScanProgress();
   return (
     <Button size="sm" variant="primary" onClick={onClick} disabled={working || status.state === "checking"}>
       {working ? <LoaderCircle className="size-3.5 animate-spin" /> : <RefreshCw className="size-3.5" />}
-      {status.state === "waiting" ? "Waiting for the scan…" : status.state === "updating" ? "Updating…" : label}
+      {status.state === "waiting" ? waitLabel(scan) : status.state === "updating" ? "Updating…" : label}
     </Button>
+  );
+}
+
+/** Settings → About while an update waits: the scan it waits for, and Stop the scan and update now. */
+function WaitingForScan() {
+  const scan = useScanProgress();
+  return (
+    <div className="flex flex-wrap items-center gap-2">
+      <p className="type-small text-muted">{waitLine(scan)}</p>
+      <StopScanAndUpdate />
+    </div>
   );
 }
 
@@ -357,7 +371,7 @@ export function AboutRawJobs() {
         </a>
         <StarLink />
       </div>
-      {status.state === "waiting" && <p className="type-small text-muted">A scan is running: RawJobs updates as soon as it's done.</p>}
+      {status.state === "waiting" && <WaitingForScan />}
       {status.tooOld && (
         <div className="type-small">
           <p>This version is too old to update by itself. Run the install line again; your data stays.</p>

@@ -819,7 +819,17 @@ Stopped after ${Math.round(timeoutMs / 1000)} s without finishing.`.trim(),
     for (const res of current.followers) res.end();
   }
 
-  return { handle, startBackground, version, scanning: busy, cli: collect, stop };
+  /**
+   * Pause the scan that's running if it's in its background check (this server's, a scheduled one's or a
+   * terminal's): it saves what it did and the next scan carries it on. Returns whether it asked one to.
+   */
+  function pauseBackground(): boolean {
+    const inBackground = scan ? !!scan.background : otherScan() !== null && liveInBackground(dataDir);
+    if (inBackground) writeFileSync(resolve(dataDir, "scan-stop"), "");
+    return inBackground;
+  }
+
+  return { handle, startBackground, version, scanning: busy, cli: collect, stop, pauseBackground };
 }
 
 /** The largest LinkedIn import body: the three CSV texts. */

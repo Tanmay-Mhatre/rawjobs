@@ -9,6 +9,8 @@ import { Dialog } from "./Dialog";
 import { Button, Card, cx, Segmented } from "./ui";
 import { Anchor, ChangeRows, ChangeTag, Head, Points, sortedItems, VersionLine } from "./UpdateParts";
 import { toast } from "./Toast";
+import { useScanProgress } from "../lib/scan";
+import { StopScanAndUpdate, waitLine } from "./UpdateWait";
 
 /**
  * What changed, version by version: the tag on each line (New, Improved, Fixed), a release's list,
@@ -229,9 +231,12 @@ export function UpdatePill() {
   const [failed, setFailed] = useState<string | null>(null);
   const a = status?.available;
   const waiting = status?.state === "waiting";
+  const scan = useScanProgress();
   if (!status?.installed || !a || status.tooOld || (a.critical && !waiting)) return null;
   const updating = busy || status.state === "updating";
   const click = async () => {
+    // Waiting for a scan: the click shows how long, and Stop the scan and update now.
+    if (waiting) return setHint(true);
     setHint(false);
     setFailed(null);
     setBusy(true);
@@ -242,7 +247,14 @@ export function UpdatePill() {
     if (s?.state === "waiting") toast({ message: "RawJobs updates when the scan finishes. Keep working." });
     else if (s && s.state === "idle" && s.error) setFailed(s.error);
   };
-  const label = updating ? "Updating…" : waiting ? "Update after scan" : `Update to ${a.version}`;
+  const label = updating ? (
+    "Updating…"
+  ) : waiting ? (
+    // The header is tight: the percent only where there's room (the scan button shows it too).
+    <>Update after scan{scan?.percent != null && <span className="max-xl:hidden"> · {scan.percent}%</span>}</>
+  ) : (
+    `Update to ${a.version}`
+  );
   const top = sortedItems(a.notes, a.changes).slice(0, 2);
   return (
     // biome-ignore lint/a11y/noStaticElementInteractions: hover only shows the preview; the button inside is the control
@@ -253,9 +265,9 @@ export function UpdatePill() {
         onFocus={() => setHint(!failed)}
         onBlur={() => setHint(false)}
         onKeyDown={(e) => e.key === "Escape" && setHint(false)}
-        disabled={updating || waiting}
-        aria-describedby={hint && !updating && !waiting ? "update-pill-preview" : undefined}
-        title={waiting ? `RawJobs ${a.version} installs as soon as the scan that's running is done.` : undefined}
+        disabled={updating}
+        aria-describedby={hint && !updating ? "update-pill-preview" : undefined}
+        aria-expanded={waiting ? hint : undefined}
         className="inline-flex h-7 shrink-0 items-center gap-1.5 rounded-md border border-control bg-raised px-2 type-label text-ink transition-colors duration-150 hover:bg-hover disabled:cursor-default disabled:text-muted"
       >
         {/* The new dot (the app's mark for something new), then what clicking does. */}
@@ -263,6 +275,14 @@ export function UpdatePill() {
         {updating || waiting ? <LoaderCircle className="size-3.5 animate-spin motion-reduce:animate-none" aria-hidden /> : <ArrowDownToLine className="size-3.5" aria-hidden />}
         <span className="whitespace-nowrap">{label}</span>
       </button>
+      {hint && waiting && (
+        <div id="update-pill-preview" className={POP}>
+          <p className="type-label text-ink">RawJobs {a.version} installs after the scan</p>
+          <p className="mt-1 type-small text-muted">{waitLine(scan)}</p>
+          <StopScanAndUpdate className="mt-3" />
+          <p className="mt-2 type-meta text-muted">What the scan checked is kept; the next scan carries on from there.</p>
+        </div>
+      )}
       {hint && !updating && !waiting && !failed && (
         <div id="update-pill-preview" role="tooltip" className={POP}>
           <div className="flex items-center gap-3">
