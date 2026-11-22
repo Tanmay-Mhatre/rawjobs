@@ -9,8 +9,8 @@ import { Button } from "./ui";
  * scheduled or terminal scan alike), and a way to stop it and update now.
  */
 
-/** "Updates after the scan · 42%". */
-export const waitLabel = (p: ScanProgress | null) => `Updates after the scan${p?.percent != null ? ` · ${p.percent}%` : ""}`;
+/** "Update after scan · 42%". */
+export const waitLabel = (p: ScanProgress | null) => `Update after scan${p?.percent != null ? ` · ${p.percent}%` : ""}`;
 
 /** "The scheduled scan has about 6 min left. RawJobs updates as soon as it ends." */
 export function waitLine(p: ScanProgress | null): string {

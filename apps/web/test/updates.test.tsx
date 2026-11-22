@@ -163,7 +163,7 @@ describe("ServerNotices", () => {
         <UpdatePill />
       </>,
     );
-    const pill = await screen.findByRole("button", { name: /Updates after the scan/ });
+    const pill = await screen.findByRole("button", { name: /Update after scan/ });
     expect(screen.queryByRole("heading", { name: /Update to RawJobs/ })).toBeNull();
     // A click says what it waits for, and offers to stop the scan and update now.
     fireEvent.click(pill);
