@@ -143,6 +143,11 @@ jobs:
         env:
           DENYLIST_FILE: ${{ runner.temp }}/denylist.json
           NODE_OPTIONS: --max-old-space-size=6144
+          # Web Bot Auth (scripts/catalog/lib/web-bot-auth.ts): with this secret set, every request is
+          # signed, pointing at the key directory on the site (SITE_URL, else www.rawjobs.workers.dev).
+          # Unset: requests go out unsigned, as before. Setup: docs/shared-directory.md#web-bot-auth
+          WEB_BOT_AUTH_KEY: ${{ secrets.WEB_BOT_AUTH_KEY }}
+          WEB_BOT_AUTH_AGENT: ${{ vars.SITE_URL }}
         run: >-
           pnpm exec tsx scripts/catalog/jobs.ts crawl --group ${{ matrix.group }}
           --generated "${{ needs.guard.outputs.run_at }}" --directory "$RUNNER_TEMP/directory.json"

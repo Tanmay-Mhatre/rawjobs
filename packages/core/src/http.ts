@@ -107,6 +107,11 @@ export type HttpOptions = {
    * short scans from home connections; the feed holds an API for an hour from one CI IP.
    */
   paceCeilings?: Record<string, number>;
+  /**
+   * Extra headers for each attempt, made just before it goes out (the job feed's Web Bot Auth signature,
+   * scripts/catalog/lib/web-bot-auth.ts). The app never sets it.
+   */
+  sign?: (url: string) => Promise<Record<string, string>>;
   fetchImpl?: typeof fetch;
   sleep?: (ms: number) => Promise<void>;
   /**
@@ -221,13 +226,15 @@ export type HttpStats = {
  * whole host down; a host that keeps failing rests, and is skipped for the run if it doesn't come back.
  */
 export class HttpClient {
-  private readonly opts: Required<Omit<HttpOptions, "cache" | "stopped">> & Pick<HttpOptions, "cache" | "stopped">;
+  private readonly opts: Required<Omit<HttpOptions, "cache" | "stopped" | "sign">> & Pick<HttpOptions, "cache" | "stopped" | "sign">;
   /** Adaptive pacing per API, by paceOf()'s key. */
   private readonly paces = new Map<string, Pace>();
   /** Earliest time (ms) the next request to each host may start. */
   private readonly nextSlot = new Map<string, number>();
   /** Current gap per host, where it differs from hostDelayMs. */
   private readonly delays: Map<string, number>;
+  /** Gaps a host asked for itself (robots.txt Crawl-delay): no pace, speed-up or pacing group goes below them. */
+  private readonly floors = new Map<string, number>();
   /** Failed requests in a row per host. */
   private readonly failures = new Map<string, number>();
   private readonly rests = new Map<string, Rest>();
@@ -259,6 +266,7 @@ export class HttpClient {
       fetchImpl: opts.fetchImpl ?? fetch,
       sleep: opts.sleep ?? realSleep,
       stopped: opts.stopped,
+      sign: opts.sign,
     };
     this.delays = new Map(Object.entries(this.opts.hostDelays));
   }
@@ -396,6 +404,16 @@ export class HttpClient {
     return this.stop.signal.aborted;
   }
 
+  /** Keep at least `ms` between two requests to `host` (robots.txt's Crawl-delay), for the client's life. */
+  keepGap(host: string, ms: number): void {
+    if (Number.isFinite(ms) && ms > (this.floors.get(host) ?? 0)) this.floors.set(host, ms);
+  }
+
+  /** Whether requests carry a signature (HttpOptions.sign). */
+  get signing(): boolean {
+    return this.opts.sign !== undefined;
+  }
+
   /** Count requests in flight: `stopped` is polled only while there are some. */
   private track(n: 1 | -1): void {
     this.inFlight += n;
@@ -430,6 +448,8 @@ export class HttpClient {
       await this.waitForHost(host, url);
       this.stats.requests++;
       const pace = this.paceFor(host);
+      // Signed after the wait for the host's turn, so the signature's clock starts when it goes out.
+      const signed = this.opts.sign ? await this.opts.sign(url) : undefined;
       const sent = Date.now();
       let res: Response;
       let body: string | undefined;
@@ -443,7 +463,7 @@ export class HttpClient {
       try {
         res = await this.opts.fetchImpl(url, {
           ...init,
-          headers: { "user-agent": this.opts.userAgent, ...(init.headers as Record<string, string>) },
+          headers: { "user-agent": this.opts.userAgent, ...(init.headers as Record<string, string>), ...signed },
           signal: ctrl.signal,
         });
         clearTimeout(timer);
@@ -499,7 +519,8 @@ export class HttpClient {
     const now = Date.now();
     const pace = this.paceFor(host);
     const slot = Math.max(now, this.nextSlot.get(host) ?? 0, pace?.next ?? 0);
-    this.nextSlot.set(host, slot + (pace && !pace.spec.hostGap ? 0 : (this.delays.get(host) ?? this.opts.hostDelayMs)));
+    const gap = pace && !pace.spec.hostGap ? 0 : (this.delays.get(host) ?? this.opts.hostDelayMs);
+    this.nextSlot.set(host, slot + Math.max(gap, this.floors.get(host) ?? 0));
     if (pace) pace.next = slot + 1000 / pace.rate;
     if (slot > now) await this.pause(slot - now, url);
   }

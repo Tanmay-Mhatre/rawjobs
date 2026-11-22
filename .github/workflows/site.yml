@@ -14,12 +14,16 @@ on:
       - apps/site/**
       - apps/web/src/design/**
       - design/components/bundle.css
+      # The key directory's signer (apps/site/worker.ts imports it).
+      - scripts/catalog/lib/web-bot-auth.ts
       - .github/workflows/site.yml
   pull_request:
     paths:
       - apps/site/**
       - apps/web/src/design/**
       - design/components/bundle.css
+      # The key directory's signer (apps/site/worker.ts imports it).
+      - scripts/catalog/lib/web-bot-auth.ts
       - .github/workflows/site.yml
   # The weekly rebuild starts a deploy when it publishes; this Monday run is the backup, off the
   # hour (GitHub's busiest time) and well after the rebuild's usual finish.

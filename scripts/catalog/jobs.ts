@@ -44,6 +44,7 @@ import {
 } from "@rawjobs/core";
 import { readDenylist } from "./lib/denylist";
 import { readFeed, stateOf, writeFeed } from "./lib/feed-v2";
+import { feedSigner } from "./lib/web-bot-auth";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const arg = (name: string) => {
@@ -340,7 +341,10 @@ async function crawl(out: string, group: string, generated: string, directoryFil
     // keeping stale rows for the rest of the run.
     hostRests: ADAPTIVE_GROUPS.has(group),
     userAgent: "RawJobs-feed/0.2 (open-source job radar; one read per board every 6 hours; https://github.com/Tanmay-Mhatre/rawjobs)",
+    // Web Bot Auth: signed only in CI with the WEB_BOT_AUTH_KEY secret set; unsigned otherwise.
+    sign: await feedSigner(),
   });
+  if (http.signing) console.log("Web Bot Auth: requests are signed");
   const now = new Date(generated);
   const stamp = stampOf(generated);
   const result: GroupFile = { group, generated_at: generated, seconds: 0, shards: {}, stats: {}, http: http.stats };
