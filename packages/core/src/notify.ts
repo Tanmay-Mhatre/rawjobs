@@ -169,6 +169,11 @@ export function availableJobs(jobs: readonly Job[], now = Date.now()): Job[] {
  * The message for "tell me when this scan is done": always sent, finished or stopped. It counts the jobs
  * available to apply (availableJobs), not only this scan's finds, so it isn't "no jobs" after every quiet scan.
  */
+/** A scheduled scan that failed: no details (they're on the computer), just that it did and what to do. */
+export function scheduledFailedMessage(): string {
+  return message("⚠️ <b>Scheduled scan didn't finish</b>", "Your earlier results are safe.", "Open RawJobs on your computer to see why and scan again.");
+}
+
 export function finishedMessage(o: { available: number; stopped?: boolean; scope: AlertScope }): string {
   const n = o.available;
   const facts = n ? plural(n, "job available to apply", "jobs available to apply") : "No new jobs in the last 2 days";

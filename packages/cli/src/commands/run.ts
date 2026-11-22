@@ -18,6 +18,7 @@ import {
   digest,
   availableJobs,
   finishedMessage,
+  scheduledFailedMessage,
   sendTelegram,
   telegramSecrets,
   remindFollowUps,
@@ -331,6 +332,8 @@ export async function cmdRun(args: string[]): Promise<number> {
     });
   } catch (err) {
     log({ ok: false, error: (err as Error).message });
+    // Nobody may be looking at the computer: say so on Telegram, when alerts are on.
+    if (values.scheduled && values.notify && alertsOn(config)) await sendTelegram(scheduledFailedMessage(), telegramSecrets()).catch(() => {});
     throw err;
   }
 

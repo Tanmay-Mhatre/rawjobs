@@ -18,6 +18,7 @@ import { ServerNotices } from "./components/Updates";
 import { UpdatePill } from "./components/WhatsNew";
 import { ScanButton } from "./components/ScanButton";
 import { FeedStaleNotice } from "./components/FeedStaleNotice";
+import { ScheduledScanNotice } from "./components/ScheduledScanNotice";
 import { TelegramBanner } from "./components/TelegramBanner";
 import { ReminderNotice } from "./components/referral/ReminderNotice";
 import { Settings } from "./components/Settings";
@@ -391,6 +392,7 @@ export function App() {
           />
           {!inSetup && tab === "radar" && <FeedStaleNotice scan={scan} onOnlyMine={() => void restartScan("yours")} />}
           {!inSetup && tab === "radar" && <ReminderNotice />}
+          {!inSetup && tab === "radar" && canRunLocally && setupState === "configured" && <ScheduledScanNotice scanning={scanning} onScan={requestScan} />}
           {status === undefined || state.kind === "loading" ? (
             <FeedSkeleton />
           ) : inSetup ? (
