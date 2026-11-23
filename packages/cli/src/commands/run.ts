@@ -10,6 +10,7 @@ import {
   scan,
   syncDirectory,
   syncJobFeed,
+  networkReachable,
   SYNC_BUDGET_MS,
   scanPlan,
   acquireScanLock,
@@ -21,6 +22,7 @@ import {
   finishedMessage,
   scheduledFailedMessage,
   sendTelegram,
+  sendTelegramQueued,
   telegramSecrets,
   remindFollowUps,
   remindDeadlines,
@@ -106,6 +108,8 @@ export const backgroundCheck = (config: Config, base: ScanOptions & { stopped: (
 /** The background check's alert: only jobs new to you (never ones already sent), whatever "only new" says. */
 const newOnly = (config: Config): Config => ({ ...config, alerts: { ...config.alerts, only_new: true } });
 
+export const OFFLINE_MESSAGE = "You're offline, so the scan didn't run. Your saved jobs are kept; scan again once you're back online.";
+
 /**
  * The scan's first step: the directory and the job feed, side by side (neither needs the other), each
  * given SYNC_BUDGET_MS. Past that the scan goes on with the local copies while the downloads carry on,
@@ -135,12 +139,19 @@ export function sessionOptions(values: RunValues, dataDir: string, scope: ScanSc
  * sync first on a full scan that's online, then `body`. The lock and the stop file are released
  * however it ends. When another scan holds the lock, `busy()` answers instead.
  */
-export async function scanSession<T>(values: RunValues, dataDir: string, o: { busy: () => T; sync: () => Promise<void> }, body: (syncMs: number) => Promise<T>): Promise<T> {
+export async function scanSession<T>(
+  values: RunValues,
+  dataDir: string,
+  o: { busy: () => T; offline: () => T; sync: () => Promise<boolean | undefined> },
+  body: (syncMs: number) => Promise<T>,
+): Promise<T> {
   if (!values["dry-run"] && !acquireScanLock(dataDir)) return o.busy();
   try {
     const fullScan = !values.only?.length && !values.check?.length;
     const started = Date.now();
-    if (fullScan && !values.offline) await o.sync();
+    // The shared directory couldn't be reached: when nothing else answers either, the internet is
+    // down, and a scan would only mark every board as failing (or, with no job feed, try them all).
+    if (fullScan && !values.offline && (await o.sync()) && !(await networkReachable())) return o.offline();
     return await body(Date.now() - started);
   } finally {
     if (!values["dry-run"]) releaseScanLock(dataDir);
@@ -223,9 +234,15 @@ export async function cmdRun(args: string[]): Promise<number> {
     const feed = feedSync?.message;
     if (feed) console.error(`  ${feed}`);
     live({ type: "synced", ...directory, ...(feed ? { feed } : {}) });
+    return directory.offline;
+  };
+  const offline = () => {
+    console.error(OFFLINE_MESSAGE);
+    log({ ok: false, error: "Offline: the scan didn't run." });
+    return 0;
   };
   try {
-    return await scanSession(values, dataDir, { busy, sync }, async (syncMs) => {
+    return await scanSession(values, dataDir, { busy, offline, sync }, async (syncMs) => {
       // Logged as it starts (with this process), so a run the scheduler kills still shows in Settings.
       if (values.scheduled) recordScheduledRun(dataDir, { startedAt, scope, ok: false, pid: process.pid, ...(catchUp ? { catchUp } : {}) });
       const stage1Started = Date.now();
@@ -304,7 +321,7 @@ export async function cmdRun(args: string[]): Promise<number> {
         console.error(`\nWrote ${out}`);
       }
 
-      const notified = values.notify && !values["dry-run"] ? await notifyScan(config, result, merged, scope) : undefined;
+      const notified = values.notify && !values["dry-run"] ? await notifyScan(config, result, merged, scope, dataDir) : undefined;
       if (notified)
         console.error(`Telegram: ${notified === "sent" ? "sent the new jobs" : notified === "nothing-new" ? "nothing new to send" : notified === "off" ? "not set up (Settings → Alerts)" : notified}`);
       // Jobs you applied to that are due a follow-up ride along with the scan's alerts.
@@ -334,7 +351,7 @@ export async function cmdRun(args: string[]): Promise<number> {
         console.log(
           `\nBackground check: ${bg.checks.length.toLocaleString()} more companies, ${found} new match${found === 1 ? "" : "es"}${bg.stopped ? " (stopped; the next one carries on where it stopped)" : ""}.`,
         );
-        if (values.notify && found) await notifyScan(newOnly(config), bg.result, bg.merged, "background");
+        if (values.notify && found) await notifyScan(newOnly(config), bg.result, bg.merged, "background", dataDir);
       }
       log({ ok: true, matches: matches.length, newMatches, notified, stopped });
       return 0;
@@ -483,12 +500,17 @@ export async function runNdjson(values: RunValues): Promise<number> {
     };
     const sync = async () => {
       // Resume now carries on the background check: the directory was synced when it began.
-      if (values["background-only"]) return;
+      if (values["background-only"]) return undefined;
       emit({ type: "sync" });
       const [directory, feed] = await syncBoth(dataDir, !values.full);
       emit({ type: "synced", ...directory, ...(feed ? { feed: feed.message } : {}) });
+      return directory.offline;
     };
-    return await scanSession(values, dataDir, { busy, sync }, async (syncMs) => {
+    const offline = () => {
+      emit({ type: "error", message: OFFLINE_MESSAGE });
+      return 0;
+    };
+    return await scanSession(values, dataDir, { busy, offline, sync }, async (syncMs) => {
       const session = sessionOptions(values, dataDir, scope);
       const stage1Started = Date.now();
       const { hooks, doneEvent, state } = progressEvents(config, emit);
@@ -500,7 +522,7 @@ export async function runNdjson(values: RunValues): Promise<number> {
         const bg = await backgroundCheck(config, { ...session, ...bgHooks }, since);
         const { newMatches } = doneEvent(bg, "background");
         // Quiet: a Telegram message only when it found something new (and never a job already sent).
-        if (newMatches && alertsOn(config)) await notifyScan(newOnly(config), bg.result, bg.merged, "background");
+        if (newMatches && alertsOn(config)) await notifyScan(newOnly(config), bg.result, bg.merged, "background", dataDir);
       };
       if (values["background-only"]) {
         // Resume now: skip what the paused check (or the Scan now before it) fetched in the hour before it began.
@@ -533,16 +555,18 @@ function alertsOn(config: Config): boolean {
   return !!(config.alerts.telegram && secrets.token && secrets.chatId);
 }
 
-/** Send how many new matches the scan found (or, with only_new off, how many strong ones) to Telegram. Never throws. */
-export async function notifyScan(config: Config, result: RunResult, merged: MergeResult, scope: AlertScope): Promise<string> {
+/**
+ * Send how many new matches the scan found (or, with only_new off, how many strong ones) to Telegram,
+ * after any earlier alert that didn't get through (sendTelegramQueued). Never throws.
+ */
+export async function notifyScan(config: Config, result: RunResult, merged: MergeResult, scope: AlertScope, dataDir: string): Promise<string> {
   const secrets = telegramSecrets();
   if (!alertsOn(config)) return "off";
   const jobs = alertJobs(config, result.jobs, merged.newIds);
   const text = digest(jobs, { minScore: config.profile.min_score, onlyNew: config.alerts.only_new, scope });
-  if (!text) return "nothing-new";
   try {
-    await sendTelegram(text, secrets);
-    return "sent";
+    const sent = await sendTelegramQueued(dataDir, text, secrets);
+    return !text && !sent.startsWith("failed") ? "nothing-new" : sent;
   } catch (err) {
     return `failed: ${(err as Error).message}`;
   }

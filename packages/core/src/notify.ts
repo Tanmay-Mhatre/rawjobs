@@ -1,4 +1,4 @@
-import { chmodSync, existsSync, mkdirSync, readFileSync } from "node:fs";
+import { chmodSync, existsSync, mkdirSync, readFileSync, rmSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import type { Config, Job } from "./schema";
 import type { ScanScope } from "./protocol";
@@ -63,6 +63,18 @@ export const looksLikeToken = (t: string) => TOKEN.test(t.trim());
 
 type Fetch = typeof fetch;
 
+/** Telegram answered with an error: its status, and how long it asked us to wait (429). */
+export class TelegramError extends Error {
+  constructor(
+    message: string,
+    readonly status: number,
+    readonly retryAfter?: number,
+  ) {
+    super(message);
+    this.name = "TelegramError";
+  }
+}
+
 async function call<T>(token: string, method: string, body: unknown, fetchImpl: Fetch = fetch): Promise<T> {
   const res = await fetchImpl(`https://api.telegram.org/bot${token}/${method}`, {
     method: "POST",
@@ -70,13 +82,25 @@ async function call<T>(token: string, method: string, body: unknown, fetchImpl: 
     body: JSON.stringify(body),
     signal: AbortSignal.timeout(15_000),
   });
-  const json = (await res.json().catch(() => ({}))) as { ok?: boolean; result?: T; description?: string };
+  const json = (await res.json().catch(() => ({}))) as { ok?: boolean; result?: T; description?: string; parameters?: { retry_after?: number } };
   if (!json.ok) {
-    if (res.status === 401) throw new Error("Telegram didn't accept that bot token. Copy it again from @BotFather.");
-    if (res.status === 403) throw new Error("The bot can't message you yet. Open your bot in Telegram and press Start.");
-    throw new Error(`Telegram said: ${json.description ?? `HTTP ${res.status}`}`);
+    if (res.status === 401) throw new TelegramError("Telegram didn't accept that bot token. Copy it again from @BotFather.", 401);
+    if (res.status === 403) throw new TelegramError("The bot can't message you yet. Open your bot in Telegram and press Start.", 403);
+    throw new TelegramError(`Telegram said: ${json.description ?? `HTTP ${res.status}`}`, res.status, json.parameters?.retry_after);
   }
   return json.result as T;
+}
+
+/** How many times a message is tried before it's left for later. */
+const SEND_TRIES = 3;
+/** The longest a send waits for Telegram's "slow down" (429) before trying again. */
+const MAX_RETRY_AFTER_S = 30;
+
+/** How long to wait before trying a failed send again, or undefined when trying again can't help (a bad token, a blocked bot). */
+function retryWait(err: unknown, tries: number): number | undefined {
+  if (!(err instanceof TelegramError)) return 2_000 * tries; // no answer: the network, or a timeout
+  if (err.status === 429) return Math.min(err.retryAfter ?? 5, MAX_RETRY_AFTER_S) * 1_000;
+  return err.status >= 500 ? 2_000 * tries : undefined;
 }
 
 /** The bot's own name, to check a token ("@my_jobs_bot"). */
@@ -98,9 +122,64 @@ export async function findTelegramChat(token: string, fetchImpl?: Fetch): Promis
   return chat ? { chatId: String(chat.id), name: chat.first_name ?? chat.username ?? "you" } : undefined;
 }
 
-export async function sendTelegram(text: string, secrets: TelegramSecrets, fetchImpl?: Fetch): Promise<void> {
+const realSleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
+
+/** Send a message, trying again (up to SEND_TRIES) when Telegram is busy, down or unreachable. */
+export async function sendTelegram(text: string, secrets: TelegramSecrets, fetchImpl?: Fetch, sleep: (ms: number) => Promise<void> = realSleep): Promise<void> {
   if (!secrets.token || !secrets.chatId) throw new Error("Telegram isn't set up yet: add your bot in Settings → Alerts.");
-  await call(secrets.token, "sendMessage", { chat_id: secrets.chatId, text, parse_mode: "HTML", disable_web_page_preview: true }, fetchImpl);
+  for (let tries = 1; ; tries++) {
+    try {
+      await call(secrets.token, "sendMessage", { chat_id: secrets.chatId, text, parse_mode: "HTML", disable_web_page_preview: true }, fetchImpl);
+      return;
+    } catch (err) {
+      const wait = retryWait(err, tries);
+      if (wait === undefined || tries >= SEND_TRIES) throw err;
+      await sleep(wait);
+    }
+  }
+}
+
+/** Scan alerts that couldn't be sent, kept in the data folder for the next scan to send. */
+const OUTBOX_FILE = "telegram-outbox.json";
+/** An alert older than this isn't sent any more: its counts are out of date by then. */
+const OUTBOX_MAX_AGE_MS = 24 * 3_600_000;
+type Outbox = { messages: { text: string; at: string }[] };
+
+/**
+ * Send a scan's alert, after any earlier ones that didn't get through (oldest first). What still
+ * can't be sent is kept for the next scan, so a moment without internet doesn't lose an alert for good
+ * (the next scan wouldn't count those jobs as new again). "nothing": no alert and nothing waiting.
+ */
+export async function sendTelegramQueued(
+  dataDir: string,
+  text: string | undefined,
+  secrets: TelegramSecrets,
+  opts: { fetchImpl?: Fetch; sleep?: (ms: number) => Promise<void>; now?: number } = {},
+): Promise<"sent" | "nothing" | `failed: ${string}`> {
+  const path = resolve(dataDir, OUTBOX_FILE);
+  const now = opts.now ?? Date.now();
+  let waiting: Outbox["messages"] = [];
+  try {
+    if (existsSync(path)) waiting = (JSON.parse(readFileSync(path, "utf8")) as Outbox).messages.filter((m) => now - Date.parse(m.at) < OUTBOX_MAX_AGE_MS);
+  } catch {
+    // An unreadable outbox: start a new one.
+  }
+  const queue = [...waiting, ...(text ? [{ text, at: new Date(now).toISOString() }] : [])];
+  if (!queue.length) {
+    rmSync(path, { force: true });
+    return "nothing";
+  }
+  for (let i = 0; i < queue.length; i++) {
+    try {
+      await sendTelegram(queue[i]!.text, secrets, opts.fetchImpl, opts.sleep);
+    } catch (err) {
+      mkdirSync(dataDir, { recursive: true });
+      writeFileAtomic(path, JSON.stringify({ messages: queue.slice(i) } satisfies Outbox));
+      return `failed: ${(err as Error).message} (kept to send after the next scan)`;
+    }
+  }
+  rmSync(path, { force: true });
+  return "sent";
 }
 
 /** "<b>12</b> new jobs": the number in bold. */
