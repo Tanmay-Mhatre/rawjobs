@@ -128,6 +128,8 @@ export type HttpOptions = {
 const HOST_RESTS_MS = [30_000, 60_000, 120_000, 300_000, 600_000];
 /** However it goes, a host is skipped for the run once it has been failing this long (a scan mustn't wait for good while offline). */
 const MAX_RESTING_MS = 3_600_000;
+/** When nothing anywhere has answered since a host began resting, it's skipped after this instead: the scan ends soon while offline. */
+const OFFLINE_RESTING_MS = 300_000;
 
 /** A resting host: no request before `until`, then one (the probe) tries it while the others wait for it. */
 type Rest = { until: number; step: number; since: number; firstAt: number; probe?: Promise<void> };
@@ -216,6 +218,8 @@ export type HttpStats = {
   restedHosts: string[];
   /** Hosts skipped for the rest of the run: they kept failing while other hosts answered. */
   brokenHosts: string[];
+  /** Requests any server answered (even with an error status): 0 with failures means the network was down. */
+  answered?: number;
   /** With adaptive pacing: each API's pace at the end (requests a second) and how often it was halved. */
   paces?: Record<string, { rate: number; downs: number }>;
 };
@@ -323,13 +327,17 @@ export class HttpClient {
     try {
       const out = await this.attempt(url, init, host, readBody);
       this.lastAnswerAt = Date.now();
+      this.stats.answered = (this.stats.answered ?? 0) + 1;
       this.failures.delete(host);
       this.rests.delete(host);
       return out;
     } catch (err) {
       if (err instanceof StoppedError) throw err;
       const status = (err as HttpError).status;
-      if (status !== undefined) this.lastAnswerAt = Date.now();
+      if (status !== undefined) {
+        this.lastAnswerAt = Date.now();
+        this.stats.answered = (this.stats.answered ?? 0) + 1;
+      }
       if (status === undefined || status === 429 || status >= 500) {
         this.stats.failures++;
         const n = (this.failures.get(host) ?? 0) + 1;
@@ -385,7 +393,8 @@ export class HttpClient {
     // Nothing anywhere answered since the last rest began: the network is down, not this host, so the rest doesn't grow.
     const step = !prev ? 0 : this.lastAnswerAt < prev.since ? prev.step : prev.step + 1;
     const firstAt = prev?.firstAt ?? now;
-    if (!this.opts.hostRests || step >= HOST_RESTS_MS.length || now - firstAt >= MAX_RESTING_MS) {
+    const offline = this.lastAnswerAt < firstAt;
+    if (!this.opts.hostRests || step >= HOST_RESTS_MS.length || now - firstAt >= (offline ? OFFLINE_RESTING_MS : MAX_RESTING_MS)) {
       this.rests.delete(host);
       this.givenUp.add(host);
       this.stats.brokenHosts.push(host);

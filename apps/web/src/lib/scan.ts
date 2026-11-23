@@ -392,6 +392,8 @@ export function useScan(onFinished: () => void | Promise<void>) {
                   : `${scanName(by)} done. No new jobs this time.`,
         });
       }
+      // A scan from this page that didn't get going (offline, or another scan running): say why.
+      else if (failed && !quickDone) toast({ message: failed, actionLabel: "Dismiss", onAction: () => {}, duration: 10_000 });
       // Quiet unless it found something: no toast for a background check that found nothing or was paused.
       else if (bgDone && !bgDone.stopped && bgDone.newMatches > 0)
         toast({
