@@ -1,4 +1,4 @@
-import { ArrowRight, Keyboard, RefreshCw, TriangleAlert, X } from "lucide-react";
+import { ArrowRight, Keyboard, RefreshCw, TriangleAlert, WifiOff, X } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { failedHealth } from "@rawjobs/core/health";
 import { CompaniesTab } from "./components/CompaniesTab";
@@ -40,6 +40,8 @@ import { useResume } from "./lib/resume";
 import { profileFromPicks, type FilterPicks } from "./lib/profileSync";
 import { ProfileFixProvider, type ProfileFixApi } from "./lib/profileFix";
 import { draftToConfig, emptyDraft, resetSetup, saveConfig, setupProgress, STEP, useSetupStatus } from "./lib/setup";
+import { useOnline } from "./lib/net";
+import { ErrorBoundary } from "./components/ErrorBoundary";
 import { buildSuggestions } from "./lib/suggest";
 import { load, onSaveFailed, save } from "./lib/storage";
 import { timeAgo } from "./lib/format";
@@ -80,6 +82,7 @@ export function App() {
   const [showKeys, setShowKeys] = useState(false);
 
   const status = setup.status;
+  const online = useOnline();
   const meta = state.kind === "ready" ? state.meta : undefined;
   const personal = !!status?.isPersonal;
   /** none: no personal config yet · invalid: config file broken · configured (also the hosted build, which can't run setup). */
@@ -333,6 +336,15 @@ export function App() {
                         Last scan {timeAgo(lastRun.startedAt)}
                       </span>
                     )}
+                    {canRunLocally && !online && (
+                      // biome-ignore lint/a11y/noNoninteractiveTabindex: focusable so keyboard users reach its explanation
+                      <span role="status" tabIndex={0} className="rj-btn rj-btn--quiet rj-btn--sm relative inline-flex gap-1 px-2 text-warning-text hover:text-warning-text">
+                        <WifiOff className="size-3.5" aria-hidden />
+                        <span className="max-sm:sr-only">Offline</span>
+                        <span className="sr-only">: your saved jobs still work. Scans and updates wait until you're back online.</span>
+                        <Tooltip label="No internet: scans and updates wait" />
+                      </span>
+                    )}
                     {state.kind === "ready" && failing > 0 && (
                       <button type="button" onClick={goFailing} className="rj-btn rj-btn--quiet rj-btn--sm relative hidden gap-1 px-2 text-warning-text hover:text-warning-text lg:inline-flex">
                         <TriangleAlert className="size-3.5" aria-hidden />
@@ -397,183 +409,187 @@ export function App() {
           {!inSetup && tab === "radar" && <FeedStaleNotice scan={scan} onOnlyMine={() => void restartScan("yours")} />}
           {!inSetup && tab === "radar" && <ReminderNotice />}
           {!inSetup && tab === "radar" && canRunLocally && setupState === "configured" && <ScheduledScanNotice scanning={scanning} onScan={requestScan} />}
-          {status === undefined || state.kind === "loading" ? (
-            <FeedSkeleton />
-          ) : inSetup ? (
-            <Wizard
-              step={wizardStep}
-              goStep={goStep}
-              draft={draft}
-              draftLoaded={draftLoaded}
-              update={update}
-              existing={personal}
-              configErrors={status?.valid === false ? status.errors : undefined}
-              startScan={startScan}
-              onSaved={async () => {
-                await setup.refresh();
-                save(DRAFT_KEY, null);
-                save(WELCOME_SEEN_KEY, true);
-              }}
-              onFinish={() => {
-                announceScan.current = true;
-                go({ tab: "radar" });
-              }}
-              onExit={exitSetup}
-              progress={progress}
-              resumeText={resume.text}
-              saveResume={saveResume}
-              removeResume={removeResume}
-              onStart={() => {
-                save(WELCOME_SEEN_KEY, true);
-                goStep(!personal && progress.started ? progress.nextStep : STEP.resume);
-              }}
-              onStartOver={() => {
-                save(WELCOME_SEEN_KEY, true);
-                setDraft(emptyDraft());
-                goStep(STEP.resume);
-              }}
-            />
-          ) : (
-            <div className={cx("flex flex-col gap-4", radarFits && "lg:min-h-0 lg:flex-1 lg:gap-3", boardFills && "flex-1")}>
-              {viewLabel && (
-                <h1 ref={headingRef} tabIndex={-1} className="sr-only">
-                  {viewLabel}
-                </h1>
-              )}
-              {state.kind === "error" && <ErrorState message={state.message} onRetry={() => void reload()} />}
-              {/* A scan in progress shows in the header (Scan now becomes its status); a Telegram message that failed shows here. */}
-              <NotifyFailed scan={scan} />
+          {setup.failed && status === undefined && !inSetup && <SetupCheckFailed onRetry={() => void setup.refresh()} />}
+          {/* A page that breaks shows its own error card; the header, and the other pages, keep working. */}
+          <ErrorBoundary key={tab} where="this page">
+            {(status === undefined && !setup.failed) || state.kind === "loading" ? (
+              <FeedSkeleton />
+            ) : inSetup ? (
+              <Wizard
+                step={wizardStep}
+                goStep={goStep}
+                draft={draft}
+                draftLoaded={draftLoaded}
+                update={update}
+                existing={personal}
+                configErrors={status?.valid === false ? status.errors : undefined}
+                startScan={startScan}
+                onSaved={async () => {
+                  await setup.refresh();
+                  save(DRAFT_KEY, null);
+                  save(WELCOME_SEEN_KEY, true);
+                }}
+                onFinish={() => {
+                  announceScan.current = true;
+                  go({ tab: "radar" });
+                }}
+                onExit={exitSetup}
+                progress={progress}
+                resumeText={resume.text}
+                saveResume={saveResume}
+                removeResume={removeResume}
+                onStart={() => {
+                  save(WELCOME_SEEN_KEY, true);
+                  goStep(!personal && progress.started ? progress.nextStep : STEP.resume);
+                }}
+                onStartOver={() => {
+                  save(WELCOME_SEEN_KEY, true);
+                  setDraft(emptyDraft());
+                  goStep(STEP.resume);
+                }}
+              />
+            ) : (
+              <div className={cx("flex flex-col gap-4", radarFits && "lg:min-h-0 lg:flex-1 lg:gap-3", boardFills && "flex-1")}>
+                {viewLabel && (
+                  <h1 ref={headingRef} tabIndex={-1} className="sr-only">
+                    {viewLabel}
+                  </h1>
+                )}
+                {state.kind === "error" && <ErrorState message={state.message} onRetry={() => void reload()} />}
+                {/* A scan in progress shows in the header (Scan now becomes its status); a Telegram message that failed shows here. */}
+                <NotifyFailed scan={scan} />
 
-              {tab === "radar" && (
-                <>
-                  {notSetUp && <SetupHero items={items} started={progress.started} nextStep={progress.nextStep} onStep={goStep} onCompanies={goCompanies} />}
-                  {setupState === "invalid" && <ConfigProblemCard errors={status?.errors} onFix={() => goStep(0)} />}
-                  {setupState === "configured" && personal && <SetupChecklist items={items} onStep={goStep} onScan={requestScan} onCompanies={goCompanies} />}
-                  {setupState === "configured" && personal && state.kind === "empty" && <FirstScanCard scan={scan} onScan={requestScan} />}
-                  {canRunLocally && setupState === "configured" && personal && lastRun && <TelegramBanner tg={tg} onConnected={refreshTg} />}
-                  {/* Laptops show this as a chip next to "Last scan" in the header, so the jobs start higher. */}
-                  {state.kind === "ready" && failing > 0 && <FailingBanner className="lg:hidden" count={failing} onOpen={goFailing} />}
-                  {state.kind === "ready" && lastRun && matched === 0 && <NoMatches jobs={otherJobs ? [...jobs, ...otherJobs] : jobs} onStep={goStep} onCompanies={goCompanies} />}
-                  {state.kind === "ready" && (matched > 0 || !lastRun) && (
-                    <RadarPage
-                      jobs={jobs}
-                      meta={state.meta}
-                      user={user.state}
-                      prefs={prefs.prefs}
-                      onOpenOverlay={onOpen}
-                      overlayOpen={!!openJob}
-                      onStatus={onStatus}
-                      onUpdate={(job, patch) => user.update(job, patch)}
-                      onApply={onApply}
-                      onSaveView={prefs.saveView}
-                      onRenameView={prefs.renameView}
-                      onDeleteView={prefs.deleteView}
-                      onRestoreView={prefs.restoreView}
-                      onHideCompany={hideCompany}
-                      isYours={isYours}
-                      companyCount={yourKeys.size}
-                      indexGeneratedAt={state.indexGeneratedAt}
-                      onCompanies={goCompanies}
-                      onTrack={canSave ? trackJob : undefined}
-                      onCheck={canSave ? checkJob : undefined}
-                      profile={status?.config?.profile}
-                      onEditProfile={() => go({ tab: "settings" })}
-                      onSaveProfile={canRunLocally && personal && setupState === "configured" ? saveProfileFromRadar : undefined}
-                    />
-                  )}
-                </>
-              )}
-              {tab === "pipeline" && (
-                <Pipeline
-                  user={user.state}
-                  jobsById={jobsById}
-                  onOpen={onOpen}
-                  onApply={onApply}
-                  minScore={meta?.profile.min_score}
-                  onPatch={(id, entry, patch) => user.update({ id, ...entry.snapshot, ...pick(jobsById.get(id)) }, patch)}
-                  weeklyPlan={prefs.prefs.weeklyPlan}
-                  onWeeklyPlan={prefs.setWeeklyPlan}
-                  onAdd={(j, status) => user.update({ id: `manual:${Date.now().toString(36)}`, ...j, location: "", score: 0 }, { status })}
-                  onSetup={notSetUp ? toSetup : undefined}
-                  goRadar={() => go({ tab: "radar" })}
-                />
-              )}
-              {tab === "companies" && (
-                <CompaniesTab
-                  configured={setupState === "configured" && personal}
-                  meta={meta}
-                  jobs={jobs}
-                  hiddenNames={prefs.prefs.hiddenCompanies}
-                  onUnhideName={(name) => prefs.setCompanyHidden(name, false)}
-                  draft={draft}
-                  loaded={draftLoaded}
-                  saved={saved}
-                  update={update}
-                  onSaved={async () => {
-                    await setup.refresh();
-                  }}
-                  onScan={() => {
-                    go({ tab: "radar" });
-                    requestScan();
-                  }}
-                  scanning={scanning}
-                  toSetup={toSetup}
-                />
-              )}
-              {tab === "settings" && notSetUp && (
-                <SetupBanner
-                  action={
-                    <Button variant="primary" size="sm" onClick={toSetup}>
-                      {progress.started ? "Continue setup" : "Start setup"} <ArrowRight className="size-3.5" />
-                    </Button>
-                  }
-                >
-                  <b>You haven't finished setup.</b> <span className="text-muted">The guided setup is the quickest way, or fill in the sections below.</span>
-                </SetupBanner>
-              )}
-              {tab === "settings" && setupState === "invalid" && <ConfigProblemCard errors={status?.errors} onFix={() => goStep(0)} />}
-              {tab === "settings" && (
-                <Settings
-                  toCompanies={goCompanies}
-                  draft={draft}
-                  update={update}
-                  revert={() => setDraft(saved)}
-                  dirty={dirty}
-                  saved={saved}
-                  setupSaved={canSave}
-                  canScan={canRunLocally && setupState === "configured"}
-                  onSaved={async () => {
-                    await setup.refresh();
-                    save(DRAFT_KEY, null);
-                  }}
-                  onScan={() => {
-                    go({ tab: "radar" });
-                    requestScan();
-                  }}
-                  onCheckEvery={() => {
-                    go({ tab: "radar" });
-                    void startScan("all");
-                  }}
-                  scanning={scanning}
-                  user={user.state}
-                  prefs={prefs.prefs}
-                  onImport={(state, p) => {
-                    user.replaceAll(state);
-                    if (p) prefs.replacePrefs(p);
-                  }}
-                  onRemoveRule={(rule) => {
-                    prefs.setRule(rule, false);
-                    toast({ message: <>Showing {offerWhat({ kind: "rule", rule })} again.</>, actionLabel: "Undo", onAction: () => prefs.setRule(rule, true) });
-                  }}
-                  suggest={suggest}
-                  resumeText={resume.text}
-                  saveResume={saveResume}
-                  removeResume={removeResume}
-                  onStartOver={canRunLocally && personal ? startOver : undefined}
-                />
-              )}
-            </div>
-          )}
+                {tab === "radar" && (
+                  <>
+                    {notSetUp && <SetupHero items={items} started={progress.started} nextStep={progress.nextStep} onStep={goStep} onCompanies={goCompanies} />}
+                    {setupState === "invalid" && <ConfigProblemCard errors={status?.errors} onFix={() => goStep(0)} />}
+                    {setupState === "configured" && personal && <SetupChecklist items={items} onStep={goStep} onScan={requestScan} onCompanies={goCompanies} />}
+                    {setupState === "configured" && personal && state.kind === "empty" && <FirstScanCard scan={scan} onScan={requestScan} />}
+                    {canRunLocally && setupState === "configured" && personal && lastRun && <TelegramBanner tg={tg} onConnected={refreshTg} />}
+                    {/* Laptops show this as a chip next to "Last scan" in the header, so the jobs start higher. */}
+                    {state.kind === "ready" && failing > 0 && <FailingBanner className="lg:hidden" count={failing} onOpen={goFailing} />}
+                    {state.kind === "ready" && lastRun && matched === 0 && <NoMatches jobs={otherJobs ? [...jobs, ...otherJobs] : jobs} onStep={goStep} onCompanies={goCompanies} />}
+                    {state.kind === "ready" && (matched > 0 || !lastRun) && (
+                      <RadarPage
+                        jobs={jobs}
+                        meta={state.meta}
+                        user={user.state}
+                        prefs={prefs.prefs}
+                        onOpenOverlay={onOpen}
+                        overlayOpen={!!openJob}
+                        onStatus={onStatus}
+                        onUpdate={(job, patch) => user.update(job, patch)}
+                        onApply={onApply}
+                        onSaveView={prefs.saveView}
+                        onRenameView={prefs.renameView}
+                        onDeleteView={prefs.deleteView}
+                        onRestoreView={prefs.restoreView}
+                        onHideCompany={hideCompany}
+                        isYours={isYours}
+                        companyCount={yourKeys.size}
+                        indexGeneratedAt={state.indexGeneratedAt}
+                        onCompanies={goCompanies}
+                        onTrack={canSave ? trackJob : undefined}
+                        onCheck={canSave ? checkJob : undefined}
+                        profile={status?.config?.profile}
+                        onEditProfile={() => go({ tab: "settings" })}
+                        onSaveProfile={canRunLocally && personal && setupState === "configured" ? saveProfileFromRadar : undefined}
+                      />
+                    )}
+                  </>
+                )}
+                {tab === "pipeline" && (
+                  <Pipeline
+                    user={user.state}
+                    jobsById={jobsById}
+                    onOpen={onOpen}
+                    onApply={onApply}
+                    minScore={meta?.profile.min_score}
+                    onPatch={(id, entry, patch) => user.update({ id, ...entry.snapshot, ...pick(jobsById.get(id)) }, patch)}
+                    weeklyPlan={prefs.prefs.weeklyPlan}
+                    onWeeklyPlan={prefs.setWeeklyPlan}
+                    onAdd={(j, status) => user.update({ id: `manual:${Date.now().toString(36)}`, ...j, location: "", score: 0 }, { status })}
+                    onSetup={notSetUp ? toSetup : undefined}
+                    goRadar={() => go({ tab: "radar" })}
+                  />
+                )}
+                {tab === "companies" && (
+                  <CompaniesTab
+                    configured={setupState === "configured" && personal}
+                    meta={meta}
+                    jobs={jobs}
+                    hiddenNames={prefs.prefs.hiddenCompanies}
+                    onUnhideName={(name) => prefs.setCompanyHidden(name, false)}
+                    draft={draft}
+                    loaded={draftLoaded}
+                    saved={saved}
+                    update={update}
+                    onSaved={async () => {
+                      await setup.refresh();
+                    }}
+                    onScan={() => {
+                      go({ tab: "radar" });
+                      requestScan();
+                    }}
+                    scanning={scanning}
+                    toSetup={toSetup}
+                  />
+                )}
+                {tab === "settings" && notSetUp && (
+                  <SetupBanner
+                    action={
+                      <Button variant="primary" size="sm" onClick={toSetup}>
+                        {progress.started ? "Continue setup" : "Start setup"} <ArrowRight className="size-3.5" />
+                      </Button>
+                    }
+                  >
+                    <b>You haven't finished setup.</b> <span className="text-muted">The guided setup is the quickest way, or fill in the sections below.</span>
+                  </SetupBanner>
+                )}
+                {tab === "settings" && setupState === "invalid" && <ConfigProblemCard errors={status?.errors} onFix={() => goStep(0)} />}
+                {tab === "settings" && (
+                  <Settings
+                    toCompanies={goCompanies}
+                    draft={draft}
+                    update={update}
+                    revert={() => setDraft(saved)}
+                    dirty={dirty}
+                    saved={saved}
+                    setupSaved={canSave}
+                    canScan={canRunLocally && setupState === "configured"}
+                    onSaved={async () => {
+                      await setup.refresh();
+                      save(DRAFT_KEY, null);
+                    }}
+                    onScan={() => {
+                      go({ tab: "radar" });
+                      requestScan();
+                    }}
+                    onCheckEvery={() => {
+                      go({ tab: "radar" });
+                      void startScan("all");
+                    }}
+                    scanning={scanning}
+                    user={user.state}
+                    prefs={prefs.prefs}
+                    onImport={(state, p) => {
+                      user.replaceAll(state);
+                      if (p) prefs.replacePrefs(p);
+                    }}
+                    onRemoveRule={(rule) => {
+                      prefs.setRule(rule, false);
+                      toast({ message: <>Showing {offerWhat({ kind: "rule", rule })} again.</>, actionLabel: "Undo", onAction: () => prefs.setRule(rule, true) });
+                    }}
+                    suggest={suggest}
+                    resumeText={resume.text}
+                    saveResume={saveResume}
+                    removeResume={removeResume}
+                    onStartOver={canRunLocally && personal ? startOver : undefined}
+                  />
+                )}
+              </div>
+            )}
+          </ErrorBoundary>
         </main>
 
         {!inSetup && (
@@ -646,6 +662,21 @@ function TabLink({ tab, active, onClick }: { tab: (typeof TABS)[number]; active:
       <tab.icon className="size-4" />
       {tab.label}
     </button>
+  );
+}
+
+/** The setup check (/api/setup) didn't answer: your jobs still show; this says why setup and scans wait. */
+function SetupCheckFailed({ onRetry }: { onRetry: () => void }) {
+  return (
+    <div role="status" className="mb-4 flex flex-col gap-3 rounded-md border border-warning/40 bg-warning-subtle p-3 type-small sm:flex-row sm:items-start">
+      <TriangleAlert className="mt-0.5 size-4 shrink-0 text-warning-text max-sm:hidden" aria-hidden />
+      <p className="min-w-0 flex-1">
+        <b className="font-semibold">RawJobs is slow to answer.</b> Your jobs are shown; Scan now comes back once it answers.
+      </p>
+      <Button size="sm" onClick={onRetry} className="self-start">
+        <RefreshCw className="size-3.5" /> Try again
+      </Button>
+    </div>
   );
 }
 

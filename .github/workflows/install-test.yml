@@ -34,7 +34,10 @@ jobs:
     # Skipping still runs one job per OS, so the required checks named after the matrix report success;
     # on ubuntu, so a skip never waits for a macOS or Windows runner.
     runs-on: ${{ inputs.skip && 'ubuntu-24.04' || matrix.os }}
-    timeout-minutes: 15
+    # The job's limit also counts the wait for a runner, and macOS runners can take a while to free up:
+    # a 15-minute job limit cancelled jobs that never got a machine (0 steps run). The install steps
+    # keep their own 15 minutes below, so a hung install still fails fast.
+    timeout-minutes: 60
     env:
       RAWJOBS_RELEASE_URL: http://127.0.0.1:8765
       RAWJOBS_PUBLIC_KEY: ${{ inputs.public-key }}
@@ -69,6 +72,7 @@ jobs:
 
       - name: Install, repair, uninstall (macOS, Linux)
         if: ${{ !inputs.skip && runner.os != 'Windows' }}
+        timeout-minutes: 15
         shell: bash
         run: |
           set -eu
@@ -120,6 +124,7 @@ jobs:
 
       - name: Install, repair, uninstall (Windows PowerShell)
         if: ${{ !inputs.skip && runner.os == 'Windows' }}
+        timeout-minutes: 15
         shell: powershell
         run: |
           $ErrorActionPreference = 'Stop'
