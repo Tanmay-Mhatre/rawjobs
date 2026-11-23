@@ -455,7 +455,9 @@ export async function scan(config: Config, opts: ScanOptions): Promise<ScanResul
   if (!opts.dryRun) writeLocationCache(opts.dataDir, locations, knownLocations);
 
   // This run's fetches only: a resumed scan's earlier ones were recorded when it stopped.
-  boards = recordBoards(boards, run.health, now.getTime());
+  // Nothing answered at all: the network was down, not the boards, so their "network" failures don't count against them.
+  const networkDown = http.stats.failures > 0 && !http.stats.answered;
+  boards = recordBoards(boards, networkDown ? run.health.filter((h) => h.ok || h.failure !== "network") : run.health, now.getTime());
   if (fullScan) boards = pruneBoards(boards, new Set([...config.companies, ...inScope].map(jobCompanyKey)), now.getTime());
   const chronic = [...chosen, ...inScope].filter((c) => isChronic(boards.boards[jobCompanyKey(c)], now.getTime())).map((c) => `${c.name} (${c.ats}:${c.slug})`);
   const boardNews = { resting: resting.length, quiet: directoryPlan.quiet.length, chronic };
