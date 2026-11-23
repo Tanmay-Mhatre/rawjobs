@@ -45,7 +45,7 @@
 <link rel="preload" href="/fonts/GeistMono-500.woff2" as="font" type="font/woff2" crossorigin>
 <link rel="preload" href="/fonts/InstrumentSerif-Italic.woff2" as="font" type="font/woff2" crossorigin>
 <script>
-/* Intro: once per browser session (sessionStorage), never with reduced motion, on a link to a section (/#get) or in a background tab.
+/* Intro: once per browser session (sessionStorage) and on every reload, never with reduced motion, on a link to a section (/#get) or in a background tab.
    html.intro shows the overlay (CSS) and makes the wall wait for rawjobs:intro-done. Without JS nothing happens. */
 (function () {
   var r = document.documentElement;
@@ -56,8 +56,8 @@
     var nav = performance.getEntriesByType && performance.getEntriesByType('navigation')[0];
     var reload = nav ? nav.type === 'reload' : (performance.navigation && performance.navigation.type === 1);
     if ((location.hash.length > 1 && !reload) || document.visibilityState === 'hidden') return;
-    /* returning visitors in the same session go straight to the page */
-    if (sessionStorage.getItem('rj-intro')) return;
+    /* returning visitors in the same session go straight to the page; a reload plays it again */
+    if (!reload && sessionStorage.getItem('rj-intro')) return;
     sessionStorage.setItem('rj-intro', '1');
   } catch (e) { return; }
   r.classList.add('intro');
