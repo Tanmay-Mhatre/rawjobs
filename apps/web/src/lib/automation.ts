@@ -1,3 +1,4 @@
+import { ACTION_TIMEOUT_MS, fetchWithin, READ_TIMEOUT_MS } from "./net";
 import type { ScanScope } from "./setup";
 
 /** Telegram alerts as the local API reports them (the token is masked; it never comes back whole). */
@@ -33,7 +34,13 @@ export type ScheduleStatus = {
 };
 
 async function call<T>(url: string, init?: RequestInit): Promise<T> {
-  const res = await fetch(url, { cache: "no-store", ...init });
+  let res: Response;
+  try {
+    res = await fetchWithin(url, { cache: "no-store", ...init }, init?.method && init.method !== "GET" ? ACTION_TIMEOUT_MS : READ_TIMEOUT_MS);
+  } catch (err) {
+    // No answer (the server restarting, a dropped connection, a time-out): the panel shows its error card.
+    return { ok: false, error: (err as Error).message } as T;
+  }
   const body = (await res.json().catch(() => ({ ok: false, error: `HTTP ${res.status}` }))) as T & { ok?: boolean; errors?: string; error?: string };
   // The local API answers { ok: false, errors } when the CLI itself failed.
   if (body.errors && !body.error) body.error = body.errors;

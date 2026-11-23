@@ -2,6 +2,7 @@ import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import { App } from "./App";
 import { parseHash } from "./app/route";
+import { ErrorBoundary } from "./components/ErrorBoundary";
 import { CardPage } from "./components/referral/OutreachCard";
 import "./index.css";
 import { canRunLocally } from "./lib/data";
@@ -29,7 +30,9 @@ if ("card" in parseHash()) {
   void restoreFromDisk().finally(() =>
     root.render(
       <StrictMode>
-        <App />
+        <ErrorBoundary where="RawJobs">
+          <App />
+        </ErrorBoundary>
       </StrictMode>,
     ),
   );
