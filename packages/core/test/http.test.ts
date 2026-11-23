@@ -156,16 +156,26 @@ describe("HttpClient", () => {
       expect(http.stats.brokenHosts).toEqual(["h.example"]);
     });
 
-    it("waits, without giving up, while nothing answers at all (offline), for up to an hour", async () => {
+    it("while nothing answers at all (offline), rests don't grow, and it's skipped after 5 minutes, not an hour", async () => {
       const { http, sleeps } = hosts(() => true, { offline: true });
       await expect(http.getJson("https://h.example/1")).rejects.toThrow(/fetch failed/);
       await expect(http.getJson("https://h.example/2")).rejects.toThrow(/fetch failed/);
-      for (let i = 0; i < 10; i++) await expect(http.getJson(`https://h.example/try${i}`)).rejects.toThrow(/fetch failed/);
+      for (let i = 0; i < 5; i++) await expect(http.getJson(`https://h.example/try${i}`)).rejects.toThrow(/fetch failed/);
       expect(sleeps.every((ms) => ms === 30_000)).toBe(true);
       expect(http.stats.brokenHosts).toEqual([]);
-      for (let i = 0; i < 110; i++) await http.getJson(`https://h.example/more${i}`).catch(() => {});
+      for (let i = 0; i < 10; i++) await http.getJson(`https://h.example/more${i}`).catch(() => {});
       await expect(http.getJson("https://h.example/late")).rejects.toThrow(/kept failing/);
-      expect(sleeps.reduce((a, b) => a + b, 0)).toBeGreaterThanOrEqual(3_600_000);
+      const waited = sleeps.reduce((a, b) => a + b, 0);
+      expect(waited).toBeGreaterThanOrEqual(300_000);
+      expect(waited).toBeLessThan(600_000);
+      expect(http.stats.answered ?? 0).toBe(0);
+    });
+
+    it("counts every request a server answered, error statuses included", async () => {
+      const { http } = hosts((url) => url.includes("h.example"));
+      await http.getJson("https://ok.example/x");
+      await expect(http.getJson("https://h.example/1")).rejects.toMatchObject({ status: 503 });
+      expect(http.stats.answered).toBe(2);
     });
 
     it("lets one request try it after a rest while the others wait for its answer", async () => {
