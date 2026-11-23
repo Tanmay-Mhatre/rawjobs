@@ -11,6 +11,7 @@ import {
   syncDirectory,
   syncJobFeed,
   networkReachable,
+  SYNC_BUDGET_MS,
   scanPlan,
   acquireScanLock,
   releaseScanLock,
@@ -107,6 +108,14 @@ export const backgroundCheck = (config: Config, base: ScanOptions & { stopped: (
 const newOnly = (config: Config): Config => ({ ...config, alerts: { ...config.alerts, only_new: true } });
 
 export const OFFLINE_MESSAGE = "You're offline, so the scan didn't run. Your saved jobs are kept; scan again once you're back online.";
+
+/**
+ * The scan's first step: the directory and the job feed, side by side (neither needs the other), each
+ * given SYNC_BUDGET_MS. Past that the scan goes on with the local copies while the downloads carry on,
+ * and the next scan applies them: a slow link to the shared data never holds the live scan.
+ */
+export const syncBoth = (dataDir: string, feed: boolean) =>
+  Promise.all([syncDirectory(dataDir, { budgetMs: SYNC_BUDGET_MS }), feed ? syncJobFeed(dataDir, { budgetMs: SYNC_BUDGET_MS }) : undefined] as const);
 
 export const duration = (s: number) => (s < 90 ? `${Math.max(1, Math.round(s / 60))} min` : s < 5400 ? `${Math.round(s / 60)} min` : `${(s / 3600).toFixed(1)} h`);
 
@@ -219,9 +228,9 @@ export async function cmdRun(args: string[]): Promise<number> {
   const sync = async () => {
     console.error("Syncing the company directory…");
     live({ type: "sync" });
-    const directory = await syncDirectory(dataDir);
+    const [directory, feedSync] = await syncBoth(dataDir, !values.full);
     console.error(`  ${directory.message}`);
-    const feed = values.full ? undefined : (await syncJobFeed(dataDir)).message;
+    const feed = feedSync?.message;
     if (feed) console.error(`  ${feed}`);
     live({ type: "synced", ...directory, ...(feed ? { feed } : {}) });
     return directory.offline;
@@ -492,8 +501,8 @@ export async function runNdjson(values: RunValues): Promise<number> {
       // Resume now carries on the background check: the directory was synced when it began.
       if (values["background-only"]) return undefined;
       emit({ type: "sync" });
-      const directory = await syncDirectory(dataDir);
-      emit({ type: "synced", ...directory, ...(values.full ? {} : { feed: (await syncJobFeed(dataDir)).message }) });
+      const [directory, feed] = await syncBoth(dataDir, !values.full);
+      emit({ type: "synced", ...directory, ...(feed ? { feed: feed.message } : {}) });
       return directory.offline;
     };
     const offline = () => {

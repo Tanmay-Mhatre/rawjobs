@@ -1,10 +1,11 @@
 import { spawn, spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
-import { cpSync, existsSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { cpSync, existsSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync, statSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { compareVersions, nodeArchive, RELEASE_URL, type ReleaseChange, verifyRelease, type ReleaseManifest } from "./release";
 import { cliCommand } from "./runtime";
 import { writeFileAtomic } from "./atomic";
+import { downloadToFile } from "./download";
 import { readDataFormat } from "./migrate";
 
 /**
@@ -201,10 +202,12 @@ function untar(archive: string, into: string, strip: number): void {
 }
 
 async function download(url: string, file: string, fetchImpl: typeof fetch): Promise<void> {
-  // A bundle or a Node archive is tens of MB: generous, but never forever.
-  const res = await fetchImpl(url, { redirect: "follow", signal: AbortSignal.timeout(600_000) });
-  if (!res.ok) throw new Error(`Couldn't download ${url} (HTTP ${res.status}).`);
-  writeFileSync(file, Buffer.from(await res.arrayBuffer()));
+  // A bundle or a Node archive is tens of MB: it gives up only when the connection stalls (download.ts).
+  try {
+    await downloadToFile(fetchImpl, url, file);
+  } catch (err) {
+    throw new Error(`Couldn't download ${url} (${(err as Error).message}).`);
+  }
 }
 
 /**

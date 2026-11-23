@@ -6,7 +6,8 @@ import { ACTIVITY_SCHEMA, dayNumber, type ActivityFile } from "./activity";
 import { compactMatcher, VAGUE_LOCATION } from "./job-feed-compact";
 import { readDict, readStore, removeStore, storeApplyDiffs, storeFromSnapshot, type StoreFiles, type StoreResult } from "./job-feed-store";
 import { JOB_FEED_SCHEMA_V3, type FeedDiff, type FeedManifestV2, type FeedRow } from "./job-feed-diff";
-import { fetchSignedJson, FILE_TIMEOUT_MS } from "./data-signing";
+import { fetchSignedJson } from "./data-signing";
+import { clearDownloads, DownloadError, downloadVerified, LateError, withBudget } from "./download";
 import { envSetting } from "./env";
 import { isSafeName, safeJoin } from "./safe-name";
 import { passesLocationGate, passesTitleGate } from "./score";
@@ -68,22 +69,35 @@ export function jobFeedStatus(dataDir: string, now = Date.now()): JobFeedStatus 
 
 export type FeedSyncResult = { updated: boolean; message: string; ageDays: number };
 
+/** Where a sync keeps what it downloaded until it's applied (download.ts). */
+const downloadsDir = (dir: string) => join(dir, ".downloads");
+
 /**
  * Bring the local copy up to date: the third format's change files (or its full copy), or else the
  * first format's shards that changed (checked against the manifest's SHA-256).
  * Never throws: without the feed, scans fetch every company live as before.
  */
-export async function syncJobFeed(dataDir: string, opts: { fetchImpl?: typeof fetch; now?: number } = {}): Promise<FeedSyncResult> {
+export async function syncJobFeed(dataDir: string, opts: { fetchImpl?: typeof fetch; now?: number; budgetMs?: number } = {}): Promise<FeedSyncResult> {
+  const stale = () => jobFeedStatus(dataDir, opts.now).ageDays;
+  return withBudget(
+    opts.budgetMs,
+    (expired) => syncJobFeedNow(dataDir, opts, expired),
+    () => ({ updated: false, ageDays: stale(), message: "The job feed is still downloading; this scan uses your local copy, the next one the new feed." }),
+  );
+}
+
+async function syncJobFeedNow(dataDir: string, opts: { fetchImpl?: typeof fetch; now?: number }, expired: () => boolean): Promise<FeedSyncResult> {
   const get = opts.fetchImpl ?? fetch;
   const dir = feedDir(dataDir);
   const stale = () => jobFeedStatus(dataDir, opts.now).ageDays;
+  clearDownloads(downloadsDir(dir), true);
   try {
     // A badly signed manifest stops here: falling back to the other format would let a tamperer pick.
     const badSignature = { updated: false, ageDays: stale(), message: "The job feed's signature isn't valid; scanning every company live." };
     const v3 = await fetchSignedJson<FeedManifestV2>(get, `${jobFeedUrl()}/${V3_MANIFEST}`);
     if (v3.ok && v3.value.schema === JOB_FEED_SCHEMA_V3) {
-      const synced = await syncV3(dir, v3.value, get, opts.now);
-      await syncActivity(dir, v3.value, get);
+      const synced = await syncV3(dir, v3.value, get, expired, opts.now);
+      await syncActivity(dir, v3.value, get, expired);
       return { ...synced, ageDays: stale() };
     }
     if (!v3.ok && v3.status === null) return badSignature;
@@ -94,23 +108,33 @@ export async function syncJobFeed(dataDir: string, opts: { fetchImpl?: typeof fe
     const local = readJson<JobFeedManifest>(join(dir, "manifest.json"));
     mkdirSync(dir, { recursive: true });
     let fetched = 0;
+    const failed: string[] = [];
     const unsafe = Object.entries(manifest.shards).find(([ats, shard]) => !isSafeName(ats) || !isSafeName(shard.file));
     if (unsafe) return { updated: false, ageDays: stale(), message: "The job feed's manifest names an unsafe file; scanning every company live." };
     for (const [ats, shard] of Object.entries(manifest.shards)) {
       if (local?.shards[ats]?.sha256 === shard.sha256 && existsSync(join(dir, `${ats}.json`))) continue;
-      const r = await get(`${jobFeedUrl()}/${shard.file}`, { redirect: "follow", signal: AbortSignal.timeout(FILE_TIMEOUT_MS) });
-      if (!r.ok) return { updated: fetched > 0, ageDays: stale(), message: `Job feed download of ${shard.file} failed (HTTP ${r.status}).` };
-      const gz = Buffer.from(await r.arrayBuffer());
-      if (createHash("sha256").update(gz).digest("hex") !== shard.sha256) return { updated: fetched > 0, ageDays: stale(), message: `${shard.file} didn't match its checksum; kept the old copy.` };
+      let gz: Buffer;
+      try {
+        gz = await downloadVerified(get, `${jobFeedUrl()}/${shard.file}`, shard.sha256, downloadsDir(dir));
+      } catch (err) {
+        // The other shards don't depend on this one: carry on, and try it again next sync.
+        failed.push(`${shard.file} (${(err as Error).message})`);
+        continue;
+      }
+      if (expired()) throw new LateError();
       writeFileSync(safeJoin(dir, `${ats}.json.tmp`), gunzipSync(gz));
       renameSync(safeJoin(dir, `${ats}.json.tmp`), safeJoin(dir, `${ats}.json`));
       fetched++;
     }
+    if (failed.length) return { updated: fetched > 0, ageDays: stale(), message: `Job feed download of ${failed.join(", ")} failed; kept the old copy of those.` };
     writeFileAtomic(join(dir, "manifest.json"), JSON.stringify(manifest, null, 2));
+    clearDownloads(downloadsDir(dir));
     const age = when(manifest.generated_at, opts.now);
     return { updated: fetched > 0, ageDays: stale(), message: fetched ? `Job feed updated (${age}).` : `Job feed is up to date (${age}).` };
   } catch (err) {
-    return { updated: false, ageDays: stale(), message: `Couldn't reach the job feed (${(err as Error).message}); scanning every company live.` };
+    if (err instanceof LateError) return { updated: false, ageDays: stale(), message: "The job feed is still downloading; this scan uses your local copy." };
+    const kept = Number.isFinite(stale()) ? "using your local copy" : "scanning every company live";
+    return { updated: false, ageDays: stale(), message: `Couldn't reach the job feed (${(err as Error).message}); ${kept}.` };
   }
 }
 
@@ -150,13 +174,9 @@ type V3Index = StoreFiles & {
   dict_base: number;
 };
 
-async function download(get: typeof fetch, file: string, sha256: string): Promise<Buffer> {
-  if (!isSafeName(file)) throw new Error(`the manifest names an unsafe file (${JSON.stringify(file)})`);
-  const r = await get(`${jobFeedUrl()}/${file}`, { redirect: "follow", signal: AbortSignal.timeout(FILE_TIMEOUT_MS) });
-  if (!r.ok) throw new Error(`download of ${file} failed (HTTP ${r.status})`);
-  const buf = Buffer.from(await r.arrayBuffer());
-  if (createHash("sha256").update(buf).digest("hex") !== sha256) throw new Error(`${file} didn't match its checksum`);
-  return buf;
+async function download(get: typeof fetch, dir: string, file: string, sha256: string): Promise<Buffer> {
+  if (!isSafeName(file)) throw new DownloadError(`the manifest names an unsafe file (${JSON.stringify(file)})`, false);
+  return downloadVerified(get, `${jobFeedUrl()}/${file}`, sha256, downloadsDir(dir));
 }
 
 /**
@@ -165,7 +185,7 @@ async function download(get: typeof fetch, file: string, sha256: string): Promis
  * missing, a mismatch), take the full copy. The local copy is only replaced once the new one is complete
  * and checked. Either way the feed streams through memory a part at a time (job-feed-store.ts).
  */
-async function syncV3(dir: string, m: FeedManifestV2, get: typeof fetch, now?: number): Promise<{ updated: boolean; message: string }> {
+async function syncV3(dir: string, m: FeedManifestV2, get: typeof fetch, expired: () => boolean, now?: number): Promise<{ updated: boolean; message: string }> {
   const index = readJson<V3Index>(join(dir, V3_INDEX));
   if (index?.seq === m.seq && index.state_sha256 === m.state_sha256) return { updated: false, message: `Job feed is up to date (${when(m.generated_at, now)}).` };
   mkdirSync(dir, { recursive: true });
@@ -182,10 +202,11 @@ async function syncV3(dir: string, m: FeedManifestV2, get: typeof fetch, now?: n
     try {
       const diffs: FeedDiff[] = [];
       for (const d of chain) {
-        const buf = await download(get, d.file, d.sha256);
+        const buf = await download(get, dir, d.file, d.sha256);
         bytes += buf.length;
         diffs.push(JSON.parse(brotliDecompressSync(buf).toString("utf8")) as FeedDiff);
       }
+      if (expired()) throw new LateError();
       next = storeApplyDiffs(dir, index, diffs, tag);
       if (next.hash !== m.state_sha256) {
         removeStore(dir, next);
@@ -194,13 +215,17 @@ async function syncV3(dir: string, m: FeedManifestV2, get: typeof fetch, now?: n
         Object.assign(touched, next.touched);
         steps = diffs.length;
       }
-    } catch {
+    } catch (err) {
+      // A change file that didn't arrive is tried again next sync (the ones that did are kept): only a
+      // chain that's broken or doesn't add up falls back to the much bigger full copy.
+      if (err instanceof LateError || (err instanceof DownloadError && err.transient)) throw err;
       next = undefined;
     }
   }
   if (!next) {
-    const buf = await download(get, m.snapshot.file, m.snapshot.sha256);
+    const buf = await download(get, dir, m.snapshot.file, m.snapshot.sha256);
     bytes += buf.length;
+    if (expired()) throw new LateError();
     next = await storeFromSnapshot(dir, buf, tag);
     if (next.hash !== m.state_sha256) {
       removeStore(dir, next);
@@ -226,6 +251,7 @@ async function syncV3(dir: string, m: FeedManifestV2, get: typeof fetch, now?: n
     parts: next.parts,
   };
   writeFileAtomic(join(dir, V3_INDEX), JSON.stringify(written));
+  clearDownloads(downloadsDir(dir));
   // The old copy's files, and the older formats', aren't needed any more.
   const keep = new Set([next.dict, ...next.parts]);
   for (const f of readdirSync(dir))
@@ -246,15 +272,17 @@ const ACTIVITY_MAX_AGE_DAYS = 7;
  * Download the activity file the manifest lists, when the local copy isn't it. Optional: a manifest
  * without one, or a failed download, keeps the local copy (readFeedActivity stops using it once it's old).
  */
-async function syncActivity(dir: string, m: FeedManifestV2, get: typeof fetch): Promise<void> {
+async function syncActivity(dir: string, m: FeedManifestV2, get: typeof fetch, expired: () => boolean): Promise<void> {
   if (!m.activity) return;
   const local = join(dir, ACTIVITY_LOCAL);
   try {
     if (existsSync(local) && createHash("sha256").update(readFileSync(local)).digest("hex") === m.activity.sha256) return;
-    const buf = await download(get, m.activity.file, m.activity.sha256);
+    const buf = await download(get, dir, m.activity.file, m.activity.sha256);
+    if (expired()) return;
     mkdirSync(dir, { recursive: true });
     writeFileSync(`${local}.tmp`, buf);
     renameSync(`${local}.tmp`, local);
+    clearDownloads(downloadsDir(dir));
   } catch {
     // Only the "Hiring at …" block and the surge tag go without it.
   }
