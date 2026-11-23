@@ -79,11 +79,22 @@ export async function serve(args: string[]): Promise<number> {
   const api = createApi({ home, dataDir, updater, startLink });
   const pages = { startLink, platform: process.platform };
   const server = createServer((req, res) => {
-    void api.handle(req, res).then((handled) => {
-      if (handled || serveStatic([WEB_DIR, dataDir], req, res)) return;
-      servePages(req, res, pages);
-    });
+    void api
+      .handle(req, res)
+      .then((handled) => {
+        if (handled || serveStatic([WEB_DIR, dataDir], req, res)) return;
+        servePages(req, res, pages);
+      })
+      .catch((err) => {
+        // One request going wrong must not take the server (and every other page) down with it.
+        console.error(`RawJobs: ${req.method} ${req.url} failed: ${(err as Error)?.stack ?? err}`);
+        if (!res.headersSent) res.writeHead(500, { "content-type": "text/plain; charset=utf-8" }).end("Something went wrong. Try again.");
+        else res.destroy();
+      });
   });
+  // A promise nobody awaited that failed (a background task, a timer): logged, not fatal. Node would
+  // otherwise end the whole server, and with it the dashboard and scheduled scans.
+  process.on("unhandledRejection", (reason) => console.error(`RawJobs: unhandled rejection: ${(reason as Error)?.stack ?? reason}`));
 
   let port = 0;
   for (const [i, p] of order.entries()) {

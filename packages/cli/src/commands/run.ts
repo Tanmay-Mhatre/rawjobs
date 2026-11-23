@@ -21,6 +21,7 @@ import {
   finishedMessage,
   scheduledFailedMessage,
   sendTelegram,
+  sendTelegramQueued,
   telegramSecrets,
   remindFollowUps,
   remindDeadlines,
@@ -304,7 +305,7 @@ export async function cmdRun(args: string[]): Promise<number> {
         console.error(`\nWrote ${out}`);
       }
 
-      const notified = values.notify && !values["dry-run"] ? await notifyScan(config, result, merged, scope) : undefined;
+      const notified = values.notify && !values["dry-run"] ? await notifyScan(config, result, merged, scope, dataDir) : undefined;
       if (notified)
         console.error(`Telegram: ${notified === "sent" ? "sent the new jobs" : notified === "nothing-new" ? "nothing new to send" : notified === "off" ? "not set up (Settings → Alerts)" : notified}`);
       // Jobs you applied to that are due a follow-up ride along with the scan's alerts.
@@ -334,7 +335,7 @@ export async function cmdRun(args: string[]): Promise<number> {
         console.log(
           `\nBackground check: ${bg.checks.length.toLocaleString()} more companies, ${found} new match${found === 1 ? "" : "es"}${bg.stopped ? " (stopped; the next one carries on where it stopped)" : ""}.`,
         );
-        if (values.notify && found) await notifyScan(newOnly(config), bg.result, bg.merged, "background");
+        if (values.notify && found) await notifyScan(newOnly(config), bg.result, bg.merged, "background", dataDir);
       }
       log({ ok: true, matches: matches.length, newMatches, notified, stopped });
       return 0;
@@ -500,7 +501,7 @@ export async function runNdjson(values: RunValues): Promise<number> {
         const bg = await backgroundCheck(config, { ...session, ...bgHooks }, since);
         const { newMatches } = doneEvent(bg, "background");
         // Quiet: a Telegram message only when it found something new (and never a job already sent).
-        if (newMatches && alertsOn(config)) await notifyScan(newOnly(config), bg.result, bg.merged, "background");
+        if (newMatches && alertsOn(config)) await notifyScan(newOnly(config), bg.result, bg.merged, "background", dataDir);
       };
       if (values["background-only"]) {
         // Resume now: skip what the paused check (or the Scan now before it) fetched in the hour before it began.
@@ -533,16 +534,18 @@ function alertsOn(config: Config): boolean {
   return !!(config.alerts.telegram && secrets.token && secrets.chatId);
 }
 
-/** Send how many new matches the scan found (or, with only_new off, how many strong ones) to Telegram. Never throws. */
-export async function notifyScan(config: Config, result: RunResult, merged: MergeResult, scope: AlertScope): Promise<string> {
+/**
+ * Send how many new matches the scan found (or, with only_new off, how many strong ones) to Telegram,
+ * after any earlier alert that didn't get through (sendTelegramQueued). Never throws.
+ */
+export async function notifyScan(config: Config, result: RunResult, merged: MergeResult, scope: AlertScope, dataDir: string): Promise<string> {
   const secrets = telegramSecrets();
   if (!alertsOn(config)) return "off";
   const jobs = alertJobs(config, result.jobs, merged.newIds);
   const text = digest(jobs, { minScore: config.profile.min_score, onlyNew: config.alerts.only_new, scope });
-  if (!text) return "nothing-new";
   try {
-    await sendTelegram(text, secrets);
-    return "sent";
+    const sent = await sendTelegramQueued(dataDir, text, secrets);
+    return !text && !sent.startsWith("failed") ? "nothing-new" : sent;
   } catch (err) {
     return `failed: ${(err as Error).message}`;
   }
