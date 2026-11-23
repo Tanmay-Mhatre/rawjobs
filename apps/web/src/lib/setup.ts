@@ -7,25 +7,33 @@ import type { AtsType, Config } from "@rawjobs/core/schema";
 
 export type { CompanyCheck, RunEvent, SaveResult, ScanPlan, ScanOrigin, ScanScope, ScanSource, SetupStatus };
 import { canRunLocally } from "./data";
+import { fetchWithin } from "./net";
 
 // ---------- API (dev server only, see apps/web/vite.config.ts) ----------
 
-/** null = no local API (hosted build): setup is done by editing the config file. */
+/**
+ * null = no local API (hosted build): setup is done by editing the config file. `failed`: the local
+ * API didn't answer in time (or answered an error): status stays unknown rather than passing for the
+ * hosted build, and the page shows your jobs with a "Try again" instead of waiting.
+ */
 export function useSetupStatus() {
   const [status, setStatus] = useState<SetupStatus | null | undefined>(undefined);
+  const [failed, setFailed] = useState(false);
   const refresh = useCallback(async () => {
     if (!canRunLocally) return setStatus(null);
     try {
-      const res = await fetch("/api/setup", { cache: "no-store" });
-      setStatus(res.ok ? ((await res.json()) as SetupStatus) : null);
+      const res = await fetchWithin("/api/setup", { cache: "no-store" });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      setStatus((await res.json()) as SetupStatus);
+      setFailed(false);
     } catch {
-      setStatus(null);
+      setFailed(true);
     }
   }, []);
   useEffect(() => {
     void refresh();
   }, [refresh]);
-  return { status, refresh };
+  return { status, refresh, failed };
 }
 
 export async function saveConfig(config: Config): Promise<SaveResult> {

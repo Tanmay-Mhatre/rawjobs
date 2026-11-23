@@ -2,12 +2,14 @@ import { viewSummary, type ActivityView, type HiringSummary } from "@rawjobs/cor
 import { employmentTypeOfTitle } from "@rawjobs/core/catalog/employment";
 import { citiesIn } from "@rawjobs/core/catalog/places";
 import { attachFeedJobs } from "./identity";
+import { fetchWithin } from "./net";
+import { toast } from "../components/Toast";
 import { toDashboardJob } from "@rawjobs/core/dashboard";
 import type { DashboardJob, DashboardJobsFile, DataMeta, Job as FullJob, JobsFile } from "@rawjobs/core/schema";
 
 /** data/discover.json (see core discover.ts); declared here so the browser bundle needs no Node code. */
 type DiscoverFile = { version: 1; generatedAt: string; indexGeneratedAt: string; jobs: DashboardJob[] };
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 export type { CompanyHealth, DataMeta, Profile, RunSummary } from "@rawjobs/core/schema";
 /** A job as the dashboard has it (no description; see useDescription). */
@@ -27,7 +29,8 @@ export type DataState =
     };
 
 async function getJson<T>(path: string): Promise<T | null> {
-  const res = await fetch(path, { cache: "no-store" });
+  // Data files can be several MB; on a busy laptop that's still seconds, not this long.
+  const res = await fetchWithin(path, { cache: "no-store" }, 30_000);
   if (res.status === 404) return null;
   if (!res.ok) throw new Error(`${path}: HTTP ${res.status}`);
   const type = res.headers.get("content-type") ?? "";
@@ -85,10 +88,19 @@ export function useData() {
       setState({ kind: "ready", jobs: attachFeedJobs([...live, ...estimated]), meta, indexGeneratedAt: discover?.indexGeneratedAt });
       return meta;
     } catch (err) {
+      // A refresh that fails (the server restarting, a file being written) keeps the jobs already shown.
+      if (shown.current.kind === "ready") {
+        toast({ message: "Couldn't refresh your jobs, so you're seeing the last results. Try again in a moment.", actionLabel: "Try again", onAction: () => void reloadRef.current() });
+        return null;
+      }
       setState({ kind: "error", message: (err as Error).message });
       return null;
     }
   }, []);
+  const shown = useRef(state);
+  shown.current = state;
+  const reloadRef = useRef(reload);
+  reloadRef.current = reload;
 
   useEffect(() => {
     void reload();
@@ -106,7 +118,11 @@ export function loadOtherJobs(): Promise<Job[]> {
     ? Promise.resolve(legacy.other)
     : getJson<DashboardJobsFile>("./jobs-other.json")
         .then((f) => attachFeedJobs((f?.jobs ?? []).map(upgrade)))
-        .catch(() => []);
+        .catch(() => {
+          // Not remembered as empty: the next time they're needed, they're fetched again.
+          otherJobs = undefined;
+          return [];
+        });
   return otherJobs;
 }
 
@@ -136,7 +152,11 @@ function loadDescriptions(): Promise<Record<string, string>> {
     ? Promise.resolve(legacy.descriptions)
     : getJson<Record<string, string>>("./descriptions.json")
         .then((d) => d ?? {})
-        .catch(() => ({}));
+        .catch(() => {
+          // Not remembered as empty: opening the next job tries again.
+          descriptions = undefined;
+          return {};
+        });
   return descriptions;
 }
 
