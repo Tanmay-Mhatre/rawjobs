@@ -191,11 +191,15 @@ describe("HttpClient", () => {
 
   it("retries a body that stalls past the timeout, counts it towards the host and says it timed out", async () => {
     /** Headers arrived, then the body read hit the request's timeout. */
-    const stalled = () => {
-      const res = new Response("{}", { status: 200 });
-      Object.defineProperty(res, "text", { value: () => Promise.reject(new DOMException("The operation was aborted due to timeout", "TimeoutError")) });
-      return res;
-    };
+    const stalled = () =>
+      new Response(
+        new ReadableStream<Uint8Array>({
+          pull(c) {
+            c.error(new DOMException("The operation was aborted due to timeout", "TimeoutError"));
+          },
+        }),
+        { status: 200 },
+      );
     const { http, seen } = client([stalled(), json({ ok: 1 })]);
     await expect(http.getJson("https://a.example/x")).resolves.toEqual({ ok: 1 });
     expect(seen).toHaveLength(2);
@@ -205,6 +209,59 @@ describe("HttpClient", () => {
     await expect(down.getText("https://h.example/2")).rejects.toThrow(/timed out after/);
     expect(down.stats.brokenHosts).toEqual(["h.example"]);
     expect(down.stats.timeouts).toBeGreaterThanOrEqual(6);
+  });
+
+  it("a body that keeps arriving isn't cut off by the read timeout, however long it takes in all", async () => {
+    const enc = new TextEncoder();
+    const parts = ['{"a":', "1,", '"b":', "2}"];
+    const trickle = (async (_u: string, init?: RequestInit) =>
+      new Response(
+        new ReadableStream<Uint8Array>({
+          async pull(c) {
+            await new Promise((r) => setTimeout(r, 40));
+            if (init?.signal?.aborted) return c.error(init.signal.reason);
+            const next = parts.shift();
+            if (next === undefined) c.close();
+            else c.enqueue(enc.encode(next));
+          },
+        }),
+        { status: 200 },
+      )) as typeof fetch;
+    // Each piece comes 40 ms apart, the whole body takes ~200 ms: past a 100 ms read timeout, but never paused that long.
+    const http = new HttpClient({ hostDelayMs: 0, retries: 0, readTimeoutMs: 100, fetchImpl: trickle });
+    await expect(http.getJson("https://slow.example/x")).resolves.toEqual({ a: 1, b: 2 });
+    expect(http.stats.timeouts).toBe(0);
+  });
+
+  it("with adaptiveConcurrency, halves the requests in flight when they time out, and holds the rest back", async () => {
+    let live = 0;
+    let most = 0;
+    let timeouts = 4;
+    const get = (async (_u: string, init?: RequestInit) => {
+      live++;
+      most = Math.max(most, live);
+      try {
+        // The first few hang until their timeout (a saturated link); after that, answers come quickly.
+        if (timeouts-- > 0) await new Promise((_, reject) => init?.signal?.addEventListener("abort", () => reject(init.signal!.reason)));
+        await new Promise((r) => setTimeout(r, 5));
+        return json({ ok: 1 });
+      } finally {
+        live--;
+      }
+    }) as typeof fetch;
+    const http = new HttpClient({ hostDelayMs: 0, retries: 1, backoffMs: 1, connectTimeoutMs: 30, adaptiveConcurrency: true, fetchImpl: get });
+    await Promise.all(Array.from({ length: 40 }, (_, i) => http.getJson(`https://h${i}.example/x`)));
+    expect(http.stats.minInFlight).toBeGreaterThanOrEqual(4);
+    expect(http.stats.minInFlight).toBeLessThan(40);
+    // Before the timeouts all 40 went out at once; the retries after them were held to the new limit.
+    expect(most).toBe(40);
+  });
+
+  it("without adaptiveConcurrency, never limits what's in flight", async () => {
+    const hang = ((_u: string, init?: RequestInit) => new Promise((_, reject) => init?.signal?.addEventListener("abort", () => reject(init.signal!.reason)))) as typeof fetch;
+    const http = new HttpClient({ hostDelayMs: 0, retries: 0, connectTimeoutMs: 10, fetchImpl: hang });
+    await Promise.allSettled(Array.from({ length: 10 }, (_, i) => http.getJson(`https://h${i}.example/x`)));
+    expect(http.stats.minInFlight).toBeUndefined();
   });
 
   it("gives up on a host that sends no headers after the connect timeout, not the whole timeout", async () => {

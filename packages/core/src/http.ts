@@ -108,6 +108,12 @@ export type HttpOptions = {
    */
   paceCeilings?: Record<string, number>;
   /**
+   * For the app's scans: no limit on requests in flight while answers keep up, but when requests start
+   * timing out (a slow connection shared by hundreds of them) the limit halves, then climbs back one
+   * at a time as answers arrive (AIMD), so a slow link finishes boards instead of timing them all out.
+   */
+  adaptiveConcurrency?: boolean;
+  /**
    * Extra headers for each attempt, made just before it goes out (the job feed's Web Bot Auth signature,
    * scripts/catalog/lib/web-bot-auth.ts). The app never sets it.
    */
@@ -218,7 +224,32 @@ export type HttpStats = {
   brokenHosts: string[];
   /** With adaptive pacing: each API's pace at the end (requests a second) and how often it was halved. */
   paces?: Record<string, { rate: number; downs: number }>;
+  /** With adaptiveConcurrency: the lowest limit on requests in flight it went down to (absent: never limited). */
+  minInFlight?: number;
 };
+
+/** With adaptiveConcurrency: the limit never goes below this, nor halves again within CUT_GAP_MS (the timeouts of one burst count once). */
+const MIN_IN_FLIGHT = 4;
+const CUT_GAP_MS = 15_000;
+/** Past this the limit is lifted altogether. */
+const MAX_IN_FLIGHT = 256;
+/** A body may take this long in all, however steadily it trickles in (the read timeout is per pause in the data). */
+const MAX_BODY_MS = 120_000;
+
+/** A response's text, calling `onData` as each piece arrives (to restart a stall clock). */
+async function readText(res: Response, onData: () => void): Promise<string> {
+  if (!res.body) return res.text();
+  const reader = res.body.getReader();
+  const decoder = new TextDecoder();
+  let out = "";
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    out += decoder.decode(value, { stream: true });
+    onData();
+  }
+  return out + decoder.decode();
+}
 
 /**
  * Polite HTTP for connectors: identifying User-Agent, 30s timeout, per-host spacing,
@@ -244,6 +275,12 @@ export class HttpClient {
   /** Aborted once `stopped` says so; every request in flight listens to it. */
   private readonly stop = new AbortController();
   private inFlight = 0;
+  /** adaptiveConcurrency: requests allowed in flight, those holding a place, those waiting for one. */
+  private limit = Infinity;
+  private active = 0;
+  private readonly waiting: (() => void)[] = [];
+  private lastCutAt = 0;
+  private okSinceChange = 0;
   private stopPoll: ReturnType<typeof setInterval> | undefined;
   readonly stats: HttpStats = { requests: 0, notModified: 0, failures: 0, rateLimited: 0, timeouts: 0, slowedHosts: [], restedHosts: [], brokenHosts: [] };
 
@@ -263,6 +300,7 @@ export class HttpClient {
       adaptive: opts.adaptive ?? false,
       climbHoldMs: opts.climbHoldMs ?? 0,
       paceCeilings: opts.paceCeilings ?? {},
+      adaptiveConcurrency: opts.adaptiveConcurrency ?? false,
       fetchImpl: opts.fetchImpl ?? fetch,
       sleep: opts.sleep ?? realSleep,
       stopped: opts.stopped,
@@ -346,6 +384,45 @@ export class HttpClient {
       probe?.();
       this.track(-1);
     }
+  }
+
+  /** adaptiveConcurrency: wait for a place among the requests in flight. */
+  private async takePlace(url: string): Promise<void> {
+    if (!this.opts.adaptiveConcurrency) return;
+    while (this.active >= this.limit) {
+      await new Promise<void>((wake) => this.waiting.push(wake));
+      if (this.isStopped()) {
+        // Pass the turn on, so every waiter sees the stop.
+        this.waiting.shift()?.();
+        throw new StoppedError(url);
+      }
+    }
+    this.active++;
+  }
+
+  private givePlace(): void {
+    if (!this.opts.adaptiveConcurrency) return;
+    this.active--;
+    this.waiting.shift()?.();
+  }
+
+  /** Requests are timing out: too many share the connection. Halve what may be in flight (once per burst). */
+  private congested(): void {
+    if (!this.opts.adaptiveConcurrency || Date.now() - this.lastCutAt < CUT_GAP_MS) return;
+    const next = Math.max(MIN_IN_FLIGHT, Math.floor(Math.min(this.limit, this.active) / 2));
+    if (next >= this.limit) return;
+    this.limit = next;
+    this.lastCutAt = Date.now();
+    this.okSinceChange = 0;
+    this.stats.minInFlight = Math.min(this.stats.minInFlight ?? Infinity, next);
+  }
+
+  /** An answer arrived in time: after `limit` of them, one more may be in flight. */
+  private flowed(): void {
+    if (!this.opts.adaptiveConcurrency || this.limit === Infinity || ++this.okSinceChange < this.limit) return;
+    this.okSinceChange = 0;
+    this.limit = this.limit + 1 >= MAX_IN_FLIGHT ? Infinity : this.limit + 1;
+    this.waiting.shift()?.();
   }
 
   /**
@@ -450,6 +527,8 @@ export class HttpClient {
       const pace = this.paceFor(host);
       // Signed after the wait for the host's turn, so the signature's clock starts when it goes out.
       const signed = this.opts.sign ? await this.opts.sign(url) : undefined;
+      // Held only while the request is on the wire, not while it waits for its host's turn or a retry.
+      await this.takePlace(url);
       const sent = Date.now();
       let res: Response;
       let body: string | undefined;
@@ -470,14 +549,26 @@ export class HttpClient {
         if (pace) this.paced(pace, res.status, Date.now() - sent);
         waited = this.opts.readTimeoutMs;
         timer = expire(waited);
-        // The timeout covers the body too: read it here, so a stalled body is retried like a stalled answer.
-        if (readBody && res.ok) body = await res.text();
+        // The body has its own clock, read here so a stalled body is retried like a stalled answer. It
+        // restarts with each piece that arrives: on a slow link a big board still comes in, as long as it
+        // keeps coming (up to MAX_BODY_MS in all).
+        if (readBody && res.ok) {
+          const bodyStarted = Date.now();
+          body = await readText(res, () => {
+            clearTimeout(timer);
+            timer = expire(Math.max(1, Math.min(waited, MAX_BODY_MS - (Date.now() - bodyStarted))));
+          });
+          this.flowed();
+        }
       } catch (err) {
         clearTimeout(timer);
         if (ctrl.signal.reason instanceof StoppedError) throw ctrl.signal.reason;
         const e = err as Error;
         const timedOut = e.name === "TimeoutError" || (ctrl.signal.reason as Error | undefined)?.name === "TimeoutError";
-        if (timedOut) this.stats.timeouts++;
+        if (timedOut) {
+          this.stats.timeouts++;
+          this.congested();
+        }
         // An API that stops answering in time is straining as much as one that says 429.
         if (pace && timedOut) this.paceDown(pace);
         const reason = timedOut ? `timed out after ${waited / 1000}s` : e.message;
@@ -485,6 +576,7 @@ export class HttpClient {
         continue;
       } finally {
         this.stop.signal.removeEventListener("abort", onStop);
+        this.givePlace();
       }
       // A caller reading the body itself (request()) keeps the read clock, but it mustn't hold the process open.
       if (readBody) clearTimeout(timer);
