@@ -232,6 +232,24 @@ describe("the app", () => {
     expect(rel.calls).toContain("jobs-v3-snapshot-2.txt.br");
   });
 
+  it("a change file that didn't arrive is tried again next time, not swapped for the full copy", async () => {
+    process.env.JOBHUNTER_JOBS_URL = "https://feed.example/jobs";
+    const rel = feedRelease();
+    const app = tmp();
+    await rel.publish(RUN1, run(1));
+    await syncJobFeed(app, { fetchImpl: rel.fetchImpl });
+    await rel.publish(RUN2, run(2));
+    await rel.publish(RUN3, run(3));
+    const flaky = (async (url: string, init?: RequestInit) => (url.endsWith("jobs-v3-diff-3.json.br") ? new Response("", { status: 503 }) : rel.fetchImpl(url, init))) as typeof fetch;
+    rel.calls.length = 0;
+    expect((await syncJobFeed(app, { fetchImpl: flaky })).message).toMatch(/Couldn't reach the job feed.*local copy/);
+    expect(rel.calls).not.toContain("jobs-v3-snapshot-3.txt.br");
+    rel.calls.length = 0;
+    expect((await syncJobFeed(app, { fetchImpl: rel.fetchImpl })).message).toMatch(/2 change file/);
+    // The first change file was kept from the failed try.
+    expect(rel.calls).toEqual(["jobs-v3-manifest.json", "jobs-v3-diff-3.json.br"]);
+  });
+
   it("matching remembers its answer and rechecks only companies whose jobs changed", async () => {
     process.env.JOBHUNTER_JOBS_URL = "https://feed.example/jobs";
     const rel = feedRelease();
