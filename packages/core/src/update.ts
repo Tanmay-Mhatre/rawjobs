@@ -101,7 +101,10 @@ export function installedVersions(home: string): { current: string; previous: st
 export async function releaseBase(channel: UpdateChannel, fetchImpl: typeof fetch = fetch): Promise<string> {
   if (process.env.RAWJOBS_RELEASE_URL) return process.env.RAWJOBS_RELEASE_URL.replace(/\/$/, "");
   if (channel === "stable") return RELEASE_URL;
-  const res = await fetchImpl(`https://api.github.com/repos/${REPO}/releases?per_page=10`, { headers: { accept: "application/vnd.github+json" } });
+  // Bounded like every other update request: a stalled GitHub mustn't hold the updater in "checking".
+  const res = await fetchImpl(`https://api.github.com/repos/${REPO}/releases?per_page=10`, { headers: { accept: "application/vnd.github+json" }, signal: AbortSignal.timeout(15_000) });
+  // 403/429: GitHub's limit for unsigned-in requests (60 an hour): the next check tries again.
+  if (res.status === 403 || res.status === 429) throw new Error("GitHub is limiting requests right now; RawJobs will check again later.");
   if (!res.ok) throw new Error(`Couldn't list releases (HTTP ${res.status}).`);
   const list = (await res.json()) as { tag_name: string; draft: boolean }[];
   const newest = list.find((r) => !r.draft);

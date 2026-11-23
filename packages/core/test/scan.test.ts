@@ -215,6 +215,17 @@ describe("scan", () => {
     expect(existsSync(join(dir, "scan-progress-mine.json"))).toBe(false);
   });
 
+  it("offline (nothing answers at all): boards aren't marked as failing, so they don't rest", async () => {
+    const dir = setup();
+    const { http } = fakeHttp(() => {
+      throw new TypeError("fetch failed");
+    });
+    await scan(config(), { dataDir: dir, http, now, scope: "all" });
+    expect(http.stats.answered ?? 0).toBe(0);
+    const boards = existsSync(join(dir, "board-health.json")) ? read<{ boards: Record<string, { fails?: number }> }>(dir, "board-health.json").boards : {};
+    expect(Object.values(boards).filter((b) => b.fails)).toEqual([]);
+  });
+
   it("all: fetches every live company in the directory, and records only those that matched", async () => {
     const dir = setup();
     const { http, calls } = fakeHttp(routes);
