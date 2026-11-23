@@ -333,10 +333,13 @@ export async function scan(config: Config, opts: ScanOptions): Promise<ScanResul
   const ids = opts.http || opts.dryRun ? undefined : new FileBoardIds(join(opts.dataDir, "cache", "board-ids.json"));
   // The weekly word list that makes "PSP" count as payments (concepts-remote.ts); the built-in one when offline.
   if (!opts.http && !opts.dryRun) await loadConcepts(opts.dataDir);
-  // A host that doesn't answer gives up after 8 s; one that answers gets 15 s for the body. One that keeps
-  // failing rests and is tried again, so a network blip doesn't drop a whole hiring system for the run.
+  // A host that doesn't answer gives up after 8 s; one that answers may pause 15 s at most while sending the
+  // body. One that keeps failing rests and is tried again, so a network blip doesn't drop a whole hiring
+  // system for the run. When requests time out, fewer go at once (adaptiveConcurrency).
   // Each hiring system's API paced as a whole, faster while it keeps up (http.ts paceOf).
-  const http = opts.http ?? new HttpClient({ cache, connectTimeoutMs: 8_000, readTimeoutMs: 15_000, retries: 2, breakAfter: 3, hostRests: true, adaptive: true, stopped: opts.stopped });
+  const http =
+    opts.http ??
+    new HttpClient({ cache, connectTimeoutMs: 8_000, readTimeoutMs: 15_000, retries: 2, breakAfter: 3, hostRests: true, adaptive: true, adaptiveConcurrency: true, stopped: opts.stopped });
   // Where "3 Locations" jobs really are, from earlier scans: their pages aren't fetched again for that.
   const locations = readLocationCache(opts.dataDir);
   const knownLocations = locations.size;
