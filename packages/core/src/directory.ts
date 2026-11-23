@@ -1,11 +1,11 @@
-import { createHash } from "node:crypto";
-import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { gunzipSync } from "node:zlib";
-import { fetchSignedJson, FILE_TIMEOUT_MS } from "./data-signing";
+import { fetchSignedJson } from "./data-signing";
+import { clearDownloads, downloadVerified, LateError, withBudget } from "./download";
 import { envSetting } from "./env";
 import { isSafeName, safeJoin } from "./safe-name";
-import { writeFileAtomic } from "./atomic";
+import { renameWithRetry, writeFileAtomic } from "./atomic";
 import { ATS_TYPES } from "./schema";
 
 /**
@@ -78,7 +78,7 @@ export type UpdateResult = { updated: boolean; version?: string; companies?: num
  * Download the latest shared directory if it's newer than the local copy. Files are checked
  * against the manifest's SHA-256 and swapped in only when both arrive intact.
  */
-export async function updateDirectory(dataDir: string, opts: { force?: boolean; fetchImpl?: typeof fetch } = {}): Promise<UpdateResult> {
+export async function updateDirectory(dataDir: string, opts: { force?: boolean; fetchImpl?: typeof fetch; expired?: () => boolean } = {}): Promise<UpdateResult> {
   const get = opts.fetchImpl ?? fetch;
   const base = directoryUrl();
   const signed = await fetchSignedJson<DirectoryManifest>(get, `${base}/manifest.json`);
@@ -103,20 +103,28 @@ export async function updateDirectory(dataDir: string, opts: { force?: boolean; 
 
   const dir = catalogDir(dataDir);
   mkdirSync(dir, { recursive: true });
+  // Each file that arrives and checks out is kept (download.ts), so a dropped connection on the
+  // second file doesn't cost the first one again.
+  const downloads = join(dir, ".downloads");
+  clearDownloads(downloads, true);
   const staged: [string, Buffer][] = [];
   for (const [file, meta] of Object.entries(manifest.files)) {
-    const r = await get(`${base}/${file}`, { redirect: "follow", signal: AbortSignal.timeout(FILE_TIMEOUT_MS) });
-    if (!r.ok) return { updated: false, message: `Download of ${file} failed (HTTP ${r.status}).` };
-    const gz = Buffer.from(await r.arrayBuffer());
-    if (createHash("sha256").update(gz).digest("hex") !== meta.sha256) return { updated: false, message: `${file} didn't match its checksum; kept your current directory.` };
+    let gz: Buffer;
+    try {
+      gz = await downloadVerified(get, `${base}/${file}`, meta.sha256, downloads);
+    } catch (err) {
+      return { updated: false, message: `Download of ${file} failed (${(err as Error).message}); kept your current directory.` };
+    }
     staged.push([file.replace(/\.gz$/, ""), gunzipSync(gz)]);
   }
+  if (opts.expired?.()) throw new LateError();
   const now = new Date().toISOString();
   for (const [name, body] of staged) {
     writeFileSync(safeJoin(dir, `${name}.tmp`), body);
-    renameSync(safeJoin(dir, `${name}.tmp`), safeJoin(dir, name));
+    renameWithRetry(safeJoin(dir, `${name}.tmp`), safeJoin(dir, name));
   }
   writeFileAtomic(join(dir, "manifest.json"), JSON.stringify({ ...manifest, updated_at: now, checked_at: now }, null, 2));
+  clearDownloads(downloads);
   return { updated: true, version: manifest.version, companies: manifest.companies, message: `Updated to ${manifest.companies.toLocaleString()} companies.` };
 }
 
@@ -127,13 +135,21 @@ export type SyncResult = UpdateResult & { /** The shared directory couldn't be r
  * manifest every time and downloads only a new version. Never throws: offline, the scan carries on
  * with the local copy.
  */
-export async function syncDirectory(dataDir: string, opts: { fetchImpl?: typeof fetch } = {}): Promise<SyncResult> {
-  try {
-    const r = await updateDirectory(dataDir, opts);
-    return r.updated || r.version ? r : { ...r, offline: true };
-  } catch (err) {
-    return { updated: false, offline: true, message: `Couldn't reach the shared directory (${(err as Error).message}); using your local copy.` };
-  }
+export async function syncDirectory(dataDir: string, opts: { fetchImpl?: typeof fetch; budgetMs?: number } = {}): Promise<SyncResult> {
+  const late = (): SyncResult => ({ updated: false, offline: true, message: "The shared directory is still downloading; this scan uses your local copy." });
+  return withBudget(
+    opts.budgetMs,
+    async (expired) => {
+      try {
+        const r = await updateDirectory(dataDir, { ...opts, expired });
+        return r.updated || r.version ? r : { ...r, offline: true };
+      } catch (err) {
+        if (err instanceof LateError) return late();
+        return { updated: false, offline: true, message: `Couldn't reach the shared directory (${(err as Error).message}); using your local copy.` };
+      }
+    },
+    late,
+  );
 }
 
 /** A board to share: what the directory needs to find it again, nothing about the user. */
