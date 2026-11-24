@@ -410,7 +410,8 @@ its User-Agent. It's off until the key is set: without it nothing changes.
 
 1. Make a key, outside the repo: `pnpm feed:bot-auth keygen ~/rawjobs-web-bot-auth.pem`. It prints the
    `keyid` and public key. (`openssl genpkey -algorithm ed25519 -out <file>` makes the same kind of key.)
-2. Add it to the repo: `gh secret set WEB_BOT_AUTH_KEY < ~/rawjobs-web-bot-auth.pem`.
+2. Add it to the repo's `data-repo` environment:
+   `gh secret set WEB_BOT_AUTH_KEY --env data-repo < ~/rawjobs-web-bot-auth.pem`.
 3. Add it to the site's Worker: `cd apps/site`, then
    `npx wrangler@4.151.1 secret put WEB_BOT_AUTH_KEY < ~/rawjobs-web-bot-auth.pem`. Then deploy the
    site (push to `main`, or run **Site** from the Actions tab).
@@ -424,7 +425,7 @@ its User-Agent. It's off until the key is set: without it nothing changes.
    under **BotBase → Submission history**.
 
 To rotate the key, repeat steps 1 to 4 with a new file; the next feed run and site deploy use it.
-To stop signing, delete the `WEB_BOT_AUTH_KEY` repo secret.
+To stop signing, delete the `WEB_BOT_AUTH_KEY` secret from the `data-repo` environment.
 
 ## Scheduler
 

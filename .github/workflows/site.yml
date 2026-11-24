@@ -82,6 +82,11 @@ jobs:
   build:
     needs: covered
     if: needs.covered.outputs.run == 'true'
+    # The Cloudflare secrets live in the `cloudflare` environment, which only main may use; pull
+    # requests and branch runs get no environment, so they build but never deploy.
+    environment:
+      name: ${{ github.ref == 'refs/heads/main' && 'cloudflare' || '' }}
+      deployment: false
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     env:

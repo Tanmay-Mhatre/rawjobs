@@ -75,6 +75,10 @@ jobs:
   read:
     needs: covered
     if: needs.covered.outputs.run == 'true'
+    # Secrets live in the `data-repo` environment, which only main may use.
+    environment:
+      name: data-repo
+      deployment: false
     runs-on: ubuntu-24.04
     # Setup ~5 + Common Crawl step 62 + Wayback step 52, with a few minutes to save.
     timeout-minutes: 125

@@ -33,6 +33,10 @@ env:
 jobs:
   approve:
     if: github.event.label.name == 'move-approved' && startsWith(github.event.issue.title, 'Move review:')
+    # Secrets live in the `data-repo` environment, which only main may use.
+    environment:
+      name: data-repo
+      deployment: false
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     steps:
