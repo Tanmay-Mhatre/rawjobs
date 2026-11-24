@@ -58,7 +58,8 @@ When development starts, build it the best way you can and spend as few tokens a
 
 - In a new worktree, run `pnpm install` first. The pre-push hook runs lint, typecheck and the
   tests your branch touches, which fail without dependencies. It runs one push's checks at a time
-  on this machine (others wait) and refuses a push from the main checkout. CI runs every test.
+  on this machine (others wait) and refuses a Claude Code push from the main checkout. CI runs
+  every test.
 
 - Read only what you need. Search (Grep, Glob) before reading, and read just the lines that matter,
   not whole files. Don't re-read a file you just edited.
