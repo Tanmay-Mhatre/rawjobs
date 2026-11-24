@@ -17,6 +17,7 @@ queue_rules:
       - -conflict
       # The checks main's branch protection requires.
       - check-success = check
+      - check-success = node-22
       - check-success = release-files
       - check-success = install / install (ubuntu-24.04)
       - check-success = install / install (macos-15)
