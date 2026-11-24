@@ -56,8 +56,10 @@ describes or in its own PR, so it doesn't sit untracked in the main checkout.
 
 When development starts, build it the best way you can and spend as few tokens as you can:
 
-- In a new worktree, run `pnpm install` first. The pre-push hook runs `pnpm check`, which fails
-  without dependencies.
+- In a new worktree, run `pnpm install` first. The pre-push hook runs lint, typecheck and the
+  tests your branch touches, which fail without dependencies. It runs one push's checks at a time
+  on this machine (others wait) and refuses a Claude Code push from the main checkout. CI runs
+  every test.
 
 - Read only what you need. Search (Grep, Glob) before reading, and read just the lines that matter,
   not whole files. Don't re-read a file you just edited.

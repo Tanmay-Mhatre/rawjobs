@@ -1,6 +1,7 @@
 #!/bin/sh
 # Before a push: refuse pushing to main directly (open a pull request instead), then run the
-# full check (lint, design tokens, design lint, typecheck, tests) so broken code never leaves this machine.
+# checks (lint, design tokens, design lint, typecheck, and the tests your branch touches) so broken
+# code never leaves this machine. CI still runs the whole test suite on every pull request.
 # Turn on once per clone with: pnpm hooks:install   (skip once with: git push --no-verify)
 
 zero=0000000000000000000000000000000000000000
@@ -10,7 +11,7 @@ while read -r local_ref local_sha remote_ref remote_sha; do
   case "$remote_ref" in
     refs/heads/main | refs/heads/master)
       echo "pre-push: not pushing to ${remote_ref#refs/heads/} directly." >&2
-      echo "  Push a branch and open a pull request (gh pr merge --auto --merge merges it once CI passes)." >&2
+      echo "  Push a branch, open a pull request, then queue it: gh pr edit <N> --add-label queue" >&2
       exit 1
       ;;
   esac
@@ -20,12 +21,49 @@ done
 
 [ "$check" = 1 ] || exit 0
 
-echo "pre-push: running pnpm check (lint, design tokens, design lint, typecheck, tests)..." >&2
+# Claude Code sessions work in their own worktree: other sessions switch branches in the main
+# checkout, so a branch pushed from there can change under you. (CLAUDECODE is set by Claude Code.)
+if [ -n "$CLAUDECODE" ] && [ "$(git rev-parse --git-dir)" = "$(git rev-parse --git-common-dir)" ]; then
+  echo "pre-push: this is the main checkout. Commit and push from your own worktree instead" >&2
+  echo "  (git worktree add .claude/worktrees/<name> -b <branch> origin/main, then pnpm install)." >&2
+  exit 1
+fi
+
+# One check at a time on this machine. Several sessions running the whole suite at once starve
+# each other of CPU and tests time out at random. The lock lives in the shared .git folder, so
+# every worktree sees it. A lock older than 30 minutes is left over from a killed run.
+lock="$(git rev-parse --git-common-dir)/pre-push.lock"
+waited=0
+until mkdir "$lock" 2>/dev/null; do
+  if [ -n "$(find "$lock" -maxdepth 0 -mmin +30 2>/dev/null)" ]; then
+    rmdir "$lock" 2>/dev/null
+    continue
+  fi
+  [ "$waited" = 0 ] && echo "pre-push: another push is running its checks; waiting for it..." >&2
+  waited=1
+  sleep 5
+done
+trap 'rmdir "$lock" 2>/dev/null' EXIT
+trap 'exit 1' INT TERM HUP
+
+# Tests: only those the branch touches, measured from where it left origin/main. The whole suite
+# runs in CI (the required "check"); vitest still runs everything when its config or a package.json
+# changed. With no origin/main to compare against, run them all.
+base="$(git merge-base HEAD origin/main 2>/dev/null)"
+if [ -n "$base" ]; then
+  tests="pnpm vitest run --changed $base --passWithNoTests"
+  what="tests this branch touches"
+else
+  tests="pnpm test"
+  what="all tests"
+fi
+
+echo "pre-push: running lint, design tokens, design lint, typecheck and $what..." >&2
 log="$(mktemp)"
-if ! pnpm check >"$log" 2>&1; then
+if ! { pnpm lint && pnpm design:build --check && pnpm design:lint && pnpm typecheck && $tests; } >"$log" 2>&1; then
   tail -n 40 "$log" >&2
   rm -f "$log"
-  echo "pre-push: pnpm check failed (the end of its output is above). Fix it, then push again." >&2
+  echo "pre-push: checks failed (the end of their output is above). Fix it, then push again." >&2
   exit 1
 fi
 rm -f "$log"
