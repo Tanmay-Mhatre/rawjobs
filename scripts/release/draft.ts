@@ -81,7 +81,7 @@ export function issueBody(d: Draft): string {
           `git push origin v${d.next}`,
           "```",
           "",
-          "Add a line `Update: mandatory` for a fix everyone must install. Pushing the tag publishes the release, and copies download it within minutes. This issue closes by itself.",
+          "Add a line `Update: mandatory` for a fix everyone must install. Pushing the tag starts the release; approve its `sign` job in Actions (the `release` environment), then it publishes and copies download it within minutes. This issue closes by itself.",
         ]
       : ["You can still release them with a tag; there's no rush."]),
   ].join("\n");

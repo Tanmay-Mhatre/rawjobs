@@ -1,8 +1,9 @@
 name: Release
 
 # Push a tag like v0.6.1 to publish a release: build the bundle (as that version), sign latest.json
-# with the release key, install it on Windows, macOS and Linux, then publish. Releases happen only
-# this way: merging a PR releases nothing (release-reminder.yml keeps an issue open as a reminder).
+# with the release key (after you approve the `sign` job in Actions), install it on Windows, macOS
+# and Linux, then publish. Releases happen only this way: merging a PR releases nothing
+# (release-reminder.yml keeps an issue open as a reminder).
 # The tag's message becomes "What's new" in the dashboard: lines starting "New:", "Improved:" or
 # "Fixed:" show with a tag each. A line "Update: mandatory" makes it a required update;
 # "Min-version: 0.5.0" makes older versions reinstall instead. Once published, the site is deployed
@@ -59,9 +60,12 @@ jobs:
           if-no-files-found: error
 
   # The only job that sees the release key: no dependencies installed, just Node and sign.mjs
-  # (node: imports only), so a compromised package can't read the key.
+  # (node: imports only), so a compromised package can't read the key. The key lives in the
+  # `release` environment, which takes only `v*` tags and waits for the owner's approval, so a tag
+  # pushed by anyone or anything else builds and tests but never gets signed or published.
   sign:
     needs: build
+    environment: release
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     steps:
