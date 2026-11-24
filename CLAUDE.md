@@ -124,6 +124,9 @@ git tag -a v0.6.1 -m "RawJobs 0.6.1" -m "New: …" -m "Fixed: …"
 git push origin v0.6.1
 ```
 
+The `sign` job then waits in Actions until the user approves it (the `release` environment), so
+tell them to open the run and approve it. Never approve a deployment yourself.
+
 Write a "Release note" section in every PR you open (`New:` / `Improved:` / `Fixed:` lines, or
 `none`): it becomes the app's "What's new". Never push a tag yourself unless the user asks.
 
