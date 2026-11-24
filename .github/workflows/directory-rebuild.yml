@@ -109,6 +109,11 @@ jobs:
   resolve:
     needs: due
     if: needs.due.outputs.run == 'true'
+    # Secrets come from the `data-repo` environment (main only). A test run on another branch gets
+    # none and reads with github.token, so it can't publish.
+    environment:
+      name: ${{ github.ref == 'refs/heads/main' && 'data-repo' || '' }}
+      deployment: false
     runs-on: ubuntu-24.04
     timeout-minutes: 110
     steps:
@@ -123,7 +128,7 @@ jobs:
       - name: Restore the catalog's working state
         id: state
         env:
-          GH_TOKEN: ${{ secrets.DATA_REPO_TOKEN }}
+          GH_TOKEN: ${{ secrets.DATA_REPO_TOKEN || github.token }}
         run: bash scripts/catalog/state.sh restore
 
       # Industry seeds, then the next batch of Wikidata companies (the coverage sample).
@@ -182,6 +187,11 @@ jobs:
   check-known:
     needs: due
     if: needs.due.outputs.run == 'true'
+    # Secrets come from the `data-repo` environment (main only). A test run on another branch gets
+    # none and reads with github.token, so it can't publish.
+    environment:
+      name: ${{ github.ref == 'refs/heads/main' && 'data-repo' || '' }}
+      deployment: false
     runs-on: ubuntu-24.04
     timeout-minutes: 110
     env:
@@ -200,13 +210,13 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           repository: ${{ env.DATA_REPO }}
-          token: ${{ secrets.DATA_REPO_TOKEN }}
+          token: ${{ secrets.DATA_REPO_TOKEN || github.token }}
           path: directory-repo
 
       - name: Restore the catalog's working state
         id: state
         env:
-          GH_TOKEN: ${{ secrets.DATA_REPO_TOKEN }}
+          GH_TOKEN: ${{ secrets.DATA_REPO_TOKEN || github.token }}
         run: bash scripts/catalog/state.sh restore
 
       - name: Download the public lists
@@ -266,6 +276,11 @@ jobs:
   collect:
     needs: [due, resolve, check-known]
     if: ${{ !cancelled() && needs.due.outputs.run == 'true' }}
+    # Secrets come from the `data-repo` environment (main only). A test run on another branch gets
+    # none and reads with github.token, so it can't publish.
+    environment:
+      name: ${{ github.ref == 'refs/heads/main' && 'data-repo' || '' }}
+      deployment: false
     runs-on: ubuntu-24.04
     timeout-minutes: 120
     env:
@@ -284,13 +299,13 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           repository: ${{ env.DATA_REPO }}
-          token: ${{ secrets.DATA_REPO_TOKEN }}
+          token: ${{ secrets.DATA_REPO_TOKEN || github.token }}
           path: directory-repo
 
       - name: Restore the catalog's working state
         id: state
         env:
-          GH_TOKEN: ${{ secrets.DATA_REPO_TOKEN }}
+          GH_TOKEN: ${{ secrets.DATA_REPO_TOKEN || github.token }}
         run: bash scripts/catalog/state.sh restore
 
       - name: Download the public lists
@@ -370,7 +385,7 @@ jobs:
         # or a run that started from nothing would overwrite good state.
         if: always() && steps.state.outcome == 'success'
         env:
-          GH_TOKEN: ${{ secrets.DATA_REPO_TOKEN }}
+          GH_TOKEN: ${{ secrets.DATA_REPO_TOKEN || github.token }}
         run: bash scripts/catalog/state.sh save
 
   publish:
@@ -378,6 +393,11 @@ jobs:
     # Also when collect failed or hit its time limit: its progress was saved, and the release gate
     # decides whether the result is good enough to ship. Cancelling the run stops it.
     if: ${{ !cancelled() && needs.collect.result != 'skipped' }}
+    # Secrets come from the `data-signing` environment (main only). A test run on another branch gets
+    # none and reads with github.token, so it can't publish.
+    environment:
+      name: ${{ github.ref == 'refs/heads/main' && 'data-signing' || '' }}
+      deployment: false
     runs-on: ubuntu-24.04
     timeout-minutes: 120
     env:
@@ -398,13 +418,13 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           repository: ${{ env.DATA_REPO }}
-          token: ${{ secrets.DATA_REPO_TOKEN }}
+          token: ${{ secrets.DATA_REPO_TOKEN || github.token }}
           path: directory-repo
 
       - name: Restore the working state collect saved
         id: state
         env:
-          GH_TOKEN: ${{ secrets.DATA_REPO_TOKEN }}
+          GH_TOKEN: ${{ secrets.DATA_REPO_TOKEN || github.token }}
         run: bash scripts/catalog/state.sh restore
 
       # merged.json isn't part of the saved state: merge again from the lists and saved results.
@@ -436,7 +456,7 @@ jobs:
         timeout-minutes: 5
         continue-on-error: true
         env:
-          GH_TOKEN: ${{ secrets.DATA_REPO_TOKEN }}
+          GH_TOKEN: ${{ secrets.DATA_REPO_TOKEN || github.token }}
         run: bash scripts/catalog/feed.sh
 
       # Rows from the feed for the boards it read in the last 7 days; the rest are read live. Only with
@@ -459,7 +479,7 @@ jobs:
       - name: Release gate
         timeout-minutes: 5
         env:
-          GH_TOKEN: ${{ secrets.DATA_REPO_TOKEN }}
+          GH_TOKEN: ${{ secrets.DATA_REPO_TOKEN || github.token }}
           ALLOW_SHRINK: ${{ inputs.allow_shrink && '1' || '' }}
         run: bash scripts/catalog/gate.sh
 
@@ -478,7 +498,7 @@ jobs:
         if: ${{ !inputs.smoke }}
         timeout-minutes: 5
         env:
-          GH_TOKEN: ${{ secrets.DATA_REPO_TOKEN }}
+          GH_TOKEN: ${{ secrets.DATA_REPO_TOKEN || github.token }}
         run: |
           day=$(date -u +%Y-%m-%d)
           tag="directory-$day"
@@ -496,7 +516,7 @@ jobs:
         # or a run that started from nothing would overwrite good state.
         if: always() && steps.state.outcome == 'success'
         env:
-          GH_TOKEN: ${{ secrets.DATA_REPO_TOKEN }}
+          GH_TOKEN: ${{ secrets.DATA_REPO_TOKEN || github.token }}
         run: bash scripts/catalog/state.sh save
 
       - name: Refresh the site's numbers

@@ -50,7 +50,7 @@ The build also writes `dist/v1/latest.json`, served at `/v1/latest.json`: the ne
 
 `.github/workflows/site.yml` builds on every pull request that touches the site, and deploys on every push to `main` that touches it (`apps/site/`, `apps/web/src/design/`, `design/components/bundle.css` or the workflow itself), every Monday (to refresh the numbers), and when the release workflow or the directory rebuild starts it. It deploys the `www` Worker: static assets, so requests don't count against the Workers request quota, except the key directory path above.
 
-One-time setup, in the repo's **Settings → Secrets and variables → Actions**:
+One-time setup, in the repo's **Settings → Environments → cloudflare** (deployment branches: `main` only; pull requests and other branches build without deploying):
 
 - Secrets: `CLOUDFLARE_API_TOKEN` (a token with **Edit Cloudflare Workers** permission) and `CLOUDFLARE_ACCOUNT_ID`.
 - Optional: the `SITE_URL` variable, and `CF_ANALYTICS_TOKEN` as a variable or a secret (it's a public token, so either works).
