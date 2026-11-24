@@ -35,7 +35,18 @@ no GitHub auto-merge (`mcp__ccd_pr__set_auto_merge`). Those skip the queue.
    yourself. For a conflict, merge `origin/main` into your branch (in a desktop-app worktree, use
    `sync_with_base_branch`) and resolve it. Run `pnpm check`, push, then remove and add the `queue`
    label to rejoin. Ask the user only if the fix would undo what another PR did.
-4. After it merges: `git checkout main && git pull`.
+4. After it merges, clean up your own worktree and branch, and only yours. Run these from the main
+   checkout, without switching its branch:
+   ```bash
+   git fetch --prune origin
+   git -C .claude/worktrees/<name> status --porcelain   # must print nothing
+   git worktree remove .claude/worktrees/<name>
+   git merge-base --is-ancestor <branch> origin/main && git branch -D <branch>
+   ```
+   `-D` is safe only after the `merge-base` check: plain `-d` compares with the main checkout's
+   local `main`, which is often behind, so it refuses merged branches. GitHub deletes the remote
+   branch on merge. If `status` shows changes or the check fails, stop and ask the user. On Windows,
+   `worktree remove` can leave files behind ("Directory not empty"); then delete that one folder.
 
 Don't change `main`'s branch protection or `.mergify.yml` to get your PR in faster.
 
