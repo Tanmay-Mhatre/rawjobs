@@ -51,6 +51,11 @@ env:
 
 jobs:
   guard:
+    # Secrets come from the `data-repo` environment (main only). A test run on another branch gets
+    # none and reads with github.token, so it can't publish.
+    environment:
+      name: ${{ github.ref == 'refs/heads/main' && 'data-repo' || '' }}
+      deployment: false
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     outputs:
@@ -67,7 +72,7 @@ jobs:
       - id: check
         name: Skip when this slot's feed is already built
         env:
-          GH_TOKEN: ${{ secrets.DATA_REPO_TOKEN }}
+          GH_TOKEN: ${{ secrets.DATA_REPO_TOKEN || github.token }}
           RUN_TOKEN: ${{ github.token }}
           PUBLISH: ${{ (github.event_name != 'workflow_dispatch' || inputs.publish) && github.ref == 'refs/heads/main' }}
           FORCE: ${{ github.event_name == 'workflow_dispatch' && inputs.force }}
@@ -98,6 +103,11 @@ jobs:
   crawl:
     needs: guard
     if: needs.guard.outputs.run == 'true'
+    # Secrets come from the `data-repo` environment (main only). A test run on another branch gets
+    # none and reads with github.token, so it can't publish.
+    environment:
+      name: ${{ github.ref == 'refs/heads/main' && 'data-repo' || '' }}
+      deployment: false
     runs-on: ubuntu-24.04
     # The crawl stops starting boards after 4 h so the save steps always get to run.
     timeout-minutes: 280
@@ -117,18 +127,18 @@ jobs:
       - name: Restore the group's last shards and ETags
         id: state
         env:
-          GH_TOKEN: ${{ secrets.DATA_REPO_TOKEN }}
+          GH_TOKEN: ${{ secrets.DATA_REPO_TOKEN || github.token }}
         run: bash scripts/catalog/state.sh restore jobs-${{ matrix.group }}
 
       - name: Before the group's first saved copy, start from the published feed
         if: steps.state.outputs.restored == 'false'
         env:
-          GH_TOKEN: ${{ secrets.DATA_REPO_TOKEN }}
+          GH_TOKEN: ${{ secrets.DATA_REPO_TOKEN || github.token }}
         run: bash scripts/catalog/state.sh restore jobs
 
       - name: Get the directory and the denylist
         env:
-          GH_TOKEN: ${{ secrets.DATA_REPO_TOKEN }}
+          GH_TOKEN: ${{ secrets.DATA_REPO_TOKEN || github.token }}
         run: |
           . "$GITHUB_WORKSPACE/scripts/catalog/release-io.sh"
           retry gh release download -R "$DATA_REPO" -p directory.json.gz -D "$RUNNER_TEMP" --clobber
@@ -158,7 +168,7 @@ jobs:
       - name: Save the group's shards and ETags for the next run
         if: needs.guard.outputs.publish == 'true' && steps.state.outcome == 'success'
         env:
-          GH_TOKEN: ${{ secrets.DATA_REPO_TOKEN }}
+          GH_TOKEN: ${{ secrets.DATA_REPO_TOKEN || github.token }}
         run: bash scripts/catalog/state.sh save jobs-${{ matrix.group }}
 
       - name: Hand the shards to the merge job
@@ -175,6 +185,11 @@ jobs:
     needs: [guard, crawl]
     # Also when a group failed: its previous saved copy stands in for it.
     if: always() && needs.guard.outputs.run == 'true'
+    # Secrets come from the `data-signing` environment (main only). A test run on another branch gets
+    # none and reads with github.token, so it can't publish.
+    environment:
+      name: ${{ github.ref == 'refs/heads/main' && 'data-signing' || '' }}
+      deployment: false
     runs-on: ubuntu-24.04
     timeout-minutes: 60
     steps:
@@ -190,7 +205,7 @@ jobs:
       - name: Restore the last published feed
         id: state
         env:
-          GH_TOKEN: ${{ secrets.DATA_REPO_TOKEN }}
+          GH_TOKEN: ${{ secrets.DATA_REPO_TOKEN || github.token }}
         run: bash scripts/catalog/state.sh restore jobs
 
       - name: Take this run's groups
@@ -202,7 +217,7 @@ jobs:
 
       - name: Stand in for a failed group with its previous copy
         env:
-          GH_TOKEN: ${{ secrets.DATA_REPO_TOKEN }}
+          GH_TOKEN: ${{ secrets.DATA_REPO_TOKEN || github.token }}
         run: |
           # Every group in jobs.ts GROUPS (jobs.test.ts checks the lists match).
           for g in sr payroll enterprise join engage rest; do
@@ -268,7 +283,7 @@ jobs:
       - name: Publish (files first, manifests last)
         if: needs.guard.outputs.publish == 'true'
         env:
-          GH_TOKEN: ${{ secrets.DATA_REPO_TOKEN }}
+          GH_TOKEN: ${{ secrets.DATA_REPO_TOKEN || github.token }}
         working-directory: scripts/catalog/out/jobs
         run: |
           # Not --latest: the directory download uses releases/latest.
@@ -297,7 +312,7 @@ jobs:
       - name: Save the published feed for the next run
         if: always() && needs.guard.outputs.publish == 'true' && steps.state.outcome == 'success'
         env:
-          GH_TOKEN: ${{ secrets.DATA_REPO_TOKEN }}
+          GH_TOKEN: ${{ secrets.DATA_REPO_TOKEN || github.token }}
         run: bash scripts/catalog/state.sh save jobs
 
       - name: Open (or add to) an issue per hiring system that needs a look

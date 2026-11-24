@@ -30,6 +30,10 @@ env:
 jobs:
   directory:
     if: inputs.what != 'jobs'
+    # Secrets live in the `data-signing` environment, which only main may use.
+    environment:
+      name: data-signing
+      deployment: false
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     # Never while a directory run is publishing (same group as the rebuild and contributions).
@@ -66,6 +70,10 @@ jobs:
 
   jobs:
     if: inputs.what != 'directory'
+    # Secrets live in the `data-signing` environment, which only main may use.
+    environment:
+      name: data-signing
+      deployment: false
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     # Never while the job feed is publishing (same group as the feed workflow).
