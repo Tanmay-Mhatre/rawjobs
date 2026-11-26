@@ -324,7 +324,7 @@ export function ScanStatus({ scan, onStop, notify, notifyLine }: { scan: ScanSta
       {open && (
         <div
           id="scan-details"
-          className="absolute right-0 top-full z-40 mt-2 flex max-h-[min(36rem,calc(100dvh-6rem))] w-[24rem] max-w-[calc(100vw-2rem)] flex-col rounded-md border border-line bg-raised p-4 shadow-l3 max-sm:fixed max-sm:inset-x-4 max-sm:top-16 max-sm:w-auto max-sm:max-w-none"
+          className="absolute right-0 top-full z-40 mt-2 whitespace-normal flex max-h-[min(36rem,calc(100dvh-6rem))] w-[24rem] max-w-[calc(100vw-2rem)] flex-col rounded-md border border-line bg-raised p-4 shadow-l3 max-sm:fixed max-sm:inset-x-4 max-sm:top-16 max-sm:w-auto max-sm:max-w-none"
         >
           {steps ? (
             <>
@@ -399,7 +399,7 @@ export function BackgroundPill({ scan, bg, onPause, onResume }: { scan: ScanStat
       {open && (
         <div
           id="background-details"
-          className="absolute right-0 top-full z-40 mt-2 w-[24rem] max-w-[calc(100vw-2rem)] rounded-md border border-line bg-raised p-4 shadow-l3 max-sm:fixed max-sm:inset-x-4 max-sm:top-16 max-sm:w-auto max-sm:max-w-none"
+          className="absolute right-0 top-full z-40 mt-2 whitespace-normal w-[24rem] max-w-[calc(100vw-2rem)] rounded-md border border-line bg-raised p-4 shadow-l3 max-sm:fixed max-sm:inset-x-4 max-sm:top-16 max-sm:w-auto max-sm:max-w-none"
         >
           {paused ? (
             <>

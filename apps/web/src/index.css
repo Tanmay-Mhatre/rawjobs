@@ -235,7 +235,9 @@ h3 {
   margin-top: 2px;
   flex: none;
 }
+/* Hints wrap, also in a menu inside a nowrap row (the header's Scan options). */
 .rj-menu:has(.rj-menu__item--hint) {
+  white-space: normal;
   width: 20rem;
   max-width: calc(100vw - 2rem);
 }
