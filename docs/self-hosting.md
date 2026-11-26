@@ -109,7 +109,7 @@ The project has one maintainer today. A second maintainer should have:
 | `DATA_REPO_TOKEN` | `data-repo` and `data-signing` environments in `rawjobs` | Push to `rawjobs-directory` and publish its releases. |
 | `INBOX_TOKEN` | Cloudflare Worker secret **and** the `data-repo` and `data-signing` environments in `rawjobs` (same value) | Read and acknowledge waiting contributions. |
 | `INBOX_URL` | `data-repo` and `data-signing` environments in `rawjobs` | Not secret, kept with the token for convenience. |
-| `RAWJOBS_DATA_SIGNING_KEY` | Repository secret in `rawjobs` for now (see below); belongs in the `data-signing` environment | Sign the directory's and the job feed's manifests (`scripts/catalog/sign.mjs`). Not the release key: it can't sign an app update. |
+| `RAWJOBS_DATA_SIGNING_KEY` | `data-signing` environment in `rawjobs` | Sign the directory's and the job feed's manifests (`scripts/catalog/sign.mjs`). Not the release key: it can't sign an app update. |
 | `WEB_BOT_AUTH_KEY` | `data-repo` environment in `rawjobs` | Sign the feed's requests to job boards ([Web Bot Auth](shared-directory.md#web-bot-auth)). |
 | `CLOUDFLARE_API_TOKEN`, `CLOUDFLARE_ACCOUNT_ID` | `cloudflare` environment in `rawjobs` | Deploy the site. |
 | `RAWJOBS_SIGNING_KEY` | `release` environment in `rawjobs` | Sign app releases. Used only after the owner approves the release's `sign` job. |
@@ -117,11 +117,8 @@ The project has one maintainer today. A second maintainer should have:
 The secrets live in GitHub **environments**: `data-repo`, `data-signing` and `cloudflare` accept
 only `main`, and `release` accepts only `v*` tags and waits for an approval. A workflow run on another
 branch gets none of them (test runs read the public data repo with `github.token`), so a branch can't
-publish data or deploy the site. One exception today: `RAWJOBS_DATA_SIGNING_KEY` is still a
-repository secret, because only the copy stored there exists and GitHub can't move a secret's value.
-A run on any branch can read it. It moves into `data-signing` the next time the data signing key
-changes (a new key needs an app release first, see below); a fork should put it there from the start
-(step 4 of [Run your own directory](#run-your-own-directory)). Set a secret in an environment
+publish data or deploy the site. That includes `RAWJOBS_DATA_SIGNING_KEY`, which lives only in
+`data-signing` (step 4 of [Run your own directory](#run-your-own-directory)). Set a secret in an environment
 with `gh secret set NAME --env ENVIRONMENT`. `DATA_REPO_TOKEN`, `INBOX_TOKEN` and `INBOX_URL` sit in
 both data environments with the same value, so rotate them in both.
 

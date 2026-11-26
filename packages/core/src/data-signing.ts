@@ -11,7 +11,7 @@ import { verifyRelease } from "./release";
  * Running your own directory or feed (RAWJOBS_DIRECTORY_URL / RAWJOBS_JOBS_URL)? Sign it with your
  * own key and set RAWJOBS_DATA_PUBLIC_KEY to its public half.
  */
-export const DATA_PUBLIC_KEY = "MCowBQYDK2VwAyEAKxV+DJuMoOIVywf5oOXgJrO8zCsaR8XfDbpUPxb/iEM=";
+export const DATA_PUBLIC_KEY = "MCowBQYDK2VwAyEAGUxgPqe5P4i+OjBkgsjO+Y2T7ulKzQ1JqnfXnv4GmDs=";
 export const dataPublicKey = () => envSetting("DATA_PUBLIC_KEY") ?? DATA_PUBLIC_KEY;
 
 /**
