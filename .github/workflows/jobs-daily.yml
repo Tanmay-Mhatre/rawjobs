@@ -4,8 +4,8 @@
 # Setup: docs/shared-directory.md ("Job feed"). The file keeps its old name so its run history stays.
 #
 # Six crawl jobs (one per group of hiring systems, scripts/catalog/jobs.ts GROUPS) run side by side and
-# each saves its own state; the merge job alone writes, signs and publishes the feed. A group that fails
-# is replaced by its previous saved copy. GitHub's cron often starts hours late, so a Cloudflare cron
+# each saves its own state; the merge job builds the feed, the sign job alone holds the data key, and the
+# publish job alone uploads it. A group that fails is replaced by its previous saved copy. GitHub's cron often starts hours late, so a Cloudflare cron
 # (services/feed-trigger) also starts this workflow; the guard skips a run when the feed is fresh.
 #
 # Test without publishing: gh workflow run jobs-daily.yml --ref <branch> -f publish=false -f force=true
@@ -181,20 +181,22 @@ jobs:
           retention-days: 1
           if-no-files-found: error
 
+  # Builds the feed from the groups. It holds no write token and no signing key: it reads the public
+  # data repo with github.token and hands everything it made to the sign and publish jobs below.
   merge:
     needs: [guard, crawl]
     # Also when a group failed: its previous saved copy stands in for it.
     if: always() && needs.guard.outputs.run == 'true'
-    # Secrets come from the `data-signing` environment (main only). A test run on another branch gets
-    # none and reads with github.token, so it can't publish.
-    environment:
-      name: ${{ github.ref == 'refs/heads/main' && 'data-signing' || '' }}
-      deployment: false
     runs-on: ubuntu-24.04
     timeout-minutes: 60
+    permissions:
+      contents: read
+    outputs:
+      artifact: ${{ steps.handoff.outputs.artifact-id }}
     steps:
-      - id: checkout
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
       - uses: pnpm/action-setup@73e46992e05b19abd31f2f3c20e0e7370d762115 # v6.1.1
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
@@ -205,7 +207,7 @@ jobs:
       - name: Restore the last published feed
         id: state
         env:
-          GH_TOKEN: ${{ secrets.DATA_REPO_TOKEN || github.token }}
+          GH_TOKEN: ${{ github.token }}
         run: bash scripts/catalog/state.sh restore jobs
 
       - name: Take this run's groups
@@ -217,7 +219,7 @@ jobs:
 
       - name: Stand in for a failed group with its previous copy
         env:
-          GH_TOKEN: ${{ secrets.DATA_REPO_TOKEN || github.token }}
+          GH_TOKEN: ${{ github.token }}
         run: |
           # Every group in jobs.ts GROUPS (jobs.test.ts checks the lists match).
           for g in sr payroll enterprise join engage rest; do
@@ -270,20 +272,114 @@ jobs:
           } >> "$GITHUB_STEP_SUMMARY"
           jq '{generated_at, groups, alerts, coverage, v2, v3}' stats.json
 
+      # The feed and its state files (state.sh's "jobs" set), for the sign and publish jobs. Also after a
+      # failed merge, so the state is saved then too, as before; the sign job runs only after a good one.
+      - name: Hand the feed to the sign and publish jobs
+        id: handoff
+        if: always() && steps.state.outcome == 'success'
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: feed
+          path: |
+            scripts/catalog/out/jobs/
+            !scripts/catalog/out/jobs/groups/
+          retention-days: 1
+          if-no-files-found: error
+
+  # Signs the manifests and does nothing else: the `data-signing` environment (main only) holds the
+  # data key alone. A sparse checkout, plain Node and no install, so nothing from node_modules or the
+  # crawl runs while the key is loaded. A manifest that's older than the live one, or odd, isn't signed.
+  sign:
+    needs: [guard, merge]
+    if: always() && needs.guard.outputs.publish == 'true' && needs.merge.result == 'success'
+    environment: data-signing
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    outputs:
+      artifact: ${{ steps.signatures.outputs.artifact-id }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          sparse-checkout: |
+            scripts/catalog/sign.mjs
+            scripts/catalog/check-manifest.mjs
+            scripts/catalog/live-copy.sh
+            packages/core/src/data-signing.ts
+          sparse-checkout-cone-mode: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 24
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          artifact-ids: ${{ needs.merge.outputs.artifact }}
+          path: feed
+
+      - name: Refuse an older or odd feed
+        run: |
+          args=()
+          for m in jobs-manifest.json jobs-v2-manifest.json jobs-v3-manifest.json; do
+            bash scripts/catalog/live-copy.sh jobs "$m" "$RUNNER_TEMP/live-$m"
+            args+=("feed/$m" --live "$RUNNER_TEMP/live-$m")
+          done
+          node scripts/catalog/check-manifest.mjs --dir feed "${args[@]}"
+
       - name: Sign the manifests
-        if: needs.guard.outputs.publish == 'true'
         timeout-minutes: 2
         env:
           RAWJOBS_DATA_SIGNING_KEY: ${{ secrets.RAWJOBS_DATA_SIGNING_KEY }}
         # Apps accept the data only with a valid signature (packages/core/src/data-signing.ts).
         run: |
           export RAWJOBS_DATA_PUBLIC_KEY="$(grep -o 'DATA_PUBLIC_KEY = "[^"]*"' packages/core/src/data-signing.ts | cut -d'"' -f2)"
-          node scripts/catalog/sign.mjs scripts/catalog/out/jobs/jobs-manifest.json scripts/catalog/out/jobs/jobs-v2-manifest.json scripts/catalog/out/jobs/jobs-v3-manifest.json
+          node scripts/catalog/sign.mjs feed/jobs-manifest.json feed/jobs-v2-manifest.json feed/jobs-v3-manifest.json
+
+      - id: signatures
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: feed-signatures
+          path: feed/*.sig
+          retention-days: 1
+          if-no-files-found: error
+
+  # Publishes and saves with the data repo's token (`data-repo` environment, main only) and no install:
+  # only gh, jq and the repo's shell scripts run here. When the sign job didn't sign (a refused
+  # manifest), only the upload is skipped: the state is still saved and the issues kept current.
+  publish:
+    needs: [guard, merge, sign]
+    if: always() && needs.guard.outputs.publish == 'true' && needs.merge.result != 'skipped'
+    environment:
+      name: data-repo
+      deployment: false
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      issues: write
+      actions: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Take the feed
+        id: feed
+        if: needs.merge.outputs.artifact != ''
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          artifact-ids: ${{ needs.merge.outputs.artifact }}
+          path: scripts/catalog/out/jobs
+      - name: Take the signatures
+        if: needs.sign.result == 'success'
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          artifact-ids: ${{ needs.sign.outputs.artifact }}
+          path: scripts/catalog/out/jobs
 
       - name: Publish (files first, manifests last)
-        if: needs.guard.outputs.publish == 'true'
+        if: needs.sign.result == 'success'
         env:
-          GH_TOKEN: ${{ secrets.DATA_REPO_TOKEN || github.token }}
+          GH_TOKEN: ${{ secrets.DATA_REPO_TOKEN }}
         working-directory: scripts/catalog/out/jobs
         run: |
           # Not --latest: the directory download uses releases/latest.
@@ -310,13 +406,13 @@ jobs:
           done
 
       - name: Save the published feed for the next run
-        if: always() && needs.guard.outputs.publish == 'true' && steps.state.outcome == 'success'
+        if: always() && steps.feed.outcome == 'success'
         env:
-          GH_TOKEN: ${{ secrets.DATA_REPO_TOKEN || github.token }}
+          GH_TOKEN: ${{ secrets.DATA_REPO_TOKEN }}
         run: bash scripts/catalog/state.sh save jobs
 
       - name: Open (or add to) an issue per hiring system that needs a look
-        if: needs.guard.outputs.publish == 'true'
+        if: needs.merge.result == 'success'
         env:
           GH_TOKEN: ${{ github.token }}
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
@@ -334,7 +430,7 @@ jobs:
         # A hiring system that recovered (Workday's challenge pages, 31 Oct) left its issue open for good.
         # Healthy: its group finished this run and it raised no alert. The first healthy run labels the
         # issue, the second closes it; an alert in between takes the label off again.
-        if: needs.guard.outputs.publish == 'true'
+        if: needs.merge.result == 'success'
         env:
           GH_TOKEN: ${{ github.token }}
           REPO: ${{ github.repository }}
@@ -363,7 +459,7 @@ jobs:
             done
 
       - name: Close "Job feed run failed" once a run succeeds
-        if: success() && needs.guard.outputs.publish == 'true'
+        if: success() && needs.merge.result == 'success' && needs.sign.result == 'success'
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
@@ -373,7 +469,8 @@ jobs:
           done
 
       - name: Report a failed run
-        if: failure() && needs.guard.outputs.publish == 'true'
+        # A failed merge or sign job, or a failed step here.
+        if: always() && (failure() || needs.merge.result != 'success' || needs.sign.result != 'success')
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
@@ -386,7 +483,7 @@ jobs:
       - name: Check the directory isn't stale
         # The weekly rebuild publishes a dated release (directory-YYYY-MM-DD); contributions publish
         # "-shared" ones in between, which don't count. More than 8 days old means a rebuild went missing.
-        if: always() && steps.checkout.outcome == 'success' && needs.guard.outputs.publish == 'true'
+        if: always()
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
@@ -408,14 +505,14 @@ jobs:
 
       - name: Start the weekly rebuild if it's overdue
         # watchdog.sh starts at most one a day, and none while one is queued or running.
-        if: always() && steps.checkout.outcome == 'success' && needs.guard.outputs.publish == 'true'
+        if: always()
         env:
           GH_TOKEN: ${{ github.token }}
         run: bash scripts/catalog/watchdog.sh rebuild
 
       - name: Keep the schedules alive
         # GitHub turns off scheduled workflows after 60 days without repository activity.
-        if: always() && steps.checkout.outcome == 'success' && needs.guard.outputs.publish == 'true'
+        if: always()
         env:
           GH_TOKEN: ${{ github.token }}
         run: bash scripts/catalog/watchdog.sh keepalive

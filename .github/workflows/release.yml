@@ -40,7 +40,8 @@ jobs:
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: 24
-          cache: pnpm
+          # No `cache: pnpm`, on purpose: a poisoned pnpm store cache (any workflow on main can write one)
+          # would flow into the release build, which the release key then signs.
       - run: pnpm install --frozen-lockfile
       - name: The tag is a version
         run: |
