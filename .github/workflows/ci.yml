@@ -76,8 +76,27 @@ jobs:
     timeout-minutes: 10
     outputs:
       public-key: ${{ steps.key.outputs.public-key }}
+      skip-macos: ${{ steps.macos.outputs.skip }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          # The pull request's merge commit and its first parent (main), to list the changed files.
+          fetch-depth: 2
+      # GitHub has too few macOS runners: a macOS job that waits about 15 minutes for one is cancelled
+      # ("not acquired by Runner"), and every pull request asked for one. So a pull request runs the
+      # macOS install test only when it changes files the install, update or desktop app depend on;
+      # Linux and Windows still run it every time, and a release always runs all three.
+      - name: Does this pull request need the macOS install test?
+        if: github.event_name == 'pull_request'
+        id: macos
+        run: |
+          if ! changed="$(git diff --name-only HEAD^1 HEAD)"; then echo "skip=false" >> "$GITHUB_OUTPUT"; exit 0; fi
+          echo "$changed"
+          if echo "$changed" | grep -qE '^(packaging/|scripts/bundle/|scripts/release/|\.github/workflows/(ci|install-test|release)\.yml$|package\.json$|pnpm-lock\.yaml$|packages/core/src/(release|update|schedule)\.ts$|packages/server/src/(desktop|icon|private-home|serve|shortcuts)\.ts$)'; then
+            echo "skip=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "skip=true" >> "$GITHUB_OUTPUT"; echo "No install, update or desktop files changed: the macOS install test reports passed without running."
+          fi
       - uses: pnpm/action-setup@73e46992e05b19abd31f2f3c20e0e7370d762115 # v6.1.1
         if: github.event_name != 'push'
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
@@ -129,3 +148,4 @@ jobs:
       update-test: true
       # Pushes to main report the install checks as passed without running them (see release-files).
       skip: ${{ github.event_name == 'push' }}
+      skip-macos: ${{ needs.release-files.outputs.skip-macos == 'true' }}

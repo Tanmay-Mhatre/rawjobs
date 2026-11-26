@@ -9,12 +9,19 @@
 #   state.sh restore [catalog|jobs|jobs-<group>]   download and unpack; fails if it exists but can't be
 #                                     downloaded. Sets the step output restored=true|false.
 #   state.sh save [catalog|jobs|jobs-<group>]      pack and upload; every run of a set saves the same files
+#   state.sh pack [SET]               pack only, into $RUNNER_TEMP/<SET>-state.tar.gz (prints its path);
+#   state.sh upload [SET] [TARBALL]   upload only. The directory workflows pack in the job that runs
+#                                     the catalog code and upload from the publish job, the one that
+#                                     holds the data repo's write token.
 #
 # Needs GH_TOKEN and DATA_REPO. Run from the repo root.
 set -euo pipefail
 
 output() { if [ -n "${GITHUB_OUTPUT:-}" ]; then echo "$1" >> "$GITHUB_OUTPUT"; fi; }
 
+# upload's TARBALL argument, made absolute before the cd below.
+SRC="${3:-}"
+if [ -n "$SRC" ] && [ "${SRC#/}" = "$SRC" ]; then SRC="$PWD/$SRC"; fi
 cd scripts/catalog
 . ./release-io.sh
 SET="${2:-catalog}"
@@ -74,6 +81,15 @@ case "$SET" in
     ;;
 esac
 
+upload() {
+  gh release view state -R "$DATA_REPO" > /dev/null 2>&1 ||
+    gh release create state -R "$DATA_REPO" --prerelease --title "Catalog working state" --notes "Internal: lets the catalog runs skip boards checked recently."
+  # Upload beside the old copy, then swap (release-io.sh): with --clobber a 502 between its delete and
+  # its upload left no state at all (4 Nov), and the next run started from scratch.
+  swap_upload state "$TARBALL" || { echo "Couldn't save the state." >&2; exit 1; }
+  echo "Saved $ASSET."
+}
+
 case "${1:-}" in
   restore)
     # Only a missing release or asset means "no state"; any other error stops the run.
@@ -92,22 +108,25 @@ case "${1:-}" in
     echo "Restored the saved state."
     output restored=true
     ;;
-  save)
+  save | pack)
     [ -d out ] || { echo "Nothing to save."; exit 0; }
     if [ "$SET" = catalog ]; then (cd ../.. && pnpm exec tsx scripts/catalog/compact.ts); fi
     present=()
     for f in "${FILES[@]}"; do if [ -f "$f" ]; then present+=("$f"); fi; done
     [ ${#present[@]} -gt 0 ] || { echo "Nothing to save."; exit 0; }
     tar czf "$TARBALL" "${present[@]}"
-    gh release view state -R "$DATA_REPO" > /dev/null 2>&1 ||
-      gh release create state -R "$DATA_REPO" --prerelease --title "Catalog working state" --notes "Internal: lets the catalog runs skip boards checked recently."
-    # Upload beside the old copy, then swap (release-io.sh): with --clobber a 502 between its delete and
-    # its upload left no state at all (4 Nov), and the next run started from scratch.
-    swap_upload state "$TARBALL" || { echo "Couldn't save the state." >&2; exit 1; }
-    echo "Saved: ${present[*]}"
+    echo "Packed: ${present[*]}"
+    if [ "$1" = pack ]; then output "tarball=$TARBALL"; exit 0; fi
+    upload
+    ;;
+  upload)
+    src="${SRC:-$TARBALL}"
+    [ -f "$src" ] || { echo "Nothing to save."; exit 0; }
+    [ "$src" = "$TARBALL" ] || cp "$src" "$TARBALL"
+    upload
     ;;
   *)
-    echo "usage: state.sh restore|save" >&2
+    echo "usage: state.sh restore|save|pack|upload" >&2
     exit 2
     ;;
 esac

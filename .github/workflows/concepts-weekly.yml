@@ -62,17 +62,23 @@ jobs:
             echo "run=true" >> "$GITHUB_OUTPUT"
           fi
 
+  # Builds the word list. No secrets: the signing key and the data repo's token are in the sign and
+  # publish jobs below, which run nothing from node_modules.
   build:
     needs: covered
     if: needs.covered.outputs.run == 'true'
-    # Secrets live in the `data-signing` environment, which only main may use.
-    environment:
-      name: data-signing
-      deployment: false
     runs-on: ubuntu-24.04
     timeout-minutes: 60
+    permissions:
+      contents: read
+      issues: write
+    outputs:
+      publish: ${{ steps.build.outputs.publish }}
+      artifact: ${{ steps.handoff.outputs.artifact-id }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
       - uses: pnpm/action-setup@73e46992e05b19abd31f2f3c20e0e7370d762115 # v6.1.1
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
@@ -81,30 +87,123 @@ jobs:
       - run: pnpm install --frozen-lockfile
 
       - name: Build and check the word list
-        # Exit 2: the new words made the eval worse, so there's nothing to publish this week.
+        # Exit 2: the new words made the eval worse, so there's nothing to publish this week. Runs from
+        # another branch only build and check (the sign and publish environments take main only).
         id: build
         run: |
           set +e
           pnpm exec tsx scripts/catalog/concepts.ts --out scripts/catalog/out/concepts
           code=$?
           if [ "$code" = 2 ]; then echo "publish=false" >> "$GITHUB_OUTPUT"; exit 0; fi
-          echo "publish=true" >> "$GITHUB_OUTPUT"
+          if [ "$GITHUB_REF" = refs/heads/main ]; then echo "publish=true" >> "$GITHUB_OUTPUT"; else echo "publish=false" >> "$GITHUB_OUTPUT"; echo "::notice::Not on main: built and checked, nothing published."; fi
           exit $code
 
-      - name: Sign it
+      - name: Hand the word list to the sign and publish jobs
+        id: handoff
         if: steps.build.outputs.publish == 'true'
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: concepts
+          path: scripts/catalog/out/concepts/concepts.json
+          retention-days: 1
+          if-no-files-found: error
+
+      - name: Report a failed run
+        if: failure()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh label create concepts-failed --color B60205 --description "The weekly word list failed" --force > /dev/null
+          gh issue list --label concepts-failed --state open --json number -q '.[0].number' | grep -q . ||
+            gh issue create --label concepts-failed --title "Weekly word list failed" \
+              --body "The weekly concepts workflow failed: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}. Apps keep last week's list until it runs again."
+
+  # Signs the list and does nothing else: the `data-signing` environment (main only) holds the data
+  # key alone. A sparse checkout, plain Node and no install, so nothing from node_modules runs while
+  # the key is loaded. A list older than the live one, or odd, isn't signed.
+  sign:
+    needs: build
+    if: needs.build.outputs.publish == 'true'
+    environment: data-signing
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    outputs:
+      artifact: ${{ steps.signature.outputs.artifact-id }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          sparse-checkout: |
+            scripts/catalog/sign.mjs
+            scripts/catalog/check-manifest.mjs
+            scripts/catalog/live-copy.sh
+            packages/core/src/data-signing.ts
+          sparse-checkout-cone-mode: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 24
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          artifact-ids: ${{ needs.build.outputs.artifact }}
+          path: concepts
+
+      - name: Refuse an older or odd list
+        run: |
+          bash scripts/catalog/live-copy.sh concepts concepts.json "$RUNNER_TEMP/live-concepts.json"
+          node scripts/catalog/check-manifest.mjs concepts/concepts.json --live "$RUNNER_TEMP/live-concepts.json"
+
+      - name: Sign it
         timeout-minutes: 2
         env:
           RAWJOBS_DATA_SIGNING_KEY: ${{ secrets.RAWJOBS_DATA_SIGNING_KEY }}
         run: |
           export RAWJOBS_DATA_PUBLIC_KEY="$(grep -o 'DATA_PUBLIC_KEY = "[^"]*"' packages/core/src/data-signing.ts | cut -d'"' -f2)"
-          node scripts/catalog/sign.mjs scripts/catalog/out/concepts/concepts.json
+          node scripts/catalog/sign.mjs concepts/concepts.json
+
+      - id: signature
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: concepts-signature
+          path: concepts/concepts.json.sig
+          retention-days: 1
+          if-no-files-found: error
+
+  # Uploads with the data repo's token (`data-repo` environment, main only) and no install.
+  publish:
+    needs: [build, sign]
+    if: always() && needs.build.result == 'success' && needs.build.outputs.publish == 'true'
+    environment:
+      name: data-repo
+      deployment: false
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      issues: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          sparse-checkout: scripts/catalog/release-io.sh
+          sparse-checkout-cone-mode: false
+      - if: needs.sign.result == 'success'
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          artifact-ids: ${{ needs.build.outputs.artifact }}
+          path: out
+      - if: needs.sign.result == 'success'
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          artifact-ids: ${{ needs.sign.outputs.artifact }}
+          path: out
 
       - name: Publish
-        if: steps.build.outputs.publish == 'true'
+        if: needs.sign.result == 'success'
         env:
           GH_TOKEN: ${{ secrets.DATA_REPO_TOKEN }}
-        working-directory: scripts/catalog/out/concepts
+        working-directory: out
         run: |
           # Not --latest: the directory download uses releases/latest.
           gh release view concepts -R "$DATA_REPO" > /dev/null 2>&1 ||
@@ -114,7 +213,8 @@ jobs:
           swap_upload concepts concepts.json concepts.json.sig
 
       - name: Report a failed run
-        if: failure()
+        # The sign job failed (a refused list), or the upload did.
+        if: always() && (failure() || needs.sign.result != 'success')
         env:
           GH_TOKEN: ${{ github.token }}
         run: |

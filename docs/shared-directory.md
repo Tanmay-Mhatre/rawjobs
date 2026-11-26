@@ -37,7 +37,7 @@ user is ever uploaded.
 | Contributions workflow | `.github/workflows/directory-contributions.yml` | Every 3 hours: read the job boards for links to companies' own boards (`feed-boards.ts`, see [Coverage](#coverage)), accept, publish incrementally, commit `contributions.json`, acknowledge. Then review move reports (below). |
 | Move review | `scripts/catalog/moves.ts`, `moves-approve.ts`, `lib/moves.ts`, `.github/workflows/directory-move-approval.yml` | Moved careers pages users report: checked and recorded every 3 hours by the contributions workflow, approved by a maintainer on a GitHub issue, or accepted automatically with company-owned evidence when `MOVES_AUTO_ACCEPT` is set. See [Moved careers pages](#moved-careers-pages). |
 | Weekly rebuild | `.github/workflows/directory-rebuild.yml` | Full rebuild and a dated release. `resolve` (company-first resolving) and `check-known` (the monthly check of known boards, then the cross-probe) run side by side and hand their files to `collect`, which merges, checks the boards this week found and saves the working state; `publish` builds, gates and releases. `collect` and `publish` run even if an earlier job failed or ran out of time. The working state is saved as the `state` release, so the next run skips recently checked boards. Each collector runs under its own time cap (`scripts/catalog/capped.sh`) and may stop early without stopping the rebuild, so build and publish always get their turn. A run that doesn't publish opens a "Directory rebuild did not publish" issue. GitHub's schedules are best effort, so Monday has backup times (03:07, 05:37, 09:41, and Tuesday 03:13); each runs only if no rebuild has published in the last 5 days. The contributions, URL-index and job-feed workflows also start it when it's overdue (`scripts/catalog/watchdog.sh`: nothing for 8 days, or none yet this week by Monday 12:00 UTC), at most once a day and not while a "did not publish" issue is open; they also keep the scheduled workflows from being switched off after 60 quiet days. The directory runs share one concurrency group with `queue: max`, so a waiting run is never cancelled by a newer one. A published rebuild starts the site deploy. To test the workflow without publishing: `gh workflow run directory-rebuild.yml -f smoke=true` (about 25 minutes). |
-| Releases | `rawjobs-directory` releases | Every publish is a new dated release, so earlier ones stay: `directory-YYYY-MM-DD` from the weekly rebuild, `directory-YYYY-MM-DD-HHMM-shared` when users' companies are added in between. Apps read the one marked latest. **Roll back:** `gh release edit <tag> -R Tanmay-Mhatre/rawjobs-directory --latest`. |
+| Releases | `rawjobs-directory` releases | Every publish is a new dated release, so earlier ones stay: `directory-YYYY-MM-DD` from the weekly rebuild, `directory-YYYY-MM-DD-HHMM-shared` when users' companies are added in between. Apps read the one marked latest. **Roll back:** see [Roll back the directory](#roll-back-the-directory). |
 | Daily URL indexes | `.github/workflows/directory-commoncrawl.yml` | Our own URL indexes, which the weekly rebuild no longer reads: 50 minutes a day of the Common Crawl URL index (the newest crawls, about a year), then 25 minutes of the Wayback Machine's on Tuesday, Thursday and Saturday (never Monday), one request every 4.5 seconds. Each resumes per query and stops when its index keeps failing. Data · health opens its issue when Wayback is blocked or makes no progress in two runs. The boards it finds are merged and checked by the next contributions run or rebuild. |
 | Release gate | `scripts/catalog/guard.ts`, `gate.sh` | Runs before every upload, in the rebuild and the contributions workflow. Refuses a directory under 90% of the live release's companies or 85% of its indexed ones, under a floor of companies and indexed companies, with broken rows, or with broken or too many new moves (the thresholds are the constants at the top of `guard.ts`). A deliberate shrink: `gh workflow run directory-rebuild.yml -f allow_shrink=true`. |
 | Finding more companies | `scripts/catalog/` | See [Coverage](#coverage) below. |
@@ -486,19 +486,39 @@ the contributions workflow (`17 */3 * * *`) got about 110 of its about 238 slots
    (another long random string, kept only in the Worker; it keys the reporter hashes on move reports, and
    without it `/v1/moves` answers 503), `npx wrangler deploy`. `DAILY_CAP`, `PER_KEY_DAILY` (boards a day per network) and `MOVES_DAILY_CAP` are in `wrangler.toml`.
 5. **Secrets in the code repo**, in GitHub environments that only `main` may use (Settings →
-   Environments; deployment branches: `main` only). Make `data-repo` and `data-signing`, then
+   Environments; deployment branches: `main` only). Make `data-repo`, `data-signing` and
+   `data-rollback` (this one also with the owner as required reviewer), then
    `gh secret set NAME --env ENVIRONMENT` (details: [self-hosting.md](self-hosting.md#tokens)):
-   - `INBOX_URL` (both environments): the Worker URL from step 4
-   - `INBOX_TOKEN` (both environments): the same string as step 4
-   - `DATA_REPO_TOKEN` (both environments): a fine-grained token with *Contents: read and write* on the directory repo only, expiring in 90 days
+   - `INBOX_URL` (`data-repo`): the Worker URL from step 4
+   - `INBOX_TOKEN` (`data-repo`): the same string as step 4
+   - `DATA_REPO_TOKEN` (`data-repo`): a fine-grained token with *Contents: read and write* on the directory repo only, expiring in 90 days
      (rotation steps: [self-hosting.md](self-hosting.md#tokens))
-   - `RAWJOBS_DATA_SIGNING_KEY` (`data-signing` only): the private data signing key (PEM). Apps accept `manifest.json`,
+   - `RAWJOBS_DATA_SIGNING_KEY` (`data-signing`, and a copy in `data-rollback`; nothing else in
+     either): the private data signing key (PEM). Apps accept `manifest.json`,
      `jobs-manifest.json` and `jobs-v2-manifest.json` only with a valid `.sig` made with it
      (`packages/core/src/data-signing.ts`; making the key: [self-hosting.md](self-hosting.md#run-your-own-directory))
      The publishing workflows sign what they publish. To sign what's already out there (the first
      time, after a failed signing step, or after changing the key), run **Data · sign what's
      published** from the Actions tab: a minute, no rebuild.
 6. **Point apps at the inbox**: set `DEFAULT_CONTRIBUTE_URL` in `packages/core/src/directory.ts` to the Worker URL.
+
+## Roll back the directory
+
+Every publish is a new dated release, so an earlier directory is always there to go back to. But
+apps refuse a directory older than the one they have (they compare `published_at`, else
+`generated_at`), and the signing jobs refuse to sign a manifest older than the live one
+(`scripts/catalog/check-manifest.mjs`). So making an old release the latest again
+(`gh release edit <tag> --latest`) no longer rolls installs back. To roll back on purpose:
+
+1. Find the release to go back to: `gh release list -R Tanmay-Mhatre/rawjobs-directory`.
+2. Actions → **Data · sign what's published** → Run workflow, with *tag* set to that release and
+   *restamp* on (or `gh workflow run sign-data.yml -f tag=<tag> -f restamp=true`).
+3. Approve the `restamp` job when GitHub asks: it runs in the `data-rollback` environment.
+
+The job adds a signed `published_at` (now) and `rolled_back_from` (the release it replaces) to that
+release's `manifest.json`, keeps its `generated_at`, re-signs it and makes the release the latest.
+The files themselves don't change. The next rebuild or contributions run publishes a newer directory
+again as usual, so pause those workflows first if the rollback must stay.
 
 ## Cost
 
