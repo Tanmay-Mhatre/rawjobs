@@ -104,9 +104,7 @@ async function searchDirectoryCmd(dataDir: string, serve: boolean): Promise<numb
     console.log(JSON.stringify(await answer(text ? JSON.parse(text) : {})));
     return 0;
   }
-  const send = (o: object) =>
-    process.stdout.write(`${JSON.stringify(o)}
-`);
+  const send = (o: object) => process.stdout.write(`${JSON.stringify(o)}\n`);
   const lines = createInterface({ input: process.stdin, crlfDelay: Number.POSITIVE_INFINITY });
   const working = new Set<Promise<unknown>>();
   for await (const line of lines) {

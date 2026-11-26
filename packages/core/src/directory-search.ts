@@ -194,6 +194,8 @@ export type BrowseRequest = {
   watched: string[];
   /** Fit score per company key, from the suggestions (orders results, never shown). */
   fit: Record<string, number>;
+  /** Leave out companies with a careers page in `watched` (My companies' "N more in the directory"). */
+  hideWatched: boolean;
 };
 
 export type BrowseGroup = { lead: DirCompany; others: DirCompany[]; rank: number };
@@ -234,6 +236,7 @@ export function cleanBrowseRequest(raw: unknown): BrowseRequest {
     pageSize: int(o.pageSize, 1, 100, 25),
     watched,
     fit,
+    hideWatched: o.hideWatched === true,
   };
 }
 

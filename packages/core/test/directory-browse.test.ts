@@ -65,6 +65,9 @@ describe("directoryBrowser", () => {
     // A dormant company is browsed only when it's yours.
     const mine = await b.search(ask({ watched: ["lever:dormantco"] }));
     expect(!mine.missing && mine.rows.some((g) => g.lead.name === "Dormant Co")).toBe(true);
+    // "N more in the directory": yours left out.
+    const more = await b.search(ask({ q: "revolut", watched: ["lever:revolut"], hideWatched: true }));
+    expect(!more.missing && more.rows.map((g) => g.lead.name)).toEqual(["Revolution Foods"]);
   });
 
   it("adds companies added by link, and reads the files again when they change", async () => {
@@ -103,6 +106,7 @@ describe("cleanBrowseRequest", () => {
       pageSize: 100,
       watched: ["a"],
       fit: { a: 1 },
+      hideWatched: false,
     });
     expect(cleanBrowseRequest(null).page).toBe(1);
   });

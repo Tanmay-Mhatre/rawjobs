@@ -112,7 +112,7 @@ function readHead(path: string, bytes: number): string {
  *   GET/POST/DELETE /api/setup/resume  read / save / remove the master resume (profile/resume.md, gitignored)
  *   GET  /api/directory       the shared company directory's local copy (and what's waiting to be shared)
  *   POST /api/directory/update download the latest shared directory and share waiting additions (and careers-link moves)
- *   POST /api/directory/search Browse all: { q, industry, system, page, pageSize, watched, fit } → one page of
+ *   POST /api/directory/search Browse all: { q, industry, system, page, pageSize, watched, fit, hideWatched } → one page of
  *                             results ({ rows, total, exact, page, pageSize, searchReady }, or { missing: true })
  *   POST /api/directory/names  { keys }: { names: { key: name } } for directory keys (the Hidden list)
  *   POST /api/directory/warm   read the directory ahead of Browse all ({ present })

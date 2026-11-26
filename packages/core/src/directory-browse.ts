@@ -96,10 +96,12 @@ export function directoryBrowser(dataDir: string) {
         if (!d) return { missing: true };
         if (!d.index) await prepareSearch();
       }
-      const key = JSON.stringify([r.q.trim().toLowerCase(), r.industry, r.system, r.watched, r.fit]);
+      const key = JSON.stringify([r.q.trim().toLowerCase(), r.industry, r.system, r.watched, r.fit, r.hideWatched]);
       let list = results.get(key);
       if (!list) {
-        list = searchDirectory(d.all, { q: r.q, watched: new Set(r.watched), fit: new Map(Object.entries(r.fit)), system: r.system, industry: r.industry || undefined, index: d.index });
+        const watched = new Set(r.watched);
+        list = searchDirectory(d.all, { q: r.q, watched, fit: new Map(Object.entries(r.fit)), system: r.system, industry: r.industry || undefined, index: d.index });
+        if (r.hideWatched) list = list.filter((g) => !watched.has(g.lead.key) && !g.others.some((c) => watched.has(c.key)));
         results.set(key, list);
         for (const k of [...results.keys()].slice(0, -4)) results.delete(k);
       }
