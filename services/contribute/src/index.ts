@@ -203,8 +203,18 @@ export function limitKey(ip: string): string {
   return `${groups.slice(0, 4).join(":")}::/64`;
 }
 
-/** A slug or host that names an IP address or this machine instead of a company's board. */
-const LOCAL_HOST = /^(\d{1,3}(\.\d{1,3}){3}|(.+\.)?localhost\.?)$/i;
+/**
+ * A slug or host that names an IP address or this machine instead of a company's board: localhost,
+ * a dotted name whose last label is a number, which URL parsers read as an IPv4 address (127.0.0.1,
+ * 127.1, 0177.0.0.1, 127.0.0.1.), or a hex number (0x7f000001). A plain number with no dot stays
+ * allowed (some boards use one as a path); the app refuses private addresses when it connects.
+ */
+export function isLocalHost(value: string): boolean {
+  const v = value.toLowerCase().replace(/\.$/, "");
+  if (v === "localhost" || v.endsWith(".localhost")) return true;
+  if (/^0x[0-9a-f]*$/.test(v)) return true;
+  return v.includes(".") && /^(\d+|0x[0-9a-f]*)$/.test(v.split(".").pop()!);
+}
 
 const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: { "content-type": "application/json" } });
 
@@ -213,9 +223,9 @@ function clean(b: unknown): Board | null {
   if (!b || typeof b !== "object") return null;
   const o = b as Record<string, unknown>;
   if (typeof o.ats !== "string" || !SCANNABLE.has(o.ats)) return null;
-  if (typeof o.slug !== "string" || !SLUG.test(o.slug) || LOCAL_HOST.test(o.slug)) return null;
+  if (typeof o.slug !== "string" || !SLUG.test(o.slug) || isLocalHost(o.slug)) return null;
   const shard = SHARD[o.ats];
-  if (o.shard !== undefined && !(shard && typeof o.shard === "string" && shard.test(o.shard) && !LOCAL_HOST.test(o.shard))) return null;
+  if (o.shard !== undefined && !(shard && typeof o.shard === "string" && shard.test(o.shard) && !isLocalHost(o.shard))) return null;
   if ((o.ats === "workday" || o.ats === "oracle" || o.ats === "ukg") && o.shard === undefined) return null;
   if (o.site !== undefined && !(typeof o.site === "string" && SLUG.test(o.site))) return null;
   if (NEEDS_SITE.has(o.ats) && o.site === undefined) return null;

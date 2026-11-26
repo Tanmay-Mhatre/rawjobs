@@ -238,6 +238,22 @@ describe("the app", () => {
     expect((await syncJobFeed(app, { fetchImpl: rel.fetchImpl })).message).toMatch(/1 change file/);
   });
 
+  it("takes a feed that started counting again when it is newer (its builder lost the last copy)", async () => {
+    process.env.JOBHUNTER_JOBS_URL = "https://feed.example/jobs";
+    const rel = feedRelease();
+    const app = tmp();
+    await rel.publish(RUN1, run(1));
+    await rel.publish(RUN2, run(2));
+    await syncJobFeed(app, { fetchImpl: rel.fetchImpl });
+    // A new builder with no previous copy: number 1 again, but a later date.
+    const fresh = feedRelease();
+    await fresh.publish(RUN3, run(3));
+    expect((await syncJobFeed(app, { fetchImpl: fresh.fetchImpl })).message).toMatch(/downloaded/);
+    expect(jobFeedStatus(app)).toMatchObject({ generated_at: run(3) });
+    await fresh.publish(RUN2, run(4));
+    expect((await syncJobFeed(app, { fetchImpl: fresh.fetchImpl })).message).toMatch(/1 change file/);
+  });
+
   it("falls back to the full copy when a change file is missing or wrong", async () => {
     process.env.JOBHUNTER_JOBS_URL = "https://feed.example/jobs";
     const rel = feedRelease();
