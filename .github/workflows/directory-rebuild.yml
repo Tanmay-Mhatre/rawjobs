@@ -4,8 +4,9 @@
 #
 # Jobs, each with its own time limit: "resolve" (company-first resolving) and "check-known" (the
 # monthly check of known boards, then the cross-probe) run at the same time and hand their files to
-# "collect", which merges, checks the boards this week found and saves the working state; "publish"
-# restores it, builds, indexes, gates and releases. Collect and publish run even when an earlier job
+# "collect", which merges, checks the boards this week found and saves the working state; "build"
+# restores it, builds, indexes and gates; "sign" (the data key, nothing else) signs the manifest; and
+# "publish" (the data repo's token, no install) releases it and saves the state. Collect and publish run even when an earlier job
 # failed or ran out of time (its progress is kept), so a slow source can never stop a release.
 # Collectors may also stop early on their own without failing collect: each saves what it found and
 # the next run continues. The steps on the publish path (sources, merge, build, package, gate,
@@ -21,7 +22,7 @@
 #   check-known  check 1              60    70     (job limit 110)
 #                crossprobe           20    25
 #   collect      check 2              25    30     (job limit 120)
-#   publish      index                60    70     (job limit 120; ~35 besides index: setup, sources,
+#   build        index                60    70     (job limit 120; ~35 besides index: setup, sources,
 #                                                   visa registers ≤10, merge, build, package, gate, release)
 #
 # Our own URL indexes (Common Crawl, Wayback) are read by the daily URL-index run
@@ -388,18 +389,24 @@ jobs:
           GH_TOKEN: ${{ secrets.DATA_REPO_TOKEN || github.token }}
         run: bash scripts/catalog/state.sh save
 
-  publish:
+  # Restores what collect saved, builds, indexes, packages and gates. It holds no write token and no
+  # signing key: it reads the public data repo with github.token and hands the release and the working
+  # state to the sign and publish jobs below.
+  build:
     needs: [resolve, check-known, collect]
     # Also when collect failed or hit its time limit: its progress was saved, and the release gate
     # decides whether the result is good enough to ship. Cancelling the run stops it.
     if: ${{ !cancelled() && needs.collect.result != 'skipped' }}
-    # Secrets come from the `data-signing` environment (main only). A test run on another branch gets
-    # none and reads with github.token, so it can't publish.
-    environment:
-      name: ${{ github.ref == 'refs/heads/main' && 'data-signing' || '' }}
-      deployment: false
     runs-on: ubuntu-24.04
     timeout-minutes: 120
+    permissions:
+      contents: read
+      # The summary reads the run's own step times.
+      actions: read
+    outputs:
+      artifact: ${{ steps.handoff.outputs.artifact-id }}
+      gate: ${{ steps.gate.outcome }}
+      outcomes: ${{ toJSON(steps) }}
     env:
       CONTRIBUTIONS_FILE: ${{ github.workspace }}/directory-repo/contributions.json
       DENYLIST_FILE: ${{ github.workspace }}/directory-repo/denylist.json
@@ -407,6 +414,8 @@ jobs:
       MOVES_FILE: ${{ github.workspace }}/directory-repo/moves.json
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
       - uses: pnpm/action-setup@73e46992e05b19abd31f2f3c20e0e7370d762115 # v6.1.1
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
@@ -418,13 +427,13 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           repository: ${{ env.DATA_REPO }}
-          token: ${{ secrets.DATA_REPO_TOKEN || github.token }}
           path: directory-repo
+          persist-credentials: false
 
       - name: Restore the working state collect saved
         id: state
         env:
-          GH_TOKEN: ${{ secrets.DATA_REPO_TOKEN || github.token }}
+          GH_TOKEN: ${{ github.token }}
         run: bash scripts/catalog/state.sh restore
 
       # merged.json isn't part of the saved state: merge again from the lists and saved results.
@@ -456,7 +465,7 @@ jobs:
         timeout-minutes: 5
         continue-on-error: true
         env:
-          GH_TOKEN: ${{ secrets.DATA_REPO_TOKEN || github.token }}
+          GH_TOKEN: ${{ github.token }}
         run: bash scripts/catalog/feed.sh
 
       # Rows from the feed for the boards it read in the last 7 days; the rest are read live. Only with
@@ -476,85 +485,40 @@ jobs:
           pnpm exec tsx scripts/catalog/coverage.ts --data dist-data
           pnpm exec tsx scripts/catalog/release.ts --data dist-data --out dist
 
+      # A refused release doesn't fail this job: the publish job still saves the state and reports it.
       - name: Release gate
+        id: gate
+        continue-on-error: true
         timeout-minutes: 5
         env:
-          GH_TOKEN: ${{ secrets.DATA_REPO_TOKEN || github.token }}
+          GH_TOKEN: ${{ github.token }}
           ALLOW_SHRINK: ${{ inputs.allow_shrink && '1' || '' }}
         run: bash scripts/catalog/gate.sh
 
-      - name: Sign the manifest
-        if: ${{ !inputs.smoke }}
-        timeout-minutes: 2
-        env:
-          RAWJOBS_DATA_SIGNING_KEY: ${{ secrets.RAWJOBS_DATA_SIGNING_KEY }}
-        # Apps accept the data only with a valid signature (packages/core/src/data-signing.ts).
-        run: |
-          export RAWJOBS_DATA_PUBLIC_KEY="$(grep -o 'DATA_PUBLIC_KEY = "[^"]*"' packages/core/src/data-signing.ts | cut -d'"' -f2)"
-          node scripts/catalog/sign.mjs dist/manifest.json
-
-      - name: Publish the release
-        id: publish
-        if: ${{ !inputs.smoke }}
-        timeout-minutes: 5
-        env:
-          GH_TOKEN: ${{ secrets.DATA_REPO_TOKEN || github.token }}
-        run: |
-          day=$(date -u +%Y-%m-%d)
-          tag="directory-$day"
-          # A second run on the same day gets its own release instead of failing on the tag.
-          if gh release view "$tag" -R "$DATA_REPO" > /dev/null 2>&1; then tag="$tag-$(date -u +%H%M)"; fi
-          version=$(jq -r .version dist/manifest.json)
-          companies=$(jq -r .companies dist/manifest.json)
-          # gh creates the release as a draft, uploads every file, then publishes it, so no install
-          # ever sees a latest release with files missing.
-          gh release create "$tag" dist/* -R "$DATA_REPO" --latest --title "Directory $day" \
-            --notes "Version $version · $companies companies. Download manifest.json first; files are checked against its SHA-256."
-
-      - name: Save the working state
+      - name: Pack the working state
         # Also after a failure or timeout, so progress isn't lost; but never when the restore failed,
-        # or a run that started from nothing would overwrite good state.
+        # or a run that started from nothing would overwrite good state. The publish job uploads it.
         if: always() && steps.state.outcome == 'success'
-        env:
-          GH_TOKEN: ${{ secrets.DATA_REPO_TOKEN || github.token }}
-        run: bash scripts/catalog/state.sh save
+        run: bash scripts/catalog/state.sh pack
 
-      - name: Refresh the site's numbers
-        # The site reads the latest release at build time; its own Monday schedule is only a backup.
-        if: steps.publish.outcome == 'success'
-        continue-on-error: true
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: gh workflow run site.yml -R "${{ github.repository }}" --ref main
-
-      - name: Commit the coverage report
-        if: ${{ !inputs.smoke }}
-        working-directory: directory-repo
+      - name: Gather the hand-over
+        if: always() && steps.state.outcome == 'success'
         run: |
-          cp ../scripts/catalog/out/coverage.md coverage.md
-          cp ../dist/manifest.json manifest.json
-          git config user.name "rawjobs-bot"
-          git config user.email "rawjobs-bot@users.noreply.github.com"
-          git add coverage.md manifest.json
-          git diff --cached --quiet || (git commit -m "Weekly directory $(date -u +%Y-%m-%d)" && git push)
+          mkdir -p handoff
+          if [ -f "$RUNNER_TEMP/catalog-state.tar.gz" ]; then mv "$RUNNER_TEMP/catalog-state.tar.gz" handoff/; fi
+          if [ -f dist/manifest.json ]; then cp -r dist handoff/dist; fi
+          if [ -f scripts/catalog/out/coverage.md ]; then cp scripts/catalog/out/coverage.md handoff/; fi
+          ls -la handoff handoff/dist 2> /dev/null || true
 
-      - name: Report a run that didn't publish
-        # Keyed on the publish step, not on failure()/cancelled(): a timeout, a failed step and a
-        # refused release all land here.
-        if: always() && steps.publish.outcome != 'success' && !inputs.smoke
-        env:
-          GH_TOKEN: ${{ github.token }}
-          OUTCOMES: ${{ toJSON(steps) }}
-          RESOLVE: ${{ needs.resolve.result }}
-          CHECK_KNOWN: ${{ needs.check-known.result }}
-          COLLECT: ${{ needs.collect.result }}
-        run: |
-          title="Directory rebuild did not publish"
-          run_url="${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
-          steps=$(printf -- '- resolve job: %s\n- check-known job: %s\n- collect job: %s\n%s' "$RESOLVE" "$CHECK_KNOWN" "$COLLECT" "$(echo "$OUTCOMES" | jq -r 'to_entries | map("- \(.key): \(.value.outcome)") | join("\n")')")
-          body=$(printf 'The weekly rebuild ended without a new release. Installs keep the current one.\n\nRun: %s\n\nSteps:\n%s\n\nIf the release gate refused a deliberate shrink, re-run with: gh workflow run directory-rebuild.yml -f allow_shrink=true' "$run_url" "$steps")
-          open=$(gh issue list -R "${{ github.repository }}" --state open --search "\"$title\" in:title" --json number -q '.[0].number')
-          if [ -n "$open" ]; then gh issue comment "$open" -R "${{ github.repository }}" --body "$body"; else gh issue create -R "${{ github.repository }}" --title "$title" --body "$body"; fi
+      - name: Hand the release and the state to the sign and publish jobs
+        id: handoff
+        if: always() && steps.state.outcome == 'success'
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: directory-release
+          path: handoff/
+          retention-days: 1
+          if-no-files-found: error
 
       - name: Summary
         if: always()
@@ -568,7 +532,7 @@ jobs:
             echo
             echo "| Step | Result | Minutes |"
             echo "|---|---|---|"
-            gh run view "${{ github.run_id }}" -R "${{ github.repository }}" --json jobs -q '.jobs[] | select(.name == "resolve" or .name == "check-known" or .name == "collect" or .name == "publish") | .name as $job | .steps[] | select(.conclusion != null and .conclusion != "" and (.completedAt | startswith("0001") | not)) | "| \($job): \(.name) | \(.conclusion) | \((((.completedAt | fromdate) - (.startedAt | fromdate)) / 60) | floor) |"' || echo "| (step times unavailable) | | |"
+            gh run view "${{ github.run_id }}" -R "${{ github.repository }}" --json jobs -q '.jobs[] | select(.name == "resolve" or .name == "check-known" or .name == "collect" or .name == "build") | .name as $job | .steps[] | select(.conclusion != null and .conclusion != "" and (.completedAt | startswith("0001") | not)) | "| \($job): \(.name) | \(.conclusion) | \((((.completedAt | fromdate) - (.startedAt | fromdate)) / 60) | floor) |"' || echo "| (step times unavailable) | | |"
             echo
             live="${RUNNER_TEMP}/live-manifest.json"
             if [ -s "$live" ]; then echo "Live release: $(jq -r '"\(.companies) companies, \(.indexed) indexed"' "$live")."; fi
@@ -578,3 +542,163 @@ jobs:
             since=$(gh run view "${{ github.run_id }}" -R "${{ github.repository }}" --json createdAt -q .createdAt) &&
               pnpm exec tsx scripts/catalog/tally.ts --since "$since" || echo "(working state unavailable)"
           } >> "$GITHUB_STEP_SUMMARY"
+
+  # Signs the manifest and does nothing else: the `data-signing` environment (main only) holds the data
+  # key alone. A sparse checkout, plain Node and no install, so nothing from node_modules or the crawl
+  # runs while the key is loaded. A manifest older than the live one, or odd, isn't signed.
+  sign:
+    needs: build
+    if: ${{ !cancelled() && needs.build.result == 'success' && needs.build.outputs.gate == 'success' && !inputs.smoke && github.ref == 'refs/heads/main' }}
+    environment: data-signing
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    outputs:
+      artifact: ${{ steps.signature.outputs.artifact-id }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          sparse-checkout: |
+            scripts/catalog/sign.mjs
+            scripts/catalog/check-manifest.mjs
+            scripts/catalog/live-copy.sh
+            packages/core/src/data-signing.ts
+          sparse-checkout-cone-mode: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 24
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          artifact-ids: ${{ needs.build.outputs.artifact }}
+          path: handoff
+
+      - name: Refuse an older or odd manifest
+        run: |
+          bash scripts/catalog/live-copy.sh latest manifest.json "$RUNNER_TEMP/live-manifest.json"
+          node scripts/catalog/check-manifest.mjs --dir handoff/dist handoff/dist/manifest.json --live "$RUNNER_TEMP/live-manifest.json"
+
+      - name: Sign the manifest
+        timeout-minutes: 2
+        env:
+          RAWJOBS_DATA_SIGNING_KEY: ${{ secrets.RAWJOBS_DATA_SIGNING_KEY }}
+        # Apps accept the data only with a valid signature (packages/core/src/data-signing.ts).
+        run: |
+          export RAWJOBS_DATA_PUBLIC_KEY="$(grep -o 'DATA_PUBLIC_KEY = "[^"]*"' packages/core/src/data-signing.ts | cut -d'"' -f2)"
+          node scripts/catalog/sign.mjs handoff/dist/manifest.json
+
+      - id: signature
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: directory-signature
+          path: handoff/dist/manifest.json.sig
+          retention-days: 1
+          if-no-files-found: error
+
+  # Publishes, saves the state and commits the coverage report with the data repo's token (`data-repo`
+  # environment, main only) and no install: only gh, jq, git and the repo's shell scripts run here.
+  # When the sign job didn't sign (a refused release), only the upload is skipped.
+  publish:
+    needs: [resolve, check-known, collect, build, sign]
+    if: ${{ always() && needs.build.result != 'skipped' && !inputs.smoke && github.ref == 'refs/heads/main' }}
+    environment:
+      name: data-repo
+      deployment: false
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      issues: write
+      # Start the site deploy after publishing.
+      actions: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Take the release and the state
+        id: handoff
+        if: needs.build.outputs.artifact != ''
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          artifact-ids: ${{ needs.build.outputs.artifact }}
+          path: handoff
+      - name: Take the signature
+        if: needs.sign.result == 'success'
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          artifact-ids: ${{ needs.sign.outputs.artifact }}
+          path: handoff/dist
+
+      - name: Publish the release
+        id: publish
+        if: needs.sign.result == 'success'
+        timeout-minutes: 5
+        working-directory: handoff
+        env:
+          GH_TOKEN: ${{ secrets.DATA_REPO_TOKEN }}
+        run: |
+          day=$(date -u +%Y-%m-%d)
+          tag="directory-$day"
+          # A second run on the same day gets its own release instead of failing on the tag.
+          if gh release view "$tag" -R "$DATA_REPO" > /dev/null 2>&1; then tag="$tag-$(date -u +%H%M)"; fi
+          version=$(jq -r .version dist/manifest.json)
+          companies=$(jq -r .companies dist/manifest.json)
+          # gh creates the release as a draft, uploads every file, then publishes it, so no install
+          # ever sees a latest release with files missing.
+          gh release create "$tag" dist/* -R "$DATA_REPO" --latest --title "Directory $day" \
+            --notes "Version $version · $companies companies. Download manifest.json first; files are checked against its SHA-256."
+
+      - name: Save the working state
+        if: always() && steps.handoff.outcome == 'success' && hashFiles('handoff/catalog-state.tar.gz') != ''
+        env:
+          GH_TOKEN: ${{ secrets.DATA_REPO_TOKEN }}
+        run: bash scripts/catalog/state.sh upload catalog handoff/catalog-state.tar.gz
+
+      - name: Refresh the site's numbers
+        # The site reads the latest release at build time; its own Monday schedule is only a backup.
+        if: steps.publish.outcome == 'success'
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh workflow run site.yml -R "${{ github.repository }}" --ref main
+
+      - name: Check out the public directory repo
+        if: steps.publish.outcome == 'success'
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: ${{ env.DATA_REPO }}
+          token: ${{ secrets.DATA_REPO_TOKEN }}
+          path: directory-repo
+
+      - name: Commit the coverage report
+        if: steps.publish.outcome == 'success'
+        working-directory: directory-repo
+        run: |
+          cp ../handoff/coverage.md coverage.md
+          cp ../handoff/dist/manifest.json manifest.json
+          git config user.name "rawjobs-bot"
+          git config user.email "rawjobs-bot@users.noreply.github.com"
+          git add coverage.md manifest.json
+          git diff --cached --quiet || (git commit -m "Weekly directory $(date -u +%Y-%m-%d)" && git push)
+
+      - name: Report a run that didn't publish
+        # Keyed on the publish step, not on failure()/cancelled(): a timeout, a failed step and a
+        # refused release all land here.
+        if: always() && steps.publish.outcome != 'success'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          OUTCOMES: ${{ needs.build.outputs.outcomes || '{}' }}
+          RESOLVE: ${{ needs.resolve.result }}
+          CHECK_KNOWN: ${{ needs.check-known.result }}
+          COLLECT: ${{ needs.collect.result }}
+          BUILD: ${{ needs.build.result }}
+          SIGN: ${{ needs.sign.result }}
+          PUBLISH: ${{ steps.publish.outcome }}
+        run: |
+          title="Directory rebuild did not publish"
+          run_url="${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+          steps=$(printf -- '- resolve job: %s\n- check-known job: %s\n- collect job: %s\n- build job: %s\n%s\n- sign job: %s\n- publish: %s' "$RESOLVE" "$CHECK_KNOWN" "$COLLECT" "$BUILD" "$(echo "$OUTCOMES" | jq -r 'to_entries | map("  - \(.key): \(.value.outcome)") | join("\n")')" "$SIGN" "${PUBLISH:-skipped}")
+          body=$(printf 'The weekly rebuild ended without a new release. Installs keep the current one.\n\nRun: %s\n\nSteps:\n%s\n\nIf the release gate refused a deliberate shrink, re-run with: gh workflow run directory-rebuild.yml -f allow_shrink=true' "$run_url" "$steps")
+          open=$(gh issue list -R "${{ github.repository }}" --state open --search "\"$title\" in:title" --json number -q '.[0].number')
+          if [ -n "$open" ]; then gh issue comment "$open" -R "${{ github.repository }}" --body "$body"; else gh issue create -R "${{ github.repository }}" --title "$title" --body "$body"; fi

@@ -72,15 +72,18 @@ and accept only releases signed with **its** key. To ship your own installs and 
    [One-time setup](shared-directory.md#one-time-setup)). Use your own KV namespace id in
    `wrangler.toml`.
 3. In your fork, set the repository variable `DATA_REPO` to your data repo, make the environments
-   `data-repo` and `data-signing` (Settings → Environments, deployment branches: `main` only), and
-   put `INBOX_URL`, `INBOX_TOKEN` and `DATA_REPO_TOKEN` in both (see [Tokens](#tokens)).
+   `data-repo`, `data-signing` and `data-rollback` (Settings → Environments, deployment branches:
+   `main` only; `data-rollback` also with you as required reviewer), and put `INBOX_URL`,
+   `INBOX_TOKEN` and `DATA_REPO_TOKEN` in `data-repo` (see [Tokens](#tokens)).
 4. Make a data signing key the same way as the release key above (call the file
    `data-signing-key.pem`). It must be a different key: the data workflows run every day on crawled
    data, and a leak there must not be able to sign an app update. Put its public half in
    `DATA_PUBLIC_KEY` in `packages/core/src/data-signing.ts` and the private key in the
-   `RAWJOBS_DATA_SIGNING_KEY` secret of the `data-signing` environment
-   (`gh secret set RAWJOBS_DATA_SIGNING_KEY --env data-signing < data-signing-key.pem`).
-   Apps refuse a directory or job feed whose manifest isn't signed with it.
+   `RAWJOBS_DATA_SIGNING_KEY` secret of the `data-signing` environment, and a copy in
+   `data-rollback`
+   (`gh secret set RAWJOBS_DATA_SIGNING_KEY --env data-signing < data-signing-key.pem`, then the
+   same with `--env data-rollback`). Apps refuse a directory or job feed whose manifest isn't signed
+   with it.
 5. Enable Actions in your fork. GitHub turns them off in new forks until you do.
 
 ### Rules for forks
@@ -106,25 +109,28 @@ The project has one maintainer today. A second maintainer should have:
 
 | Secret | Where it lives | What it can do |
 |---|---|---|
-| `DATA_REPO_TOKEN` | `data-repo` and `data-signing` environments in `rawjobs` | Push to `rawjobs-directory` and publish its releases. |
-| `INBOX_TOKEN` | Cloudflare Worker secret **and** the `data-repo` and `data-signing` environments in `rawjobs` (same value) | Read and acknowledge waiting contributions. |
-| `INBOX_URL` | `data-repo` and `data-signing` environments in `rawjobs` | Not secret, kept with the token for convenience. |
-| `RAWJOBS_DATA_SIGNING_KEY` | `data-signing` environment in `rawjobs` | Sign the directory's and the job feed's manifests (`scripts/catalog/sign.mjs`). Not the release key: it can't sign an app update. |
+| `DATA_REPO_TOKEN` | `data-repo` environment in `rawjobs` | Push to `rawjobs-directory` and publish its releases. |
+| `INBOX_TOKEN` | Cloudflare Worker secret **and** the `data-repo` environment in `rawjobs` (same value) | Read and acknowledge waiting contributions. |
+| `INBOX_URL` | `data-repo` environment in `rawjobs` | Not secret, kept with the token for convenience. |
+| `RAWJOBS_DATA_SIGNING_KEY` | `data-signing` environment in `rawjobs`, and a copy in `data-rollback` | Sign the directory's and the job feed's manifests and the word list (`scripts/catalog/sign.mjs`). Not the release key: it can't sign an app update. The `data-rollback` copy is only for a deliberate rollback ([shared-directory.md](shared-directory.md#roll-back-the-directory)), which waits for the owner's approval. |
 | `WEB_BOT_AUTH_KEY` | `data-repo` environment in `rawjobs` | Sign the feed's requests to job boards ([Web Bot Auth](shared-directory.md#web-bot-auth)). |
 | `CLOUDFLARE_API_TOKEN`, `CLOUDFLARE_ACCOUNT_ID` | `cloudflare` environment in `rawjobs` | Deploy the site. |
 | `RAWJOBS_SIGNING_KEY` | `release` environment in `rawjobs` | Sign app releases. Used only after the owner approves the release's `sign` job. |
 
 The secrets live in GitHub **environments**: `data-repo`, `data-signing` and `cloudflare` accept
-only `main`, and `release` accepts only `v*` tags and waits for an approval. A workflow run on another
+only `main`, `data-rollback` accepts only `main` and waits for the owner's approval, and `release`
+accepts only `v*` tags and waits for an approval. A workflow run on another
 branch gets none of them (test runs read the public data repo with `github.token`), so a branch can't
 publish data or deploy the site. That includes `RAWJOBS_DATA_SIGNING_KEY`, which lives only in
-`data-signing` (step 4 of [Run your own directory](#run-your-own-directory)). Set a secret in an environment
-with `gh secret set NAME --env ENVIRONMENT`. `DATA_REPO_TOKEN`, `INBOX_TOKEN` and `INBOX_URL` sit in
-both data environments with the same value, so rotate them in both.
+`data-signing` (step 4 of [Run your own directory](#run-your-own-directory)) with nothing else: each data
+workflow builds its data in a job with no secrets, signs it in a job that holds only the key (a sparse
+checkout, plain Node, no `pnpm install`) and uploads it from a job in `data-repo` that holds the
+tokens but runs no install. Set a secret in an environment with `gh secret set NAME --env ENVIRONMENT`.
 
 Rotate the two tokens every 90 days, when a maintainer leaves, and right away if one may have leaked.
 The data signing key changes only with an app release (installed apps carry its public half): put the
-new public half in `data-signing.ts`, release the app, then switch the secret once most installs have updated.
+new public half in `data-signing.ts`, release the app, then switch the secret in `data-signing` and
+`data-rollback` once most installs have updated.
 
 ### Rotate `DATA_REPO_TOKEN`
 
@@ -135,8 +141,7 @@ Use a **fine-grained** personal access token, never a classic one.
    - Expiration: 90 days.
    - Repository access: **only** `rawjobs-directory`.
    - Permissions: *Contents: Read and write* (pushes and releases). Nothing else.
-2. In `rawjobs`: `gh secret set DATA_REPO_TOKEN --env data-repo` and
-   `gh secret set DATA_REPO_TOKEN --env data-signing`, pasting the new token each time.
+2. In `rawjobs`: `gh secret set DATA_REPO_TOKEN --env data-repo`, pasting the new token.
 3. Run **Directory · contributions** by hand (Actions → Run workflow) and check it passes. If the
    inbox is empty it stops early, so also check the next **Directory · weekly rebuild**, or run it by hand.
 4. Delete the old token on the same GitHub page.
@@ -151,7 +156,7 @@ This is a random string shared by the Worker and the workflow, not a GitHub toke
 2. Right after a contributions run (they start at 17 minutes past every third hour, UTC), set it
    in both places:
    - `cd services/contribute && npx wrangler secret put INBOX_TOKEN`
-   - `gh secret set INBOX_TOKEN --env data-repo` and `gh secret set INBOX_TOKEN --env data-signing` in `rawjobs`
+   - `gh secret set INBOX_TOKEN --env data-repo` in `rawjobs`
 3. Run **Directory · contributions** by hand and check the "Check the inbox" step passes.
 
 Until both are updated, the workflow fails with 401 and contributions wait in the inbox (up to 30
