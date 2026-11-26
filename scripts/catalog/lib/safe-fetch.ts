@@ -13,7 +13,10 @@
  */
 import { lookup as dnsLookup } from "node:dns/promises";
 import { isIP } from "node:net";
-import { parseRobots, type RobotsRules, robotsAllowsPath } from "@rawjobs/core";
+import { isPrivateAddress, parseRobots, type RobotsRules, robotsAllowsPath } from "@rawjobs/core";
+
+/** One list of non-public addresses for the whole repo (packages/core/src/network-guard.ts). */
+export { isPrivateAddress };
 
 export type Hop = { url: string; status: number; location?: string };
 export type SafeResult =
@@ -34,33 +37,6 @@ export type SafeFetchOptions = {
 
 export const MAX_BYTES = 2_000_000;
 export const MAX_HOPS = 5;
-
-/** Not a public unicast address: private, loopback, link-local, CGNAT, documentation, multicast, reserved. */
-export function isPrivateAddress(ip: string): boolean {
-  const v = isIP(ip);
-  if (v === 4) {
-    const [a, b] = ip.split(".").map(Number) as [number, number];
-    return (
-      a === 0 ||
-      a === 10 ||
-      a === 127 ||
-      (a === 100 && b >= 64 && b <= 127) ||
-      (a === 169 && b === 254) ||
-      (a === 172 && b >= 16 && b <= 31) ||
-      (a === 192 && b === 168) ||
-      (a === 192 && b === 0) ||
-      (a === 198 && (b === 18 || b === 19)) ||
-      a >= 224
-    );
-  }
-  if (v === 6) {
-    const x = ip.toLowerCase();
-    const mapped = /^::ffff:(\d+\.\d+\.\d+\.\d+)$/.exec(x);
-    if (mapped) return isPrivateAddress(mapped[1]!);
-    return x === "::" || x === "::1" || /^f[cd]/.test(x) || /^fe[89ab]/.test(x) || /^ff/.test(x) || x.startsWith("2001:db8") || x.startsWith("64:ff9b");
-  }
-  return true;
-}
 
 const defaultLookup = async (host: string) => (await dnsLookup(host, { all: true, verbatim: true })).map((a) => a.address);
 
