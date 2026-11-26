@@ -6,3 +6,9 @@ packages:
 onlyBuiltDependencies:
   - esbuild
   - workerd
+
+# Don't resolve a version published less than 7 days ago (in minutes), the same week as Dependabot's
+# cooldown. For an urgent fix, see minimumReleaseAgeExclude in CONTRIBUTING.md.
+minimumReleaseAge: 10080
+# Refuse a version whose publish trust went down (for example, no provenance where earlier ones had it).
+trustPolicy: no-downgrade

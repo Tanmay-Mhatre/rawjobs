@@ -484,7 +484,7 @@ the contributions workflow (`17 */3 * * *`) got about 110 of its about 238 slots
    (after `pnpm install` at the repo root) `npx wrangler login`, `npx wrangler kv namespace create INBOX` (put the id in `wrangler.toml`),
    `npx wrangler secret put INBOX_TOKEN` (a long random string), `npx wrangler secret put REPORTER_SECRET`
    (another long random string, kept only in the Worker; it keys the reporter hashes on move reports, and
-   without it `/v1/moves` answers 503), `npx wrangler deploy`. `DAILY_CAP` and `MOVES_DAILY_CAP` are in `wrangler.toml`.
+   without it `/v1/moves` answers 503), `npx wrangler deploy`. `DAILY_CAP`, `PER_KEY_DAILY` (boards a day per network) and `MOVES_DAILY_CAP` are in `wrangler.toml`.
 5. **Secrets in the code repo**, in GitHub environments that only `main` may use (Settings →
    Environments; deployment branches: `main` only). Make `data-repo` and `data-signing`, then
    `gh secret set NAME --env ENVIRONMENT` (details: [self-hosting.md](self-hosting.md#tokens)):
