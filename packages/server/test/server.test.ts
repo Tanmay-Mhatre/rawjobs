@@ -205,9 +205,9 @@ console.log(JSON.stringify({ type: "done", scope: args[args.indexOf("--scope") +
     return { api, port, home, dataDir };
   }
 
-  function call(port: number, method: string, path: string, body?: string, onFirstChunk?: (abort: () => void) => void) {
+  function call(port: number, method: string, path: string, body?: string, onFirstChunk?: (abort: () => void) => void, headers: Record<string, string> = {}) {
     return new Promise<{ status: number; headers: IncomingMessage["headers"]; text: string }>((done, fail) => {
-      const r = request({ host: "127.0.0.1", port, method, path, headers: { origin: `http://127.0.0.1:${port}` } }, (res) => {
+      const r = request({ host: "127.0.0.1", port, method, path, headers: { origin: `http://127.0.0.1:${port}`, ...headers } }, (res) => {
         let text = "";
         let first = true;
         res.setEncoding("utf8");
@@ -238,6 +238,7 @@ console.log(JSON.stringify({ type: "done", scope: args[args.indexOf("--scope") +
       background: false,
       scanOrigin: null,
       dataVersion: null,
+      trackingRev: 0,
       update: null,
       startLink: false,
       platform: process.platform,
@@ -379,7 +380,7 @@ console.log(JSON.stringify({ type: "done", scope: args[args.indexOf("--scope") +
 
   it("saves your tracking in profile/tracking.json and reads it back", async () => {
     const { port, home } = await start();
-    expect(JSON.parse((await call(port, "GET", "/api/tracking")).text)).toEqual({ tracking: null });
+    expect(JSON.parse((await call(port, "GET", "/api/tracking")).text)).toEqual({ tracking: null, rev: 0, epoch: "" });
     const put = await call(port, "PUT", "/api/tracking", JSON.stringify({ state: { j1: { status: "applied" } } }));
     expect(JSON.parse(put.text).ok).toBe(true);
     await call(port, "PUT", "/api/tracking", JSON.stringify({ prefs: { views: [] } }));
@@ -389,6 +390,41 @@ console.log(JSON.stringify({ type: "done", scope: args[args.indexOf("--scope") +
     expect(existsSync(join(home, "profile/tracking.json"))).toBe(true);
     expect((await call(port, "PUT", "/api/tracking", "{ nope")).status).toBe(400);
     expect((await call(port, "PUT", "/api/tracking", JSON.stringify({ state: [] }))).status).toBe(400);
+  });
+
+  it("saves key-level changes with If-Match and answers a conflict with 409 and the current tracking", async () => {
+    const { port } = await start();
+    const patch = (ifMatch: string | null, changes: unknown) => call(port, "PATCH", "/api/tracking", JSON.stringify({ changes }), undefined, ifMatch ? { "if-match": ifMatch } : {});
+    expect((await patch(null, { state: { set: { a: 1 } } })).status).toBe(400);
+    const first = await patch('":0"', { state: { set: { a: 1, b: 1 } } });
+    expect(first.status).toBe(200);
+    const { rev, epoch } = JSON.parse(first.text) as { rev: number; epoch: string };
+    expect(rev).toBe(1);
+    // ETag equals rev (with the epoch); health says the same rev.
+    const got = await call(port, "GET", "/api/tracking");
+    expect(got.headers.etag).toBe(`"${epoch}:1"`);
+    expect(JSON.parse(got.text)).toMatchObject({ rev: 1, epoch, tracking: { state: { a: 1, b: 1 } } });
+    expect(JSON.parse((await call(port, "GET", "/api/health")).text).trackingRev).toBe(1);
+    // Another window changes a; this one (still on rev 1) changes b and a.
+    expect((await patch(`"${epoch}:1"`, { state: { set: { a: 2 } } })).status).toBe(200);
+    expect((await patch(`"${epoch}:1"`, { state: { set: { b: 2 } } })).status).toBe(200);
+    const clash = await patch(`"${epoch}:1"`, { state: { set: { a: 3 } } });
+    expect(clash.status).toBe(409);
+    expect(JSON.parse(clash.text)).toMatchObject({ ok: false, rev: 3, epoch, tracking: { state: { a: 2, b: 2 } }, conflicts: [{ part: "state", key: "a" }] });
+    expect(JSON.parse((await call(port, "GET", "/api/health")).text).trackingRev).toBe(3);
+    // An old cached page's PUT moves the rev too.
+    const put = JSON.parse((await call(port, "PUT", "/api/tracking", JSON.stringify({ prefs: { v: 1 } }))).text);
+    expect(put).toMatchObject({ ok: true, rev: 4, epoch });
+  });
+
+  it("answers 503 and changes nothing when tracking.json can't be read", async () => {
+    const { port, home } = await start();
+    // A folder where the file should be: there, but unreadable.
+    mkdirSync(join(home, "profile/tracking.json"), { recursive: true });
+    expect((await call(port, "GET", "/api/tracking")).status).toBe(503);
+    expect((await call(port, "PUT", "/api/tracking", JSON.stringify({ state: {} }))).status).toBe(503);
+    expect((await call(port, "PATCH", "/api/tracking", JSON.stringify({ changes: {} }), undefined, { "if-match": '":0"' })).status).toBe(503);
+    expect(existsSync(join(home, "profile/tracking.json"))).toBe(true);
   });
 
   it("queues a confirmed careers-link move to share later, and checks it first", async () => {
