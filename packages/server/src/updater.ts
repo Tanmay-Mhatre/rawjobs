@@ -14,6 +14,7 @@ import {
   readLastUpdate,
   readUpdateFile,
   releaseBase,
+  ScanRunningError,
   startUpdate,
   writeUpdateFile,
   type UpdateCheck,
@@ -212,6 +213,8 @@ export function createUpdater(o: {
       setTimeout(o.exit, 300);
     } catch (err) {
       state = "idle";
+      // A scan started between the check and the backup (one the computer's schedule started): wait for it, as when one was running.
+      if (err instanceof ScanRunningError) return waitThenInstall();
       error = `Couldn't update: ${(err as Error).message}`;
     }
   }
@@ -221,6 +224,11 @@ export function createUpdater(o: {
     if (state === "updating" || state === "waiting") return;
     error = undefined;
     if (!o.isBusy() && state === "idle") return install();
+    waitThenInstall();
+  }
+
+  /** Wait for the scan that's running, then install (polled, so it also sees a scheduled scan end). */
+  function waitThenInstall(): void {
     o.pauseBackground?.();
     state = "waiting";
     clearInterval(waiter);

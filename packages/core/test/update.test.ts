@@ -20,6 +20,9 @@ import {
   judge,
   platformKey,
   prepareVersion,
+  ScanRunningError,
+  sha256File,
+  startUpdate,
   readLastUpdate,
   readUpdateFile,
   recentBackup,
@@ -152,6 +155,24 @@ describe("updating an installed copy", () => {
     expect(installedVersions(home)).toMatchObject({ current: "0.2.0", previous: "0.1.0" });
   });
 
+  it("hashes a file a piece at a time, the same as reading it whole", async () => {
+    const home = installedCopy();
+    const file = join(home, "big.bin");
+    writeFileSync(file, Buffer.alloc(3 * 1024 * 1024 + 17, 7));
+    expect(await sha256File(file)).toBe(createHash("sha256").update(readFileSync(file)).digest("hex"));
+  });
+
+  it("doesn't back up or switch while a scan holds the scan lock, and lets go of it when it fails", async () => {
+    const home = installedCopy();
+    const r = await release("0.2.0");
+    mkdirSync(join(home, "data"), { recursive: true });
+    writeFileSync(join(home, "data/scan.lock"), String(process.ppid));
+    await expect(startUpdate({ home, base: r.base, manifest: r.manifest })).rejects.toBeInstanceOf(ScanRunningError);
+    expect(installedVersions(home)?.current).toBe("0.1.0");
+    expect(existsSync(join(home, "backups"))).toBe(false);
+    expect(readFileSync(join(home, "data/scan.lock"), "utf8")).toBe(String(process.ppid));
+  });
+
   it("refuses a bundle that doesn't match the checksum", async () => {
     const home = installedCopy();
     const r = await release("0.2.0");
@@ -240,7 +261,7 @@ describe("updating an installed copy", () => {
     const home = installedCopy();
     const r = await release("0.2.0");
     const v = await prepareVersion(home, r.base, r.manifest);
-    const backup = backupData(home, "before-0.2.0");
+    const backup = await backupData(home, "before-0.2.0");
     switchTo(home, v.version, v.node);
     // A scheduled scan saved its jobs while the update ran.
     mkdirSync(join(home, "data"), { recursive: true });
@@ -264,7 +285,7 @@ describe("updating an installed copy", () => {
     const home = installedCopy();
     const r = await release("0.2.0");
     const v = await prepareVersion(home, r.base, r.manifest);
-    const backup = backupData(home, "before-0.2.0");
+    const backup = await backupData(home, "before-0.2.0");
     switchTo(home, v.version, v.node);
     mkdirSync(join(home, "data"), { recursive: true });
     writeFileSync(join(home, "data/format.json"), JSON.stringify({ format: 2 }));
@@ -292,7 +313,7 @@ describe("updating an installed copy", () => {
     const home = installedCopy();
     const r = await release("0.2.0");
     const v = await prepareVersion(home, r.base, r.manifest);
-    const backup = backupData(home, "before-0.2.0");
+    const backup = await backupData(home, "before-0.2.0");
     switchTo(home, v.version, v.node);
     // An old line from 0.2.0 (an earlier try) doesn't count: only what's written after the start.
     appendLog(home, "RawJobs 0.2.0 is starting.");
@@ -420,7 +441,7 @@ describe("what an update keeps", () => {
     expect(readUpdateFile(home).mode).toBe("off");
   });
 
-  it("backs up all your data, but not what downloads again or a scan's flags", () => {
+  it("backs up all your data, but not what downloads again or a scan's flags", async () => {
     const home = installedCopy();
     for (const d of ["data/runs", "data/cache", "data/catalog"]) mkdirSync(join(home, d), { recursive: true });
     writeFileSync(join(home, "data/jobs.json"), "jobs");
@@ -430,7 +451,7 @@ describe("what an update keeps", () => {
     writeFileSync(join(home, "data/catalog/additions.json"), "my additions");
     writeFileSync(join(home, "data/scan.lock"), "123");
     writeFileSync(join(home, "rawjobs.config.local.yaml"), "profile: {}");
-    const b = backupData(home, "before-0.2.0");
+    const b = await backupData(home, "before-0.2.0");
     expect(readFileSync(join(b, "data/jobs.json"), "utf8")).toBe("jobs");
     expect(readFileSync(join(b, "data/runs/2026-10-12.json"), "utf8")).toBe("a run");
     expect(readFileSync(join(b, "data/catalog/additions.json"), "utf8")).toBe("my additions");
@@ -441,9 +462,11 @@ describe("what an update keeps", () => {
     expect(existsSync(join(b, "data/scan.lock"))).toBe(false);
   });
 
-  it("keeps the last two backups, and reuses one from the last hour instead of copying again", () => {
+  it("keeps the last two backups, and reuses one from the last hour instead of copying again", async () => {
     const home = installedCopy();
-    const [, b2, b3] = ["before-0.2.0", "before-0.3.0", "before-0.4.0"].map((label) => backupData(home, label));
+    const made: string[] = [];
+    for (const label of ["before-0.2.0", "before-0.3.0", "before-0.4.0"]) made.push(await backupData(home, label));
+    const [, b2, b3] = made;
     expect(readdirSync(join(home, "backups")).map((n) => join(home, "backups", n))).toEqual([b2, b3]);
     expect(recentBackup(home, "before-0.4.0")).toBe(b3);
     expect(recentBackup(home, "before-0.9.0")).toBeNull();
