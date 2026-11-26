@@ -35,8 +35,10 @@ no GitHub auto-merge (`mcp__ccd_pr__set_auto_merge`). Those skip the queue.
    yourself. For a conflict, merge `origin/main` into your branch (in a desktop-app worktree, use
    `sync_with_base_branch`) and resolve it. Run `pnpm check`, push, then remove and add the `queue`
    label to rejoin. Ask the user only if the fix would undo what another PR did.
-4. After it merges, clean up your own worktree and branch, and only yours. Run these from the main
-   checkout, without switching its branch:
+4. As soon as it merges, clean up your own worktree and branch, and only yours, in the same turn
+   that learns of the merge. Don't wait for the user to ask. Also stop your test servers and remove
+   their scratch data and `.claude/launch.json` entries. Run these from the main checkout, without
+   switching its branch:
    ```bash
    git fetch --prune origin
    git -C .claude/worktrees/<name> status --porcelain   # must print nothing
