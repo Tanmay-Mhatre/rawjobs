@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { HttpClient, StoppedError } from "../src/http";
+import { HttpClient, readBodyCapped, StoppedError, TooLargeError } from "../src/http";
 import { json } from "./helpers";
 
 afterEach(() => vi.restoreAllMocks());
@@ -241,6 +241,55 @@ describe("HttpClient", () => {
     const http = new HttpClient({ hostDelayMs: 0, retries: 0, readTimeoutMs: 100, fetchImpl: trickle });
     await expect(http.getJson("https://slow.example/x")).resolves.toEqual({ a: 1, b: 2 });
     expect(http.stats.timeouts).toBe(0);
+  });
+
+  it("readBodyCapped aborts past max and cancels the reader", async () => {
+    let pulled = 0;
+    let cancelled = false;
+    const body = new ReadableStream<Uint8Array>({
+      pull(c) {
+        pulled++;
+        c.enqueue(new Uint8Array(4));
+      },
+      cancel() {
+        cancelled = true;
+      },
+    });
+    await expect(readBodyCapped(new Response(body), 10)).rejects.toBeInstanceOf(TooLargeError);
+    expect(cancelled).toBe(true);
+    expect(pulled).toBeLessThan(10);
+    await expect(readBodyCapped(new Response("abcdefghij"), 10)).resolves.toBe("abcdefghij");
+  });
+
+  it("content-length over max rejects without reading", async () => {
+    let pulled = 0;
+    const body = new ReadableStream<Uint8Array>({ pull: (c) => void (pulled++, c.enqueue(new Uint8Array(1))) });
+    const res = new Response(body, { headers: { "content-length": "11" } });
+    await expect(readBodyCapped(res, 10)).rejects.toBeInstanceOf(TooLargeError);
+    // A stream may pull once ahead when it's made; the read itself pulls nothing more.
+    expect(pulled).toBeLessThanOrEqual(1);
+  });
+
+  it("TooLargeError is not retried and is counted", async () => {
+    let calls = 0;
+    const big = (async () => (calls++, new Response("x".repeat(64), { status: 200 }))) as unknown as typeof fetch;
+    const http = new HttpClient({ hostDelayMs: 0, retries: 3, backoffMs: 1, breakAfter: 1, maxBodyBytes: 32, sleep: async () => {}, fetchImpl: big });
+    const err = await http.getText("https://big.example/feed").catch((e: unknown) => e);
+    expect(err).toBeInstanceOf(TooLargeError);
+    expect((err as TooLargeError).url).toBe("https://big.example/feed");
+    expect(calls).toBe(1);
+    expect(http.stats.tooLarge).toBe(1);
+    // About this URL, not the host: it isn't a failure, and the host isn't broken.
+    expect(http.stats.failures).toBe(0);
+    await expect(http.getText("https://big.example/small")).rejects.toBeInstanceOf(TooLargeError);
+    expect(calls).toBe(2);
+  });
+
+  it("records the largest body read in stats.maxBodyBytes", async () => {
+    const sizes = [10, 300, 40];
+    const http = new HttpClient({ hostDelayMs: 0, fetchImpl: (async () => new Response("y".repeat(sizes.shift() ?? 0))) as unknown as typeof fetch });
+    for (let i = 0; i < 3; i++) await http.getText(`https://sizes.example/${i}`);
+    expect(http.stats.maxBodyBytes).toBe(300);
   });
 
   it("with adaptiveConcurrency, halves the requests in flight when they time out, and holds the rest back", async () => {

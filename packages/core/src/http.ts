@@ -1,5 +1,5 @@
-export { HostSkippedError, HttpError, NotModifiedError, StoppedError } from "./http-error";
-import { HostSkippedError, HttpError, NotModifiedError, StoppedError } from "./http-error";
+export { HostSkippedError, HttpError, NotModifiedError, StoppedError, TooLargeError } from "./http-error";
+import { HostSkippedError, HttpError, NotModifiedError, StoppedError, TooLargeError } from "./http-error";
 import { allowPrivate, privateAddressReason, privateHost, publicOnlyAgent } from "./network-guard";
 
 /** Set by the bundle build (scripts/bundle/build.ts) to the release's version. */
@@ -89,6 +89,8 @@ export type HttpOptions = {
    */
   sign?: (url: string) => Promise<Record<string, string>>;
   fetchImpl?: typeof fetch;
+  /** A body larger than this fails with TooLargeError. Defaults to MAX_BODY_BYTES. */
+  maxBodyBytes?: number;
   sleep?: (ms: number) => Promise<void>;
   /**
    * Once this returns true, requests in flight are cut short and new ones, retries and waits for a
@@ -200,6 +202,10 @@ export type HttpStats = {
   paces?: Record<string, { rate: number; downs: number }>;
   /** With adaptiveConcurrency: the lowest limit on requests in flight it went down to (absent: never limited). */
   minInFlight?: number;
+  /** Bodies refused for being over maxBodyBytes. */
+  tooLarge?: number;
+  /** The largest body read in full (bytes), to tune MAX_BODY_BYTES from real scans. */
+  maxBodyBytes?: number;
 };
 
 /** With adaptiveConcurrency: the limit never goes below this, nor halves again within CUT_GAP_MS (the timeouts of one burst count once). */
@@ -210,17 +216,34 @@ const MAX_IN_FLIGHT = 256;
 /** A body may take this long in all, however steadily it trickles in (the read timeout is per pause in the data). */
 const MAX_BODY_MS = 120_000;
 
-/** A response's text, calling `onData` as each piece arrives (to restart a stall clock). */
-async function readText(res: Response, onData: () => void): Promise<string> {
-  if (!res.body) return res.text();
+/** No body is read past this (32 MB): a runaway board would otherwise fill the scan's memory. */
+export const MAX_BODY_BYTES = 32 * 1024 * 1024;
+
+/**
+ * A response's text, at most `max` bytes: over that it throws TooLargeError, without reading when the
+ * content-length says so, else cancelling the read as soon as the count passes it. `onData` is
+ * called with the bytes so far as each piece arrives (to restart a stall clock).
+ */
+export async function readBodyCapped(res: Response, max = MAX_BODY_BYTES, onData?: (bytes: number) => void): Promise<string> {
+  if (Number(res.headers.get("content-length")) > max) {
+    await res.body?.cancel().catch(() => {});
+    throw new TooLargeError(res.url, max);
+  }
+  if (!res.body) return "";
   const reader = res.body.getReader();
   const decoder = new TextDecoder();
   let out = "";
+  let bytes = 0;
   for (;;) {
     const { done, value } = await reader.read();
     if (done) break;
+    bytes += value.byteLength;
+    if (bytes > max) {
+      await reader.cancel().catch(() => {});
+      throw new TooLargeError(res.url, max);
+    }
     out += decoder.decode(value, { stream: true });
-    onData();
+    onData?.(bytes);
   }
   return out + decoder.decode();
 }
@@ -276,6 +299,7 @@ export class HttpClient {
       paceCeilings: opts.paceCeilings ?? {},
       adaptiveConcurrency: opts.adaptiveConcurrency ?? false,
       fetchImpl: opts.fetchImpl ?? guardedFetch,
+      maxBodyBytes: opts.maxBodyBytes ?? MAX_BODY_BYTES,
       sleep: opts.sleep ?? realSleep,
       stopped: opts.stopped,
       sign: opts.sign,
@@ -347,11 +371,13 @@ export class HttpClient {
       // A private address is refused for good: not an answer, and not a sign the host is flaky.
       if (err instanceof StoppedError || (err as HttpError).code === "EPRIVATE") throw err;
       const status = (err as HttpError).status;
-      if (status !== undefined) {
+      // Too large is about this URL, like a 4xx: the host answered.
+      const tooLarge = err instanceof TooLargeError;
+      if (status !== undefined || tooLarge) {
         this.lastAnswerAt = Date.now();
         this.stats.answered = (this.stats.answered ?? 0) + 1;
       }
-      if (status === undefined || status === 429 || status >= 500) {
+      if (!tooLarge && (status === undefined || status === 429 || status >= 500)) {
         this.stats.failures++;
         const n = (this.failures.get(host) ?? 0) + 1;
         this.failures.set(host, n);
@@ -538,15 +564,24 @@ export class HttpClient {
         // keeps coming (up to MAX_BODY_MS in all).
         if (readBody && res.ok) {
           const bodyStarted = Date.now();
-          body = await readText(res, () => {
+          let bytes = 0;
+          body = await readBodyCapped(res, this.opts.maxBodyBytes, (n) => {
+            bytes = n;
             clearTimeout(timer);
             timer = expire(Math.max(1, Math.min(waited, MAX_BODY_MS - (Date.now() - bodyStarted))));
           });
+          if (bytes > (this.stats.maxBodyBytes ?? 0)) this.stats.maxBodyBytes = bytes;
           this.flowed();
         }
       } catch (err) {
         clearTimeout(timer);
         if (ctrl.signal.reason instanceof StoppedError) throw ctrl.signal.reason;
+        // Asking again brings the same body: refused at once.
+        if (err instanceof TooLargeError) {
+          this.stats.tooLarge = (this.stats.tooLarge ?? 0) + 1;
+          // A test or proxied Response may not know its URL.
+          throw err.url ? err : new TooLargeError(url, this.opts.maxBodyBytes);
+        }
         const refused = privateAddressReason(err);
         if (refused) throw new HttpError(`blocked: ${refused} (${url})`, url, undefined, undefined, "EPRIVATE");
         const e = err as Error;
