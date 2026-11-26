@@ -12,8 +12,13 @@ import { useSavedOnDisk } from "./tracking";
 export { ACTIVE, dayAfter, FOLLOW_UP_DAYS, isActive, isDay, PIPELINE, type PipelineStatus, QUIET_DAYS, STATUS_LABEL, type Status, stageSince, today } from "@rawjobs/core/next-steps";
 
 /** How a job you're out of the running for ended (status "rejected", shown as Closed). */
-export const CLOSED_AS = { rejected: "Rejected", withdrew: "I withdrew", "no-response": "No response" } as const;
+export const CLOSED_AS = { rejected: "Rejected", withdrew: "I withdrew", "no-response": "No response", accepted: "Accepted the offer" } as const;
 export type ClosedAs = keyof typeof CLOSED_AS;
+/** The everyday outcomes. "accepted" is rare, so it's offered quietly and only once there was an offer (see hadOffer). */
+export const CLOSED_AS_COMMON = ["rejected", "withdrew", "no-response"] as const satisfies readonly ClosedAs[];
+/** Whether this job got as far as an offer: now, earlier in its history, offer details saved, or already closed as accepted. */
+export const hadOffer = (e: Pick<Entry, "status" | "history" | "offer" | "closedAs"> | undefined) =>
+  !!e && (e.status === "offer" || !!e.offer || e.closedAs === "accepted" || (e.history ?? []).some((h) => h.status === "offer"));
 
 const HISTORY_MAX = 20;
 

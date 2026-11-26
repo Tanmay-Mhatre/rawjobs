@@ -16,6 +16,10 @@ on:
       - design/components/bundle.css
       # The key directory's signer (apps/site/worker.ts imports it).
       - scripts/catalog/lib/web-bot-auth.ts
+      # Files build.mjs reads its lists from (hiring systems, job boards, their names): a change or
+      # a move there must build the site on its own pull request, not fail the deploy after a release.
+      - packages/core/src/schema.ts
+      - packages/core/src/directory-search.ts
       - .github/workflows/site.yml
   pull_request:
     paths:
@@ -24,6 +28,10 @@ on:
       - design/components/bundle.css
       # The key directory's signer (apps/site/worker.ts imports it).
       - scripts/catalog/lib/web-bot-auth.ts
+      # Files build.mjs reads its lists from (hiring systems, job boards, their names): a change or
+      # a move there must build the site on its own pull request, not fail the deploy after a release.
+      - packages/core/src/schema.ts
+      - packages/core/src/directory-search.ts
       - .github/workflows/site.yml
   # The weekly rebuild starts a deploy when it publishes; this Monday run is the backup, off the
   # hour (GitHub's busiest time) and well after the rebuild's usual finish.
