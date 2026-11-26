@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { applyPatch, dayAfter, type Entry, goneQuiet, mergeStates, quickStatus, stageSince } from "../src/lib/userState";
+import { applyPatch, dayAfter, type Entry, goneQuiet, hadOffer, mergeStates, quickStatus, stageSince, statusLabel } from "../src/lib/userState";
 
 const job = { id: "greenhouse:acme:1", title: "Head of Product", company: "Acme", url: "https://acme.example/1", location: "Dubai", score: 83 };
 const entry = (status: Entry["status"], updatedAt: string): Entry => ({ status, updatedAt, snapshot: { ...job } });
@@ -94,5 +94,16 @@ describe("offers", () => {
     const e = applyPatch(undefined, job, { status: "offer", offer: { pay: "AED 45k a month", deadline: "2026-10-25" } }, "2026-10-19T09:00:00Z")!;
     expect(e.offer).toEqual({ pay: "AED 45k a month", deadline: "2026-10-25" });
     expect(applyPatch(e, job, { offer: { pay: undefined } }, "2026-10-19T10:00:00Z")).not.toHaveProperty("offer");
+  });
+
+  it("closes as Accepted the offer, and knows which jobs had an offer", () => {
+    const offered = entry("offer", "2026-10-15T00:00:00Z");
+    const closed = applyPatch(offered, job, { status: "rejected", closedAs: "accepted" }, "2026-10-20T00:00:00Z")!;
+    expect(closed.closedAs).toBe("accepted");
+    expect(statusLabel(closed)).toBe("Accepted the offer");
+    expect(hadOffer(offered)).toBe(true);
+    expect(hadOffer(closed)).toBe(true);
+    expect(hadOffer({ ...entry("rejected", "2026-10-20T00:00:00Z"), history: [{ status: "offer", at: "2026-10-18T00:00:00Z" }] })).toBe(true);
+    expect(hadOffer(entry("applied", "2026-10-15T00:00:00Z"))).toBe(false);
   });
 });

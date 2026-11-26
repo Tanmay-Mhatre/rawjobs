@@ -161,6 +161,28 @@ describe("moving to Closed", () => {
     fireEvent.click(within(screen.getByRole("dialog", { name: "How did it end?" })).getByRole("button", { name: "I withdrew" }));
     expect(onPatch).toHaveBeenCalledWith("a", e, { status: "rejected", closedAs: "withdrew" });
   });
+
+  it("doesn't offer Accepted the offer for a job that never reached Offer", () => {
+    renderBoard({ user: { a: entry("applied", "2026-10-15", { snapshot: { title: "Ops Lead", company: "Acme", url: "", location: "", score: 80 } }) } });
+    fireEvent.click(screen.getByRole("button", { name: "Move Ops Lead to" }));
+    fireEvent.click(screen.getByRole("menuitem", { name: "Closed" }));
+    expect(within(screen.getByRole("dialog", { name: "How did it end?" })).queryByRole("button", { name: /accepted/i })).toBeNull();
+  });
+
+  it("offers Accepted the offer as a quiet link for a job that reached Offer", () => {
+    const onPatch = vi.fn();
+    const offered = entry("offer", "2026-10-15", { snapshot: { title: "Ops Lead", company: "Acme", url: "", location: "", score: 80 } });
+    renderBoard({ user: { a: offered }, onPatch });
+    fireEvent.click(screen.getByRole("button", { name: "Move Ops Lead to" }));
+    fireEvent.click(screen.getByRole("menuitem", { name: "Closed" }));
+    fireEvent.click(within(screen.getByRole("dialog", { name: "How did it end?" })).getByRole("button", { name: "Accepted the offer?" }));
+    expect(onPatch).toHaveBeenCalledWith("a", offered, { status: "rejected", closedAs: "accepted" });
+  });
+
+  it("shows Accepted the offer on a closed card", () => {
+    renderBoard({ user: { a: entry("rejected", "2026-10-15", { closedAs: "accepted" }) } });
+    expect(screen.getAllByText("Accepted the offer").length).toBeGreaterThan(0);
+  });
 });
 
 describe("a Radar job opened from the board", () => {
