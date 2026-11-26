@@ -1,5 +1,5 @@
 import { displayName } from "@rawjobs/core/display-name";
-import { ArrowRight, CalendarClock, ChevronDown, History, Plus, X } from "lucide-react";
+import { ArrowRight, CalendarClock, Check, ChevronDown, History, Plus, X } from "lucide-react";
 import { type DragEvent, type KeyboardEvent, useEffect, useMemo, useRef, useState } from "react";
 import type { Job } from "../lib/data";
 import { timeAgo } from "../lib/format";
@@ -9,6 +9,7 @@ import { useMedia } from "../lib/useMedia";
 import {
   addActivity,
   CLOSED_AS,
+  CLOSED_AS_COMMON,
   type ClosedAs,
   type Entry,
   type EntryPatch,
@@ -17,6 +18,7 @@ import {
   STATUS_LABEL,
   type Status,
   stageSince,
+  hadOffer,
   statusLabel,
   today,
   type UserState,
@@ -476,7 +478,12 @@ function BoardCard({
           </span>
         </p>
       )}
-      {e.status === "rejected" && e.closedAs && e.closedAs !== "rejected" && <p className="mt-2 type-meta text-muted">{statusLabel(e)}</p>}
+      {e.status === "rejected" && e.closedAs && e.closedAs !== "rejected" && (
+        <p className="mt-2 flex items-center gap-1 type-meta text-muted">
+          {e.closedAs === "accepted" && <Check className="size-3.5 shrink-0" aria-hidden />}
+          {statusLabel(e)}
+        </p>
+      )}
       {(chip || showInterview) && (
         <div className="mt-2 flex flex-wrap gap-1.5">
           {chip && <span className={cx("inline-flex items-center rounded-sm border px-1.5 py-0.5 type-meta font-medium", CHIP_CLASS[chip.tone])}>{chip.text}</span>}
@@ -530,7 +537,7 @@ function CloseDialog({ target, onClose, onPick }: { target: { entry: Entry } | n
             </p>
           </div>
           <div className="flex flex-wrap gap-2">
-            {(Object.keys(CLOSED_AS) as ClosedAs[]).map((how) => (
+            {CLOSED_AS_COMMON.map((how) => (
               <Button key={how} size="sm" onClick={() => onPick(how)}>
                 {CLOSED_AS[how]}
               </Button>
@@ -539,6 +546,15 @@ function CloseDialog({ target, onClose, onPick }: { target: { entry: Entry } | n
               Cancel
             </Button>
           </div>
+          {/* Rare, so a quiet link, and only for a job that got an offer. */}
+          {hadOffer(target.entry) && (
+            <p className="type-meta text-muted">
+              Reached Offer ·{" "}
+              <button type="button" className="rounded-sm text-muted underline underline-offset-2 hover:text-ink" onClick={() => onPick("accepted")}>
+                Accepted the offer?
+              </button>
+            </p>
+          )}
         </Card>
       )}
     </Dialog>
