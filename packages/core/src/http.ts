@@ -1,3 +1,5 @@
+export { HostSkippedError, HttpError, NotModifiedError, StoppedError } from "./http-error";
+import { HostSkippedError, HttpError, NotModifiedError, StoppedError } from "./http-error";
 import { allowPrivate, privateAddressReason, privateHost, publicOnlyAgent } from "./network-guard";
 
 /** Set by the bundle build (scripts/bundle/build.ts) to the release's version. */
@@ -9,21 +11,6 @@ export function defaultUserAgent(): string {
   const repo = process.env.GITHUB_REPOSITORY;
   const home = repo ? `https://github.com/${repo}` : "self-hosted";
   return `RawJobs/${VERSION} (personal job radar; +${home})`;
-}
-
-export class HttpError extends Error {
-  override name = "HttpError";
-  constructor(
-    message: string,
-    readonly url: string,
-    readonly status?: number,
-    /** On a 403: who refused (server, CDN and firewall headers, the start of the body), to tell a rate limit from a block. */
-    readonly detail?: string,
-    /** "EPRIVATE": the host is a private address (network-guard.ts). Permanent, like a 4xx. */
-    readonly code?: string,
-  ) {
-    super(message);
-  }
 }
 
 /** Headers that say who answered a 403 or 429: the server, a CDN, or a firewall in front of it. */
@@ -49,27 +36,6 @@ export type HttpCache = {
   /** The saved body, read only on a 304. Undefined when it's gone: the URL is then fetched again in full. */
   load?(url: string): Promise<string | undefined>;
 };
-
-/** The URL answered 304 and the cache kept no body: the caller already has what it would say. */
-export class NotModifiedError extends HttpError {
-  override name = "NotModifiedError";
-  constructor(url: string) {
-    super(`not modified (${url})`, url, 304);
-  }
-}
-
-/** No request made: the host kept failing for other URLs this run (with hostRests, through every rest). */
-export class HostSkippedError extends HttpError {
-  override name = "HostSkippedError";
-}
-
-/** No answer waited for: the scan was stopped (HttpOptions.stopped). Not the host's fault, so never counted against it. */
-export class StoppedError extends HttpError {
-  override name = "StoppedError";
-  constructor(url: string) {
-    super(`stopped (${url})`, url);
-  }
-}
 
 export type HttpOptions = {
   userAgent?: string;

@@ -1,5 +1,5 @@
 import type { NormalizedJob } from "../schema";
-import { HttpError } from "../http";
+import { HttpError } from "../http-error";
 import { htmlToText, inferWorkplace } from "../text";
 import { type LdJobPosting, ldLocation } from "./parse";
 import { jobId, type Connector } from "./types";

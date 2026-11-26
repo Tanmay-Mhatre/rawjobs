@@ -1,7 +1,7 @@
 import { employmentType } from "../catalog/employment";
 import type { CompanyRef, NormalizedJob, Workplace } from "../schema";
 import { htmlToText } from "../text";
-import { HttpError } from "../http";
+import { HttpError } from "../http-error";
 import { urlOf } from "./parse";
 import { firstPageFingerprint, firstPathSegment, jobId, SEARCH_MAX_POSTINGS, type Connector, type Ctx } from "./types";
 
