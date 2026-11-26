@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { addedVersions, splitKey, tooYoung } from "./lockfile-age";
+import { addedVersions, mapLimit, splitKey, tooYoung } from "./lockfile-age";
 
 const lock = (keys: string[]) =>
   `lockfileVersion: '9.0'\n\nimporters:\n\n  .: {}\n\npackages:\n\n${keys.map((k) => `  '${k}':\n    resolution: {integrity: sha512-x}\n`).join("\n")}\nsnapshots:\n\n  'zzz-only-in-snapshots@1.0.0': {}\n`;
@@ -38,5 +38,20 @@ describe("the lockfile age check", () => {
       now,
     );
     expect(young.map((v) => v.name)).toEqual(["fresh", "edge", "unknown"]);
+  });
+});
+
+describe("mapLimit", () => {
+  it("keeps the order and never runs more than the limit at once", async () => {
+    let running = 0;
+    let most = 0;
+    const out = await mapLimit([5, 1, 4, 2, 3, 0, 6], 3, async (n) => {
+      most = Math.max(most, ++running);
+      await new Promise((r) => setTimeout(r, n * 3));
+      running--;
+      return n * 10;
+    });
+    expect(out).toEqual([50, 10, 40, 20, 30, 0, 60]);
+    expect(most).toBe(3);
   });
 });

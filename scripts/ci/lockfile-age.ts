@@ -43,16 +43,40 @@ export function tooYoung(added: { name: string; version: string; published?: str
   return added.filter((v) => !v.published || Date.parse(v.published) > limit);
 }
 
-async function publishTime(name: string, version: string): Promise<string | undefined> {
-  const res = await fetch(`https://registry.npmjs.org/${name.replace("/", "%2F")}`, { headers: { accept: "application/json" } });
-  if (!res.ok) throw new Error(`${name}: registry answered ${res.status}`);
-  return ((await res.json()) as { time?: Record<string, string> }).time?.[version];
+/** Every version's publish time for one package: one registry read per name, retried on 429 and 5xx. */
+async function publishTimes(name: string): Promise<Record<string, string>> {
+  for (let attempt = 1; ; attempt++) {
+    const res = await fetch(`https://registry.npmjs.org/${name.replace("/", "%2F")}`, { headers: { accept: "application/json" } });
+    if (res.ok) return ((await res.json()) as { time?: Record<string, string> }).time ?? {};
+    if (attempt >= 4 || (res.status !== 429 && res.status < 500)) throw new Error(`${name}: registry answered ${res.status}`);
+    await res.body?.cancel();
+    await new Promise((r) => setTimeout(r, 1000 * 2 ** attempt));
+  }
+}
+
+/** `work` over `items`, at most `limit` at a time, results in order. */
+export async function mapLimit<T, R>(items: T[], limit: number, work: (item: T) => Promise<R>): Promise<R[]> {
+  const out = new Array<R>(items.length);
+  let next = 0;
+  await Promise.all(
+    Array.from({ length: Math.min(limit, items.length) }, async () => {
+      while (next < items.length) {
+        const i = next++;
+        out[i] = await work(items[i]!);
+      }
+    }),
+  );
+  return out;
 }
 
 async function main([basePath, headPath]: string[]) {
   if (!basePath || !headPath) throw new Error("usage: lockfile-age.ts <base-lockfile> <head-lockfile>");
   const added = addedVersions(readFileSync(basePath, "utf8"), readFileSync(headPath, "utf8"));
-  const timed = await Promise.all(added.map(async (v) => ({ ...v, published: await publishTime(v.name, v.version) })));
+  // One read per package name, 6 at a time: a big group bump adds dozens of versions.
+  const names = [...new Set(added.map((v) => v.name))];
+  const times = new Map(names.map((n, i) => [n, i] as const));
+  const byName = await mapLimit(names, 6, publishTimes);
+  const timed = added.map((v) => ({ ...v, published: byName[times.get(v.name)!]![v.version] }));
   for (const v of timed) console.log(`${v.name}@${v.version}  published ${v.published ?? "(unknown)"}`);
   const young = tooYoung(timed, new Date());
   if (young.length) {

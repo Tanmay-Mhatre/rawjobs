@@ -99,7 +99,8 @@ async function syncJobFeedNow(dataDir: string, opts: { fetchImpl?: typeof fetch;
     const v3 = await fetchSignedJson<FeedManifestV2>(get, `${jobFeedUrl()}/${V3_MANIFEST}`);
     if (v3.ok && v3.value.schema === JOB_FEED_SCHEMA_V3) {
       const synced = await syncV3(dir, v3.value, get, expired, opts.now);
-      await syncActivity(dir, v3.value, get, expired);
+      // Not from a manifest that was refused as older: that would roll the hiring activity back.
+      if (synced.message !== OLDER_FEED) await syncActivity(dir, v3.value, get, expired);
       return { ...synced, ageDays: stale() };
     }
     if (!v3.ok && v3.status === null) return badSignature;
@@ -191,8 +192,10 @@ async function download(get: typeof fetch, dir: string, file: string, sha256: st
  */
 async function syncV3(dir: string, m: FeedManifestV2, get: typeof fetch, expired: () => boolean, now?: number): Promise<{ updated: boolean; message: string }> {
   const index = readJson<V3Index>(join(dir, V3_INDEX));
-  // A lower number is an older feed (re-served, or rolled back): keep the newer copy here.
-  if (index && m.seq < index.seq) return { updated: false, message: OLDER_FEED };
+  // A lower number with an older (or same) date is an older feed, re-served or rolled back: keep the
+  // copy here. A lower number with a newer date is a feed that started counting again (its builder
+  // lost the last copy): take it in full, or every app would stay on its copy for good.
+  if (index && m.seq < index.seq && !(Date.parse(m.generated_at) > Date.parse(index.generated_at))) return { updated: false, message: OLDER_FEED };
   if (index?.seq === m.seq && index.state_sha256 === m.state_sha256) return { updated: false, message: `Job feed is up to date (${when(m.generated_at, now)}).` };
   mkdirSync(dir, { recursive: true });
   const tag = `${m.seq}-${Date.now().toString(36)}`;

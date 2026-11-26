@@ -273,6 +273,13 @@ describe("contribution inbox", () => {
       { ats: "teamtailor", slug: "jobs.localhost" },
       { ats: "eightfold", slug: "acme", shard: "127.0.0.1" },
       { ats: "eightfold", slug: "acme", shard: "evil.localhost" },
+      // Other ways URL parsers read an IPv4 address.
+      { ats: "teamtailor", slug: "127.1" },
+      { ats: "teamtailor", slug: "0177.0.0.1" },
+      { ats: "teamtailor", slug: "127.0.0.1." },
+      { ats: "teamtailor", slug: "0x7f000001" },
+      { ats: "teamtailor", slug: "evil.0x7f" },
+      { ats: "teamtailor", slug: "jobs.localhost." },
     ]) {
       expect((await post(env, "/v1/contributions", { boards: [b] })).status, JSON.stringify(b)).toBe(400);
     }
@@ -283,11 +290,13 @@ describe("contribution inbox", () => {
             { ats: "teamtailor", slug: "careers.acme.com" },
             { ats: "lever", slug: "localhost-labs" },
             { ats: "eightfold", slug: "acme", shard: "acme.com" },
+            { ats: "lever", slug: "12345" },
+            { ats: "teamtailor", slug: "careers.3m.com" },
           ],
         })
       ).status,
     ).toBe(202);
-    expect(contributions(env)[0]!.boards).toHaveLength(3);
+    expect(contributions(env)[0]!.boards).toHaveLength(5);
   });
 
   it("lists and acknowledges pending items only with the token", async () => {
