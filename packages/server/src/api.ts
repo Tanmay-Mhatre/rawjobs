@@ -484,7 +484,7 @@ Stopped after ${Math.round(timeoutMs / 1000)} s without finishing.`.trim(),
       res.setHeader("cross-origin-resource-policy", "same-origin");
     }
     if (url === CSP_REPORT_PATH && req.method === "POST") {
-      // What the Content-Security-Policy (report-only) would have blocked: one log line per kind, at
+      // What the Content-Security-Policy blocked: one log line per kind, at
       // most 50 a start. The browser sends these on its own, sometimes without an Origin, so only the
       // Host is checked; the route changes nothing.
       if (!refuseHost(req)) {
