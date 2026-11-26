@@ -41,6 +41,8 @@ jobs:
     env:
       RAWJOBS_RELEASE_URL: http://127.0.0.1:8765
       RAWJOBS_PUBLIC_KEY: ${{ inputs.public-key }}
+      # An installed copy ignores the key and address overrides above unless this is set.
+      RAWJOBS_TEST: "1"
       RAWJOBS_NO_OPEN: "1"
     steps:
       - name: Skipped
@@ -79,6 +81,8 @@ jobs:
           export RAWJOBS_HOME="$RUNNER_TEMP/Raw Jobs"
           curl -fsSL http://127.0.0.1:8765/install.sh | sh
           curl -fs http://127.0.0.1:4317/api/health | grep -F '"ok":true'
+          # The RawJobs folder is readable by this user only.
+          [ "$(stat -c %a "$RAWJOBS_HOME" 2>/dev/null || stat -f %Lp "$RAWJOBS_HOME")" = 700 ]
           "$RAWJOBS_HOME/bin/rawjobs" setup status | grep -F "\"configPath\":\"$RAWJOBS_HOME/rawjobs.config.local.yaml\""
           "$RAWJOBS_HOME/bin/rawjobs" open --no-browser
           if [ "$RUNNER_OS" = Linux ]; then grep -qF "Icon=$RAWJOBS_HOME/icons/rawjobs.png" "${XDG_DATA_HOME:-$HOME/.local/share}/applications/rawjobs.desktop"; fi

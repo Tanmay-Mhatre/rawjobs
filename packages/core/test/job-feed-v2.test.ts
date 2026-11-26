@@ -219,6 +219,25 @@ describe("the app", () => {
     expect(jobFeedStatus(app)).toMatchObject({ companies: 3 });
   });
 
+  it("refuses a feed with a lower number than its copy, and takes a newer one", async () => {
+    process.env.JOBHUNTER_JOBS_URL = "https://feed.example/jobs";
+    const rel = feedRelease();
+    const app = tmp();
+    await rel.publish(RUN1, run(1));
+    const first = rel.files.get("jobs-v3-manifest.json")!;
+    await rel.publish(RUN2, run(2));
+    await syncJobFeed(app, { fetchImpl: rel.fetchImpl });
+    const latest = rel.files.get("jobs-v3-manifest.json")!;
+    rel.files.set("jobs-v3-manifest.json", first);
+    rel.calls.length = 0;
+    expect((await syncJobFeed(app, { fetchImpl: rel.fetchImpl })).message).toBe("The job feed offered an older copy; kept yours.");
+    expect(rel.calls).toEqual(["jobs-v3-manifest.json"]);
+    rel.files.set("jobs-v3-manifest.json", latest);
+    expect((await syncJobFeed(app, { fetchImpl: rel.fetchImpl })).message).toMatch(/up to date/);
+    await rel.publish(RUN3, run(3));
+    expect((await syncJobFeed(app, { fetchImpl: rel.fetchImpl })).message).toMatch(/1 change file/);
+  });
+
   it("falls back to the full copy when a change file is missing or wrong", async () => {
     process.env.JOBHUNTER_JOBS_URL = "https://feed.example/jobs";
     const rel = feedRelease();
