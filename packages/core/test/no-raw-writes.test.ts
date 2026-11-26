@@ -14,7 +14,6 @@ const ALLOWED: { file: string; line: string; why: string }[] = [
   { file: "core/src/live.ts", line: "writeFileSync(path,", why: "append log head; its reader skips torn lines" },
   { file: "core/src/job-feed-store.ts", line: "writeFileSync(join(this.dir,", why: "unique file names, committed by a pointer file" },
   { file: "core/src/schedule.ts", line: "writeFileSync(", why: "OS task files; repair writes them again" },
-  { file: "core/src/scan.ts", line: '{ flag: "wx" }', why: "the scan lock: create-only, never replaced" },
   { file: "core/src/lock.ts", line: '{ flag: "wx" }', why: "the lock helper: create-only, never replaced" },
   { file: "cli/src/commands/run.ts", line: "writeFileSync(out,", why: "--json output the user asked for" },
   { file: "server/src/api.ts", line: '"scan-notify"), "")', why: "flag file: only its existence matters" },
