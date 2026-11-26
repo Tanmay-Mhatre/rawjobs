@@ -1,8 +1,8 @@
-import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { describe, expect, it } from "vitest";
-import { applicationsPlan, dueDeadlines, dueFollowUps, dueInterviews, followUpMessage, interviewMessage, lastWeek, remindFollowUps, weeklyMessage } from "../src/followups";
+import { describe, expect, it, vi } from "vitest";
+import { applicationsPlan, dueDeadlines, dueFollowUps, dueInterviews, FOLLOW_UPS_SENT, followUpMessage, interviewMessage, lastWeek, remindFollowUps, weeklyMessage } from "../src/followups";
 
 const secrets = { token: "123:abc", chatId: "42" };
 
@@ -50,6 +50,38 @@ describe("follow-up reminders", () => {
     expect(s.sent).toHaveLength(1);
     writeFileSync(join(s.home, "profile", "tracking.json"), JSON.stringify({ state: { a: { status: "applied", followUp: "2026-10-24" } } }));
     expect(await remindFollowUps(s.dataDir, secrets, { home: s.home, now, fetchImpl: s.fetchImpl })).toBe("sent");
+  });
+
+  it("records before sending and rolls back on failure", async () => {
+    const s = setup({ a: { status: "applied", followUp: "2026-10-23" } });
+    const now = new Date("2026-10-24T12:00:00");
+    const file = join(s.dataDir, FOLLOW_UPS_SENT);
+    let onDisk: string | undefined;
+    const fetchImpl = (async () => {
+      onDisk = readFileSync(file, "utf8");
+      throw new Error("offline");
+    }) as typeof fetch;
+    expect(await remindFollowUps(s.dataDir, secrets, { home: s.home, now, fetchImpl })).toMatch(/^failed: /);
+    expect(JSON.parse(onDisk ?? "{}")).toEqual({ a: "2026-10-23" });
+    expect(existsSync(file)).toBe(false);
+    // The rolled-back reminder goes out next time.
+    expect(await remindFollowUps(s.dataDir, secrets, { home: s.home, now, fetchImpl: s.fetchImpl })).toBe("sent");
+    expect(s.sent).toHaveLength(1);
+  });
+
+  it("with a damaged sent file sends nothing and records", async () => {
+    const s = setup({ a: { status: "applied", followUp: "2026-10-23" }, b: { status: "applied", followUp: "2026-10-22" } });
+    const now = new Date("2026-10-24T12:00:00");
+    const file = join(s.dataDir, FOLLOW_UPS_SENT);
+    writeFileSync(file, '{"a":"2026-10');
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    expect(await remindFollowUps(s.dataDir, secrets, { home: s.home, now, fetchImpl: s.fetchImpl })).toBe("nothing-due");
+    expect(warn).toHaveBeenCalledTimes(1);
+    warn.mockRestore();
+    expect(s.sent).toEqual([]);
+    expect(existsSync(`${file}.bad`)).toBe(true);
+    expect(JSON.parse(readFileSync(file, "utf8"))).toEqual({ a: "2026-10-23", b: "2026-10-22" });
+    expect(await remindFollowUps(s.dataDir, secrets, { home: s.home, now, fetchImpl: s.fetchImpl })).toBe("nothing-due");
   });
 });
 

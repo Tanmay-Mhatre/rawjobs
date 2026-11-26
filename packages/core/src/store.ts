@@ -69,13 +69,26 @@ export function slimRun(run: RunSummary, yours: ReadonlySet<string>, whole = fal
 const yourKeys = (config: Config) => new Set(config.companies.map(companyKey));
 const runFile = (run: RunSummary) => `${run.startedAt.replace(/:/g, "-").replace(/\.\d+Z$/, "Z")}.json`;
 
+/**
+ * Whether the scan that finished at `run` saved: it's in meta.json's runs (written last by saveRun).
+ * "pending" while no later scan has saved either: that one may still be saving, or was killed, and
+ * the next scan's save settles it.
+ */
+export function runCommitted(dataDir: string, run: string): boolean | "pending" {
+  const ends = (readMeta(dataDir)?.runs ?? []).map((r) => r.finishedAt).sort();
+  if (ends.includes(run)) return true;
+  // Older than every run kept (30): it saved long ago and has left the history since.
+  if (ends.length >= KEEP_RUNS && run < ends[0]!) return true;
+  return ends.some((f) => f > run) ? false : "pending";
+}
+
 /** Slim meta.json's run history and runs/ to match it (once, when the data format moves to 2). */
 export function slimRunHistory(dir: string, config: Config): void {
   const meta = readMeta(dir);
   if (!meta) return;
   const yours = yourKeys(config);
   const runs = meta.runs.map((r) => slimRun(r, yours));
-  writeFileAtomic(join(dir, "meta.json"), JSON.stringify({ ...meta, runs }));
+  writeFileAtomic(join(dir, "meta.json"), JSON.stringify({ ...meta, runs }), undefined, { fsync: true });
   const kept = new Map(runs.map((r) => [runFile(r), r]));
   const runsDir = join(dir, "runs");
   if (!existsSync(runsDir)) return;
@@ -193,7 +206,7 @@ export function saveRun(
 
   const jobs = merged.jobs.map((j) => (j.why.gate ? { ...j, description: undefined } : j));
   const history: JobsFile = { version: 1, generatedAt, jobs };
-  writeFileAtomic(join(dir, "history.json"), JSON.stringify(history));
+  writeFileAtomic(join(dir, "history.json"), JSON.stringify(history), undefined, { fsync: true });
 
   const { companies: directory, moves } = readDirectory(dir);
   const industries = directoryIndustries(directory);
@@ -252,7 +265,7 @@ export function saveRun(
     ...(activity.ready ? { hiringReady: true } : {}),
     ...(boardHealth && Object.keys(boardHealth).length ? { boardHealth } : {}),
   };
-  writeFileAtomic(join(dir, "meta.json"), JSON.stringify(meta));
+  writeFileAtomic(join(dir, "meta.json"), JSON.stringify(meta), undefined, { fsync: true });
 
   if (opts.record === false) return summary;
   writeFileAtomic(join(dir, "runs", runFile(summary)), JSON.stringify(summary));

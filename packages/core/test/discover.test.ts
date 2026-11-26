@@ -1,5 +1,8 @@
-import { describe, expect, it } from "vitest";
-import { findCandidates, pickChecks, recordChecks, toIndexJobs, type IndexFile } from "../src/discover";
+import { existsSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { describe, expect, it, vi } from "vitest";
+import { findCandidates, pickChecks, readLedger, recordChecks, toIndexJobs, writeLedger, type IndexFile } from "../src/discover";
 import type { IndexedCompany, IndexRow } from "../src/suggest";
 import { profile } from "./helpers";
 
@@ -110,5 +113,20 @@ describe("toIndexJobs", () => {
     const sponsor = { ...co("lever:sponsor", [pm("Dubai")]), visa: { GB: "2026-10-09" } };
     const jobs = toIndexJobs(findCandidates(profile(), index([sponsor, co("lever:plain", [pm("Dubai")])]), now), { live: new Set(), muted: new Set(), indexGeneratedAt: now.toISOString() });
     expect(Object.fromEntries(jobs.map((j) => [j.companyKey, j.visa]))).toEqual({ "lever:sponsor": { GB: "2026-10-09" }, "lever:plain": undefined });
+  });
+});
+
+describe("readLedger", () => {
+  it("sets aside a truncated discovery.json and the scan proceeds", () => {
+    const dir = mkdtempSync(join(tmpdir(), "rj-ledger-"));
+    writeFileSync(join(dir, "discovery.json"), '{"version":1,"companies":{"lever:acme":');
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    expect(readLedger(dir)).toEqual({ version: 1, companies: {} });
+    expect(warn).toHaveBeenCalledTimes(1);
+    warn.mockRestore();
+    expect(existsSync(join(dir, "discovery.json.bad"))).toBe(true);
+    writeLedger(dir, { version: 1, companies: {} });
+    expect(readLedger(dir)).toEqual({ version: 1, companies: {} });
+    rmSync(dir, { recursive: true, force: true });
   });
 });

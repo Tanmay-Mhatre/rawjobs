@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { existsSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { brotliDecompressSync, gunzipSync } from "node:zlib";
 import { ACTIVITY_SCHEMA, dayNumber, type ActivityFile } from "./activity";
@@ -13,6 +13,7 @@ import { isSafeName, safeJoin } from "./safe-name";
 import { passesLocationGate, passesTitleGate } from "./score";
 import type { Profile } from "./schema";
 import { writeFileAtomic } from "./atomic";
+import { tryWithLock } from "./lock";
 
 /**
  * The shared job feed: every live directory board's open jobs, fetched every 6 hours for everyone
@@ -83,7 +84,12 @@ export async function syncJobFeed(dataDir: string, opts: { fetchImpl?: typeof fe
   const stale = () => jobFeedStatus(dataDir, opts.now).ageDays;
   return withBudget(
     opts.budgetMs,
-    (expired) => syncJobFeedNow(dataDir, opts, expired),
+    async (expired) => {
+      // One feed sync at a time per data folder (a scan's, the CLI's): they download into the same files.
+      mkdirSync(feedDir(dataDir), { recursive: true });
+      const r = await tryWithLock(join(feedDir(dataDir), ".sync.lock"), () => syncJobFeedNow(dataDir, opts, expired), { staleMs: 5 * 60_000, beatMs: 30_000 });
+      return r ?? { updated: false, ageDays: stale(), message: "Another job feed sync is running; this scan uses your local copy." };
+    },
     () => ({ updated: false, ageDays: stale(), message: "The job feed is still downloading; this scan uses your local copy, the next one the new feed." }),
   );
 }
@@ -127,8 +133,7 @@ async function syncJobFeedNow(dataDir: string, opts: { fetchImpl?: typeof fetch;
         continue;
       }
       if (expired()) throw new LateError();
-      writeFileSync(safeJoin(dir, `${ats}.json.tmp`), gunzipSync(gz));
-      renameSync(safeJoin(dir, `${ats}.json.tmp`), safeJoin(dir, `${ats}.json`));
+      writeFileAtomic(safeJoin(dir, `${ats}.json`), gunzipSync(gz));
       fetched++;
     }
     if (failed.length) return { updated: fetched > 0, ageDays: stale(), message: `Job feed download of ${failed.join(", ")} failed; kept the old copy of those.` };
@@ -289,8 +294,7 @@ async function syncActivity(dir: string, m: FeedManifestV2, get: typeof fetch, e
     const buf = await download(get, dir, m.activity.file, m.activity.sha256);
     if (expired()) return;
     mkdirSync(dir, { recursive: true });
-    writeFileSync(`${local}.tmp`, buf);
-    renameSync(`${local}.tmp`, local);
+    writeFileAtomic(local, buf);
     clearDownloads(downloadsDir(dir));
   } catch {
     // Only the "Hiring at …" block and the surge tag go without it.
@@ -390,7 +394,7 @@ function feedMatchesV3(dir: string, index: V3Index, profile: Profile, cutoff: nu
       return { covered: new Set(), matching: new Set() };
     }
     try {
-      writeFileSync(join(dir, V3_MATCHES), JSON.stringify({ version: MATCHING_VERSION, profile: key, seq: index.seq, matching: [...matching] } satisfies V3MatchCache));
+      writeFileAtomic(join(dir, V3_MATCHES), JSON.stringify({ version: MATCHING_VERSION, profile: key, seq: index.seq, matching: [...matching] } satisfies V3MatchCache));
     } catch {
       // Only a speed-up.
     }
@@ -436,7 +440,7 @@ export function feedMatches(dataDir: string, profile: Profile, now = Date.now(),
     }
   }
   try {
-    writeFileSync(join(dir, "matches.json"), JSON.stringify(cache));
+    writeFileAtomic(join(dir, "matches.json"), JSON.stringify(cache));
   } catch {
     // Only a speed-up: without it the next scan checks the feed again.
   }

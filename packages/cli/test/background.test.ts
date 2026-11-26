@@ -1,11 +1,11 @@
-import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { parseConfig } from "../../core/src/config";
 import { HttpClient } from "../../core/src/http";
 import { JOB_FEED_SCHEMA } from "../../core/src/job-feed";
-import { backgroundCheck, parseScope, progressEvents, wantsBackground, type RunValues } from "../src/commands/run";
+import { alertText, backgroundCheck, notifyScan, parseScope, progressEvents, wantsBackground, type RunValues } from "../src/commands/run";
 
 const config = (yaml = "") =>
   parseConfig(`
@@ -85,5 +85,40 @@ describe("a scan's progress lines", () => {
     expect(p.state.fallback).toBe(true);
     expect(sent.map((e) => e.type)).toEqual(["start", "company"]);
     expect(sent[1]).toMatchObject({ done: 1 });
+  });
+});
+
+describe("scan alerts written ahead (scheduled, terminal and page scans)", () => {
+  afterEach(() => {
+    vi.unstubAllEnvs();
+    vi.unstubAllGlobals();
+  });
+
+  it("the scan keeps its alert in the outbox before saving, and notifyScan sends it", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "jh-alert-"));
+    mkdirSync(join(dir, "catalog"));
+    writeFileSync(join(dir, "catalog", "directory.json"), JSON.stringify({ companies: [] }));
+    const http = new HttpClient({ fetchImpl: (async () => new Response("[]")) as unknown as typeof fetch });
+    const r = await backgroundCheck(config(), { dataDir: dir, http, stopped: () => false, alert: () => "1 new job" }, Date.now());
+    expect(r.alertQueued).toBe(true);
+    const outbox = JSON.parse(readFileSync(join(dir, "telegram-outbox.json"), "utf8")) as { messages: { text: string; run?: string }[] };
+    expect(outbox.messages).toEqual([expect.objectContaining({ text: "1 new job", run: r.result.finishedAt })]);
+
+    vi.stubEnv("TELEGRAM_BOT_TOKEN", "123456:abc");
+    vi.stubEnv("TELEGRAM_CHAT_ID", "42");
+    const sent: string[] = [];
+    vi.stubGlobal("fetch", async (_url: string, init?: RequestInit) => {
+      sent.push(JSON.parse(String(init?.body)).text);
+      return new Response(JSON.stringify({ ok: true, result: {} }));
+    });
+    expect(await notifyScan(config("alerts: { telegram: true }"), dir, true)).toBe("sent");
+    expect(sent).toEqual(["1 new job"]);
+    expect(existsSync(join(dir, "telegram-outbox.json"))).toBe(false);
+  });
+
+  it("no alert text while alerts are off", () => {
+    vi.stubEnv("TELEGRAM_BOT_TOKEN", "");
+    const merged = { jobs: [], newIds: new Set<string>(), closedIds: new Set<string>() } as unknown as Parameters<typeof alertText>[2];
+    expect(alertText(config(), { jobs: [] } as unknown as Parameters<typeof alertText>[1], merged, "mine")).toBeUndefined();
   });
 });

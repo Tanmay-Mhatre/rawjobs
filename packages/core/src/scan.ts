@@ -1,5 +1,6 @@
-import { appendFileSync, existsSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { appendFileSync, existsSync, readdirSync, readFileSync, rmSync, statSync } from "node:fs";
 import { join } from "node:path";
+import { writeFileAtomic } from "./atomic";
 import { isChronic, knownFirstPages, planBoards, pruneBoards, readBoardHealth, recordBoards, writeBoardHealth } from "./board-health";
 import { companyIndustries } from "./catalog/industries";
 import { companyKey, companyOfJobId, jobCompanyKey } from "./connectors";
@@ -14,7 +15,7 @@ import { checkStillOpen, jobsToRecheck } from "./liveness";
 import { loadConcepts } from "./concepts-remote";
 import { readResume } from "./resume";
 import { resumeTopics } from "./resume-topics";
-import { alertJobs } from "./notify";
+import { alertJobs, queueTelegram } from "./notify";
 import { runRadar, type RunOptions, type RunResult } from "./run";
 import type { BoardMove, CompanyHealth, CompanyRef, Config, Job, RunSummary } from "./schema";
 import { byMatchChance, estimateScan, findMoves, readDirectory, readDirectoryMoves, readSpeeds, recordSpeeds, refOfEntry, scopeCompanies, type ScanEstimate, type ScanScope } from "./scope";
@@ -89,6 +90,14 @@ export type ScanOptions = {
   onCompanyResult?: (h: CompanyHealth, jobs: Job[]) => void;
   /** How long syncing the directory and job feed took before this scan, for its timings. */
   syncMs?: number;
+  /**
+   * This scan's Telegram alert (undefined: nothing to send). Called just before the save, never on a
+   * dry run, and written ahead into the outbox stamped with the run, so a crash after the save can't
+   * lose it; the caller sends it afterwards with sendTelegramQueued.
+   */
+  alert?: (result: RunResult, merged: MergeResult) => string | undefined;
+  /** Tests only: runs right after the save, to stand in for a crash there. */
+  afterSave?: () => void;
 } & Pick<RunOptions, "maxCompaniesInFlight" | "describeWorkers">;
 
 /** Where a scan's time went, and what its requests did (data/scan-stats.json keeps the last few). */
@@ -121,7 +130,7 @@ export function readScanStats(dataDir: string): ScanStats[] {
 
 function writeScanStats(dataDir: string, stats: ScanStats): void {
   const runs = [stats, ...readScanStats(dataDir).map(({ companies: _, ...r }) => r)].slice(0, KEEP_STATS);
-  writeFileSync(join(dataDir, "scan-stats.json"), JSON.stringify({ version: 1, runs }));
+  writeFileAtomic(join(dataDir, "scan-stats.json"), JSON.stringify({ version: 1, runs }));
 }
 
 /** Past this many hours, the job feed's "nothing for you" is checked live for the likeliest companies (liveDespiteFeed). */
@@ -183,6 +192,8 @@ export type ScanResult = {
   moves: BoardMove[];
   /** Stopped before the end: resumable. */
   stopped: boolean;
+  /** An alert was written ahead into the Telegram outbox (opts.alert), for the caller to send. */
+  alertQueued?: boolean;
   /** With checkBeforeAlert: jobs checked again before the alert, and how many of them had closed. */
   openCheck?: { checked: number; closed: number };
   /** Boards this scan left alone because they're resting after failures. */
@@ -347,7 +358,7 @@ export async function scan(config: Config, opts: ScanOptions): Promise<ScanResul
   const saving = fullScan && !opts.dryRun;
   if (saving) {
     const head = JSON.stringify({ version: 2, scope, startedAt: resumed?.startedAt ?? now.toISOString() });
-    writeFileSync(progressPath, `${head}\n${resumed?.health.length ? `${JSON.stringify({ health: resumed.health, jobs: resumed.jobs })}\n` : ""}`);
+    writeFileAtomic(progressPath, `${head}\n${resumed?.health.length ? `${JSON.stringify({ health: resumed.health, jobs: resumed.jobs })}\n` : ""}`);
   }
   let pending: { health: CompanyHealth[]; jobs: Job[] } = { health: [], jobs: [] };
   let lastSave = 0;
@@ -495,18 +506,31 @@ export async function scan(config: Config, opts: ScanOptions): Promise<ScanResul
     openCheck = { checked, closed: closed.size };
   }
 
+  // Written ahead of the save. A "Check now" isn't added to the run history, so its alert isn't stamped.
+  let alertQueued = false;
+  if (opts.alert) {
+    try {
+      const text = opts.alert(result, merged);
+      if (text) queueTelegram(opts.dataDir, text, checkOnly ? undefined : result.finishedAt);
+      alertQueued = !!text;
+    } catch (err) {
+      console.warn(`Couldn't keep this scan's alert to send: ${(err as Error).message}`);
+    }
+  }
+
   // Run history keeps your companies' health and counts the rest (saveRun).
   const summary = saveRun(opts.dataDir, config, { ...result, checked: checks.length, ...(moves.length ? { moves } : {}) }, merged, { record: !checkOnly, boards });
+  opts.afterSave?.();
   writeLedger(opts.dataDir, ledger);
   writeBoardHealth(opts.dataDir, boards);
   if (!checkOnly && !stopped) recordSpeeds(opts.dataDir, run.health);
   // The Radar shows only jobs fetched live; the shared index is for suggestions on the Companies page.
-  if (fullScan) writeFileSync(join(opts.dataDir, "discover.json"), JSON.stringify({ version: 1, generatedAt: result.finishedAt, indexGeneratedAt: result.finishedAt, jobs: [] }));
+  if (fullScan) writeFileAtomic(join(opts.dataDir, "discover.json"), JSON.stringify({ version: 1, generatedAt: result.finishedAt, indexGeneratedAt: result.finishedAt, jobs: [] }));
   if (stopped) saveProgress(true);
   else if (fullScan) rmSync(progressPath, { force: true });
   const stats = statsOf();
   writeScanStats(opts.dataDir, stats);
-  return { result, merged, summary, checks, moves, stopped, ...boardNews, stats, ...(openCheck ? { openCheck } : {}) };
+  return { result, merged, summary, checks, moves, stopped, ...boardNews, stats, alertQueued, ...(openCheck ? { openCheck } : {}) };
 }
 
 /**

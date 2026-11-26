@@ -2,6 +2,7 @@ import { spawnSync } from "node:child_process";
 import { existsSync, lstatSync, mkdirSync, readFileSync, renameSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
+import { writeFileAtomic } from "@rawjobs/core";
 import { iconIcns, iconIco, iconPng } from "./icon";
 
 /**
@@ -39,7 +40,7 @@ function readFile(home: string): ShortcutFile {
     return {};
   }
 }
-const writeFile = (home: string, f: ShortcutFile) => writeFileSync(filePath(home), `${JSON.stringify(f, null, 1)}\n`);
+const writeFile = (home: string, f: ShortcutFile) => writeFileAtomic(filePath(home), `${JSON.stringify(f, null, 1)}\n`);
 
 export type ShortcutResult = { ok: boolean; menu: string | null; desktop: string | null; error?: string; startLink?: boolean };
 
