@@ -28,7 +28,7 @@ import {
   telegramStatus,
   writeCacheFile,
 } from "@rawjobs/core";
-import { readTracking, saveTracking, suggestPoolSize, type ScanScope } from "@rawjobs/core";
+import { MAX_DOWNLOAD_MS, readTracking, saveTracking, suggestPoolSize, type ScanScope } from "@rawjobs/core";
 import { CONNECTION_ID, createNetworkStore, createReminder, createWatcher, nodeWatchDeps, type ReminderDeps, sendTelegram, telegramSecrets, type WatchDeps } from "@rawjobs/core";
 import type { ScanOrigin } from "@rawjobs/core/protocol";
 import { folderId } from "@rawjobs/core/update";
@@ -252,7 +252,10 @@ Stopped after ${Math.round(timeoutMs / 1000)} s without finishing.`.trim(),
 
   /** Send the CLI's JSON stdout as the response, or a JSON error. */
   async function respondJson(res: ServerResponse, args: string[], stdin?: string) {
-    const r = await collect(args, stdin);
+    respondOutput(res, await collect(args, stdin));
+  }
+
+  function respondOutput(res: ServerResponse, r: { code: number; stdout: string; stderr: string }) {
     res.setHeader("content-type", "application/json");
     const out = r.stdout.trim();
     if (out.startsWith("{") || out.startsWith("[")) {
@@ -615,7 +618,7 @@ Stopped after ${Math.round(timeoutMs / 1000)} s without finishing.`.trim(),
     if (url === "/api/directory/search" && req.method === "POST") return await searchRoute(res, req, "search");
     if (url === "/api/directory/names" && req.method === "POST") return await searchRoute(res, req, "names");
     if (url === "/api/directory/warm" && req.method === "POST") return await searchRoute(res, req, "warm");
-    if (url === "/api/directory/update" && req.method === "POST") return await respondJson(res, ["directory", "update", "--json", "--data", dataDir]);
+    if (url === "/api/directory/update" && req.method === "POST") return respondOutput(res, await updateDirectoryOnce(["directory", "update", "--json", "--data", dataDir]));
     if (url === "/api/directory/moves" && req.method === "POST") {
       let body: unknown;
       try {
@@ -758,9 +761,27 @@ Stopped after ${Math.round(timeoutMs / 1000)} s without finishing.`.trim(),
     watcher.resume();
     // A LinkedIn file reminder whose time came while RawJobs was off fires now.
     reminder.resume();
-    const update = cli(["directory", "update", "--auto", "--if-older", "7", "--data", dataDir]);
-    update.on("error", () => {});
-    update.on("close", () => void oneSuggestRun(() => collect(["companies", "suggest", "--json", "--data", dataDir])));
+    void updateDirectoryOnce(["directory", "update", "--auto", "--if-older", "7", "--data", dataDir]).then(() => oneSuggestRun(() => collect(["companies", "suggest", "--json", "--data", dataDir])));
+  }
+
+  /**
+   * One directory update from this server at a time: the weekly check at start and the Update button
+   * (or two clicks of it) share the run that's going. It may take as long as a download may (a slow
+   * link), so it isn't stopped after the usual 10 minutes, mid-download or mid-swap.
+   */
+  let directoryUpdate: { key: string; run: Promise<{ code: number; stdout: string; stderr: string }> } | null = null;
+  function updateDirectoryOnce(args: string[]) {
+    const key = args.join(" ");
+    if (directoryUpdate?.key === key) return directoryUpdate.run;
+    // A different one (the button while the weekly check runs): after it, so they never overlap.
+    const before = directoryUpdate?.run ?? Promise.resolve();
+    const run = before.then(() => collect(args, undefined, MAX_DOWNLOAD_MS + 2 * 60_000));
+    const entry = { key, run };
+    directoryUpdate = entry;
+    void run.finally(() => {
+      if (directoryUpdate === entry) directoryUpdate = null;
+    });
+    return run;
   }
 
   /** /api/network*: your LinkedIn connections. Error answers never repeat the company asked about. */

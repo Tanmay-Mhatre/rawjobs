@@ -58,17 +58,22 @@ export async function cmdSetup(args: string[]): Promise<number> {
       if (status.config?.directory.share_additions !== false) {
         const fresh = results.filter((r) => (r.status === "live" || r.status === "dormant") && !r.in_directory && isAts(r.ats) && r.slug);
         if (fresh.length) {
-          queueContributions(
-            values.data,
-            fresh.map((r) => ({
-              ats: r.ats!,
-              slug: r.slug!,
-              ...(r.region === "eu" ? { region: "eu" } : {}),
-              ...(r.shard ? { shard: r.shard } : {}),
-              ...(r.site ? { site: r.site } : {}),
-              ...(r.name ? { name: r.name } : {}),
-            })),
-          );
+          // Busy for over 5 s (another process saving the outbox): these boards just aren't shared this time.
+          try {
+            queueContributions(
+              values.data,
+              fresh.map((r) => ({
+                ats: r.ats!,
+                slug: r.slug!,
+                ...(r.region === "eu" ? { region: "eu" } : {}),
+                ...(r.shard ? { shard: r.shard } : {}),
+                ...(r.site ? { site: r.site } : {}),
+                ...(r.name ? { name: r.name } : {}),
+              })),
+            );
+          } catch {
+            // Sharing is best effort; the check's answer doesn't depend on it.
+          }
           await sendContributions(values.data);
         }
       }
