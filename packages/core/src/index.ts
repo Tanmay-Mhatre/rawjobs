@@ -15,6 +15,7 @@ export * from "./job-feed-diff";
 export * from "./job-feed-compact";
 export * from "./job-feed-store";
 export * from "./activity";
+export { readJsonOrSetAside, renameWithRetry, writeFileAtomic, type AtomicOptions } from "./atomic";
 export * from "./score";
 export * from "./dealbreakers";
 export * from "./posting";

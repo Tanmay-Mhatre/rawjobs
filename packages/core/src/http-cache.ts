@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto";
-import { existsSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, readdirSync, rmSync } from "node:fs";
+import { writeFileAtomic } from "./atomic";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { promisify } from "node:util";
@@ -103,13 +104,13 @@ export class FileHttpCache implements HttpCache {
       }
     if (this.dirty) {
       mkdirSync(this.dir, { recursive: true });
-      writeFileSync(join(this.dir, "index.json"), JSON.stringify(Object.fromEntries(this.index)));
+      writeFileAtomic(join(this.dir, "index.json"), JSON.stringify(Object.fromEntries(this.index)));
       this.dirty = false;
     }
     if (!opts.prune || !existsSync(this.dir) || now - this.prunedAt() < PRUNE_EVERY_MS) return;
     const live = new Set([...this.index.values()].map((e) => e.file));
     for (const f of readdirSync(this.dir)) if (f.endsWith(".gz") && !live.has(f) && !this.writing.has(f)) rmSync(join(this.dir, f), { force: true });
-    writeFileSync(join(this.dir, PRUNED_AT), String(now));
+    writeFileAtomic(join(this.dir, PRUNED_AT), String(now));
   }
 
   private prunedAt(): number {

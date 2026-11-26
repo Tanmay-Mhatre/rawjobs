@@ -1,5 +1,5 @@
-import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
+import { readJsonOrSetAside, writeFileAtomic } from "./atomic";
 import { toDashboardJob } from "./dashboard";
 import { companyKey, connectors } from "./connectors";
 import type { CompanyRef, DashboardJob, Profile, ScoreBreakdown, Workplace } from "./schema";
@@ -57,16 +57,21 @@ const keyOf = (c: Pick<CompanyRef, "ats" | "slug" | "shard" | "site">) => compan
 
 export function readIndex(dataDir: string): IndexFile | undefined {
   const path = join(dataDir, "catalog", "index.json");
-  return existsSync(path) ? (JSON.parse(readFileSync(path, "utf8")) as IndexFile) : undefined;
+  return readJsonOrSetAside<IndexFile>(path, (bad) => console.warn(`${path} couldn't be read; moved it to ${bad}. It downloads again on the next update.`));
 }
 
 export function readLedger(dataDir: string): DiscoveryLedger {
   const path = join(dataDir, "discovery.json");
-  return existsSync(path) ? (JSON.parse(readFileSync(path, "utf8")) as DiscoveryLedger) : { version: 1, companies: {} };
+  return (
+    readJsonOrSetAside<DiscoveryLedger>(path, (bad) => console.warn(`${path} couldn't be read; moved it to ${bad} and started fresh.`)) ?? {
+      version: 1,
+      companies: {},
+    }
+  );
 }
 
 export function writeLedger(dataDir: string, ledger: DiscoveryLedger): void {
-  writeFileSync(join(dataDir, "discovery.json"), JSON.stringify(ledger, null, 1));
+  writeFileAtomic(join(dataDir, "discovery.json"), JSON.stringify(ledger, null, 1));
 }
 
 /** Every index row that passes the user's title and location gates, best estimate first. */
@@ -206,5 +211,5 @@ export function toIndexJobs(candidates: readonly Candidate[], opts: { live: Read
 }
 
 export function writeDiscover(dataDir: string, file: DiscoverFile): void {
-  writeFileSync(join(dataDir, "discover.json"), JSON.stringify(file));
+  writeFileAtomic(join(dataDir, "discover.json"), JSON.stringify(file));
 }

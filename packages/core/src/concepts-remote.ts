@@ -1,4 +1,5 @@
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync } from "node:fs";
+import { writeFileAtomic } from "./atomic";
 import { dirname, join } from "node:path";
 import { type ConceptsFile, setConcepts } from "./concepts";
 import { fetchSignedJson } from "./data-signing";
@@ -49,7 +50,7 @@ export async function loadConcepts(dataDir: string, get: typeof fetch = fetch, n
     if (res.ok && isConceptsFile(res.value)) {
       const path = fileOf(dataDir);
       if (!existsSync(dirname(path))) mkdirSync(dirname(path), { recursive: true });
-      writeFileSync(path, JSON.stringify({ fetchedAt: new Date(now).toISOString(), file: res.value } satisfies Cached));
+      writeFileAtomic(path, JSON.stringify({ fetchedAt: new Date(now).toISOString(), file: res.value } satisfies Cached));
       setConcepts(res.value);
       return res.value.version;
     }

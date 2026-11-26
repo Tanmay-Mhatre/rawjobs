@@ -1,5 +1,6 @@
 import { appendFileSync, existsSync, readdirSync, readFileSync, rmSync, statSync, utimesSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
+import { writeFileAtomic } from "./atomic";
 import { isChronic, knownFirstPages, planBoards, pruneBoards, readBoardHealth, recordBoards, writeBoardHealth } from "./board-health";
 import { companyIndustries } from "./catalog/industries";
 import { companyKey, companyOfJobId, jobCompanyKey } from "./connectors";
@@ -121,7 +122,7 @@ export function readScanStats(dataDir: string): ScanStats[] {
 
 function writeScanStats(dataDir: string, stats: ScanStats): void {
   const runs = [stats, ...readScanStats(dataDir).map(({ companies: _, ...r }) => r)].slice(0, KEEP_STATS);
-  writeFileSync(join(dataDir, "scan-stats.json"), JSON.stringify({ version: 1, runs }));
+  writeFileAtomic(join(dataDir, "scan-stats.json"), JSON.stringify({ version: 1, runs }));
 }
 
 /** Past this many hours, the job feed's "nothing for you" is checked live for the likeliest companies (liveDespiteFeed). */
@@ -347,7 +348,7 @@ export async function scan(config: Config, opts: ScanOptions): Promise<ScanResul
   const saving = fullScan && !opts.dryRun;
   if (saving) {
     const head = JSON.stringify({ version: 2, scope, startedAt: resumed?.startedAt ?? now.toISOString() });
-    writeFileSync(progressPath, `${head}\n${resumed?.health.length ? `${JSON.stringify({ health: resumed.health, jobs: resumed.jobs })}\n` : ""}`);
+    writeFileAtomic(progressPath, `${head}\n${resumed?.health.length ? `${JSON.stringify({ health: resumed.health, jobs: resumed.jobs })}\n` : ""}`);
   }
   let pending: { health: CompanyHealth[]; jobs: Job[] } = { health: [], jobs: [] };
   let lastSave = 0;
@@ -501,7 +502,7 @@ export async function scan(config: Config, opts: ScanOptions): Promise<ScanResul
   writeBoardHealth(opts.dataDir, boards);
   if (!checkOnly && !stopped) recordSpeeds(opts.dataDir, run.health);
   // The Radar shows only jobs fetched live; the shared index is for suggestions on the Companies page.
-  if (fullScan) writeFileSync(join(opts.dataDir, "discover.json"), JSON.stringify({ version: 1, generatedAt: result.finishedAt, indexGeneratedAt: result.finishedAt, jobs: [] }));
+  if (fullScan) writeFileAtomic(join(opts.dataDir, "discover.json"), JSON.stringify({ version: 1, generatedAt: result.finishedAt, indexGeneratedAt: result.finishedAt, jobs: [] }));
   if (stopped) saveProgress(true);
   else if (fullScan) rmSync(progressPath, { force: true });
   const stats = statsOf();

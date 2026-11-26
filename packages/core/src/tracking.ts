@@ -65,7 +65,7 @@ export function saveTracking(input: unknown, home = rawjobsHome()): { ok: true; 
   const path = resolve(home, TRACKING_PATH);
   mkdirSync(dirname(path), { recursive: true });
   backUp(path, home);
-  writeFileAtomic(path, text);
+  writeFileAtomic(path, text, undefined, { fsync: true });
   return { ok: true, tracking: next };
 }
 
