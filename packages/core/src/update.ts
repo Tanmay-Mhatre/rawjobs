@@ -1,10 +1,12 @@
 import { spawn, spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
-import { cpSync, existsSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync, statSync } from "node:fs";
+import { cpSync, createReadStream, existsSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync, statSync } from "node:fs";
+import { cp, mkdir, rename, rm } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import { compareVersions, nodeArchive, RELEASE_URL, type ReleaseChange, verifyRelease, type ReleaseManifest } from "./release";
 import { BUNDLED, cliCommand } from "./runtime";
 import { writeFileAtomic } from "./atomic";
+import { acquireLock, acquireLockWaiting } from "./lock";
 import { downloadToFile } from "./download";
 import { readDataFormat } from "./migrate";
 
@@ -208,16 +210,28 @@ export function platformKey(): string {
   return `${os}-${process.arch}`;
 }
 
-function sha256(file: string): string {
-  return createHash("sha256").update(readFileSync(file)).digest("hex");
+/**
+ * A file's SHA-256, read a piece at a time. The server downloads updates ahead of time: reading a
+ * bundle of tens of MB in one go, or unpacking it while waiting, would stop it answering meanwhile,
+ * and an open page (or the shortcut) would take it for not running.
+ */
+export async function sha256File(file: string): Promise<string> {
+  const hash = createHash("sha256");
+  for await (const chunk of createReadStream(file)) hash.update(chunk as Buffer);
+  return hash.digest("hex");
 }
 
-/** The system's tar (on Windows its own bsdtar, which also unpacks .zip). */
-function untar(archive: string, into: string, strip: number): void {
-  mkdirSync(into, { recursive: true });
+/** The system's tar (on Windows its own bsdtar, which also unpacks .zip), in the background. */
+async function untar(archive: string, into: string, strip: number): Promise<void> {
+  await mkdir(into, { recursive: true });
   const tar = process.platform === "win32" ? join(process.env.SystemRoot ?? "C:\\Windows", "System32", "tar.exe") : "tar";
-  const r = spawnSync(tar, ["-xf", archive, "-C", into, ...(strip ? [`--strip-components=${strip}`] : [])], { windowsHide: true, encoding: "utf8" });
-  if (r.status !== 0) throw new Error(`Couldn't unpack ${archive}: ${(r.stderr || String(r.error ?? "")).trim()}`);
+  await new Promise<void>((done, fail) => {
+    const child = spawn(tar, ["-xf", archive, "-C", into, ...(strip ? [`--strip-components=${strip}`] : [])], { windowsHide: true, stdio: ["ignore", "ignore", "pipe"] });
+    let stderr = "";
+    child.stderr!.setEncoding("utf8").on("data", (d: string) => (stderr += d));
+    child.on("error", (err) => fail(new Error(`Couldn't unpack ${archive}: ${err.message}`)));
+    child.on("close", (code) => (code === 0 ? done() : fail(new Error(`Couldn't unpack ${archive}: ${stderr.trim() || `tar exited with ${code}`}`))));
+  });
 }
 
 async function download(url: string, file: string, fetchImpl: typeof fetch): Promise<void> {
@@ -243,14 +257,14 @@ export async function prepareVersion(
   into: "versions" | "ready" = "versions",
 ): Promise<{ version: string; node: string }> {
   const tmp = join(home, "app", `.download-${m.version}`);
-  rmSync(tmp, { recursive: true, force: true });
-  mkdirSync(tmp, { recursive: true });
+  await rm(tmp, { recursive: true, force: true });
+  await mkdir(tmp, { recursive: true });
   try {
     const bundle = join(tmp, m.bundleFile);
     await download(`${base}/${m.bundleFile}`, bundle, fetchImpl);
-    if (sha256(bundle) !== m.bundleSha256) throw new Error("The download doesn't match the release's checksum.");
+    if ((await sha256File(bundle)) !== m.bundleSha256) throw new Error("The download doesn't match the release's checksum.");
     const unpacked = join(tmp, "app");
-    untar(bundle, unpacked, 1);
+    await untar(bundle, unpacked, 1);
     if (!existsSync(join(unpacked, "cli.mjs"))) throw new Error("The release is missing cli.mjs.");
 
     const platform = platformKey();
@@ -262,20 +276,20 @@ export async function prepareVersion(
       if (!want) throw new Error(`This release has no Node for ${platform}.`);
       const file = join(tmp, archive);
       await download(`${updateOverride("RAWJOBS_NODE_DIST") ?? "https://nodejs.org/dist"}/${m.nodeVersion}/${archive}`, file, fetchImpl);
-      if (sha256(file) !== want) throw new Error("The Node download doesn't match the release's checksum.");
-      untar(file, join(tmp, "node"), 0);
+      if ((await sha256File(file)) !== want) throw new Error("The Node download doesn't match the release's checksum.");
+      await untar(file, join(tmp, "node"), 0);
       mkdirSync(join(home, "runtime"), { recursive: true });
-      renameSync(join(tmp, "node", node), nodeDir);
+      await rename(join(tmp, "node", node), nodeDir);
     }
 
     const target = join(home, "app", into, m.version);
-    if (into === "ready") rmSync(join(home, "app/ready"), { recursive: true, force: true });
+    if (into === "ready") await rm(join(home, "app/ready"), { recursive: true, force: true });
     mkdirSync(join(home, "app", into), { recursive: true });
-    rmSync(target, { recursive: true, force: true });
-    renameSync(unpacked, target);
+    await rm(target, { recursive: true, force: true });
+    await rename(unpacked, target);
     return { version: m.version, node };
   } finally {
-    rmSync(tmp, { recursive: true, force: true });
+    await rm(tmp, { recursive: true, force: true });
   }
 }
 
@@ -289,17 +303,18 @@ const SCAN_FLAGS = new Set(["scan.lock", "scan-stop", "scan-notify", "scan-live.
  * tracking, secrets), all of data/ (jobs, history, scan runs and progress, the data format) except
  * what downloads again, plus the companies you added to the directory. The last two backups are kept.
  */
-export function backupData(home: string, label: string): string {
+export async function backupData(home: string, label: string): Promise<string> {
   const dir = join(home, "backups", `${new Date().toISOString().replace(/[:.]/g, "-")}-${label}`);
   mkdirSync(dir, { recursive: true });
-  for (const f of ["rawjobs.config.local.yaml", "rawjobs.config.local.backup.yaml"]) if (existsSync(join(home, f))) cpSync(join(home, f), join(dir, f));
-  if (existsSync(join(home, "profile"))) cpSync(join(home, "profile"), join(dir, "profile"), { recursive: true });
+  // Copied in the background: profile/ and data/ can be hundreds of MB, and the server keeps answering meanwhile.
+  for (const f of ["rawjobs.config.local.yaml", "rawjobs.config.local.backup.yaml"]) if (existsSync(join(home, f))) await cp(join(home, f), join(dir, f));
+  if (existsSync(join(home, "profile"))) await cp(join(home, "profile"), join(dir, "profile"), { recursive: true });
   const data = join(home, "data");
   if (existsSync(data)) {
     mkdirSync(join(dir, "data"), { recursive: true });
-    for (const f of readdirSync(data)) if (!REFETCHED.has(f) && !SCAN_FLAGS.has(f)) cpSync(join(data, f), join(dir, "data", f), { recursive: true });
+    for (const f of readdirSync(data)) if (!REFETCHED.has(f) && !SCAN_FLAGS.has(f)) await cp(join(data, f), join(dir, "data", f), { recursive: true });
     const additions = join(data, "catalog/additions.json");
-    if (existsSync(additions)) cpSync(additions, join(dir, "data/catalog/additions.json"));
+    if (existsSync(additions)) await cp(additions, join(dir, "data/catalog/additions.json"));
   }
   const all = readdirSync(join(home, "backups")).sort();
   for (const old of all.slice(0, -2)) rmSync(join(home, "backups", old), { recursive: true, force: true });
@@ -709,7 +724,15 @@ export async function finishUpdate(o: FinishOptions): Promise<UpdateRecord> {
     // No line from the new version in its log: the computer never ran it, which says nothing about it.
     const ran = startedSince(o.home, logFrom, o.to);
     switchBack(o.home, o.from, o.to);
-    if (o.backup && existsSync(o.backup) && needsRestore(o.home, o.backup)) restoreBackup(o.home, o.backup);
+    if (o.backup && existsSync(o.backup) && needsRestore(o.home, o.backup)) {
+      // Not under a scan the computer's schedule started meanwhile: wait for it (a minute at most).
+      const lock = await acquireLockWaiting(join(o.home, "data", "scan.lock"), { waitMs: 60_000 });
+      try {
+        restoreBackup(o.home, o.backup);
+      } finally {
+        lock?.release();
+      }
+    }
     if (ran) {
       const f = readUpdateFile(o.home);
       writeUpdateFile(o.home, { skip: [...new Set([...(f.skip ?? []), o.to])] });
@@ -749,15 +772,35 @@ export async function startUpdate(o: { home: string; base: string; manifest: Rel
   const now = installedVersions(o.home);
   if (!now) throw new Error("This isn't an installed copy of RawJobs.");
   const { version, node } = takeReady(o.home, o.manifest) ?? (await prepareVersion(o.home, o.base, o.manifest, o.fetchImpl));
-  const backup = recentBackup(o.home, `before-${version}`) ?? backupData(o.home, `before-${version}`);
-  // Node can't start the helper below outside a Windows task's job, so when this runs inside the
-  // RawJobs Server task, ending that task could end the helper too: it mustn't.
-  const pending: Pending = { from: now.current, to: version, backup, notes: o.manifest.notes, pid: o.serverPid, insideTask: insideServerTask() };
-  writeJson(join(o.home, "app/pending-update.json"), pending);
-  switchTo(o.home, version, node);
-  // This very version's CLI, on the Node it runs on: both stay in place until the update is done.
-  const how = cliCommand();
-  spawn(how.command, [...how.args, "update", "--finish"], { cwd: o.home, detached: true, stdio: "ignore", windowsHide: true }).unref();
+  // From the backup to the switch, no scan may start (a scheduled one would be saving while the
+  // backup copies): the scan lock, kept until this process ends (the server exits right after;
+  // its lock is then left by a process that's gone, which the next scan takes over).
+  mkdirSync(join(o.home, "data"), { recursive: true });
+  const lock = acquireLock(join(o.home, "data", "scan.lock"));
+  if (!lock) throw new ScanRunningError();
+  try {
+    const backup = recentBackup(o.home, `before-${version}`) ?? (await backupData(o.home, `before-${version}`));
+    // Node can't start the helper below outside a Windows task's job, so when this runs inside the
+    // RawJobs Server task, ending that task could end the helper too: it mustn't.
+    const pending: Pending = { from: now.current, to: version, backup, notes: o.manifest.notes, pid: o.serverPid, insideTask: insideServerTask() };
+    writeJson(join(o.home, "app/pending-update.json"), pending);
+    switchTo(o.home, version, node);
+    // This very version's CLI, on the Node it runs on: both stay in place until the update is done.
+    const how = cliCommand();
+    spawn(how.command, [...how.args, "update", "--finish"], { cwd: o.home, detached: true, stdio: "ignore", windowsHide: true }).unref();
+  } catch (err) {
+    // Nothing switched (or it failed partway): scans may run again.
+    lock.release();
+    throw err;
+  }
+}
+
+/** startUpdate found a scan running: it waits for it to finish, then tries again. */
+export class ScanRunningError extends Error {
+  constructor() {
+    super("A scan is running; the update starts once it's done.");
+    this.name = "ScanRunningError";
+  }
 }
 
 /** The version downloaded ahead of time (downloadAhead), moved into app/versions; null when there isn't one. */
