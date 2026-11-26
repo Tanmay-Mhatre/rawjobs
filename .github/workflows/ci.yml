@@ -25,6 +25,14 @@ jobs:
           node-version: 24
           cache: pnpm
       - run: pnpm install --frozen-lockfile
+      # Dependabot pull requests: every version the lockfile adds is at least 7 days old, so a bad
+      # release pulled within days never merges. Checks Dependabot's pnpm honoured minimumReleaseAge.
+      - name: New package versions are at least a week old
+        if: startsWith(github.head_ref, 'dependabot/')
+        run: |
+          git fetch --depth=1 origin "$GITHUB_BASE_REF"
+          git show FETCH_HEAD:pnpm-lock.yaml > "$RUNNER_TEMP/base-lock.yaml"
+          pnpm exec tsx scripts/ci/lockfile-age.ts "$RUNNER_TEMP/base-lock.yaml" pnpm-lock.yaml
       # Design tokens, design lint, typecheck and tests: the same gate as a release and the pre-push hook.
       - run: pnpm check
         timeout-minutes: 5
