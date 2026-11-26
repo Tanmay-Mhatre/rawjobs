@@ -1,6 +1,6 @@
 import type { NormalizedJob } from "../schema";
 import { htmlToText, inferWorkplace } from "../text";
-import { HttpError } from "../http";
+import { HttpError } from "../http-error";
 import { BoardClosedError, detectAs, isoDate, joinParts } from "./parse";
 import { jobId, type Connector } from "./types";
 
