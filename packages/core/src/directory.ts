@@ -24,6 +24,8 @@ export const contributeUrl = () => (envSetting("CONTRIBUTE_URL") ?? DEFAULT_CONT
 export type DirectoryManifest = {
   version: string;
   generated_at: string;
+  /** When this copy was published, if it differs from `generated_at` (a deliberate rollback, signed). */
+  published_at?: string;
   companies: number;
   indexed: number;
   files: Record<string, { sha256: string; bytes: number }>;
@@ -72,6 +74,9 @@ export function directoryAgeDays(dataDir: string, now = Date.now()): number {
   return updated ? (now - Date.parse(updated)) / 86_400_000 : Infinity;
 }
 
+/** When a manifest was published (NaN when it doesn't say, which never counts as older). */
+const publishedTime = (m: Pick<DirectoryManifest, "generated_at" | "published_at">) => Date.parse(m.published_at ?? m.generated_at);
+
 export type UpdateResult = { updated: boolean; version?: string; companies?: number; message: string };
 
 /**
@@ -89,6 +94,10 @@ export async function updateDirectory(dataDir: string, opts: { force?: boolean; 
     };
   const manifest = signed.value;
   const current = directoryStatus(dataDir).local;
+  // Never go back to an older copy than the one here (a re-served old manifest could bring back a
+  // removed board or freeze the directory). `--force` is the way to take it anyway.
+  if (!opts.force && current && publishedTime(manifest) < publishedTime(current))
+    return { updated: false, version: current.version, companies: current.companies, message: "The shared directory offered an older version; kept your current one." };
   if (!opts.force && current?.version === manifest.version) {
     try {
       writeFileAtomic(join(catalogDir(dataDir), "manifest.json"), JSON.stringify({ ...current, checked_at: new Date().toISOString() }, null, 2));

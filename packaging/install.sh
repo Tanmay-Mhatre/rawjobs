@@ -193,6 +193,8 @@ case "$ARCH" in
 esac
 PLATFORM="$OSKEY-$ARCH"
 DIR="${RAWJOBS_HOME:-$DEFAULT_HOME}"
+# Your RawJobs folder (résumé, network, tracking) is readable by you only, and so is everything written below.
+umask 077
 mkdir -p "$DIR"
 DIR="$(cd "$DIR" && pwd)"
 

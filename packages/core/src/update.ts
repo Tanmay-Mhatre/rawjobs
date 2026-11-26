@@ -3,7 +3,7 @@ import { createHash } from "node:crypto";
 import { cpSync, existsSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync, statSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { compareVersions, nodeArchive, RELEASE_URL, type ReleaseChange, verifyRelease, type ReleaseManifest } from "./release";
-import { cliCommand } from "./runtime";
+import { BUNDLED, cliCommand } from "./runtime";
 import { writeFileAtomic } from "./atomic";
 import { downloadToFile } from "./download";
 import { readDataFormat } from "./migrate";
@@ -95,11 +95,27 @@ export function installedVersions(home: string): { current: string; previous: st
   return current && node ? { current, previous: readText(join(home, "app/previous.txt")), node } : null;
 }
 
+// ---------- test and self-hosting overrides ----------
+
+/** The update settings a developer or test can point somewhere else. */
+export type UpdateOverride = "RAWJOBS_PUBLIC_KEY" | "RAWJOBS_RELEASE_URL" | "RAWJOBS_BEACON_URL" | "RAWJOBS_NODE_DIST";
+
+/**
+ * An override's value, or undefined. An installed copy ignores them unless RAWJOBS_TEST=1 (the
+ * install test): a changed key could let a forged release in, and a changed address could freeze
+ * updates, so something already running as you mustn't be able to set them quietly.
+ */
+export function updateOverride(name: UpdateOverride, env: NodeJS.ProcessEnv = process.env, bundled = BUNDLED): string | undefined {
+  if (bundled && env.RAWJOBS_TEST !== "1") return undefined;
+  return env[name] || undefined;
+}
+
 // ---------- finding the newest release ----------
 
 /** Where the newest release's files are: the latest stable release, or the newest one of any kind for Beta. */
 export async function releaseBase(channel: UpdateChannel, fetchImpl: typeof fetch = fetch): Promise<string> {
-  if (process.env.RAWJOBS_RELEASE_URL) return process.env.RAWJOBS_RELEASE_URL.replace(/\/$/, "");
+  const override = updateOverride("RAWJOBS_RELEASE_URL");
+  if (override) return override.replace(/\/$/, "");
   if (channel === "stable") return RELEASE_URL;
   // Bounded like every other update request: a stalled GitHub mustn't hold the updater in "checking".
   const res = await fetchImpl(`https://api.github.com/repos/${REPO}/releases?per_page=10`, { headers: { accept: "application/vnd.github+json" }, signal: AbortSignal.timeout(15_000) });
@@ -113,7 +129,7 @@ export async function releaseBase(channel: UpdateChannel, fetchImpl: typeof fetc
 }
 
 /** A release's base address by version (`rawjobs update --to 0.3.0`). */
-export const releaseBaseFor = (version: string) => process.env.RAWJOBS_RELEASE_URL?.replace(/\/$/, "") ?? `https://github.com/${REPO}/releases/download/v${version.replace(/^v/, "")}`;
+export const releaseBaseFor = (version: string) => updateOverride("RAWJOBS_RELEASE_URL")?.replace(/\/$/, "") ?? `https://github.com/${REPO}/releases/download/v${version.replace(/^v/, "")}`;
 
 // ---------- the beacon: is there a new version? ----------
 
@@ -129,7 +145,7 @@ export type Beacon = { stable?: { version: string; critical?: boolean; date?: st
 
 /** Read the beacon. "same" when it hasn't changed since `etag`. Throws when it can't be read. */
 export async function fetchBeacon(etag?: string, fetchImpl: typeof fetch = fetch): Promise<{ same: true } | { same: false; etag?: string; beacon: Beacon }> {
-  const url = process.env.RAWJOBS_BEACON_URL || BEACON_URL;
+  const url = updateOverride("RAWJOBS_BEACON_URL") ?? BEACON_URL;
   const res = await fetchImpl(url, { headers: etag ? { "if-none-match": etag } : {}, signal: AbortSignal.timeout(15_000) });
   if (res.status === 304) return { same: true };
   if (!res.ok) throw new Error(`The update beacon answered HTTP ${res.status}.`);
@@ -155,7 +171,7 @@ export async function fetchManifest(base: string, opts: { fetchImpl?: typeof fet
     return Buffer.from(await res.arrayBuffer());
   };
   const [body, sig] = await Promise.all([get("latest.json"), get("latest.json.sig")]);
-  if (!verifyRelease(body, sig.toString("utf8"), opts.publicKey ?? (process.env.RAWJOBS_PUBLIC_KEY || undefined))) {
+  if (!verifyRelease(body, sig.toString("utf8"), opts.publicKey ?? updateOverride("RAWJOBS_PUBLIC_KEY"))) {
     throw new Error("The release's signature isn't valid, so it wasn't installed.");
   }
   const m = JSON.parse(body.toString("utf8")) as ReleaseManifest;
@@ -245,7 +261,7 @@ export async function prepareVersion(
       const want = m.nodeSha256[platform];
       if (!want) throw new Error(`This release has no Node for ${platform}.`);
       const file = join(tmp, archive);
-      await download(`${process.env.RAWJOBS_NODE_DIST ?? "https://nodejs.org/dist"}/${m.nodeVersion}/${archive}`, file, fetchImpl);
+      await download(`${updateOverride("RAWJOBS_NODE_DIST") ?? "https://nodejs.org/dist"}/${m.nodeVersion}/${archive}`, file, fetchImpl);
       if (sha256(file) !== want) throw new Error("The Node download doesn't match the release's checksum.");
       untar(file, join(tmp, "node"), 0);
       mkdirSync(join(home, "runtime"), { recursive: true });
