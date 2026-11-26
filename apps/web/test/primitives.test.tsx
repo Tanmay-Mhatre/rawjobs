@@ -249,6 +249,67 @@ describe("Menu", () => {
     );
   }
 
+  it("stays inside the window and any scrolling box around it", async () => {
+    // A 224px menu and a 40px trigger at `left`; a box with data-box is a scrolling column that wide.
+    vi.spyOn(HTMLElement.prototype, "offsetWidth", "get").mockReturnValue(224);
+    const user = userEvent.setup();
+    const at = (left: number) =>
+      vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(function (this: HTMLElement) {
+        const box = Number(this.dataset.box);
+        return box ? DOMRect.fromRect({ x: 0, y: 0, width: box, height: 800 }) : DOMRect.fromRect({ x: left, y: 0, width: 40, height: 32 });
+      });
+    const leftOf = () => screen.getByRole("menu").style.left;
+    const menu = (align: "start" | "end") => (
+      <Menu
+        label="Snooze"
+        align={align}
+        trigger={(p) => (
+          <button type="button" {...p}>
+            Snooze
+          </button>
+        )}
+        items={[{ id: "a", label: "Tomorrow", onSelect: () => {} }]}
+      />
+    );
+    const open = async (el: ReturnType<typeof menu>) => {
+      cleanup();
+      render(el);
+      await user.click(screen.getByRole("button", { name: "Snooze" }));
+    };
+    try {
+      // With room, it lines up with the edge it asked for.
+      at(300);
+      await open(menu("start"));
+      expect(leftOf()).toBe("0px");
+      // Near the window's right edge, it lines up with the trigger's right edge instead.
+      at(window.innerWidth - 60);
+      await open(menu("start"));
+      expect(leftOf()).toBe(`${40 - 224}px`);
+      // Near the left edge, an end-aligned menu lines up with the trigger's left edge instead.
+      at(10);
+      await open(menu("end"));
+      expect(leftOf()).toBe("0px");
+      // In a scrolling column (the Pipeline board), the column's edge counts, not just the window's.
+      at(500);
+      await open(
+        <div data-box="600" style={{ overflowX: "auto" }}>
+          {menu("start")}
+        </div>,
+      );
+      expect(leftOf()).toBe(`${40 - 224}px`);
+      // Neither edge leaves room: it slides in, 8px from the column's right edge.
+      at(20);
+      await open(
+        <div data-box="250" style={{ overflowX: "auto" }}>
+          {menu("start")}
+        </div>,
+      );
+      expect(leftOf()).toBe(`${250 - 8 - 224 - 20}px`);
+    } finally {
+      vi.restoreAllMocks();
+    }
+  });
+
   it("opens on Enter and focuses the first item; arrows, Home and End move real focus", async () => {
     render(<Demo />);
     const user = userEvent.setup();
