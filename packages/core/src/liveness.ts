@@ -1,6 +1,6 @@
 import { detectCompany, getConnector } from "./connectors";
 import { urlOf } from "./connectors/parse";
-import { HttpError, type HttpClient } from "./http";
+import { HttpError, readBodyCapped, type HttpClient } from "./http";
 import { JOB_BOARDS, type AtsType, type Job } from "./schema";
 import { htmlToText } from "./text";
 
@@ -75,7 +75,7 @@ export async function pageSaysOpen(link: string, http: HttpClient): Promise<bool
     await res.body?.cancel().catch(() => {});
     return undefined;
   }
-  const text = htmlToText((await res.text().catch(() => "")).slice(0, MAX_PAGE_CHARS));
+  const text = htmlToText((await readBodyCapped(res).catch(() => "")).slice(0, MAX_PAGE_CHARS));
   return !CLOSED_WORDING.test(text);
 }
 

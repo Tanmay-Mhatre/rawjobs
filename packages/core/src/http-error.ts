@@ -38,3 +38,11 @@ export class StoppedError extends HttpError {
     super(`stopped (${url})`, url);
   }
 }
+
+/** The body was over the size cap (HttpOptions.maxBodyBytes): not retried, and about this URL, not its host. */
+export class TooLargeError extends HttpError {
+  override name = "TooLargeError";
+  constructor(url: string, max: number) {
+    super(`response over ${Math.round(max / 2 ** 20)} MB (${url})`, url, undefined, undefined, "ETOOLARGE");
+  }
+}

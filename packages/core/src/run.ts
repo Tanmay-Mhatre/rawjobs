@@ -2,7 +2,7 @@ import { companyOfJobId, getConnector, jobCompanyKey } from "./connectors";
 import { hashIds } from "./board-health";
 import { BoardClosedError } from "./connectors/parse";
 import type { BoardIds } from "./connectors/types";
-import { HostSkippedError, HttpClient, HttpError } from "./http";
+import { HostSkippedError, HttpClient, HttpError, TooLargeError } from "./http";
 import { limiter } from "./limit";
 import type { BoardMove, CompanyHealth, CompanyRef, Config, Job, NormalizedJob, Profile } from "./schema";
 import { scoreJob } from "./score";
@@ -402,6 +402,8 @@ export function failureOf(err: unknown): CompanyHealth["failure"] {
   if (err instanceof HostSkippedError) return undefined;
   if (err instanceof BoardClosedError) return "gone";
   if (err instanceof TypeError || err instanceof SyntaxError) return "parse";
+  // Over the body cap: the board answered, and asking again brings the same.
+  if (err instanceof TooLargeError) return "other";
   if (!(err instanceof HttpError)) return err instanceof Error && /\bunexpected\b/i.test(err.message) ? "parse" : "other";
   if (err.status === 404 || err.status === 410) return "gone";
   // A bot challenge (http.ts keeps the refusal's headers in detail): the site turned us away, the board may be fine.
