@@ -4,8 +4,15 @@
 # (packages/core/src/data-signing.ts); the directory rebuild, contributions and job-feed workflows
 # sign what they publish themselves.
 #
-# On purpose no `pnpm install` here: nothing from node_modules runs while the key is loaded.
-# Setup: docs/shared-directory.md
+# With restamp: roll the directory back to an earlier release on purpose. Apps refuse a directory
+# older than the one they have, so the earlier release's manifest gets a signed `published_at` (now)
+# and `rolled_back_from` (the release it replaces), keeps its honest `generated_at`, and becomes the
+# latest release. That job runs in the `data-rollback` environment, which needs the owner's approval.
+#
+# Each signing job holds only the key (environment `data-signing`, or `data-rollback` for a restamp):
+# a sparse checkout, plain Node and no `pnpm install`, so nothing from node_modules runs while the
+# key is loaded. It reads the public data repo without a write token; a second job, in `data-repo`,
+# uploads the signatures. Setup: docs/shared-directory.md
 name: Data · sign what's published
 
 on:
@@ -17,9 +24,13 @@ on:
         options: [both, directory, jobs]
         default: both
       tag:
-        description: "Directory release to sign (empty: the latest)"
+        description: "Directory release to sign (empty: the latest). With restamp: the release to roll back to."
         type: string
         default: ""
+      restamp:
+        description: "Roll the directory back to the release in tag (needs the owner's approval)"
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -29,10 +40,54 @@ env:
 
 jobs:
   directory:
-    if: inputs.what != 'jobs'
-    # Secrets live in the `data-signing` environment, which only main may use.
+    if: inputs.what != 'jobs' && !inputs.restamp
+    environment: data-signing
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    outputs:
+      tag: ${{ steps.sign.outputs.tag }}
+      artifact: ${{ steps.signature.outputs.artifact-id }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          sparse-checkout: |
+            scripts/catalog/sign.mjs
+            scripts/catalog/live-copy.sh
+            packages/core/src/data-signing.ts
+          sparse-checkout-cone-mode: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 24
+
+      - name: Sign the directory's manifest
+        id: sign
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RAWJOBS_DATA_SIGNING_KEY: ${{ secrets.RAWJOBS_DATA_SIGNING_KEY }}
+          TAG: ${{ inputs.tag }}
+        run: |
+          tag="${TAG:-$(gh release view -R "$DATA_REPO" --json tagName -q .tagName)}"
+          echo "Signing $tag"
+          mkdir -p dir
+          bash scripts/catalog/live-copy.sh "$tag" manifest.json dir/manifest.json
+          [ -s dir/manifest.json ] || { echo "::error::$tag has no manifest.json."; exit 1; }
+          export RAWJOBS_DATA_PUBLIC_KEY="$(grep -o 'DATA_PUBLIC_KEY = "[^"]*"' packages/core/src/data-signing.ts | cut -d'"' -f2)"
+          node scripts/catalog/sign.mjs dir/manifest.json
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+
+      - id: signature
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: directory-signature
+          path: dir/
+          retention-days: 1
+          if-no-files-found: error
+
+  directory-upload:
+    needs: directory
     environment:
-      name: data-signing
+      name: data-repo
       deployment: false
     runs-on: ubuntu-24.04
     timeout-minutes: 10
@@ -44,35 +99,72 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
+          persist-credentials: false
+          sparse-checkout: |
+            scripts/catalog/release-io.sh
+            scripts/catalog/live-copy.sh
+          sparse-checkout-cone-mode: false
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          artifact-ids: ${{ needs.directory.outputs.artifact }}
+          path: dir
+      - name: Upload the signature
+        env:
+          GH_TOKEN: ${{ secrets.DATA_REPO_TOKEN }}
+          TAG: ${{ needs.directory.outputs.tag }}
+        run: |
+          # Only if the manifest is still the one that was signed.
+          bash scripts/catalog/live-copy.sh "$TAG" manifest.json "$RUNNER_TEMP/now.json"
+          cmp -s dir/manifest.json "$RUNNER_TEMP/now.json" || { echo "::error::$TAG's manifest.json changed since it was signed; run this again."; exit 1; }
+          . "$GITHUB_WORKSPACE/scripts/catalog/release-io.sh"
+          swap_upload "$TAG" dir/manifest.json.sig
+          echo "Signed manifest.json of $TAG" >> "$GITHUB_STEP_SUMMARY"
+
+  jobs:
+    if: inputs.what != 'directory' && !inputs.restamp
+    environment: data-signing
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    outputs:
+      artifact: ${{ steps.signatures.outputs.artifact-id }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
           sparse-checkout: |
             scripts/catalog/sign.mjs
-            scripts/catalog/release-io.sh
+            scripts/catalog/live-copy.sh
             packages/core/src/data-signing.ts
           sparse-checkout-cone-mode: false
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
-          node-version: 22
+          node-version: 24
 
-      - name: Sign the directory's manifest
+      - name: Sign the job feed's manifests
         env:
-          GH_TOKEN: ${{ secrets.DATA_REPO_TOKEN }}
           RAWJOBS_DATA_SIGNING_KEY: ${{ secrets.RAWJOBS_DATA_SIGNING_KEY }}
-          TAG: ${{ inputs.tag }}
         run: |
-          tag="${TAG:-$(gh release view -R "$DATA_REPO" --json tagName -q .tagName)}"
-          echo "Signing $tag"
-          . "$GITHUB_WORKSPACE/scripts/catalog/release-io.sh"
-          retry gh release download "$tag" -R "$DATA_REPO" -p manifest.json -D "$RUNNER_TEMP/dir" --clobber
+          # The second and third formats' manifests exist only once the 6-hourly feed has published them.
+          mkdir -p jobs
+          for n in jobs-manifest.json jobs-v2-manifest.json jobs-v3-manifest.json; do
+            bash scripts/catalog/live-copy.sh jobs "$n" "jobs/$n"
+            [ -s "jobs/$n" ] || rm "jobs/$n"
+          done
           export RAWJOBS_DATA_PUBLIC_KEY="$(grep -o 'DATA_PUBLIC_KEY = "[^"]*"' packages/core/src/data-signing.ts | cut -d'"' -f2)"
-          node scripts/catalog/sign.mjs "$RUNNER_TEMP/dir/manifest.json"
-          swap_upload "$tag" "$RUNNER_TEMP/dir/manifest.json.sig"
-          echo "Signed manifest.json of $tag" >> "$GITHUB_STEP_SUMMARY"
+          node scripts/catalog/sign.mjs jobs/*.json
 
-  jobs:
-    if: inputs.what != 'directory'
-    # Secrets live in the `data-signing` environment, which only main may use.
+      - id: signatures
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: jobs-signatures
+          path: jobs/
+          retention-days: 1
+          if-no-files-found: error
+
+  jobs-upload:
+    needs: jobs
     environment:
-      name: data-signing
+      name: data-repo
       deployment: false
     runs-on: ubuntu-24.04
     timeout-minutes: 10
@@ -84,26 +176,122 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
+          persist-credentials: false
+          sparse-checkout: |
+            scripts/catalog/release-io.sh
+            scripts/catalog/live-copy.sh
+          sparse-checkout-cone-mode: false
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          artifact-ids: ${{ needs.jobs.outputs.artifact }}
+          path: jobs
+      - name: Upload the signatures
+        env:
+          GH_TOKEN: ${{ secrets.DATA_REPO_TOKEN }}
+        run: |
+          # Only if the manifests are still the ones that were signed (the feed publishes every 6 hours).
+          for f in jobs/*.json; do
+            n=$(basename "$f")
+            bash scripts/catalog/live-copy.sh jobs "$n" "$RUNNER_TEMP/$n"
+            cmp -s "$f" "$RUNNER_TEMP/$n" || { echo "::error::$n changed since it was signed (a feed run published); run this again."; exit 1; }
+          done
+          . "$GITHUB_WORKSPACE/scripts/catalog/release-io.sh"
+          swap_upload jobs jobs/*.json.sig
+          echo "Signed the job feed's manifests" >> "$GITHUB_STEP_SUMMARY"
+
+  # A deliberate rollback. `data-rollback`: main only, the owner as required reviewer, and its own
+  # copy of the data key (docs/shared-directory.md, "Roll back the directory").
+  restamp:
+    if: inputs.restamp
+    environment: data-rollback
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    outputs:
+      tag: ${{ inputs.tag }}
+      artifact: ${{ steps.signed.outputs.artifact-id }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
           sparse-checkout: |
             scripts/catalog/sign.mjs
-            scripts/catalog/release-io.sh
+            scripts/catalog/check-manifest.mjs
+            scripts/catalog/live-copy.sh
             packages/core/src/data-signing.ts
           sparse-checkout-cone-mode: false
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
-          node-version: 22
+          node-version: 24
 
-      - name: Sign the job feed's manifests
+      - name: Restamp the earlier release's manifest
         env:
-          GH_TOKEN: ${{ secrets.DATA_REPO_TOKEN }}
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ inputs.tag }}
+        run: |
+          [ -n "$TAG" ] || { echo "::error::Set tag to the directory release to roll back to."; exit 1; }
+          latest=$(gh release view -R "$DATA_REPO" --json tagName -q .tagName)
+          [ "$latest" != "$TAG" ] || { echo "::error::$TAG is already the latest release."; exit 1; }
+          mkdir -p dir
+          bash scripts/catalog/live-copy.sh "$TAG" manifest.json dir/original.json
+          [ -s dir/original.json ] || { echo "::error::$TAG has no manifest.json."; exit 1; }
+          bash scripts/catalog/live-copy.sh latest manifest.json "$RUNNER_TEMP/live-manifest.json"
+          # The files' hashes don't change: only the manifest gets the two new fields.
+          FROM="$latest" node -e '
+            const fs = require("node:fs");
+            const m = JSON.parse(fs.readFileSync("dir/original.json", "utf8"));
+            m.published_at = new Date().toISOString();
+            m.rolled_back_from = process.env.FROM;
+            fs.writeFileSync("dir/manifest.json", JSON.stringify(m, null, 2) + "\n");
+            console.log(`Rolling back to ${m.version} (generated ${m.generated_at}) from ${process.env.FROM}, published ${m.published_at}.`);
+          '
+          node scripts/catalog/check-manifest.mjs dir/manifest.json --live "$RUNNER_TEMP/live-manifest.json"
+
+      - name: Sign it
+        env:
           RAWJOBS_DATA_SIGNING_KEY: ${{ secrets.RAWJOBS_DATA_SIGNING_KEY }}
         run: |
-          # The third format's manifest exists only once the 6-hourly feed has published it.
-          names=$(gh release view jobs -R "$DATA_REPO" --json assets -q '.assets[].name' | grep -xE 'jobs-(v[23]-)?manifest\.json')
-          mkdir -p "$RUNNER_TEMP/jobs"
-          . "$GITHUB_WORKSPACE/scripts/catalog/release-io.sh"
-          for n in $names; do retry gh release download jobs -R "$DATA_REPO" -p "$n" -D "$RUNNER_TEMP/jobs" --clobber; done
           export RAWJOBS_DATA_PUBLIC_KEY="$(grep -o 'DATA_PUBLIC_KEY = "[^"]*"' packages/core/src/data-signing.ts | cut -d'"' -f2)"
-          node scripts/catalog/sign.mjs $(for n in $names; do echo "$RUNNER_TEMP/jobs/$n"; done)
-          swap_upload jobs $(for n in $names; do echo "$RUNNER_TEMP/jobs/$n.sig"; done)
-          echo "Signed the job feed's manifests" >> "$GITHUB_STEP_SUMMARY"
+          node scripts/catalog/sign.mjs dir/manifest.json
+
+      - id: signed
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: restamped-manifest
+          path: dir/
+          retention-days: 1
+          if-no-files-found: error
+
+  restamp-upload:
+    needs: restamp
+    environment:
+      name: data-repo
+      deployment: false
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    concurrency:
+      group: directory
+      cancel-in-progress: false
+      queue: max
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          sparse-checkout: |
+            scripts/catalog/release-io.sh
+            scripts/catalog/live-copy.sh
+          sparse-checkout-cone-mode: false
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          artifact-ids: ${{ needs.restamp.outputs.artifact }}
+          path: dir
+      - name: Upload it and make the release the latest
+        env:
+          GH_TOKEN: ${{ secrets.DATA_REPO_TOKEN }}
+          TAG: ${{ needs.restamp.outputs.tag }}
+        run: |
+          bash scripts/catalog/live-copy.sh "$TAG" manifest.json "$RUNNER_TEMP/now.json"
+          cmp -s dir/original.json "$RUNNER_TEMP/now.json" || { echo "::error::$TAG's manifest.json changed since it was restamped; run this again."; exit 1; }
+          . "$GITHUB_WORKSPACE/scripts/catalog/release-io.sh"
+          swap_upload "$TAG" dir/manifest.json dir/manifest.json.sig
+          gh release edit "$TAG" -R "$DATA_REPO" --latest
+          echo "Rolled the directory back to $TAG (from $(jq -r .rolled_back_from dir/manifest.json))." >> "$GITHUB_STEP_SUMMARY"

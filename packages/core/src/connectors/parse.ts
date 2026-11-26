@@ -1,5 +1,6 @@
 import { decodeEntities, htmlToText } from "../text";
-import { HttpError, type HttpClient } from "../http";
+import type { HttpClient } from "../http";
+import { HttpError } from "../http-error";
 import type { AtsType } from "../schema";
 import { detectKnownAts } from "./detect-known";
 import type { DetectedCompany } from "./types";

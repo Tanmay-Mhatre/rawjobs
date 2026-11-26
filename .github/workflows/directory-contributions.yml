@@ -70,15 +70,21 @@ jobs:
             echo "run=true" >> "$GITHUB_OUTPUT"
           fi
 
-  accept:
+  # Reads the inbox with its token and hands the items over; nothing else runs with that token here.
+  # Only main: the `data-repo` environment takes main only, so a test run from another branch skips the
+  # inbox and only works through the board-check backlog.
+  inbox:
     needs: covered
-    if: needs.covered.outputs.run == 'true'
-    # Secrets live in the `data-signing` environment, which only main may use.
+    if: needs.covered.outputs.run == 'true' && github.ref == 'refs/heads/main'
     environment:
-      name: data-signing
+      name: data-repo
       deployment: false
     runs-on: ubuntu-24.04
-    timeout-minutes: 90
+    timeout-minutes: 10
+    permissions: {}
+    outputs:
+      count: ${{ steps.inbox.outputs.count }}
+      artifact: ${{ steps.handoff.outputs.artifact-id }}
     steps:
       - name: Check the inbox
         id: inbox
@@ -100,8 +106,43 @@ jobs:
           jq '{items: unique_by(.id)}' "$RUNNER_TEMP/items.json" > "$RUNNER_TEMP/inbox.json"
           echo "count=$(jq '.items | length' "$RUNNER_TEMP/inbox.json")" >> "$GITHUB_OUTPUT"
 
-      - id: checkout
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Hand the items to the accept job
+        id: handoff
+        if: steps.inbox.outputs.count != '0'
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: inbox
+          path: ${{ runner.temp }}/inbox.json
+          retention-days: 1
+          if-no-files-found: error
+
+  # Checks and adds the shared companies, builds the updated directory and gates it. It holds no
+  # write token and no signing key: it reads the public data repo with github.token and hands the
+  # release, contributions.json and the working state to the sign and publish jobs below.
+  accept:
+    needs: [covered, inbox]
+    if: always() && needs.covered.outputs.run == 'true' && (needs.inbox.result == 'success' || needs.inbox.result == 'skipped')
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    permissions:
+      contents: read
+    env:
+      INBOX_COUNT: ${{ needs.inbox.outputs.count || '0' }}
+    outputs:
+      accepted: ${{ steps.accept.outputs.accepted }}
+      gate: ${{ steps.gate.outcome }}
+      artifact: ${{ steps.handoff.outputs.artifact-id }}
+    steps:
+      - name: Take the inbox items
+        if: env.INBOX_COUNT != '0'
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          artifact-ids: ${{ needs.inbox.outputs.artifact }}
+          path: ${{ runner.temp }}
+
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
 
       - uses: pnpm/action-setup@73e46992e05b19abd31f2f3c20e0e7370d762115 # v6.1.1
 
@@ -116,13 +157,13 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           repository: ${{ env.DATA_REPO }}
-          token: ${{ secrets.DATA_REPO_TOKEN }}
           path: directory-repo
+          persist-credentials: false
 
       - name: Restore the catalog's working state
         id: state
         env:
-          GH_TOKEN: ${{ secrets.DATA_REPO_TOKEN }}
+          GH_TOKEN: ${{ github.token }}
         # Without saved state, contributions are recorded now and published at the weekly rebuild.
         run: bash scripts/catalog/state.sh restore
 
@@ -135,7 +176,7 @@ jobs:
         timeout-minutes: 10
         run: bash scripts/catalog/capped.sh "Boards from job feeds" 8 pnpm exec tsx scripts/catalog/feed-boards.ts --max-minutes 5
 
-      - if: steps.inbox.outputs.count != '0'
+      - if: env.INBOX_COUNT != '0'
         name: Accept contributions
         id: accept
         env:
@@ -153,7 +194,7 @@ jobs:
           DENYLIST_FILE: ${{ github.workspace }}/directory-repo/denylist.json
           # Approved moves: the directory's `moves` list (build.ts).
           MOVES_FILE: ${{ github.workspace }}/directory-repo/moves.json
-          GH_TOKEN: ${{ secrets.DATA_REPO_TOKEN }}
+          GH_TOKEN: ${{ github.token }}
         run: |
           pnpm catalog:sources
           pnpm exec tsx scripts/catalog/merge.ts
@@ -189,25 +230,130 @@ jobs:
         id: gate
         continue-on-error: true
         env:
-          GH_TOKEN: ${{ secrets.DATA_REPO_TOKEN }}
+          GH_TOKEN: ${{ github.token }}
         run: bash scripts/catalog/gate.sh
 
+      - if: always() && steps.state.outputs.restored == 'true'
+        name: Pack the working state
+        # Also after a failure or timeout, so the checks done so far aren't lost. The same files every
+        # run saves, so this never wipes the weekly rebuild's progress. The publish job uploads it.
+        run: bash scripts/catalog/state.sh pack
+
+      - name: Gather the hand-over
+        if: always()
+        run: |
+          mkdir -p handoff
+          if [ -f "$RUNNER_TEMP/catalog-state.tar.gz" ]; then mv "$RUNNER_TEMP/catalog-state.tar.gz" handoff/; fi
+          if [ "${{ steps.gate.outcome }}" = success ]; then cp -r dist handoff/dist; fi
+          if [ "${{ steps.accept.outcome }}" = success ]; then cp directory-repo/contributions.json "$RUNNER_TEMP/summary.json" handoff/; fi
+          ls -la handoff
+
+      - name: Hand the release, contributions and state to the sign and publish jobs
+        id: handoff
+        if: always() && hashFiles('handoff/**') != ''
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: contributions-release
+          path: handoff/
+          retention-days: 1
+          if-no-files-found: error
+
+  # Signs the manifest and does nothing else: the `data-signing` environment (main only) holds the data
+  # key alone. A sparse checkout, plain Node and no install, so nothing from node_modules or the inbox
+  # runs while the key is loaded. A manifest older than the live one, or odd, isn't signed.
+  sign:
+    needs: accept
+    if: needs.accept.result == 'success' && needs.accept.outputs.gate == 'success' && github.ref == 'refs/heads/main'
+    environment: data-signing
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    outputs:
+      artifact: ${{ steps.signature.outputs.artifact-id }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          sparse-checkout: |
+            scripts/catalog/sign.mjs
+            scripts/catalog/check-manifest.mjs
+            scripts/catalog/live-copy.sh
+            packages/core/src/data-signing.ts
+          sparse-checkout-cone-mode: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 24
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          artifact-ids: ${{ needs.accept.outputs.artifact }}
+          path: handoff
+
+      - name: Refuse an older or odd manifest
+        run: |
+          bash scripts/catalog/live-copy.sh latest manifest.json "$RUNNER_TEMP/live-manifest.json"
+          node scripts/catalog/check-manifest.mjs --dir handoff/dist handoff/dist/manifest.json --live "$RUNNER_TEMP/live-manifest.json"
+
       - name: Sign the manifest
-        if: steps.gate.outcome == 'success'
         timeout-minutes: 2
         env:
           RAWJOBS_DATA_SIGNING_KEY: ${{ secrets.RAWJOBS_DATA_SIGNING_KEY }}
         # Apps accept the data only with a valid signature (packages/core/src/data-signing.ts).
         run: |
           export RAWJOBS_DATA_PUBLIC_KEY="$(grep -o 'DATA_PUBLIC_KEY = "[^"]*"' packages/core/src/data-signing.ts | cut -d'"' -f2)"
-          node scripts/catalog/sign.mjs dist/manifest.json
+          node scripts/catalog/sign.mjs handoff/dist/manifest.json
 
-      - if: steps.gate.outcome == 'success'
+      - id: signature
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: contributions-signature
+          path: handoff/dist/manifest.json.sig
+          retention-days: 1
+          if-no-files-found: error
+
+  # Publishes, saves the state, commits contributions.json and acknowledges the inbox, with the data
+  # repo's and the inbox's tokens (`data-repo` environment, main only) and no install: only gh, jq,
+  # curl, git and the repo's shell scripts run here. When the sign job didn't sign (a refused
+  # release), only the upload is skipped.
+  publish:
+    needs: [covered, inbox, accept, sign]
+    if: always() && needs.covered.outputs.run == 'true' && github.ref == 'refs/heads/main'
+    environment:
+      name: data-repo
+      deployment: false
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    permissions:
+      contents: read
+      issues: write
+      # To start an overdue weekly rebuild and keep the schedules on (scripts/catalog/watchdog.sh).
+      actions: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Take the hand-over
+        id: handoff
+        if: needs.accept.outputs.artifact != ''
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          artifact-ids: ${{ needs.accept.outputs.artifact }}
+          path: handoff
+      - name: Take the signature
+        if: needs.sign.result == 'success'
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          artifact-ids: ${{ needs.sign.outputs.artifact }}
+          path: handoff/dist
+
+      - if: needs.sign.result == 'success'
         name: Publish the updated directory
+        working-directory: handoff
         env:
           GH_TOKEN: ${{ secrets.DATA_REPO_TOKEN }}
-        # A new dated release each time (never overwriting the last one), so any earlier directory
-        # can be made the latest again: gh release edit <tag> -R "$DATA_REPO" --latest
+          ACCEPTED: ${{ needs.accept.outputs.accepted }}
+        # A new dated release each time (never overwriting the last one), so any earlier directory can
+        # be rolled back to (sign-data.yml with restamp; docs/shared-directory.md#roll-back-the-directory).
         run: |
           base=$(gh release view -R "$DATA_REPO" --json tagName -q .tagName)
           tag="directory-$(date -u +%Y-%m-%d-%H%M)-shared"
@@ -215,36 +361,99 @@ jobs:
           companies=$(jq -r .companies dist/manifest.json)
           # gh creates it as a draft, uploads every file, then publishes it as the latest.
           gh release create "$tag" dist/* -R "$DATA_REPO" --latest --title "Directory $(date -u +%Y-%m-%d) + shared companies" \
-            --notes "$base plus ${{ steps.accept.outputs.accepted }} companies users shared. Version $version · $companies companies. Download manifest.json first; files are checked against its SHA-256."
+            --notes "$base plus $ACCEPTED companies users shared. Version $version · $companies companies. Download manifest.json first; files are checked against its SHA-256."
 
-      - if: always() && steps.state.outputs.restored == 'true'
+      - if: always() && steps.handoff.outcome == 'success' && hashFiles('handoff/catalog-state.tar.gz') != ''
         name: Save the working state
-        # Also after a failure or timeout, so the checks done so far aren't lost. The same files every
-        # run saves, so this never wipes the weekly rebuild's progress.
         env:
           GH_TOKEN: ${{ secrets.DATA_REPO_TOKEN }}
-        run: bash scripts/catalog/state.sh save
+        run: bash scripts/catalog/state.sh upload catalog handoff/catalog-state.tar.gz
 
-      - if: steps.accept.outputs.accepted != '0' && steps.accept.outputs.accepted != ''
+      - if: needs.accept.result == 'success' && needs.accept.outputs.accepted != '0' && needs.accept.outputs.accepted != ''
+        name: Check out the public directory repo
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: ${{ env.DATA_REPO }}
+          token: ${{ secrets.DATA_REPO_TOKEN }}
+          path: directory-repo
+
+      - if: needs.accept.result == 'success' && needs.accept.outputs.accepted != '0' && needs.accept.outputs.accepted != ''
         name: Commit contributions.json
         working-directory: directory-repo
+        env:
+          ACCEPTED: ${{ needs.accept.outputs.accepted }}
         run: |
           git config user.name "rawjobs-bot"
           git config user.email "rawjobs-bot@users.noreply.github.com"
+          cp ../handoff/contributions.json contributions.json
           git add contributions.json
-          git commit -m "Add ${{ steps.accept.outputs.accepted }} companies shared by users"
+          git commit -m "Add $ACCEPTED companies shared by users"
           git push
 
-      - if: steps.inbox.outputs.count != '0'
+      - if: needs.accept.result == 'success' && needs.inbox.outputs.count != '0' && needs.inbox.outputs.count != ''
         name: Acknowledge processed contributions
         env:
           INBOX_URL: ${{ secrets.INBOX_URL }}
           INBOX_TOKEN: ${{ secrets.INBOX_TOKEN }}
         # The inbox removes at most 1,000 a request.
         run: |
-          jq -c '.processed | _nwise(1000) | {ids: .}' "$RUNNER_TEMP/summary.json" | while read -r batch; do
+          jq -c '.processed | _nwise(1000) | {ids: .}' handoff/summary.json | while read -r batch; do
             curl -fsS -X POST -H "Authorization: Bearer $INBOX_TOKEN" -H "content-type: application/json" --data "$batch" "$INBOX_URL/v1/ack"
           done
+
+      - if: always() && needs.accept.outputs.gate == 'failure'
+        name: Report a refused release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          title="Directory release refused"
+          run_url="${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+          body=$(printf 'The release gate refused the updated directory (see the run summary for why). Installs keep the current release; the shared companies are saved and go out with the next release that passes.\n\nRun: %s\n\nIf the shrink is deliberate (a purge), publish it with: gh workflow run directory-rebuild.yml -f allow_shrink=true' "$run_url")
+          open=$(gh issue list -R "${{ github.repository }}" --state open --search "\"$title\" in:title" --json number -q '.[0].number')
+          if [ -n "$open" ]; then gh issue comment "$open" -R "${{ github.repository }}" --body "$body"; else gh issue create -R "${{ github.repository }}" --title "$title" --body "$body"; fi
+          exit 1
+
+      # Even when the inbox is down: these only need the checkout.
+      - name: Start the weekly rebuild if it's overdue
+        if: always()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: bash scripts/catalog/watchdog.sh rebuild
+
+      - name: Keep the schedules alive
+        if: always()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: bash scripts/catalog/watchdog.sh keepalive
+
+  # Moved careers pages, after the publish job so the two never push to the directory repo at once.
+  # This job runs the catalog code with the data repo's and the inbox's tokens, as before, but never
+  # sees the signing key.
+  moves:
+    needs: [covered, publish]
+    if: always() && needs.covered.outputs.run == 'true' && github.ref == 'refs/heads/main'
+    environment:
+      name: data-repo
+      deployment: false
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      issues: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: pnpm/action-setup@73e46992e05b19abd31f2f3c20e0e7370d762115 # v6.1.1
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Check out the public directory repo
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: ${{ env.DATA_REPO }}
+          token: ${{ secrets.DATA_REPO_TOKEN }}
+          path: directory-repo
 
       # ---- Moved careers pages (record-only: checked and recorded; a maintainer approves on the
       # issue, .github/workflows/directory-move-approval.yml). None of these steps can stop the rest.
@@ -370,28 +579,3 @@ jobs:
           body=$(printf 'Unusual move reports in this run: %s\n\nA spike of held or rejected reports can mean someone is flooding the inbox; a full inbox or a hit check cap means reports wait longer; a reverted auto move means a company page now points somewhere else (it is blocked for good). Auto-accept is %s.\n\nRun: %s' "$(jq -c 'del(.processed, .rejections)' "$s")" "$(jq -r 'if .auto_accept then "on" else "off" end' "$s")" "$RUN_URL")
           open=$(gh issue list -R "$REPO" --state open --search "\"$title\" in:title" --json number -q '.[0].number')
           if [ -n "$open" ]; then gh issue comment "$open" -R "$REPO" --body "$body"; else gh issue create -R "$REPO" --title "$title" --body "$body"; fi
-
-      - if: always() && steps.gate.outcome == 'failure'
-        name: Report a refused release
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          title="Directory release refused"
-          run_url="${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
-          body=$(printf 'The release gate refused the updated directory (see the run summary for why). Installs keep the current release; the shared companies are saved and go out with the next release that passes.\n\nRun: %s\n\nIf the shrink is deliberate (a purge), publish it with: gh workflow run directory-rebuild.yml -f allow_shrink=true' "$run_url")
-          open=$(gh issue list -R "${{ github.repository }}" --state open --search "\"$title\" in:title" --json number -q '.[0].number')
-          if [ -n "$open" ]; then gh issue comment "$open" -R "${{ github.repository }}" --body "$body"; else gh issue create -R "${{ github.repository }}" --title "$title" --body "$body"; fi
-          exit 1
-
-      # Even when the inbox is down: these only need the checkout.
-      - name: Start the weekly rebuild if it's overdue
-        if: always() && steps.checkout.outcome == 'success'
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: bash scripts/catalog/watchdog.sh rebuild
-
-      - name: Keep the schedules alive
-        if: always() && steps.checkout.outcome == 'success'
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: bash scripts/catalog/watchdog.sh keepalive

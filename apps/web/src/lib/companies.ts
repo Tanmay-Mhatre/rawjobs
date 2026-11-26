@@ -1,81 +1,9 @@
 import { careersUrl, companyKey } from "@rawjobs/core/detect";
-import { isPlaceholderBoard } from "@rawjobs/core/text";
+import { type CompanyRef, SUPPORTED } from "@rawjobs/core/directory-search";
 import { rowId, type CompanyRow, type Draft } from "./setup";
 
-export const ATS_LABEL: Record<string, string> = {
-  greenhouse: "Greenhouse",
-  lever: "Lever",
-  ashby: "Ashby",
-  smartrecruiters: "SmartRecruiters",
-  workday: "Workday",
-  workable: "Workable",
-  recruitee: "Recruitee",
-  personio: "Personio",
-  bamboohr: "BambooHR",
-  breezy: "Breezy HR",
-  successfactors: "SAP SuccessFactors",
-  teamtailor: "Teamtailor",
-  comeet: "Comeet",
-  oracle: "Oracle Recruiting",
-  icims: "iCIMS",
-  taleo: "Taleo",
-  jobvite: "Jobvite",
-  pinpoint: "Pinpoint",
-  rippling: "Rippling",
-  jazzhr: "JazzHR",
-  zoho: "Zoho Recruit",
-  hibob: "HiBob",
-  freshteam: "Freshteam",
-  join: "JOIN",
-  paylocity: "Paylocity",
-  paycom: "Paycom",
-  hireology: "Hireology",
-  ukg: "UKG Pro",
-  eightfold: "Eightfold",
-  phenom: "Phenom",
-  careerplug: "CareerPlug",
-  dayforce: "Dayforce",
-  adp: "ADP Workforce Now",
-  applicantpro: "ApplicantPro",
-  paycor: "Paycor",
-  hiringthing: "HiringThing",
-  manatal: "Manatal",
-  trakstar: "Trakstar Hire",
-  factorial: "Factorial",
-  gem: "Gem",
-  hrmdirect: "HRMDirect",
-  softgarden: "softgarden",
-  cornerstone: "Cornerstone",
-  keka: "Keka",
-  taleobe: "Taleo Business Edition",
-  jobscore: "JobScore",
-  avature: "Avature",
-  pageup: "PageUp",
-  radancy: "Radancy",
-  oleeo: "Oleeo",
-  jobtrain: "Jobtrain",
-  varbi: "Varbi",
-  reachmee: "ReachMee",
-  jobylon: "Jobylon",
-  homerun: "Homerun",
-  emply: "Emply",
-  bullhorn: "Bullhorn",
-  hrmos: "HRMOS",
-  herp: "HERP",
-  engage: "engage",
-  // Job boards: credited by name (Remote OK's terms ask for it), linked back on every job.
-  hackernews: "Hacker News",
-  remotive: "Remotive",
-  arbeitnow: "Arbeitnow",
-  remoteok: "Remote OK",
-  himalayas: "Himalayas",
-  jobicy: "Jobicy",
-  weworkremotely: "We Work Remotely",
-  remotefirstjobs: "Remote First Jobs",
-};
-
-/** Hiring systems we can scan (every one we recognise). Anything else is kept as "not supported yet". */
-export const SUPPORTED = new Set(Object.keys(ATS_LABEL));
+// The directory search lives in core (shared with the local server): kept importable from here.
+export { ATS_LABEL, type BoardGroup, type CompanyRef, countCompanies, groupBoards, SUPPORTED } from "@rawjobs/core/directory-search";
 
 /** "Review failing companies" links: My companies, sorted by Needs attention. */
 export const FAILING_HASH = "companies?sort=attention";
@@ -88,9 +16,6 @@ export const keyOf = (c: { ats?: string; slug?: string; shard?: string; site?: s
 /** A job's directory key: saved jobs carry it; older ones fall back to the "ats:slug:" start of their id. */
 export const jobCompanyKey = (j: { id: string; companyKey?: string }) => j.companyKey ?? j.id.split(":").slice(0, 2).join(":").toLowerCase();
 
-/** What the watchlist needs to know about a company, from any source (suggestion, directory, link). */
-export type CompanyRef = { name: string; ats: string; slug: string; region?: string; shard?: string; site?: string; careers_url: string };
-
 /**
  * The company behind a job, to add or mute it from the Radar. A directory job links to the careers
  * page already; a scanned one gets the board's address. Workday keys are "tenant|shard|site", Taleo "host|section".
@@ -101,54 +26,6 @@ export function refOfJob(j: { id: string; ats: string; company: string; url: str
   const slug = parts[0] ?? "";
   const board: { shard?: string; site?: string } = j.ats === "workday" && parts.length === 3 ? { shard: parts[1], site: parts[2] } : j.ats === "taleo" && parts.length === 2 ? { site: parts[1] } : {};
   return { name: j.company, ats: j.ats, slug, ...board, careers_url: j.estimated ? j.url : careersUrl({ ats: j.ats as never, slug, ...board }) || j.url };
-}
-
-/** A directory entry as far as grouping needs it. */
-type Board = { key: string; name: string; ats: string; status: string; open_jobs: number | null };
-
-/** One company in search results: its best board first, then its other live boards. */
-export type BoardGroup<T extends Board> = { lead: T; others: T[] };
-
-/** "Gusto, Inc." and "gusto" are one company; "Binance.US" is not "Binance". */
-const companyName = (name: string) =>
-  name
-    .toLowerCase()
-    .replace(/[,.]?\s+(inc|llc|ltd|limited|gmbh|corp|corporation|co)\.?$/, "")
-    .replace(/[^\p{L}\p{N}]/gu, "");
-
-const boardRank = (b: Board) => [b.status === "live" ? 2 : b.status === "dormant" ? 1 : 0, SUPPORTED.has(b.ats) ? 1 : 0, b.open_jobs ?? 0];
-const better = (a: Board, b: Board) => {
-  const [x, y] = [boardRank(a), boardRank(b)];
-  return y[0]! - x[0]! || y[1]! - x[1]! || y[2]! - x[2]!;
-};
-
-/**
- * Many companies have boards on several hiring systems (Binance on Lever, Greenhouse, Ashby and
- * SmartRecruiters), often old ones left behind. Group boards by company name, keep the input order of
- * each group's first board, lead with the best (live, scannable, most jobs) and drop dead boards when a
- * live one exists. Boards in `keep` (ones you watch) are never dropped.
- */
-export function groupBoards<T extends Board>(boards: readonly T[], keep: ReadonlySet<string> = new Set()): BoardGroup<T>[] {
-  const groups = new Map<string, T[]>();
-  for (const b of boards) {
-    const k = companyName(b.name) || b.key;
-    groups.set(k, [...(groups.get(k) ?? []), b]);
-  }
-  return [...groups.values()].map((list) => {
-    const live = list.some((b) => b.status === "live");
-    const [lead, ...others] = list.filter((b) => !live || b.status === "live" || keep.has(b.key)).sort(better);
-    return { lead: lead!, others };
-  });
-}
-
-/**
- * How many companies the directory holds: real employers (no sandbox or test boards), one per company
- * however many careers pages it has. The one "directory size" shown anywhere (H9), via roughCount().
- */
-export function countCompanies(boards: readonly Board[]): number {
-  const names = new Set<string>();
-  for (const b of boards) if (!isPlaceholderBoard(b.name)) names.add(companyName(b.name) || b.key);
-  return names.size;
 }
 
 export function toRow(c: CompanyRef): CompanyRow {
