@@ -1,9 +1,11 @@
 // @vitest-environment happy-dom
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { companyIndex } from "@rawjobs/core/company-search";
+import { cleanBrowseRequest, pageOf, searchDirectory } from "@rawjobs/core/directory-search";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { AddByLink } from "../src/components/AddByLink";
 import { MyCompanies } from "../src/components/Companies";
-import { CompanyFinder, typedName, type DirCompany } from "../src/components/CompanyFinder";
+import { BrowseSkeleton, CompanyFinder, typedName, type DirCompany } from "../src/components/CompanyFinder";
 import type { CompanyCheck, CompanyRow } from "../src/lib/setup";
 
 vi.mock("../src/lib/setup", async (importOriginal) => ({
@@ -30,11 +32,23 @@ vi.mock("../src/lib/setup", async (importOriginal) => ({
   ),
 }));
 
+/** Requests to the local server's directory search, answered from `directory` (below) as it would. */
+let searches: Record<string, unknown>[] = [];
 beforeEach(() => {
-  // The directory bar asks the local server for the directory's age; there is none here.
+  searches = [];
   vi.stubGlobal(
     "fetch",
-    vi.fn(() => new Promise(() => {})),
+    vi.fn(async (url: string, init?: RequestInit) => {
+      if (url === "/api/directory/search") {
+        const body = JSON.parse(String(init?.body));
+        searches.push(body);
+        const r = cleanBrowseRequest(body);
+        const list = searchDirectory(directory, { q: r.q, watched: new Set(r.watched), index: companyIndex(directory) });
+        return new Response(JSON.stringify(pageOf(list, r, true)));
+      }
+      // The directory bar asks the local server for the directory's age; there is none here.
+      return new Promise(() => {});
+    }),
   );
 });
 afterEach(() => {
@@ -63,14 +77,14 @@ const directory = [
 ];
 
 const browse = (q: string, onAddByLink = vi.fn()) => {
-  render(<CompanyFinder watched={new Set()} directory={directory} directoryError={null} onAddMany={() => []} onRemove={() => {}} onDirectoryUpdated={() => {}} q={q} onAddByLink={onAddByLink} />);
+  render(<CompanyFinder watched={new Set()} rev={0} onAddMany={() => []} onRemove={() => {}} onDirectoryUpdated={() => {}} q={q} onAddByLink={onAddByLink} />);
   return { onAddByLink, text: () => document.body.textContent ?? "" };
 };
 
 describe("Browse all search", () => {
-  it("“revolut”: says no company has that name, offers Add Revolut by link, and never matches a careers address", () => {
+  it("“revolut”: says no company has that name, offers Add Revolut by link, and never matches a careers address", async () => {
     const { onAddByLink, text } = browse("revolut");
-    expect(screen.getByRole("heading", { name: "No company called “revolut” in the directory" })).toBeTruthy();
+    expect(await screen.findByRole("heading", { name: "No company called “revolut” in the directory" })).toBeTruthy();
     expect(text()).toContain("No exact match for “revolut” · 2 close matches");
     expect(text()).toContain("Close matches");
     expect(text()).toContain("Revolution Medicines");
@@ -81,20 +95,54 @@ describe("Browse all search", () => {
     expect(onAddByLink).toHaveBeenCalledWith("Revolut");
   });
 
-  it("“recharge”: finds Recharge (listed as Getrecharge.Com) as the exact match, with no add-by-link prompt", () => {
+  it("“recharge”: finds Recharge (listed as Getrecharge.Com) as the exact match, with no add-by-link prompt", async () => {
     const { text } = browse("recharge");
-    expect(text()).toContain("1 exact match for “recharge”");
+    await waitFor(() => expect(text()).toContain("1 exact match for “recharge”"));
     expect(text()).toContain("Recharge");
     expect(text()).not.toContain("No company called");
     expect(text()).not.toContain("Close matches");
   });
 
-  it("no results at all: says so plainly and still offers Add by link", () => {
+  it("no results at all: says so plainly and still offers Add by link", async () => {
     const { onAddByLink, text } = browse("zyxwq");
-    expect(screen.getByRole("heading", { name: "No company called “zyxwq” in the directory" })).toBeTruthy();
+    expect(await screen.findByRole("heading", { name: "No company called “zyxwq” in the directory" })).toBeTruthy();
     expect(text()).toContain("No exact match for “zyxwq”");
     fireEvent.click(screen.getByRole("button", { name: "Add Zyxwq by link" }));
     expect(onAddByLink).toHaveBeenCalledWith("Zyxwq");
+  });
+});
+
+describe("Browse all loading", () => {
+  it("shows placeholder rows until the first page arrives, then the companies", async () => {
+    let answer: ((r: Response) => void) | undefined;
+    vi.stubGlobal(
+      "fetch",
+      vi.fn((url: string) => (url === "/api/directory/search" ? new Promise<Response>((r) => (answer = r)) : new Promise(() => {}))),
+    );
+    const { text } = browse("");
+    expect(document.querySelector('[data-skeleton="browse"]')).toBeTruthy();
+    expect(text()).toContain("Loading companies");
+    // The filters don't wait for the list.
+    expect(screen.getByRole("combobox", { name: "Industry" })).toBeTruthy();
+    const r = cleanBrowseRequest({});
+    await waitFor(() => expect(answer).toBeDefined());
+    answer!(new Response(JSON.stringify(pageOf(searchDirectory(directory, { q: "", watched: new Set() }), r, false))));
+    await waitFor(() => expect(text()).toContain("Showing 1–4 of 4 matching companies"));
+    expect(document.querySelector('[data-skeleton="browse"]')).toBeNull();
+  });
+
+  it("says the search is getting ready while the first search waits for the index", () => {
+    render(<BrowseSkeleton preparing />);
+    expect(screen.getByRole("status").textContent).toContain("Getting search ready…");
+    // Ten rows, the last four hidden on a phone.
+    expect(document.querySelectorAll('[data-skeleton="browse"] li')).toHaveLength(10);
+    expect(document.querySelectorAll('[data-skeleton="browse"] li.max-sm\\:hidden')).toHaveLength(4);
+  });
+
+  it("sends your companies with each search, and pages on the server", async () => {
+    render(<CompanyFinder watched={new Set(["ashby:recharge"])} rev={0} onAddMany={() => []} onRemove={() => {}} onDirectoryUpdated={() => {}} q="" onAddByLink={() => {}} />);
+    await waitFor(() => expect(searches).toHaveLength(1));
+    expect(searches[0]).toMatchObject({ q: "", page: 1, pageSize: 25, watched: ["ashby:recharge"], system: "all", industry: "" });
   });
 });
 

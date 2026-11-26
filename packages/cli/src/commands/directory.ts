@@ -1,6 +1,9 @@
 import { resolve } from "node:path";
+import { createInterface } from "node:readline";
 import { parseArgs } from "node:util";
 import { defaultDataDir, directoryIndustryCounts, loadConfig, directoryAgeDays, directoryStatus, sendContributions, sendMoves, updateDirectory } from "@rawjobs/core";
+import { cleanBrowseRequest, directoryBrowser } from "@rawjobs/core/directory-browse";
+import { readStdin } from "../util";
 
 /** The shared company directory: status, download the latest copy, share waiting additions. */
 export async function cmdDirectory(args: string[]): Promise<number> {
@@ -14,6 +17,8 @@ export async function cmdDirectory(args: string[]): Promise<number> {
       "if-older": { type: "string" },
       /** Background update: skipped when auto_update is off in your settings. */
       auto: { type: "boolean", default: false },
+      /** search: answer one JSON request per stdin line until stdin closes (the local server keeps one running). */
+      serve: { type: "boolean", default: false },
     },
   });
   const dataDir = resolve(values.data);
@@ -74,8 +79,54 @@ export async function cmdDirectory(args: string[]): Promise<number> {
       out({ ...result, moves_shared: moved.sent }, `${result.message}${moved.sent ? ` ${moved.message}` : ""}`);
       return 0;
     }
+    case "search":
+      return await searchDirectoryCmd(dataDir, values.serve);
     default:
-      console.error("Usage: rawjobs directory <status|update|share> [--force] [--if-older <days>] [--json]");
+      console.error("Usage: rawjobs directory <status|update|share|search> [--force] [--if-older <days>] [--json] [--serve]");
       return 2;
   }
+}
+
+/**
+ * Browse all for the page: `{ "q": "revolut", "page": 1, … }` on stdin, one page of results on stdout.
+ * With --serve, one request per line ({ id, op: "search" | "names" | "warm", … }), one answer per line
+ * ({ id, ok, answer | error }), the directory and its search index kept between them.
+ */
+async function searchDirectoryCmd(dataDir: string, serve: boolean): Promise<number> {
+  const browser = directoryBrowser(dataDir);
+  const answer = async (m: Record<string, unknown>) => {
+    if (m.op === "warm") return { present: browser.warm() };
+    if (m.op === "names") return { names: browser.names(Array.isArray(m.keys) ? m.keys.filter((k): k is string => typeof k === "string") : []) };
+    return browser.search(cleanBrowseRequest(m));
+  };
+  if (!serve) {
+    const text = (await readStdin()).trim();
+    console.log(JSON.stringify(await answer(text ? JSON.parse(text) : {})));
+    return 0;
+  }
+  const send = (o: object) => process.stdout.write(`${JSON.stringify(o)}\n`);
+  const lines = createInterface({ input: process.stdin, crlfDelay: Number.POSITIVE_INFINITY });
+  const working = new Set<Promise<unknown>>();
+  for await (const line of lines) {
+    if (!line.trim()) continue;
+    let m: Record<string, unknown>;
+    try {
+      m = JSON.parse(line) as Record<string, unknown>;
+    } catch (err) {
+      send({ id: null, ok: false, error: (err as Error).message });
+      continue;
+    }
+    // Answered as each is ready (a search may wait for the index while a page change doesn't): by id.
+    const job = answer(m)
+      .then((a) => {
+        send({ id: m.id ?? null, ok: true, answer: a });
+        // Once the directory is read, build the search index while the page still shows the list.
+        void browser.prepareSearch().catch(() => {});
+      })
+      .catch((err: Error) => send({ id: m.id ?? null, ok: false, error: err.message }))
+      .finally(() => working.delete(job));
+    working.add(job);
+  }
+  await Promise.all(working);
+  return 0;
 }

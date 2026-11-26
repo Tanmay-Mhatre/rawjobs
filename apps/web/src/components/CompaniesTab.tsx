@@ -1,12 +1,13 @@
 import { companyLabel } from "@rawjobs/core/display-name";
 import { ArrowRight, Check, CircleAlert, LoaderCircle, Radar, RefreshCw, X } from "lucide-react";
 import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
-import { addCompanies, countCompanies, jobCompanyKey, keyOf, replaceCompany, wantsAttention, type CompanyRef } from "../lib/companies";
-import { companyIndex, nameRank, type CompanyIndex } from "../lib/companySearch";
+import { addCompanies, jobCompanyKey, keyOf, replaceCompany, wantsAttention, type CompanyRef } from "../lib/companies";
+import { nameRank } from "../lib/companySearch";
 import { useCompanySuggestions, useSuggestPoolSize, type SuggestState } from "../lib/companySuggest";
 import { coverageLine, initialCompaniesTab, type CompaniesTabId } from "../lib/companiesPage";
 import type { DataMeta, Job } from "../lib/data";
 import { canRunLocally, useDirectorySize } from "../lib/data";
+import { useDirectoryNames, useDirectorySearch, useHostedCompanyCount } from "../lib/directorySearch";
 import { useScanPrefs } from "../lib/scan";
 import { draftToConfig, saveConfig, scanPlan, type CompanyRow, type Draft, type ScanPlan } from "../lib/setup";
 import { load, save } from "../lib/storage";
@@ -14,7 +15,7 @@ import { AddByLink } from "./AddByLink";
 import type { BoardMove } from "@rawjobs/core/schema";
 import { shareMove } from "../lib/shareMove";
 import { MyCompanies, moveKey, type HiddenCompany } from "./Companies";
-import { CompanyFinder, searchDirectory, useDirectory, type DirCompany } from "./CompanyFinder";
+import { CompanyFinder } from "./CompanyFinder";
 import { ForYou } from "./companies/ForYou";
 import { QuickAdd } from "./companies/QuickAdd";
 import { packActions, Tray, useVisit } from "./companies/Tray";
@@ -196,16 +197,11 @@ export function CompaniesTab({ configured, meta, jobs, draft, loaded, saved, upd
   const [linkName, setLinkName] = useState<string | undefined>();
   /** Bumped after the directory updates (or to retry loading it), so search reloads it. */
   const [rev, setRev] = useState(0);
-  const { directory, error: directoryError } = useDirectory(rev);
   /** The one directory size shown on this page (H9). */
   const directorySize = useDirectorySize(rev);
-  const companyCount = useMemo(() => directorySize ?? (directory ? countCompanies(directory) : undefined), [directorySize, directory]);
-  /** The directory's search index, built the first time a search needs it (about a quarter second), then kept. */
-  const indexCache = useRef<{ of: DirCompany[]; index: CompanyIndex<DirCompany> } | null>(null);
+  const hostedCount = useHostedCompanyCount(rev);
+  const companyCount = directorySize ?? hostedCount;
   const searchMine = tab === "mine" && draft.companies.length > 0;
-  const needIndex = !!directory && (tab === "browse" || (searchMine && !!q.trim()));
-  if (needIndex && indexCache.current?.of !== directory) indexCache.current = { of: directory, index: companyIndex(directory) };
-  const index = indexCache.current?.of === directory ? indexCache.current.index : undefined;
   const autosave = useAutoSave(draft, saved, onSaved, configured && canRunLocally);
   const plan = useScanPlan(saved, configured && canRunLocally);
   const { scope } = useScanPrefs();
@@ -254,6 +250,8 @@ export function CompaniesTab({ configured, meta, jobs, draft, loaded, saved, upd
   latest.current = draft;
   /** This visit's Starter pack changes, for the tray (session memory, nothing saved). */
   const visit = useVisit();
+  /** Names of the companies you hid, for the Hidden list (it keeps only their keys). */
+  const names = useDirectoryNames(draft.muted, rev);
 
   if (!configured) {
     return (
@@ -347,7 +345,6 @@ export function CompaniesTab({ configured, meta, jobs, draft, loaded, saved, upd
   };
 
   // Hidden companies: muted in your config (by key) and hidden on the Radar (by name), shown once each.
-  const names = new Map((directory ?? []).map((c) => [c.key, c.name]));
   const mutedRows = draft.muted.map((key) => ({ key, name: names.get(key) }));
   const mutedNames = new Set(mutedRows.map((m) => m.name).filter(Boolean));
   const hidden: HiddenCompany[] = [...mutedRows, ...hiddenNames.filter((n) => !mutedNames.has(n)).map((name) => ({ key: undefined, name }))];
@@ -449,7 +446,7 @@ export function CompaniesTab({ configured, meta, jobs, draft, loaded, saved, upd
               </p>
             }
           />
-          {searchMine && q.trim() && <MoreInDirectory q={q} mine={draft.companies} directory={directory} index={index} watched={watched} onBrowse={() => setTab("browse")} />}
+          {searchMine && q.trim() && <MoreInDirectory q={q} mine={draft.companies} rev={rev} watched={watched} onBrowse={() => setTab("browse")} />}
           {draft.companies.length === 0 && (
             <div className="flex flex-wrap gap-2">
               <Button variant="primary" onClick={() => setTab("suggestions")}>
@@ -493,8 +490,7 @@ export function CompaniesTab({ configured, meta, jobs, draft, loaded, saved, upd
         <TabPanel id="browse" ids={ids}>
           <CompanyFinder
             watched={watched}
-            directory={directory}
-            directoryError={directoryError}
+            rev={rev}
             onAddMany={addMany}
             onRemove={(k) => removeMany([k])}
             onDirectoryUpdated={() => setRev((r) => r + 1)}
@@ -503,7 +499,6 @@ export function CompaniesTab({ configured, meta, jobs, draft, loaded, saved, upd
             q={q}
             onAddByLink={openLink}
             companyCount={companyCount}
-            index={index}
           />
         </TabPanel>
       )}
@@ -518,26 +513,12 @@ export function CompaniesTab({ configured, meta, jobs, draft, loaded, saved, upd
 }
 
 /** Under a search of My companies: how many of yours match, and how many more the directory has (one click to Browse all). */
-function MoreInDirectory({
-  q,
-  mine,
-  directory,
-  index,
-  watched,
-  onBrowse,
-}: {
-  q: string;
-  mine: readonly CompanyRow[];
-  directory: DirCompany[] | null;
-  index?: CompanyIndex<DirCompany>;
-  watched: Set<string>;
-  onBrowse: () => void;
-}) {
+function MoreInDirectory({ q, mine, rev, watched, onBrowse }: { q: string; mine: readonly CompanyRow[]; rev: number; watched: Set<string>; onBrowse: () => void }) {
   const yours = mine.filter((r) => nameRank(q, r.name, companyLabel(r)) >= 0).length;
-  const more = useMemo(
-    () => (directory && index ? searchDirectory(directory, { q, watched, index }).filter((g) => ![g.lead, ...g.others].some((c) => watched.has(c.key))).length : 0),
-    [directory, index, q, watched],
-  );
+  // How many companies that aren't yours the directory has for this search (counted by the search).
+  const { answer, loading, slow } = useDirectorySearch({ q, industry: "", system: "all", page: 1, pageSize: 1, hideWatched: true }, { watched, rev, enabled: yours > 0 });
+  const more = answer && !answer.missing && !(loading && slow) ? answer.total : 0;
+  const counting = !answer || (loading && slow);
   // None of yours match: the list itself says so and links to the directory.
   if (!yours) return null;
   return (
@@ -545,6 +526,11 @@ function MoreInDirectory({
       <span className="tabular">
         {yours.toLocaleString()} {yours === 1 ? "match" : "matches"} in your list
       </span>
+      {counting && (
+        <span className="flex h-6 items-center animate-[rj-fade_var(--duration-quick)_var(--ease-enter)_100ms_backwards]" aria-hidden data-skeleton="more">
+          <span className="rj-skel h-2.5 w-36" />
+        </span>
+      )}
       {more > 0 && (
         <>
           <span aria-hidden>·</span>
