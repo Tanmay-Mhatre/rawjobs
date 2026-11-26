@@ -12,6 +12,9 @@ type Status = {
   age_days: number | null;
 };
 
+/** A shared directory older than this is worth a word: it's normally rebuilt every week. */
+const STALE_DAYS = 21;
+
 /** "22 Oct", with the year only when it isn't this year. */
 const shortDate = (iso: string) => {
   const d = new Date(iso);
@@ -74,6 +77,7 @@ export function DirectoryBar({ onUpdated, companies }: { onUpdated: () => void; 
     : status.present
       ? `${count ? `${roughCount(count)} companies · ` : ""}built on this computer. Update to get everyone's additions`
       : "Not downloaded yet";
+  const stale = !!status.local && Date.now() - Date.parse(status.local.generated_at) > STALE_DAYS * 86_400_000;
 
   return (
     <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5 rounded-md bg-inset/60 px-3 py-2 type-small">
@@ -86,6 +90,11 @@ export function DirectoryBar({ onUpdated, companies }: { onUpdated: () => void; 
         {busy ? <LoaderCircle className="size-3.5 animate-spin" /> : <CloudDownload className="size-3.5" />}
         {busy ? "Updating…" : status.present ? "Update directory" : "Download directory"}
       </Button>
+      {stale && (
+        <p className="w-full text-warning-text">
+          This version of the directory is more than 3 weeks old. It's normally updated every week, so some new companies may be missing until the next update.
+        </p>
+      )}
       <p role="status" className={cx("w-full type-small empty:hidden", message?.tone === "bad" ? "text-danger-text" : "text-muted")}>
         {message?.text}
       </p>
