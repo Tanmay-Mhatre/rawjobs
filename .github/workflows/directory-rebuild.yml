@@ -383,10 +383,11 @@ jobs:
 
       - name: Save the working state
         # Also after a failure or timeout, so progress isn't lost; but never when the restore failed,
-        # or a run that started from nothing would overwrite good state.
-        if: always() && steps.state.outcome == 'success'
+        # or a run that started from nothing would overwrite good state. Only on main: a test run on
+        # another branch reads with github.token, which can't write to the data repo.
+        if: always() && steps.state.outcome == 'success' && github.ref == 'refs/heads/main'
         env:
-          GH_TOKEN: ${{ secrets.DATA_REPO_TOKEN || github.token }}
+          GH_TOKEN: ${{ secrets.DATA_REPO_TOKEN }}
         run: bash scripts/catalog/state.sh save
 
   # Restores what collect saved, builds, indexes, packages and gates. It holds no write token and no
