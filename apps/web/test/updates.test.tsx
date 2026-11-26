@@ -148,6 +148,10 @@ describe("ServerNotices", () => {
     expect(shown.indexOf("NewUpdate button")).toBeLessThan(shown.indexOf("ImprovedFaster scans"));
     expect(screen.getByText("See all 4 changes")).toBeTruthy();
     expect(screen.getByRole("button", { name: /Update now/ })).toBeTruthy();
+    // A long list of changes scrolls inside the window instead of running off it.
+    const dialog = screen.getByRole("dialog");
+    expect(dialog.className).toContain("max-h-[calc(100dvh-2rem)]");
+    expect(dialog.className).toContain("overflow-y-auto");
     // Background check errors don't turn it into "didn't finish" before you clicked.
     cleanup();
     api({ ...required, error: "Couldn't reach GitHub to get the update." });
