@@ -178,7 +178,7 @@ function serialize(doc: TrackingDoc): string {
 
 function writeDoc(path: string, doc: TrackingDoc, text = serialize(doc)): void {
   mkdirSync(dirname(path), { recursive: true });
-  writeFileAtomic(path, text);
+  writeFileAtomic(path, text, undefined, { fsync: true });
 }
 
 /** Back up, then write the next version whole: a temporary file moved into place. */

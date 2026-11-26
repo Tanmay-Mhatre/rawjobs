@@ -2,7 +2,7 @@ import { existsSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSy
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { readJsonOrSetAside, renameWithRetry, writeFileAtomic } from "../src/atomic";
+import { fsOps, readJsonOrSetAside, renameWithRetry, writeFileAtomic } from "../src/atomic";
 import { readJobs, readMeta } from "../src/store";
 
 let dir: string;
@@ -25,6 +25,22 @@ describe("writeFileAtomic", () => {
     expect(() => writeFileAtomic(join(dir, "missing-folder", "x.json"), "new")).toThrow();
     expect(readFileSync(file, "utf8")).toBe("old");
     expect(readdirSync(dir)).toEqual(["history.json"]);
+  });
+
+  it("with fsync calls fsyncSync before rename", () => {
+    dir = mkdtempSync(join(tmpdir(), "rawjobs-atomic-"));
+    const file = join(dir, "tracking.json");
+    writeFileSync(file, "old");
+    const order: string[] = [];
+    const sync = vi.spyOn(fsOps, "fsyncSync").mockImplementation(() => {
+      order.push(readFileSync(file, "utf8"));
+    });
+    writeFileAtomic(file, "new ✓", undefined, { fsync: true });
+    expect(order[0]).toBe("old");
+    expect(sync).toHaveBeenCalledTimes(process.platform === "win32" ? 1 : 2);
+    sync.mockRestore();
+    expect(readFileSync(file, "utf8")).toBe("new ✓");
+    expect(readdirSync(dir)).toEqual(["tracking.json"]);
   });
 });
 
@@ -52,6 +68,22 @@ describe("readJsonOrSetAside", () => {
     warn.mockRestore();
     expect(existsSync(join(dir, "history.json.bad"))).toBe(true);
   });
+
+  it("survives EPERM on the set-aside rename", () => {
+    dir = mkdtempSync(join(tmpdir(), "rawjobs-atomic-"));
+    const file = join(dir, "discovery.json");
+    writeFileSync(file, "{");
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const seen: string[] = [];
+    const rename = vi.fn(() => {
+      throw Object.assign(new Error("EPERM"), { code: "EPERM" });
+    });
+    expect(readJsonOrSetAside(file, (bad) => seen.push(bad), rename)).toBeUndefined();
+    expect(warn).toHaveBeenCalledTimes(1);
+    warn.mockRestore();
+    expect(seen).toEqual([]);
+    expect(readFileSync(file, "utf8")).toBe("{");
+  });
 });
 
 describe("renameWithRetry", () => {
@@ -77,6 +109,16 @@ describe("renameWithRetry", () => {
     });
     expect(() => renameWithRetry("a.tmp", "a", rename)).toThrow("EPERM");
     expect(rename).toHaveBeenCalledTimes(8);
+  });
+
+  it("keeps trying up to maxMs", () => {
+    const rename = vi.fn(() => {
+      throw busy("EBUSY");
+    });
+    const start = Date.now();
+    expect(() => renameWithRetry("a.tmp", "a", rename, { maxMs: 40 })).toThrow("EBUSY");
+    expect(rename).toHaveBeenCalledTimes(4);
+    expect(Date.now() - start).toBeLessThan(1_000);
   });
 
   it("doesn't retry other errors", () => {

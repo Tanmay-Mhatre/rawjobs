@@ -1,4 +1,3 @@
-import { existsSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { parseArgs } from "node:util";
 import {
@@ -10,6 +9,7 @@ import {
   suggestCompanies,
   suggestCompaniesCached,
   readDirectory,
+  readJsonOrSetAside,
   ProfileSchema,
   type Config,
   type IndexedCompany,
@@ -38,7 +38,9 @@ export async function cmdCompanies(args: string[]): Promise<number> {
     return 2;
   }
   const indexFile = resolve(values.data, "catalog", "index.json");
-  if (!existsSync(indexFile)) {
+  // A damaged index is moved aside and counts as missing: the next directory update fetches it again.
+  const index = readJsonOrSetAside<{ generated_at: string; companies: IndexedCompany[] }>(indexFile, (bad) => console.warn(`${indexFile} couldn't be read; moved it to ${bad}.`));
+  if (!index) {
     const msg = "No company index yet. Build it with: pnpm catalog:refresh";
     if (values.json) console.log(JSON.stringify({ error: msg, hiringNow: [], worthWatching: [], scanned: 0 }));
     else console.error(msg);
@@ -54,7 +56,6 @@ export async function cmdCompanies(args: string[]): Promise<number> {
     if (!sent?.success) throw err;
   }
   const profile = sent?.success ? sent.data : config!.profile;
-  const index = JSON.parse(readFileSync(indexFile, "utf8")) as { generated_at: string; companies: IndexedCompany[] };
   const directory = readDirectory(values.data);
   // Directory companies without job rows (no openings, or not indexed): candidates to watch.
   const others = directory.filter((c) => !c.indexed);

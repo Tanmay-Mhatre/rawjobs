@@ -87,7 +87,7 @@ export function createNetworkStore(home: string, now: () => Date = () => new Dat
   }
   function save(file: NetworkFile) {
     mkdirSync(dirname(path), { recursive: true });
-    writeFileAtomic(path, `${JSON.stringify(file)}\n`);
+    writeFileAtomic(path, `${JSON.stringify(file)}\n`, undefined, { fsync: true });
     disk = { kind: "ready", loaded: build(file) };
     seen = mtime();
   }
