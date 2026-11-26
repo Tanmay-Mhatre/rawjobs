@@ -1,30 +1,14 @@
 import { companyLabel } from "@rawjobs/core/display-name";
 import { INDUSTRIES, INDUSTRY_BY_ID, INDUSTRY_GROUPS } from "@rawjobs/core/catalog/industries";
-import { isPlaceholderBoard, safeUrl } from "@rawjobs/core/text";
+import { safeUrl } from "@rawjobs/core/text";
 import { ChevronDown, CloudDownload, ExternalLink, Link2, LoaderCircle, RefreshCw } from "lucide-react";
 import { Fragment, useEffect, useMemo, useRef, useState } from "react";
-import { ATS_LABEL, groupBoards, SUPPORTED, type CompanyRef } from "../lib/companies";
-import { companyIndex, companyMatches, MATCH, type CompanyIndex } from "../lib/companySearch";
+import { companyIndex, MATCH, type CompanyIndex } from "@rawjobs/core/company-search";
+import { ATS_LABEL, type CompanyRef, type DirCompany, searchDirectory, SUPPORTED } from "@rawjobs/core/directory-search";
 import { canRunLocally } from "../lib/data";
 import { DirectoryBar, updateDirectory } from "./DirectoryBar";
 import { AddButton } from "./CompanyButtons";
 import { Button, cx, Pagination, Select } from "./ui";
-
-/** Directory entry served at data/catalog/directory.json (see scripts/catalog/publish.ts). */
-export type DirCompany = CompanyRef & {
-  key: string;
-  tier: "curated" | "dump";
-  /** unverified: a seed company on a hiring system RawJobs can't check yet. */
-  status: "live" | "dormant" | "unverified";
-  open_jobs: number | null;
-  indexed: boolean;
-  tags?: string[];
-  title_tags?: string[];
-  /** Where each tag that no hand-made list gives came from (directories from October 2026 on). */
-  tag_src?: Record<string, "wikidata" | "titles">;
-  /** Found by you with "Add by link", or from the industry seed list. */
-  origin?: "user" | "seed";
-};
 
 const BROWSE_PAGE = 25;
 
@@ -76,38 +60,7 @@ export function CompanyFinder({ watched, directory, directoryError, onAddMany, o
 
 // ---------- search the whole directory ----------
 
-/**
- * Directory search, one row per company (its other careers pages fold under it), each with how it matched
- * (`rank`, MATCH). Browsing lists companies with open jobs; a search finds any, and yours always show. The
- * search looks at names only, never careers addresses (companyMatches): the exact name first, then names
- * that start with it, then names that contain it, then close spellings; within each, the best fit for your
- * profile, then the biggest. Sandbox and test boards never show (unless one is already in My companies).
- */
-export function searchDirectory(
-  all: readonly DirCompany[],
-  o: {
-    q: string;
-    watched: ReadonlySet<string>;
-    fit?: ReadonlyMap<string, number>;
-    system?: "all" | "supported" | "soon";
-    industry?: string;
-    /** The directory's search index (companyIndex); built here when not given. */
-    index?: CompanyIndex<DirCompany>;
-  },
-) {
-  const s = o.q.trim().toLowerCase();
-  const matches = s ? companyMatches(o.index ?? companyIndex(all), s) : undefined;
-  const rank = (c: DirCompany) => matches?.get(c) ?? 0;
-  const system = o.system ?? "all";
-  const sorted = all
-    .filter((c) => o.watched.has(c.key) || !isPlaceholderBoard(c.name))
-    .filter((c) => c.status === "live" || !!s || o.watched.has(c.key))
-    .filter((c) => system === "all" || (system === "supported") === SUPPORTED.has(c.ats))
-    .filter((c) => !o.industry || !!c.tags?.includes(o.industry) || !!c.title_tags?.includes(o.industry))
-    .filter((c) => !matches || matches.has(c))
-    .sort((a, b) => rank(a) - rank(b) || (o.fit?.get(b.key) ?? 0) - (o.fit?.get(a.key) ?? 0) || (b.open_jobs ?? 0) - (a.open_jobs ?? 0));
-  return groupBoards(sorted, new Set(o.watched)).map((g) => ({ ...g, rank: Math.min(rank(g.lead), ...g.others.map(rank)) }));
-}
+export { searchDirectory, type DirCompany };
 
 /** Title case for a name typed in lower case ("revolut" is "Revolut"); a name typed with capitals stays as typed. */
 export function typedName(q: string): string {
