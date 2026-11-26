@@ -2,10 +2,11 @@ import { companyLabel } from "@rawjobs/core/display-name";
 import { INDUSTRIES, INDUSTRY_BY_ID, INDUSTRY_GROUPS } from "@rawjobs/core/catalog/industries";
 import { safeUrl } from "@rawjobs/core/text";
 import { ChevronDown, CloudDownload, ExternalLink, Link2, LoaderCircle, RefreshCw } from "lucide-react";
-import { Fragment, useEffect, useMemo, useRef, useState } from "react";
-import { companyIndex, MATCH, type CompanyIndex } from "@rawjobs/core/company-search";
-import { ATS_LABEL, type CompanyRef, type DirCompany, searchDirectory, SUPPORTED } from "@rawjobs/core/directory-search";
+import { Fragment, useEffect, useRef, useState } from "react";
+import { MATCH } from "@rawjobs/core/company-search";
+import { ATS_LABEL, type BrowseAnswer, type CompanyRef, type DirCompany, searchDirectory, SUPPORTED } from "@rawjobs/core/directory-search";
 import { canRunLocally } from "../lib/data";
+import { useDirectorySearch } from "../lib/directorySearch";
 import { DirectoryBar, updateDirectory } from "./DirectoryBar";
 import { AddButton } from "./CompanyButtons";
 import { Button, cx, Pagination, Select } from "./ui";
@@ -15,9 +16,8 @@ const BROWSE_PAGE = 25;
 type Props = {
   /** Keys of the companies in your list (saved or not yet). */
   watched: Set<string>;
-  /** The directory, once loaded (shared with the rest of the page). */
-  directory: DirCompany[] | null;
-  directoryError: string | null;
+  /** Bumped after the directory updates (or to retry loading it): asks again. */
+  rev: number;
   onAddMany: (list: CompanyRef[]) => string[];
   onRemove: (key: string) => void;
   /** Reload the directory (after an update, or to retry a failed load). */
@@ -32,28 +32,14 @@ type Props = {
   onAddByLink: (name?: string) => void;
   /** The page's one company count (countCompanies), for the directory bar. */
   companyCount?: number;
-  /** The directory's search index (companyIndex), shared with the page; built here when not given. */
-  index?: CompanyIndex<DirCompany>;
 };
 
 /** Browse all: the whole directory, filtered by the header search, industry or hiring system. */
-export function CompanyFinder({ watched, directory, directoryError, onAddMany, onRemove, onDirectoryUpdated, fit, industries, q, onAddByLink, companyCount, index }: Props) {
+export function CompanyFinder({ watched, rev, onAddMany, onRemove, onDirectoryUpdated, fit, industries, q, onAddByLink, companyCount }: Props) {
   return (
     <div className="space-y-4">
       <DirectoryBar onUpdated={onDirectoryUpdated} companies={companyCount} />
-      <Browse
-        all={directory}
-        error={directoryError}
-        fit={fit}
-        mine={industries ?? []}
-        watched={watched}
-        onAdd={(c) => void onAddMany([c])}
-        onRemove={onRemove}
-        q={q}
-        onAddByLink={onAddByLink}
-        onReload={onDirectoryUpdated}
-        index={index}
-      />
+      <Browse rev={rev} fit={fit} mine={industries ?? []} watched={watched} onAdd={(c) => void onAddMany([c])} onRemove={onRemove} q={q} onAddByLink={onAddByLink} onReload={onDirectoryUpdated} />
     </div>
   );
 }
@@ -114,9 +100,21 @@ function DirectoryMissing({ onReload }: { onReload: () => void }) {
   );
 }
 
+/** The search couldn't answer (the local server is restarting, say): offer a retry. */
+function SearchFailed({ onReload }: { onReload: () => void }) {
+  return (
+    <div role="alert" className="space-y-2 rounded-md bg-warning-subtle/50 p-4 type-small">
+      <p className="font-medium">Companies couldn't be loaded.</p>
+      <p className="text-muted">RawJobs may still be starting. Try again in a moment.</p>
+      <Button size="sm" onClick={onReload}>
+        <RefreshCw className="size-3.5" /> Try again
+      </Button>
+    </div>
+  );
+}
+
 function Browse({
-  all,
-  error,
+  rev,
   fit,
   mine,
   watched,
@@ -125,10 +123,8 @@ function Browse({
   q,
   onAddByLink,
   onReload,
-  index: shared,
 }: {
-  all: DirCompany[] | null;
-  error: string | null;
+  rev: number;
   fit?: ReadonlyMap<string, number>;
   mine: string[];
   watched: Set<string>;
@@ -137,15 +133,12 @@ function Browse({
   q: string;
   onAddByLink: (name?: string) => void;
   onReload: () => void;
-  index?: CompanyIndex<DirCompany>;
 }) {
   const [system, setSystem] = useState<"all" | "supported" | "soon">("all");
   const [industry, setIndustry] = useState("");
   const [page, setPage] = useState(1);
   const top = useRef<HTMLDivElement>(null);
-
-  const index = useMemo(() => shared ?? (all ? companyIndex(all) : undefined), [shared, all]);
-  const results = useMemo(() => (all ? searchDirectory(all, { q, watched, fit, system, industry, index }) : []), [all, index, q, system, industry, watched, fit]);
+  const { answer, error, loading, slow } = useDirectorySearch({ q, industry, system, page, pageSize: BROWSE_PAGE }, { watched, fit, rev });
 
   // Back to page 1 whenever the search or filters change.
   // biome-ignore lint/correctness/useExhaustiveDependencies: back to page 1 whenever the search or a filter changes: they are the triggers
@@ -155,25 +148,20 @@ function Browse({
     top.current?.scrollIntoView({ block: "nearest", behavior: "smooth" });
   };
 
-  if (error) return <DirectoryMissing onReload={onReload} />;
-  if (!all)
-    return (
-      <p role="status" className="flex items-center gap-2 py-6 type-small text-muted">
-        <LoaderCircle className="size-4 animate-spin" /> Loading the directory…
-      </p>
-    );
+  if (answer?.missing) return <DirectoryMissing onReload={onReload} />;
+  if (error && !loading) return <SearchFailed onReload={onReload} />;
 
-  const pageItems = results.slice((page - 1) * BROWSE_PAGE, page * BROWSE_PAGE);
-  const from = (page - 1) * BROWSE_PAGE + 1;
-  const to = Math.min(results.length, page * BROWSE_PAGE);
   const term = q.trim();
-  const exact = term ? results.filter((g) => g.rank === MATCH.exact).length : 0;
-  const close = results.length - exact;
   const filtered = system !== "all" || !!industry;
   const clearFilters = () => {
     setSystem("all");
     setIndustry("");
   };
+  // The last answer stays while the next one loads; placeholders on the first load, and when the next
+  // page or search takes a moment (SLOW_MS), so a quick change never flickers.
+  const shown = answer && !(loading && slow) ? answer : null;
+  // The first search after the app starts waits a few seconds for the search index: say so.
+  const preparing = !shown && !!term && !answer?.searchReady;
 
   return (
     <div className="space-y-3">
@@ -205,6 +193,38 @@ function Browse({
           <option value="soon">Coming in a later update</option>
         </Select>
       </div>
+      {shown && !shown.missing ? (
+        <Results answer={shown} term={term} filtered={filtered} clearFilters={clearFilters} onAddByLink={onAddByLink} goTo={goTo} mine={mine} watched={watched} onAdd={onAdd} onRemove={onRemove} />
+      ) : (
+        <BrowseSkeleton preparing={preparing} />
+      )}
+    </div>
+  );
+}
+
+/** One page of Browse all: the count line, the rows and the pages. */
+function Results({
+  answer,
+  term,
+  filtered,
+  clearFilters,
+  onAddByLink,
+  goTo,
+  ...line
+}: Omit<LineProps, "why"> & {
+  answer: Extract<BrowseAnswer, { rows: unknown }>;
+  term: string;
+  filtered: boolean;
+  clearFilters: () => void;
+  onAddByLink: (name?: string) => void;
+  goTo: (page: number) => void;
+}) {
+  const { rows, total, exact, page, pageSize } = answer;
+  const from = (page - 1) * pageSize + 1;
+  const to = Math.min(total, page * pageSize);
+  const close = total - exact;
+  return (
+    <>
       {/* Filtered counts stay exact, and say what they count (the directory size is the rounded-md one). */}
       <p role="status" className="tabular type-meta text-muted">
         {term
@@ -214,9 +234,9 @@ function Browse({
             ]
               .filter(Boolean)
               .join(" · ")
-          : results.length === 0
+          : total === 0
             ? "No matching companies"
-            : `Showing ${from.toLocaleString()}–${to.toLocaleString()} of ${results.length.toLocaleString()} matching ${results.length === 1 ? "company" : "companies"}`}
+            : `Showing ${from.toLocaleString()}–${to.toLocaleString()} of ${total.toLocaleString()} matching ${total === 1 ? "company" : "companies"}`}
       </p>
       <ul className="divide-y divide-line rounded-md border border-line">
         {/* No company has the name typed: say so, and offer to add it by link under that name. */}
@@ -238,16 +258,16 @@ function Browse({
             </div>
           </li>
         )}
-        {pageItems.map((g, i) => {
-          const firstClose = !!term && g.rank > MATCH.exact && (i === 0 ? page === 1 : pageItems[i - 1]!.rank === MATCH.exact);
+        {rows.map((g, i) => {
+          const firstClose = !!term && g.rank > MATCH.exact && (i === 0 ? page === 1 : rows[i - 1]!.rank === MATCH.exact);
           return (
             <Fragment key={g.lead.key}>
               {firstClose && <li className="bg-inset px-3 py-1.5 type-label text-muted">Close matches</li>}
-              <BrowseRow lead={g.lead} others={g.others} mine={mine} watched={watched} onAdd={onAdd} onRemove={onRemove} why={term ? matchWhy(g.rank, term) : undefined} />
+              <BrowseRow lead={g.lead} others={g.others} {...line} why={term ? matchWhy(g.rank, term) : undefined} />
             </Fragment>
           );
         })}
-        {results.length === 0 && !term && (
+        {total === 0 && !term && (
           <li className="space-y-3 px-3 py-6 text-center type-small text-muted">
             <p>No company matches these filters.</p>
             <Button size="sm" onClick={clearFilters}>
@@ -256,7 +276,53 @@ function Browse({
           </li>
         )}
       </ul>
-      {results.length > BROWSE_PAGE && <Pagination page={page} pageSize={BROWSE_PAGE} total={results.length} onPage={goTo} />}
+      {total > pageSize && <Pagination page={page} pageSize={pageSize} total={total} onPage={goTo} />}
+    </>
+  );
+}
+
+/** Placeholder rows: 10, 6 on a phone. */
+const SKELETON_ROWS = 10;
+const SKELETON_ROWS_PHONE = 6;
+/** Bar widths (rem) for the name and industry lines, varied so the placeholder reads as a list. */
+const NAME_W = [9, 7, 11, 8, 10, 6];
+const LINE_W = [6, 9, 5, 8, 7, 10];
+
+/**
+ * Browse all while results load: the count line, then rows drawn in the boxes a company row takes
+ * (name, industry line, Add), so nothing moves when they arrive. Bars show after 100 ms and, with
+ * reduced motion, don't shimmer. The first search after the app starts waits for the search index:
+ * then the count line says so.
+ */
+export function BrowseSkeleton({ preparing }: { preparing?: boolean }) {
+  return (
+    <div className="space-y-3 animate-[rj-fade_var(--duration-quick)_var(--ease-enter)_100ms_backwards]" aria-busy="true" data-skeleton="browse">
+      {preparing ? (
+        <p role="status" className="flex h-[1.125rem] items-center gap-2 type-meta text-muted">
+          <LoaderCircle className="size-3.5 animate-spin motion-reduce:animate-none" aria-hidden /> Getting search ready…
+        </p>
+      ) : (
+        <p role="status" className="flex h-[1.125rem] items-center">
+          <span className="sr-only">Loading companies</span>
+          <span className="rj-skel h-2.5 w-56 max-w-full" aria-hidden />
+        </p>
+      )}
+      <ul className="divide-y divide-line rounded-md border border-line" aria-hidden>
+        {Array.from({ length: SKELETON_ROWS }, (_, i) => (
+          // biome-ignore lint/suspicious/noArrayIndexKey: fixed placeholder rows, never reordered
+          <li key={i} className={cx("flex items-center gap-3 px-3 py-2.5", i >= SKELETON_ROWS_PHONE && "max-sm:hidden")}>
+            <div className="min-w-0 flex-1">
+              <p className="flex h-5 items-center">
+                <span className="rj-skel h-3 max-w-full" style={{ width: `${NAME_W[i % NAME_W.length]}rem` }} />
+              </p>
+              <p className="flex h-5 items-center">
+                <span className="rj-skel h-2.5 max-w-full" style={{ width: `${LINE_W[i % LINE_W.length]}rem` }} />
+              </p>
+            </div>
+            <span className="rj-skel h-7 w-[4.125rem] shrink-0 rounded-md pointer-coarse:h-11" />
+          </li>
+        ))}
+      </ul>
     </div>
   );
 }
@@ -342,29 +408,4 @@ export function BrowseRow({ lead, others, ...line }: LineProps & { lead: DirComp
       {open && others.map((o) => <BoardLine key={o.key} c={o} sub {...line} />)}
     </li>
   );
-}
-
-/** Load the directory (data/catalog/directory.json, plus companies added by link since the last publish). */
-export function useDirectory(rev: number): { directory: DirCompany[] | null; error: string | null } {
-  const [directory, setDirectory] = useState<DirCompany[] | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  // biome-ignore lint/correctness/useExhaustiveDependencies: `rev` is the trigger: bumped to load the directory again
-  useEffect(() => {
-    const get = (path: string) => fetch(path, { cache: "no-store" }).then((r) => (r.ok ? (r.json() as Promise<{ companies: DirCompany[] }>) : null));
-    let live = true;
-    setError(null);
-    setDirectory(null);
-    Promise.all([get("./catalog/directory.json"), get("./catalog/additions.json").catch(() => null)])
-      .then(([dir, adds]) => {
-        if (!dir) throw new Error("no directory");
-        const known = new Set(dir.companies.map((c) => c.key));
-        const extra = (adds?.companies ?? []).filter((c) => !known.has(c.key)).map((c): DirCompany => ({ ...c, tier: "dump", indexed: false, origin: "user" }));
-        if (live) setDirectory([...dir.companies, ...extra]);
-      })
-      .catch(() => live && setError("The company directory isn't downloaded yet."));
-    return () => {
-      live = false;
-    };
-  }, [rev]);
-  return { directory, error };
 }
