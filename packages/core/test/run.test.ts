@@ -56,6 +56,22 @@ describe("runRadar", () => {
     expect(result.jobs.at(-1)!.score).toBe(0);
   });
 
+  it("a connector over the cap fails that board only", async () => {
+    const http = new HttpClient({
+      hostDelayMs: 0,
+      sleep: async () => {},
+      maxBodyBytes: 64 * 1024,
+      // Lever answers with a body over the cap; the rest answer as usual.
+      fetchImpl: (async (input: string) => (input.includes("lever.co") ? new Response("x".repeat(128 * 1024), { status: 200 }) : routes(input))) as typeof fetch,
+    });
+    const result = await runRadar(config, { http, now });
+    const lever = result.health.find((h) => h.company === "Lever Co")!;
+    expect(lever).toMatchObject({ ok: false, failure: "other" });
+    expect(lever.error).toMatch(/response over/);
+    expect(result.health.find((h) => h.company === "GH Co")).toMatchObject({ ok: true, jobsFound: 3 });
+    expect(http.stats.tooLarge).toBe(1);
+  });
+
   it("a stop cuts companies in flight short and leaves them unrecorded, so a resume fetches them again", async () => {
     let stop = false;
     const http = new HttpClient({

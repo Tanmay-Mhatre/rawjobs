@@ -38,7 +38,23 @@ import { atsLabel, evergreenReason, INDEX_MAX_AGE_DAYS, isOlder } from "../lib/f
 import { isRoleStale, isStale, staleReasons } from "../lib/stale";
 import { type FitFix, fitFixes, fixApplied, useProfileFix } from "../lib/profileFix";
 import { load, save } from "../lib/storage";
-import { CLOSED_AS, type ClosedAs, type Entry, type EntryPatch, dayAfter, followUpDue, isActive, PIPELINE, quickStatus, STATUS_LABEL, type Status, stageSince, statusLabel } from "../lib/userState";
+import {
+  CLOSED_AS,
+  CLOSED_AS_COMMON,
+  type ClosedAs,
+  type Entry,
+  type EntryPatch,
+  dayAfter,
+  followUpDue,
+  hadOffer,
+  isActive,
+  PIPELINE,
+  quickStatus,
+  STATUS_LABEL,
+  type Status,
+  stageSince,
+  statusLabel,
+} from "../lib/userState";
 import { DateField } from "./DateField";
 import { Dialog } from "./Dialog";
 import { settingsHash } from "./settings/registry";
@@ -459,7 +475,7 @@ export function JobDetail(p: JobDetailProps) {
                       {STATUS_LABEL[s]}
                     </option>
                   ))}
-                  {(Object.keys(CLOSED_AS) as ClosedAs[]).map((c) => (
+                  {(hadOffer(entry) ? [...CLOSED_AS_COMMON, "accepted" as const] : CLOSED_AS_COMMON).map((c) => (
                     <option key={c} value={`rejected:${c}`}>
                       Closed: {CLOSED_AS[c].toLowerCase()}
                     </option>
