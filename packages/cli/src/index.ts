@@ -26,7 +26,7 @@ Usage:
   rawjobs validate            Check your config file
   rawjobs setup <status|save|check>   Used by the dashboard's setup wizard (JSON in/out)
   rawjobs companies suggest   Companies from the directory that fit your profile (industries, roles, places)
-  rawjobs directory <status|update|share>   The shared company directory: download the latest, share additions
+  rawjobs directory <status|update|share|search>   The shared company directory: download the latest, share additions
 
 Options for companies suggest:
   -c, --config <path>   Config file (as for run)
