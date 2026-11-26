@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { baselineSwap, boardsInPage, decide, emptyBaselines, isNxdomain, judge, type PageEvidence, readCompanyPage, sameBoard, trustedUrlOf, unescapePage, vendorHostOf } from "./lib/evidence";
 import type { CheckResult } from "./lib/live-check";
 import { boardKey, checkMoves, type DirRow, directoryMoves, emptyBlocked, emptyMoves, emptyPending, goneVerdict, type InboxMove, issueBody, type MoveBoard, type MovesFile } from "./lib/moves";
-import { allowedUrl, isPrivateAddress, type SafeGet, type SafeResult, safeFetcher } from "./lib/safe-fetch";
+import { allowedUrl, type SafeGet, type SafeResult, safeFetcher } from "./lib/safe-fetch";
 import { type IssueApi, runReview } from "./moves";
 
 const H = 3_600_000;
@@ -13,12 +13,6 @@ const iso = (hours: number) => at(hours).toISOString();
 // ---- safe fetch ----
 
 describe("safe fetch", () => {
-  it("refuses private, loopback, link-local, CGNAT and metadata addresses", () => {
-    for (const ip of ["10.0.0.1", "127.0.0.1", "169.254.169.254", "172.20.1.1", "192.168.1.1", "100.64.0.1", "0.0.0.0", "::1", "fd00::1", "fe80::1", "::ffff:10.0.0.1", "224.0.0.1"])
-      expect(isPrivateAddress(ip), ip).toBe(true);
-    for (const ip of ["8.8.8.8", "87.201.244.163", "2606:4700::1"]) expect(isPrivateAddress(ip), ip).toBe(false);
-  });
-
   it("only allows https on port 443 to a host name", () => {
     expect(allowedUrl("https://www.acme.com/careers")).not.toBeNull();
     for (const u of ["http://www.acme.com/", "https://www.acme.com:8443/", "https://127.0.0.1/", "https://user:pw@acme.com/", "file:///etc/passwd", "https://localhost/"])

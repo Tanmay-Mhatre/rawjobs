@@ -29,6 +29,7 @@ Where RawJobs keeps your files, and which port it uses (`packages/core/src/paths
 | `RAWJOBS_HOME` | the folder RawJobs runs in (installed copies: the install folder, set by the launchers in `packaging/bin`) | Your RawJobs folder: the config, `profile/` and, unless `RAWJOBS_DATA` says otherwise, `data/`. |
 | `RAWJOBS_DATA` | `data` | The scan data folder, relative to `RAWJOBS_HOME`. |
 | `RAWJOBS_PORT` | `4317` | The dashboard's port (`rawjobs serve --port` wins over it). |
+| `RAWJOBS_ALLOW_PRIVATE` | not set | Set it to `1` to let scans fetch private addresses. By default a scan never connects to this computer (`localhost`, `127.0.0.1`), your local network (`10.x`, `192.168.x`, …) or a cloud metadata address, and a redirect there is refused too, because job links and board hosts come from public boards and the shared directory (`packages/core/src/network-guard.ts`). Set it only when a job board you scan runs on your own network. |
 
 For example:
 
