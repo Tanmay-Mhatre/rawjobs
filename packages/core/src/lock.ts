@@ -59,7 +59,9 @@ export function acquireLock(path: string, o: LockOptions = {}): Lock | null {
       if ((err as NodeJS.ErrnoException).code !== "EEXIST") throw err;
     }
     const pid = readLockPid(path);
-    if (pid === process.pid) return held(path, o.beatMs ?? BEAT_MS);
+    // This process's own id: held by a task of this process right now (busy, like any holder), or
+    // left by an earlier process that had the same id (it's gone, since this one has it now).
+    if (pid === process.pid) return beats.has(path) ? null : held(path, o.beatMs ?? BEAT_MS);
     if (holds(path, pid, staleMs)) return null;
     // Left by a process that's gone: remove it (unless another process just took it over) and try again.
     if (readLockPid(path) === pid) rmSync(path, { force: true });
@@ -74,6 +76,32 @@ export async function acquireLockWaiting(path: string, o: LockOptions & { waitMs
     const lock = acquireLock(path, o);
     if (lock || Date.now() >= until) return lock;
     await new Promise((done) => setTimeout(done, POLL_MS));
+  }
+}
+
+/**
+ * Run `fn` (synchronous, quick: a read, a change and a write) holding the lock, waiting up to
+ * `waitMs`; throws LockBusyError when it stays busy. For small files several processes add to.
+ */
+export function withLockSync<T>(path: string, fn: () => T, o: LockOptions & { waitMs?: number } = {}): T {
+  const until = Date.now() + (o.waitMs ?? 5_000);
+  let lock = acquireLock(path, o);
+  while (!lock && Date.now() < until) {
+    Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 50);
+    lock = acquireLock(path, o);
+  }
+  if (!lock) throw new LockBusyError(path);
+  try {
+    return fn();
+  } finally {
+    lock.release();
+  }
+}
+
+export class LockBusyError extends Error {
+  constructor(readonly path: string) {
+    super("Another RawJobs process is saving the same file; try again in a moment.");
+    this.name = "LockBusyError";
   }
 }
 

@@ -23,6 +23,7 @@ import {
   scheduledFailedMessage,
   sendTelegram,
   sendTelegramQueued,
+  runCommitted,
   telegramSecrets,
   remindFollowUps,
   remindDeadlines,
@@ -255,6 +256,7 @@ export async function cmdRun(args: string[]): Promise<number> {
         syncMs,
         // Only when an alert will go out: the check costs requests the alert-less scan doesn't need.
         checkBeforeAlert: values.notify && alertsOn(config),
+        alert: values.notify ? (r, m) => alertText(config, r, m, scope) : undefined,
         onCompanyResult: quick.onCompanyResult,
         onStart: (s) => {
           quick.onStart?.(s);
@@ -321,7 +323,7 @@ export async function cmdRun(args: string[]): Promise<number> {
         console.error(`\nWrote ${out}`);
       }
 
-      const notified = values.notify && !values["dry-run"] ? await notifyScan(config, result, merged, scope, dataDir) : undefined;
+      const notified = values.notify && !values["dry-run"] ? await notifyScan(config, dataDir, !!first.alertQueued) : undefined;
       if (notified)
         console.error(`Telegram: ${notified === "sent" ? "sent the new jobs" : notified === "nothing-new" ? "nothing new to send" : notified === "off" ? "not set up (Settings → Alerts)" : notified}`);
       // Jobs you applied to that are due a follow-up ride along with the scan's alerts.
@@ -344,14 +346,15 @@ export async function cmdRun(args: string[]): Promise<number> {
       if (wantsBackground(config, values, scope, { stopped, fallback })) {
         live({ type: "background" });
         const { onCompanyResult: _, ...bgHooks } = progress.hooks("background");
-        const bg = await backgroundCheck(config, { ...session, ...bgHooks }, stage1Started);
+        const alert = values.notify ? backgroundAlert(config) : undefined;
+        const bg = await backgroundCheck(config, { ...session, ...bgHooks, alert }, stage1Started);
         progress.doneEvent(bg, "background");
         const found = bg.result.jobs.filter((j) => !j.why.gate && bg.merged.newIds.has(j.id)).length;
         newMatches += found;
         console.log(
           `\nBackground check: ${bg.checks.length.toLocaleString()} more companies, ${found} new match${found === 1 ? "" : "es"}${bg.stopped ? " (stopped; the next one carries on where it stopped)" : ""}.`,
         );
-        if (values.notify && found) await notifyScan(newOnly(config), bg.result, bg.merged, "background", dataDir);
+        if (values.notify && found) await notifyScan(newOnly(config), dataDir, !!bg.alertQueued);
       }
       log({ ok: true, matches: matches.length, newMatches, notified, stopped });
       return 0;
@@ -519,10 +522,10 @@ export async function runNdjson(values: RunValues): Promise<number> {
       const background = async (since: number) => {
         emit({ type: "background" });
         const { onCompanyResult: _, ...bgHooks } = hooks("background");
-        const bg = await backgroundCheck(config, { ...session, ...bgHooks }, since);
+        const bg = await backgroundCheck(config, { ...session, ...bgHooks, alert: backgroundAlert(config) }, since);
         const { newMatches } = doneEvent(bg, "background");
         // Quiet: a Telegram message only when it found something new (and never a job already sent).
-        if (newMatches && alertsOn(config)) await notifyScan(newOnly(config), bg.result, bg.merged, "background", dataDir);
+        if (newMatches && alertsOn(config)) await notifyScan(newOnly(config), dataDir, !!bg.alertQueued);
       };
       if (values["background-only"]) {
         // Resume now: skip what the paused check (or the Scan now before it) fetched in the hour before it began.
@@ -556,17 +559,30 @@ function alertsOn(config: Config): boolean {
 }
 
 /**
- * Send how many new matches the scan found (or, with only_new off, how many strong ones) to Telegram,
- * after any earlier alert that didn't get through (sendTelegramQueued). Never throws.
+ * The alert for a scan: how many new matches it found (or, with only_new off, how many strong ones).
+ * Undefined when alerts are off or there's nothing to say. scan() writes it into the Telegram outbox
+ * just before it saves, so a crash after the save can't lose it.
  */
-export async function notifyScan(config: Config, result: RunResult, merged: MergeResult, scope: AlertScope, dataDir: string): Promise<string> {
+export function alertText(config: Config, result: RunResult, merged: MergeResult, scope: AlertScope): string | undefined {
+  if (!alertsOn(config)) return undefined;
+  const jobs = alertJobs(config, result.jobs, merged.newIds);
+  return digest(jobs, { minScore: config.profile.min_score, onlyNew: config.alerts.only_new, scope });
+}
+
+/** The background check's alert: only when it found new matches, and only jobs new to you. */
+const backgroundAlert = (config: Config) => (r: RunResult, m: MergeResult) => (r.jobs.some((j) => !j.why.gate && m.newIds.has(j.id)) ? alertText(newOnly(config), r, m, "background") : undefined);
+
+/**
+ * Send the Telegram outbox: this scan's alert (written ahead by scan(); `queued` says there was one)
+ * after any earlier alert that didn't get through. An alert whose scan never finished saving is
+ * dropped (sendTelegramQueued). Never throws.
+ */
+export async function notifyScan(config: Config, dataDir: string, queued: boolean): Promise<string> {
   const secrets = telegramSecrets();
   if (!alertsOn(config)) return "off";
-  const jobs = alertJobs(config, result.jobs, merged.newIds);
-  const text = digest(jobs, { minScore: config.profile.min_score, onlyNew: config.alerts.only_new, scope });
   try {
-    const sent = await sendTelegramQueued(dataDir, text, secrets);
-    return !text && !sent.startsWith("failed") ? "nothing-new" : sent;
+    const sent = await sendTelegramQueued(dataDir, undefined, secrets, { committed: (run) => runCommitted(dataDir, run) });
+    return !queued && !sent.startsWith("failed") ? "nothing-new" : sent;
   } catch (err) {
     return `failed: ${(err as Error).message}`;
   }

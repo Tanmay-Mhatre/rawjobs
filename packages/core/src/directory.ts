@@ -1,11 +1,12 @@
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { closeSync, existsSync, mkdirSync, openSync, readFileSync, readSync, statSync } from "node:fs";
 import { join } from "node:path";
 import { gunzipSync } from "node:zlib";
 import { fetchSignedJson } from "./data-signing";
 import { clearDownloads, downloadVerified, LateError, withBudget } from "./download";
 import { envSetting } from "./env";
 import { isSafeName, safeJoin } from "./safe-name";
-import { renameWithRetry, writeFileAtomic } from "./atomic";
+import { readJsonOrSetAside, writeFileAtomic } from "./atomic";
+import { tryWithLock, withLockSync } from "./lock";
 import { ATS_TYPES } from "./schema";
 
 /**
@@ -47,7 +48,49 @@ export type DirectoryStatus = {
 };
 
 const catalogDir = (dataDir: string) => join(dataDir, "catalog");
-const readJson = <T>(path: string): T | undefined => (existsSync(path) ? (JSON.parse(readFileSync(path, "utf8")) as T) : undefined);
+/** A catalog file, or undefined when it's missing or doesn't parse (a torn or damaged copy is downloaded again). */
+const readJson = <T>(path: string): T | undefined => {
+  if (!existsSync(path)) return undefined;
+  try {
+    return JSON.parse(readFileSync(path, "utf8")) as T;
+  } catch {
+    console.warn(`RawJobs: ${path} isn't readable; it's downloaded again with the next directory update.`);
+    return undefined;
+  }
+};
+/** The waiting-to-share lists are yours, not downloaded: one that doesn't parse is set aside (.bad) rather than lost. */
+const readOutbox = <T>(path: string): T | undefined => readJsonOrSetAside<T>(path, (bad) => console.warn(`RawJobs: ${path} didn't parse; moved it to ${bad}.`));
+
+/**
+ * One directory update at a time per data folder: a scan's sync, the server's weekly check, the
+ * dashboard's Update button and `rawjobs directory update` all download into the same files.
+ * Held until the download settles, also when a scan stopped waiting for it.
+ */
+const SYNC_LOCK = ".sync.lock";
+const SYNC_LOCK_OPTS = { staleMs: 5 * 60_000, beatMs: 30_000 };
+/** The small files people add to (outboxes, your added companies): read, changed and written by one process at a time. */
+export const CATALOG_FILES_LOCK = ".files.lock";
+const filesLock = (dataDir: string) => join(catalogDir(dataDir), CATALOG_FILES_LOCK);
+
+/** Whether a JSON file looks whole (starts with "{" and ends with "}"), read from its ends only: no 100 MB parse. */
+function looksWhole(path: string): boolean {
+  try {
+    const size = statSync(path).size;
+    if (size < 2) return false;
+    const fd = openSync(path, "r");
+    try {
+      const head = Buffer.alloc(1);
+      const tail = Buffer.alloc(Math.min(64, size));
+      readSync(fd, head, 0, 1, 0);
+      readSync(fd, tail, 0, tail.length, size - tail.length);
+      return head.toString() === "{" && tail.toString().trimEnd().endsWith("}");
+    } finally {
+      closeSync(fd);
+    }
+  } catch {
+    return false;
+  }
+}
 
 export function directoryStatus(dataDir: string): DirectoryStatus {
   const dir = catalogDir(dataDir);
@@ -77,13 +120,26 @@ export function directoryAgeDays(dataDir: string, now = Date.now()): number {
 /** When a manifest was published (NaN when it doesn't say, which never counts as older). */
 const publishedTime = (m: Pick<DirectoryManifest, "generated_at" | "published_at">) => Date.parse(m.published_at ?? m.generated_at);
 
-export type UpdateResult = { updated: boolean; version?: string; companies?: number; message: string };
+export type UpdateResult = {
+  updated: boolean;
+  version?: string;
+  companies?: number;
+  message: string;
+  /** Another update holds the directory right now. */
+  busy?: boolean;
+};
 
 /**
  * Download the latest shared directory if it's newer than the local copy. Files are checked
  * against the manifest's SHA-256 and swapped in only when both arrive intact.
  */
 export async function updateDirectory(dataDir: string, opts: { force?: boolean; fetchImpl?: typeof fetch; expired?: () => boolean } = {}): Promise<UpdateResult> {
+  mkdirSync(catalogDir(dataDir), { recursive: true });
+  const result = await tryWithLock(join(catalogDir(dataDir), SYNC_LOCK), () => updateDirectoryLocked(dataDir, opts), SYNC_LOCK_OPTS);
+  return result ?? { updated: false, busy: true, message: "Another directory update is running; kept your current directory for now." };
+}
+
+async function updateDirectoryLocked(dataDir: string, opts: { force?: boolean; fetchImpl?: typeof fetch; expired?: () => boolean }): Promise<UpdateResult> {
   const get = opts.fetchImpl ?? fetch;
   const base = directoryUrl();
   const signed = await fetchSignedJson<DirectoryManifest>(get, `${base}/manifest.json`);
@@ -98,7 +154,9 @@ export async function updateDirectory(dataDir: string, opts: { force?: boolean; 
   // removed board or freeze the directory). `--force` is the way to take it anyway.
   if (!opts.force && current && publishedTime(manifest) < publishedTime(current))
     return { updated: false, version: current.version, companies: current.companies, message: "The shared directory offered an older version; kept your current one." };
-  if (!opts.force && current?.version === manifest.version) {
+  // Same version, but a file of it is missing or torn (a crash mid-write): download it again.
+  const whole = Object.keys(manifest.files ?? {}).every((f) => isSafeName(f) && looksWhole(safeJoin(catalogDir(dataDir), f.replace(/\.gz$/, ""))));
+  if (!opts.force && current?.version === manifest.version && whole) {
     try {
       writeFileAtomic(join(catalogDir(dataDir), "manifest.json"), JSON.stringify({ ...current, checked_at: new Date().toISOString() }, null, 2));
     } catch {
@@ -129,8 +187,8 @@ export async function updateDirectory(dataDir: string, opts: { force?: boolean; 
   if (opts.expired?.()) throw new LateError();
   const now = new Date().toISOString();
   for (const [name, body] of staged) {
-    writeFileSync(safeJoin(dir, `${name}.tmp`), body);
-    renameWithRetry(safeJoin(dir, `${name}.tmp`), safeJoin(dir, name));
+    // A temp file named after this process: two writers can never fill the same one.
+    writeFileAtomic(safeJoin(dir, name), body);
   }
   writeFileAtomic(join(dir, "manifest.json"), JSON.stringify({ ...manifest, updated_at: now, checked_at: now }, null, 2));
   clearDownloads(downloads);
@@ -213,18 +271,21 @@ export const sharedBoardKey = (b: Pick<SharedBoard, "ats" | "slug" | "shard" | "
 export function queueContributions(dataDir: string, boards: SharedBoard[]): number {
   if (!boards.length) return 0;
   const file = join(catalogDir(dataDir), "outbox.json");
-  const current = readJson<{ boards: SharedBoard[] }>(file)?.boards ?? [];
-  const key = sharedBoardKey;
-  const seen = new Set(current.map(key));
-  const next = [...current];
-  for (const b of boards) {
-    if (seen.has(key(b))) continue;
-    seen.add(key(b));
-    next.push(b);
-  }
   mkdirSync(catalogDir(dataDir), { recursive: true });
-  writeFileAtomic(file, JSON.stringify({ boards: next }, null, 1));
-  return next.length;
+  // A send running in another process rewrites the outbox when it's done: one at a time.
+  return withLockSync(filesLock(dataDir), () => {
+    const current = readOutbox<{ boards: SharedBoard[] }>(file)?.boards ?? [];
+    const key = sharedBoardKey;
+    const seen = new Set(current.map(key));
+    const next = [...current];
+    for (const b of boards) {
+      if (seen.has(key(b))) continue;
+      seen.add(key(b));
+      next.push(b);
+    }
+    writeFileAtomic(file, JSON.stringify({ boards: next }, null, 1));
+    return next.length;
+  });
 }
 
 /**
@@ -234,13 +295,29 @@ export function queueContributions(dataDir: string, boards: SharedBoard[]): numb
 export async function sendContributions(dataDir: string, opts: { fetchImpl?: typeof fetch; client?: string; enabled?: boolean } = {}): Promise<{ sent: number; message: string }> {
   const file = join(catalogDir(dataDir), "outbox.json");
   if (opts.enabled === false) {
-    if (existsSync(file)) writeFileAtomic(file, JSON.stringify({ boards: [] }, null, 1));
+    if (existsSync(file))
+      try {
+        withLockSync(filesLock(dataDir), () => writeFileAtomic(file, JSON.stringify({ boards: [] }, null, 1)));
+      } catch {
+        // Busy: emptied next time; nothing is sent with sharing off either way.
+      }
     return { sent: 0, message: "Sharing is off in your settings." };
   }
   const url = contributeUrl();
   if (!url) return { sent: 0, message: "Sharing isn't set up for this install." };
-  const boards = readJson<{ boards: SharedBoard[] }>(file)?.boards ?? [];
+  const boards = readOutbox<{ boards: SharedBoard[] }>(file)?.boards ?? [];
   if (!boards.length) return { sent: 0, message: "Nothing to share." };
+  // Read the outbox again before writing it: boards queued while these were on their way stay for next time.
+  const dropSent = (sentBoards: SharedBoard[]) => {
+    const gone = new Set(sentBoards.map(sharedBoardKey));
+    try {
+      withLockSync(filesLock(dataDir), () =>
+        writeFileAtomic(file, JSON.stringify({ boards: (readOutbox<{ boards: SharedBoard[] }>(file)?.boards ?? []).filter((b) => !gone.has(sharedBoardKey(b))) }, null, 1)),
+      );
+    } catch {
+      // Busy or locked: they're sent again next time, and the inbox drops repeats.
+    }
+  };
   let sent = 0;
   try {
     for (let i = 0; i < boards.length; i += 25) {
@@ -255,10 +332,10 @@ export async function sendContributions(dataDir: string, opts: { fetchImpl?: typ
       sent += batch.length;
     }
   } catch (err) {
-    writeFileAtomic(file, JSON.stringify({ boards: boards.slice(sent) }, null, 1));
+    if (sent) dropSent(boards.slice(0, sent));
     return { sent, message: `Shared ${sent}; the rest will be retried (${(err as Error).message}).` };
   }
-  writeFileAtomic(file, JSON.stringify({ boards: [] }, null, 1));
+  dropSent(boards);
   return { sent, message: `Shared ${sent} compan${sent === 1 ? "y" : "ies"} with the directory.` };
 }
 
@@ -276,7 +353,7 @@ const MOVES_OUTBOX = "moves-outbox.json";
 /** Moves per request (the inbox takes at most 10). */
 const MOVES_BATCH = 10;
 const moveKey = (m: MoveReport) => `${sharedBoardKey(m.from)}>${sharedBoardKey(m.to)}`;
-const readMoves = (file: string) => readJson<{ moves: QueuedMove[] }>(file)?.moves ?? [];
+const readMoves = (file: string) => readOutbox<{ moves: QueuedMove[] }>(file)?.moves ?? [];
 
 /** A move report cleaned up (two well-shaped, different boards and a name), or the reason it can't be shared. */
 export function cleanMove(raw: unknown): MoveReport | string {
@@ -302,13 +379,16 @@ export function queueMove(dataDir: string, move: unknown, now = new Date()): { o
   const clean = cleanMove(move);
   if (typeof clean === "string") return { ok: false, error: clean };
   const file = join(catalogDir(dataDir), MOVES_OUTBOX);
-  const current = readMoves(file);
-  if (!current.some((m) => moveKey(m) === moveKey(clean))) {
-    current.push({ ...clean, at: now.toISOString() });
-    mkdirSync(catalogDir(dataDir), { recursive: true });
-    writeFileAtomic(file, JSON.stringify({ moves: current }, null, 1));
-  }
-  return { ok: true, move: clean, waiting: current.length };
+  mkdirSync(catalogDir(dataDir), { recursive: true });
+  const waiting = withLockSync(filesLock(dataDir), () => {
+    const current = readMoves(file);
+    if (!current.some((m) => moveKey(m) === moveKey(clean))) {
+      current.push({ ...clean, at: now.toISOString() });
+      writeFileAtomic(file, JSON.stringify({ moves: current }, null, 1));
+    }
+    return current.length;
+  });
+  return { ok: true, move: clean, waiting };
 }
 
 /**
@@ -322,7 +402,12 @@ export function queueMove(dataDir: string, move: unknown, now = new Date()): { o
 export async function sendMoves(dataDir: string, opts: { fetchImpl?: typeof fetch; client?: string; enabled?: boolean } = {}): Promise<{ sent: number; message: string }> {
   const file = join(catalogDir(dataDir), MOVES_OUTBOX);
   if (opts.enabled === false) {
-    if (existsSync(file)) writeFileAtomic(file, JSON.stringify({ moves: [] }, null, 1));
+    if (existsSync(file))
+      try {
+        withLockSync(filesLock(dataDir), () => writeFileAtomic(file, JSON.stringify({ moves: [] }, null, 1)));
+      } catch {
+        // Busy: emptied next time; nothing is sent with sharing off either way.
+      }
     return { sent: 0, message: "Sharing is off in your settings." };
   }
   const url = contributeUrl();
@@ -349,7 +434,12 @@ export async function sendMoves(dataDir: string, opts: { fetchImpl?: typeof fetc
     failure = (err as Error).message;
   }
   // Read the outbox again: a move confirmed while these were on their way stays for next time.
-  if (done.size) writeFileAtomic(file, JSON.stringify({ moves: readMoves(file).filter((m) => !done.has(moveKey(m))) }, null, 1));
+  if (done.size)
+    try {
+      withLockSync(filesLock(dataDir), () => writeFileAtomic(file, JSON.stringify({ moves: readMoves(file).filter((m) => !done.has(moveKey(m))) }, null, 1)));
+    } catch {
+      // Busy or locked: they're sent again next time, and the inbox drops repeats.
+    }
   if (failure) return { sent, message: `Shared ${sent} careers-link move${sent === 1 ? "" : "s"}; the rest will be retried (${failure}).` };
   return { sent, message: `Shared ${sent} careers-link move${sent === 1 ? "" : "s"} with the directory.` };
 }

@@ -21,9 +21,13 @@ describe("acquireLock", () => {
     const lock = acquireLock(path);
     expect(lock).not.toBeNull();
     expect(readFileSync(path, "utf8")).toBe(String(process.pid));
-    // The same process asking again gets it (a scan's own retry).
-    expect(acquireLock(path)).not.toBeNull();
+    // Another task of the same process is refused too: its release would end the first one's lock.
+    expect(acquireLock(path)).toBeNull();
     lock!.release();
+    // A lock with this process's id that nobody here holds was left by an earlier process with the same id.
+    writeFileSync(path, String(process.pid));
+    expect(acquireLock(path)).not.toBeNull();
+    releaseLock(path);
     expect(existsSync(path)).toBe(false);
   });
 

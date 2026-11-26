@@ -69,6 +69,19 @@ export function slimRun(run: RunSummary, yours: ReadonlySet<string>, whole = fal
 const yourKeys = (config: Config) => new Set(config.companies.map(companyKey));
 const runFile = (run: RunSummary) => `${run.startedAt.replace(/:/g, "-").replace(/\.\d+Z$/, "Z")}.json`;
 
+/**
+ * Whether the scan that finished at `run` saved: it's in meta.json's runs (written last by saveRun).
+ * "pending" while no later scan has saved either: that one may still be saving, or was killed, and
+ * the next scan's save settles it.
+ */
+export function runCommitted(dataDir: string, run: string): boolean | "pending" {
+  const ends = (readMeta(dataDir)?.runs ?? []).map((r) => r.finishedAt).sort();
+  if (ends.includes(run)) return true;
+  // Older than every run kept (30): it saved long ago and has left the history since.
+  if (ends.length >= KEEP_RUNS && run < ends[0]!) return true;
+  return ends.some((f) => f > run) ? false : "pending";
+}
+
 /** Slim meta.json's run history and runs/ to match it (once, when the data format moves to 2). */
 export function slimRunHistory(dir: string, config: Config): void {
   const meta = readMeta(dir);

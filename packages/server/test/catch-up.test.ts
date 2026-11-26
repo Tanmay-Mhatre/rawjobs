@@ -1,9 +1,9 @@
-import { mkdtempSync, utimesSync, writeFileSync } from "node:fs";
+import { existsSync, mkdtempSync, utimesSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-import { recordScheduledRun } from "@rawjobs/core";
-import { CHECK_EVERY_MS, SETTLE_MS, watchMissedScans } from "../src/catch-up";
+import { OUTBOX_FILE, recordScheduledRun } from "@rawjobs/core";
+import { CHECK_EVERY_MS, flushAlerts, SETTLE_MS, watchMissedScans } from "../src/catch-up";
 
 /** A data folder with a 10:00 schedule saved long ago, and a clock starting at 09:00 on 14 Nov. */
 function setup(o: { online?: boolean; busy?: boolean; platform?: NodeJS.Platform } = {}) {
@@ -85,5 +85,77 @@ describe("catching up on a missed scheduled scan", () => {
     await s.advance(3_600_000);
     await s.advance(SETTLE_MS);
     expect(repairs()).toBe(2);
+  });
+});
+
+describe("sending alerts a scan left in the outbox", () => {
+  const secrets = { token: "123456:abc", chatId: "42" };
+  const withOutbox = () => {
+    const dataDir = mkdtempSync(join(tmpdir(), "rj-flush-"));
+    writeFileSync(join(dataDir, OUTBOX_FILE), JSON.stringify({ messages: [{ text: "waiting", at: new Date().toISOString() }] }));
+    return dataDir;
+  };
+  const telegram = () => {
+    const sent: string[] = [];
+    const fetchImpl = (async (_url: string, init?: RequestInit) => {
+      sent.push(JSON.parse(String(init?.body)).text);
+      return new Response(JSON.stringify({ ok: true, result: {} }));
+    }) as unknown as typeof fetch;
+    return { sent, fetchImpl };
+  };
+
+  it("sends them at server start", async () => {
+    const dataDir = withOutbox();
+    const t = telegram();
+    expect(await flushAlerts(dataDir, { secrets, enabled: true, fetchImpl: t.fetchImpl })).toBe("sent");
+    expect(t.sent).toEqual(["waiting"]);
+    expect(existsSync(join(dataDir, OUTBOX_FILE))).toBe(false);
+  });
+
+  it("server start flush skips while scan.lock is held", async () => {
+    const dataDir = withOutbox();
+    // Another live process (this test's parent) holds the scan lock.
+    writeFileSync(join(dataDir, "scan.lock"), String(process.ppid));
+    const t = telegram();
+    expect(await flushAlerts(dataDir, { secrets, enabled: true, fetchImpl: t.fetchImpl })).toBeNull();
+    expect(t.sent).toEqual([]);
+    expect(existsSync(join(dataDir, OUTBOX_FILE))).toBe(true);
+  });
+
+  it("alerts off: leaves them", async () => {
+    const dataDir = withOutbox();
+    expect(await flushAlerts(dataDir, { secrets, enabled: false })).toBe("off");
+    expect(existsSync(join(dataDir, OUTBOX_FILE))).toBe(true);
+  });
+
+  it("the watcher flushes once after start, and again only after a busy lock", async () => {
+    const answers: (string | null)[] = [null, "sent"];
+    let flushes = 0;
+    let t = 0;
+    const w = watchMissedScans({
+      dataDir: mkdtempSync(join(tmpdir(), "rj-flush-")),
+      busy: () => false,
+      cli: async () => ({ code: 0, stdout: "{}", stderr: "" }),
+      online: async () => true,
+      log: () => {},
+      now: () => t,
+      platform: "linux",
+      flush: async () => {
+        flushes++;
+        return answers.length ? (answers.shift() as string | null) : "nothing";
+      },
+    });
+    w.stop();
+    // One-minute ticks, as the server runs them.
+    const minutes = async (n: number) => {
+      for (let i = 0; i < n; i++) {
+        t += 60_000;
+        await w.tick();
+      }
+    };
+    await minutes(SETTLE_MS / 60_000);
+    expect(flushes).toBe(1);
+    await minutes((3 * CHECK_EVERY_MS) / 60_000);
+    expect(flushes).toBe(2);
   });
 });

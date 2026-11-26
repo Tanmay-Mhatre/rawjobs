@@ -133,3 +133,45 @@ describe("/api/directory/search", () => {
     expect(starts(log)).toBe(1);
   });
 });
+
+describe("POST /api/directory/update", () => {
+  it("shares one run between two clicks instead of starting a second download", async () => {
+    dir = mkdtempSync(join(tmpdir(), "rawjobs-dirupdate-"));
+    const log = join(dir, "log.txt");
+    const fake = join(dir, "fake-cli.mjs");
+    // A slow update: logs when it starts and ends, so overlapping runs show up.
+    writeFileSync(
+      fake,
+      `import { appendFileSync } from "node:fs";
+const args = process.argv.slice(2);
+appendFileSync(${JSON.stringify(log)}, "start " + args.join(" ") + "\\n");
+setTimeout(() => { appendFileSync(${JSON.stringify(log)}, "end\\n"); console.log(JSON.stringify({ updated: true, message: "ok" })); }, 300);`,
+    );
+    const home = join(dir, "home");
+    const dataDir = join(dir, "data");
+    mkdirSync(home);
+    mkdirSync(join(dataDir, "catalog"), { recursive: true });
+    const api = createApi({ home, dataDir, cli: { command: process.execPath, args: [fake] }, version: "9.9.9" });
+    stops.push(() => api.stop(0));
+    server = createServer((rq, rs) => void api.handle(rq, rs));
+    await new Promise<void>((r) => server!.listen(0, "127.0.0.1", r));
+    const port = (server.address() as AddressInfo).port;
+
+    const post = () =>
+      new Promise<string>((done, fail) => {
+        const r = request({ host: "127.0.0.1", port, method: "POST", path: "/api/directory/update", headers: { origin: `http://127.0.0.1:${port}` } }, (res) => {
+          let text = "";
+          res.setEncoding("utf8");
+          res.on("data", (d) => (text += d));
+          res.on("end", () => done(text));
+        });
+        r.on("error", fail);
+        r.end();
+      });
+    const [a, b] = await Promise.all([post(), post()]);
+    expect(JSON.parse(a)).toEqual({ updated: true, message: "ok" });
+    expect(b).toBe(a);
+    const lines = readFileSync(log, "utf8").trim().split(/\r?\n/);
+    expect(lines).toEqual([`start directory update --json --data ${dataDir}`, "end"]);
+  });
+});

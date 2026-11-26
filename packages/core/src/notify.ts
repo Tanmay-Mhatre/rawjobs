@@ -4,7 +4,7 @@ import type { Config, Job } from "./schema";
 import type { ScanScope } from "./protocol";
 import { findConfigPath, loadConfig } from "./config";
 import { rawjobsHome } from "./paths";
-import { writeFileAtomic } from "./atomic";
+import { readJsonOrSetAside, writeFileAtomic } from "./atomic";
 
 /**
  * Telegram alerts: one short message per scan with how many new matches. The bot is the user's own (made with
@@ -139,46 +139,82 @@ export async function sendTelegram(text: string, secrets: TelegramSecrets, fetch
   }
 }
 
-/** Scan alerts that couldn't be sent, kept in the data folder for the next scan to send. */
-const OUTBOX_FILE = "telegram-outbox.json";
+/** Scan alerts that couldn't be sent yet, kept in the data folder for the next scan to send. */
+export const OUTBOX_FILE = "telegram-outbox.json";
 /** An alert older than this isn't sent any more: its counts are out of date by then. */
 const OUTBOX_MAX_AGE_MS = 24 * 3_600_000;
-type Outbox = { messages: { text: string; at: string }[] };
+/** `run`: the finishedAt of the scan the alert is about, when it was written ahead of that scan's save. */
+type OutboxMessage = { text: string; at: string; run?: string };
+type Outbox = { messages: OutboxMessage[] };
+
+function readOutbox(path: string): OutboxMessage[] {
+  const file = readJsonOrSetAside<Outbox>(path, (bad) => console.warn(`${path} couldn't be read; moved it to ${bad} and started a new one.`));
+  return Array.isArray(file?.messages) ? file.messages.filter((m) => typeof m?.text === "string" && typeof m.at === "string") : [];
+}
+
+function writeOutbox(dataDir: string, path: string, messages: OutboxMessage[]): void {
+  if (!messages.length) {
+    rmSync(path, { force: true });
+    return;
+  }
+  mkdirSync(dataDir, { recursive: true });
+  writeFileAtomic(path, JSON.stringify({ messages } satisfies Outbox), undefined, { fsync: true });
+}
+
+/**
+ * Write a scan's alert into the outbox before the scan saves (scan.ts), stamped with the run
+ * (its finishedAt). If the scan is killed after saving, the next scan sends it: those jobs are
+ * saved as seen, so it would never count them new again. Throws when the outbox can't be written.
+ */
+export function queueTelegram(dataDir: string, text: string, run: string | undefined, now = Date.now()): void {
+  const path = resolve(dataDir, OUTBOX_FILE);
+  writeOutbox(dataDir, path, [...readOutbox(path), { text, at: new Date(now).toISOString(), ...(run ? { run } : {}) }]);
+}
 
 /**
  * Send a scan's alert, after any earlier ones that didn't get through (oldest first). What still
  * can't be sent is kept for the next scan, so a moment without internet doesn't lose an alert for good
  * (the next scan wouldn't count those jobs as new again). "nothing": no alert and nothing waiting.
+ *
+ * `committed(run)` says whether a written-ahead alert's scan saved: true sends it, "pending" keeps
+ * it (that scan may still be saving), false drops it (its save never finished, so the next scan
+ * counts those jobs new again and alerts them itself). Alerts without a run are always sent.
  */
 export async function sendTelegramQueued(
   dataDir: string,
   text: string | undefined,
   secrets: TelegramSecrets,
-  opts: { fetchImpl?: Fetch; sleep?: (ms: number) => Promise<void>; now?: number } = {},
+  opts: { fetchImpl?: Fetch; sleep?: (ms: number) => Promise<void>; now?: number; committed?: (run: string) => boolean | "pending" } = {},
 ): Promise<"sent" | "nothing" | `failed: ${string}`> {
   const path = resolve(dataDir, OUTBOX_FILE);
   const now = opts.now ?? Date.now();
-  let waiting: Outbox["messages"] = [];
+  let waiting: OutboxMessage[] = [];
   try {
-    if (existsSync(path)) waiting = (JSON.parse(readFileSync(path, "utf8")) as Outbox).messages.filter((m) => now - Date.parse(m.at) < OUTBOX_MAX_AGE_MS);
+    waiting = readOutbox(path).filter((m) => now - Date.parse(m.at) < OUTBOX_MAX_AGE_MS);
   } catch {
     // An unreadable outbox: start a new one.
   }
-  const queue = [...waiting, ...(text ? [{ text, at: new Date(now).toISOString() }] : [])];
+  const pending: OutboxMessage[] = [];
+  const ready: OutboxMessage[] = [];
+  for (const m of waiting) {
+    const state = m.run && opts.committed ? opts.committed(m.run) : true;
+    if (state === "pending") pending.push(m);
+    else if (state) ready.push(m);
+  }
+  const queue = [...ready, ...(text ? [{ text, at: new Date(now).toISOString() }] : [])];
   if (!queue.length) {
-    rmSync(path, { force: true });
+    writeOutbox(dataDir, path, pending);
     return "nothing";
   }
   for (let i = 0; i < queue.length; i++) {
     try {
       await sendTelegram(queue[i]!.text, secrets, opts.fetchImpl, opts.sleep);
     } catch (err) {
-      mkdirSync(dataDir, { recursive: true });
-      writeFileAtomic(path, JSON.stringify({ messages: queue.slice(i) } satisfies Outbox));
+      writeOutbox(dataDir, path, [...pending, ...queue.slice(i)]);
       return `failed: ${(err as Error).message} (kept to send after the next scan)`;
     }
   }
-  rmSync(path, { force: true });
+  writeOutbox(dataDir, path, pending);
   return "sent";
 }
 
