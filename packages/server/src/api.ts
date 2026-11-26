@@ -34,6 +34,7 @@ import type { ScanOrigin } from "@rawjobs/core/protocol";
 import { folderId } from "@rawjobs/core/update";
 import { CSP_REPORT_PATH, cspReportLine } from "./csp";
 import { refuse, refuseHost } from "./guard";
+import { directorySearch } from "./directory-search";
 import { createReaders } from "./readers";
 import type { Updater } from "./updater";
 
@@ -54,11 +55,15 @@ export type ApiOptions = {
   watchDeps?: Partial<WatchDeps>;
   /** The LinkedIn file reminder's clock and Telegram (tests use a fake clock). Default: the real ones. */
   reminderDeps?: Partial<ReminderDeps>;
+  /** How long the directory search process is kept without a request. Default: 10 minutes. */
+  searchIdleMs?: number;
 };
 
 const HOUR_MS = 60 * 60_000;
 /** Requests that may change what the kept read-only answers show (any but GET). */
 const WRITES = /^\/api\/(setup|directory|alerts|schedule|run|check)(\/|$)/;
+/** POSTs that only read (Browse all's search sends its filters as a body): they keep the kept answers. */
+const READ_POSTS = new Set(["/api/directory/search", "/api/directory/names", "/api/directory/warm"]);
 /** A page served from this computer (any port): may read /api/health from another port. */
 const LOCAL_ORIGIN = /^http:\/\/(127\.0\.0\.1|localhost|\[::1\]):\d{1,5}$/;
 
@@ -107,6 +112,10 @@ function readHead(path: string, bytes: number): string {
  *   GET/POST/DELETE /api/setup/resume  read / save / remove the master resume (profile/resume.md, gitignored)
  *   GET  /api/directory       the shared company directory's local copy (and what's waiting to be shared)
  *   POST /api/directory/update download the latest shared directory and share waiting additions (and careers-link moves)
+ *   POST /api/directory/search Browse all: { q, industry, system, page, pageSize, watched, fit } → one page of
+ *                             results ({ rows, total, exact, page, pageSize, searchReady }, or { missing: true })
+ *   POST /api/directory/names  { keys }: { names: { key: name } } for directory keys (the Hidden list)
+ *   POST /api/directory/warm   read the directory ahead of Browse all ({ present })
  *   POST /api/directory/moves  { name, from, to }: queue a confirmed careers-link move to share with the next directory
  *                             update (never sent right away). { queued: true }, { queued: false, reason } when sharing
  *                             is off, or 400 { ok: false, errors } for a body that isn't a move
@@ -163,6 +172,31 @@ export function createApi(opts: ApiOptions) {
     if (stdin !== undefined) child.stdin!.end(stdin);
     else child.stdin!.end();
     return child;
+  }
+
+  /** Browse all's search: one `rawjobs directory search --serve` kept while the page uses it. */
+  const search = directorySearch(
+    () => {
+      // A 250k-company directory and its index take a few hundred MB: room, with a cap.
+      const env = { ...process.env, NODE_OPTIONS: `${process.env.NODE_OPTIONS ?? ""} --max-old-space-size=2048`.trim() };
+      return spawn(cliCmd.command, [...cliCmd.args, "directory", "search", "--serve", "--data", dataDir], { cwd: home, env, windowsHide: true });
+    },
+    { idleMs: opts.searchIdleMs },
+  );
+  /** A search route: its JSON body to the search process, its answer back (a body too big or not JSON is a 400). */
+  async function searchRoute(res: ServerResponse, req: IncomingMessage, op: "search" | "names" | "warm") {
+    let body: unknown;
+    try {
+      body = JSON.parse((await readBody(req, 4_000_000)) || "{}");
+    } catch (err) {
+      return json(res, { ok: false, errors: (err as Error).message }, 400);
+    }
+    if (!body || typeof body !== "object" || Array.isArray(body)) return json(res, { ok: false, errors: "Send a JSON object." }, 400);
+    try {
+      return json(res, await search.ask(op, body as Record<string, unknown>));
+    } catch (err) {
+      return json(res, { ok: false, errors: (err as Error).message }, 503);
+    }
   }
 
   /**
@@ -501,7 +535,7 @@ Stopped after ${Math.round(timeoutMs / 1000)} s without finishing.`.trim(),
     const why = refuse(req);
     if (why) json(res, { ok: false, errors: why }, 403);
     else {
-      const writes = req.method !== "GET" && WRITES.test(url);
+      const writes = req.method !== "GET" && WRITES.test(url) && !READ_POSTS.has(url);
       if (writes) readers.clear();
       try {
         await route(url, req, res);
@@ -578,6 +612,9 @@ Stopped after ${Math.round(timeoutMs / 1000)} s without finishing.`.trim(),
       const stamp = ["manifest.json", "outbox.json", "moves-outbox.json", "directory.json"].map((f) => fileStamp(resolve(dataDir, "catalog", f))).join("|");
       return await respondRead(res, () => readCli(`directory|${stamp}`, HOUR_MS, ["directory", "status", "--json", "--data", dataDir]));
     }
+    if (url === "/api/directory/search" && req.method === "POST") return await searchRoute(res, req, "search");
+    if (url === "/api/directory/names" && req.method === "POST") return await searchRoute(res, req, "names");
+    if (url === "/api/directory/warm" && req.method === "POST") return await searchRoute(res, req, "warm");
     if (url === "/api/directory/update" && req.method === "POST") return await respondJson(res, ["directory", "update", "--json", "--data", dataDir]);
     if (url === "/api/directory/moves" && req.method === "POST") {
       let body: unknown;
@@ -825,6 +862,7 @@ Stopped after ${Math.round(timeoutMs / 1000)} s without finishing.`.trim(),
     // The watch itself stays in network-watch.json, so the next start carries on with it.
     watcher.close();
     reminder.close();
+    await search.stop();
     const current = scan;
     if (!current) return;
     const closed = new Promise<void>((done) => {

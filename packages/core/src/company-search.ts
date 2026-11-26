@@ -19,16 +19,39 @@ export type CompanyIndex<T extends Named> = {
 const squash = (s: string) => s.replace(/[^\p{L}\p{N}]+/gu, "");
 const wordsOf = (s: string) => s.split(/[^\p{L}\p{N}]+/u).filter(Boolean);
 
-export function companyIndex<T extends Named>(items: readonly T[]): CompanyIndex<T> {
-  const search = new MiniSearch<Doc>({ fields: ["name", "clean"], searchOptions: { prefix: true, fuzzy: 0.2, combineWith: "AND" } });
-  const cleans = items.map((c) => displayName(c.name, c.slug));
-  search.addAll(items.map((c, id) => ({ id, name: c.name, clean: cleans[id]! })));
-  const lower = items.map((c, i) => {
+const newSearch = () => new MiniSearch<Doc>({ fields: ["name", "clean"], searchOptions: { prefix: true, fuzzy: 0.2, combineWith: "AND" } });
+
+/** Index items[from, to) into `index` (its MiniSearch and lower-case copies). */
+function indexRange<T extends Named>(index: CompanyIndex<T>, from: number, to: number) {
+  const docs: Doc[] = [];
+  for (let id = from; id < to; id++) {
+    const c = index.items[id]!;
+    const clean = displayName(c.name, c.slug);
+    docs.push({ id, name: c.name, clean });
     const name = c.name.toLowerCase();
-    const clean = cleans[i]!.toLowerCase();
-    return { name, clean, words: [...new Set([...wordsOf(name), ...wordsOf(clean)])], squashed: [squash(name), squash(clean)] };
-  });
-  return { items, lower, search };
+    const cleanLower = clean.toLowerCase();
+    index.lower[id] = { name, clean: cleanLower, words: [...new Set([...wordsOf(name), ...wordsOf(cleanLower)])], squashed: [squash(name), squash(cleanLower)] };
+  }
+  index.search.addAll(docs);
+}
+
+export function companyIndex<T extends Named>(items: readonly T[]): CompanyIndex<T> {
+  const index: CompanyIndex<T> = { items, lower: new Array(items.length), search: newSearch() };
+  indexRange(index, 0, items.length);
+  return index;
+}
+
+/**
+ * companyIndex() a slice at a time, letting other work run in between (250k companies take about 3 s):
+ * the directory search process keeps answering page and filter changes while it builds.
+ */
+export async function companyIndexAsync<T extends Named>(items: readonly T[], chunk = 5000, pause = () => new Promise<void>((r) => setTimeout(r, 0))): Promise<CompanyIndex<T>> {
+  const index: CompanyIndex<T> = { items, lower: new Array(items.length), search: newSearch() };
+  for (let from = 0; from < items.length; from += chunk) {
+    indexRange(index, from, Math.min(items.length, from + chunk));
+    await pause();
+  }
+  return index;
 }
 
 /** How a company matched a search (companyMatches), best first. */
