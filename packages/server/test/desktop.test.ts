@@ -1,9 +1,10 @@
 import { spawn } from "node:child_process";
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it, vi } from "vitest";
-import { alreadyRunning, AUTOSTART, ensureAutostart, portTaken, readServerState, serverHolding, serverRunning, writeServerState } from "../src/desktop";
+import type { Lock } from "@rawjobs/core";
+import { alreadyRunning, AUTOSTART, ensureAutostart, portTaken, readServerState, SERVER_LOCK, serverHolding, serverRunning, takeServerLock, writeServerState } from "../src/desktop";
 import { iconIcns, iconIco, iconPng, markPixels } from "../src/icon";
 import { portOrder } from "../src/serve";
 import { markShortcutNoticeSeen, shortcutState } from "../src/shortcuts";
@@ -177,5 +178,56 @@ describe("what the dashboard says about the shortcuts", () => {
     writeFileSync(menu, "");
     writeFileSync(join(home, "shortcuts.json"), JSON.stringify({ menu, desktop: null, desktopError: "access denied" }));
     expect(shortcutState(home)).toMatchObject({ desktop: false, menu: true, desktopError: "access denied", notice: true });
+  });
+});
+
+describe("one server per RawJobs folder", () => {
+  const home = () => mkdtempSync(join(tmpdir(), "rawjobs-serverlock-"));
+
+  it("takes server.lock when no other server holds it, and lets it go", async () => {
+    const h = home();
+    const lock = await takeServerLock(h, { waitMs: 0 });
+    expect(typeof lock).toBe("object");
+    expect(readFileSync(join(h, SERVER_LOCK), "utf8")).toBe(String(process.pid));
+    (lock as Lock).release();
+    expect(existsSync(join(h, SERVER_LOCK))).toBe(false);
+  });
+
+  it("answers running as soon as the server holding it answers", async () => {
+    const h = home();
+    writeFileSync(join(h, SERVER_LOCK), String(process.ppid));
+    let asked = 0;
+    expect(await takeServerLock(h, { waitMs: 5_000, pollMs: 10, answering: async () => ++asked >= 3 })).toBe("running");
+    expect(asked).toBe(3);
+  });
+
+  it("answers busy when the holder neither answers nor lets go in time", async () => {
+    const h = home();
+    writeFileSync(join(h, SERVER_LOCK), String(process.ppid));
+    expect(await takeServerLock(h, { waitMs: 100, pollMs: 10, answering: async () => false })).toBe("busy");
+  });
+
+  it("takes over once the server holding it has exited (an update's new version)", async () => {
+    const h = home();
+    writeFileSync(join(h, SERVER_LOCK), String(process.ppid));
+    let polls = 0;
+    // The old server's process is gone after a few polls: its lock now names a process that isn't running.
+    const lock = await takeServerLock(h, {
+      waitMs: 5_000,
+      pollMs: 10,
+      answering: async () => {
+        if (++polls === 3) writeFileSync(join(h, SERVER_LOCK), "999999999");
+        return false;
+      },
+    });
+    expect(typeof lock).toBe("object");
+    (lock as Lock).release();
+  });
+
+  it("writes state.json whole or not at all", () => {
+    const h = home();
+    writeServerState(4317, h);
+    expect(readServerState(h)).toMatchObject({ port: 4317, pid: process.pid });
+    expect(readdirSync(h).filter((f) => f.endsWith(".tmp"))).toEqual([]);
   });
 });

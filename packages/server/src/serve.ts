@@ -7,7 +7,7 @@ import { APP_VERSION, BUNDLED, migrateData, scanLockHeld, WEB_DIR } from "@rawjo
 import { watchMissedScans } from "./catch-up";
 import { createApi } from "./api";
 import { createUpdater } from "./updater";
-import { alreadyRunning, DEFAULT_PORT, ensureAutostart, logTo, openBrowser, readServerState, watchEventLoop, writeServerState } from "./desktop";
+import { alreadyRunning, DEFAULT_PORT, ensureAutostart, logTo, openBrowser, readServerState, takeServerLock, watchEventLoop, writeServerState } from "./desktop";
 import { makeHomePrivate } from "./private-home";
 import { ensureShortcuts, startLinkInstalled } from "./shortcuts";
 import { createHandler } from "./handler";
@@ -60,6 +60,22 @@ export async function serve(args: string[]): Promise<number> {
     );
     return 1;
   }
+  // Another start may be under way right now (at login while you click the shortcut, or an update's
+  // new version while the old one exits): only one gets past here, before the data is converted.
+  const lock = await takeServerLock(home);
+  if (lock === "running") {
+    const now = readServerState(home);
+    console.log(`RawJobs is already running at http://127.0.0.1:${now?.port ?? DEFAULT_PORT}`);
+    if (values.open) openBrowser(`http://127.0.0.1:${now?.port ?? DEFAULT_PORT}`);
+    return 0;
+  }
+  if (lock === "busy") {
+    console.error("Another RawJobs server is starting from this folder and hasn't answered yet, so a second one isn't started next to it. Try again in a minute, or restart the computer.");
+    return 1;
+  }
+  // However this process ends (an update stops it, Ctrl+C, an error), the next start can take over.
+  process.once("exit", () => lock.release());
+
   // From here on this version really starts: an update looks for this line to tell "it failed" from "it never ran".
   console.log(`RawJobs ${APP_VERSION} is starting.`);
 
@@ -128,6 +144,7 @@ export async function serve(args: string[]): Promise<number> {
       // Let a running scan save and stop first, so it isn't cut off mid-write.
       void api.stop().finally(() => {
         server.close();
+        lock.release();
         done(0);
       });
     };

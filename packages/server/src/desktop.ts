@@ -1,5 +1,5 @@
 import { spawn, spawnSync } from "node:child_process";
-import { appendFileSync, mkdirSync, readFileSync, renameSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { appendFileSync, mkdirSync, readFileSync, renameSync, rmSync, statSync } from "node:fs";
 import { connect } from "node:net";
 import { homedir } from "node:os";
 import { monitorEventLoopDelay } from "node:perf_hooks";
@@ -9,7 +9,7 @@ import { parseArgs } from "node:util";
 import { defaultDataDir, rawjobsHome } from "@rawjobs/core";
 import { APP_VERSION, BUNDLED, CODE_ROOT, cliCommand } from "@rawjobs/core";
 import { DAILY_SCHEDULER_NAMES, removeDailySummary, removeSchedule, SCHEDULER_NAMES } from "@rawjobs/core";
-import { scanLockHeld } from "@rawjobs/core";
+import { acquireLock, type Lock, scanLockHeld, writeFileAtomic } from "@rawjobs/core";
 import { compareVersions } from "@rawjobs/core/release";
 import {
   AUTOSTART,
@@ -48,7 +48,37 @@ export function readServerState(home = rawjobsHome()): ServerState | null {
 
 export function writeServerState(port: number, home = rawjobsHome()): void {
   const state: ServerState = { port, pid: process.pid, version: APP_VERSION, startedAt: new Date().toISOString() };
-  writeFileSync(statePath(home), `${JSON.stringify(state, null, 1)}\n`);
+  // Whole or not at all: a torn state.json reads as "no server", and a second one would start.
+  writeFileAtomic(statePath(home), `${JSON.stringify(state, null, 1)}\n`);
+}
+
+/** RAWJOBS_HOME/server.lock: held by the one server of this folder from before it converts the data until it stops. */
+export const SERVER_LOCK = "server.lock";
+
+/**
+ * Become this folder's one server, or find the one that is: the lock, taken before the data is
+ * converted (so two starts at login, or the shortcut clicked while the login one is still starting,
+ * never both run migrateData and then take 4317 and 4318). While another live server holds it, waits
+ * up to `waitMs` (an update's new version starts while the old one exits): "running" as soon as that
+ * one answers, "busy" when it neither answers nor lets go.
+ */
+export async function takeServerLock(home: string, o: { waitMs?: number; pollMs?: number; answering?: () => Promise<boolean> } = {}): Promise<Lock | "running" | "busy"> {
+  const path = join(home, SERVER_LOCK);
+  const until = Date.now() + (o.waitMs ?? 30_000);
+  const answering =
+    o.answering ??
+    (async () => {
+      const s = readServerState(home);
+      return !!s?.port && s.pid !== process.pid && (await healthy(`http://127.0.0.1:${s.port}`));
+    });
+  for (;;) {
+    // Touched every 20 s; a server that's gone is replaced at once (its process id), a hung one after 2 minutes.
+    const lock = acquireLock(path, { staleMs: 2 * 60_000, beatMs: 20_000 });
+    if (lock) return lock;
+    if (await answering()) return "running";
+    if (Date.now() >= until) return "busy";
+    await sleep(o.pollMs ?? 500);
+  }
 }
 
 /**
@@ -79,7 +109,7 @@ export async function ensureAutostart(home: string, version: string, o: { platfo
   try {
     const { code, error } = await (o.run ?? powershellAsync)(script);
     if (code !== 0) throw new Error(`PowerShell exited with ${code}${error ? `: ${error}` : ""}`);
-    writeFileSync(file, `${JSON.stringify({ version })}\n`);
+    writeFileAtomic(file, `${JSON.stringify({ version })}\n`);
   } catch (err) {
     console.log(`Couldn't update the RawJobs scheduled tasks: ${(err as Error).message}`);
   }
