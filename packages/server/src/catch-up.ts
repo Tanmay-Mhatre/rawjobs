@@ -1,4 +1,19 @@
-import { missedScan, readScheduledRuns, readScheduleSettings, scanLockHeld, scheduleSavedAt } from "@rawjobs/core";
+import { existsSync } from "node:fs";
+import { join } from "node:path";
+import {
+  missedScan,
+  OUTBOX_FILE,
+  readScheduledRuns,
+  readScheduleSettings,
+  runCommitted,
+  scanLockHeld,
+  scheduleSavedAt,
+  sendTelegramQueued,
+  type TelegramSecrets,
+  telegramSecrets,
+  telegramStatus,
+  tryWithLock,
+} from "@rawjobs/core";
 import { BEACON_URL } from "@rawjobs/core/update";
 
 /** First look this long after the server starts or the computer wakes: the network and the laptop settle first. */
@@ -20,7 +35,21 @@ export type CatchUpDeps = {
   log?: (line: string) => void;
   now?: () => number;
   platform?: NodeJS.Platform;
+  /** Send alerts waiting in the Telegram outbox (default flushAlerts). */
+  flush?: () => Promise<string | null>;
 };
+
+/**
+ * Send the scan alerts waiting in the Telegram outbox: written ahead by a scan killed after it
+ * saved, or kept while offline. Done under the scan lock, so it never races a scan's own send; null
+ * when a scan holds it (that scan sends them). An alert whose scan never saved is dropped.
+ */
+export async function flushAlerts(dataDir: string, o: { secrets?: TelegramSecrets; enabled?: boolean; fetchImpl?: typeof fetch } = {}): Promise<string | null> {
+  if (!existsSync(join(dataDir, OUTBOX_FILE))) return "nothing";
+  const secrets = o.secrets ?? telegramSecrets();
+  if (!(o.enabled ?? telegramStatus().enabled) || !secrets.token || !secrets.chatId) return "off";
+  return tryWithLock(join(dataDir, "scan.lock"), () => sendTelegramQueued(dataDir, undefined, secrets, { fetchImpl: o.fetchImpl, committed: (run) => runCommitted(dataDir, run) }), { waitMs: 0 });
+}
 
 async function beaconAnswers(): Promise<boolean> {
   try {
@@ -47,8 +76,16 @@ export function watchMissedScans(d: CatchUpDeps): { tick: () => Promise<void>; s
   let repairDue = windows;
   let started: number | undefined;
   let running = false;
+  const flush = d.flush ?? (() => flushAlerts(d.dataDir));
+  let flushed = false;
 
   async function check(): Promise<void> {
+    // Once after start (again only if a scan held the lock or the send failed): alerts a killed scan left.
+    if (!flushed && !d.busy()) {
+      const r = await flush();
+      flushed = r !== null && !r.startsWith("failed");
+      if (r?.startsWith("failed")) log(`Couldn't send the waiting Telegram alerts: ${r.slice(8)}`);
+    }
     if (repairDue) {
       repairDue = false;
       const r = await d.cli(["schedule", "repair", "--data", d.dataDir]);
