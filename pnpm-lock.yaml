@@ -108,6 +108,9 @@ importers:
 
   packages/core:
     dependencies:
+      undici:
+        specifier: ^7.30.2
+        version: 7.30.2
       yaml:
         specifier: ^2.8.0
         version: 2.9.1

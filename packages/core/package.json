@@ -41,6 +41,7 @@
     "./network/paste": "./src/network/paste.ts"
   },
   "dependencies": {
+    "undici": "^7.30.2",
     "yaml": "^2.8.0",
     "zod": "^4.6.7"
   }
