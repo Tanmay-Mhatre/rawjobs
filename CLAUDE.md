@@ -126,24 +126,40 @@ they ask: the installed RawJobs runs on ports 4317/4318, and test pages opened t
 Run test servers on a non-default port with auto-open off: Vite already has `open: false`; give the
 desktop launcher `--no-browser`.
 
-## Releasing: only when the user asks
+## Releasing: after your PR merges, the user approves
 
-Merging releases nothing: a release happens only when the user pushes a version tag
-(`.github/workflows/release.yml`). The user batches releases and says when to release, so don't
-add a tag reminder after merges. When they ask, give the commands: the next version (the latest
-`vX.Y.Z` tag with the patch + 1) and a tag message drafted from the merged PRs' "Release note"
-lines (`pnpm release:notes` prints it). For example:
+Merging releases nothing: a release happens when a version tag is pushed
+(`.github/workflows/release.yml`). Once your PR has merged, release it yourself, then ask the user
+to approve it. Skip the release when every PR merged since the last tag has the release note
+`none`. The user's approval of the `sign` job is the gate: nothing reaches installed copies until
+they approve it.
 
-```bash
-git tag -a v0.6.1 -m "RawJobs 0.6.1" -m "New: …" -m "Fixed: …"
-git push origin v0.6.1
-```
+1. Your PR is merged and nothing else is half-way: no queued PR of yours still waiting to merge.
+2. In a worktree at `origin/main` with `pnpm install` done (the pre-push hook refuses pushes from the
+   main checkout and needs dependencies), run `git fetch --tags origin`. The next version is the
+   latest `vX.Y.Z` tag with the patch + 1.
+3. Write the tag message to a file in your scratchpad, not with `-m`: PowerShell breaks on the
+   backticks and apostrophes in release notes. `pnpm release:notes` prints it (it reads `HEAD`, so
+   run it at `origin/main`). Add a line `Update: mandatory` only when installed copies can't work
+   properly without this release (a new signing key, a security fix, a data format change), and say
+   why when you ask for approval.
+4. Tag the exact `origin/main` commit and push it:
+   ```bash
+   git tag -a v0.6.1 <origin/main sha> -F <scratchpad>/v0.6.1-tag.txt
+   git push origin v0.6.1
+   ```
+   If the push is refused because the tag already exists, another session released first: fetch
+   the tags again and check whether your change is already in that release. If it isn't, take the
+   next number.
+5. Tell the user the version, the run link and what it ships. The `sign` job waits in Actions until
+   they approve the `release` environment. Never approve a deployment yourself.
+6. After they approve, check that the release published and its jobs passed.
 
-The `sign` job then waits in Actions until the user approves it (the `release` environment), so
-tell them to open the run and approve it. Never approve a deployment yourself.
+Releases run one at a time, in the order the tags were pushed (release.yml's concurrency group), so
+two sessions releasing close together queue rather than clash.
 
 Write a "Release note" section in every PR you open (`New:` / `Improved:` / `Fixed:` lines, or
-`none`): it becomes the app's "What's new". Never push a tag yourself unless the user asks.
+`none`): it becomes the app's "What's new".
 
 ### Pull requests that change `.mergify.yml`
 
