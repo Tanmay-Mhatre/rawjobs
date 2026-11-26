@@ -39,9 +39,9 @@ afterEach(() => {
 });
 
 /** Serve a manifest and its shards like the release does. */
-function feedServer(shards: Record<string, JobFeedShard>, schema = JOB_FEED_SCHEMA) {
+function feedServer(shards: Record<string, JobFeedShard>, schema = JOB_FEED_SCHEMA, generatedAt = new Date(NOW).toISOString()) {
   const files = new Map<string, Buffer>();
-  const manifest: JobFeedManifest = { schema, generated_at: new Date(NOW).toISOString(), shards: {} };
+  const manifest: JobFeedManifest = { schema, generated_at: generatedAt, shards: {} };
   for (const [ats, s] of Object.entries(shards)) {
     const gz = gzipSync(JSON.stringify(s));
     files.set(`jobs-${ats}.json.gz`, gz);
@@ -76,6 +76,20 @@ describe("syncJobFeed", () => {
       "https://feed.example/jobs/jobs-v3-manifest.json",
       "https://feed.example/jobs/jobs-v3-manifest.json.sig",
     ]);
+  });
+
+  it("refuses a manifest older than the local copy, and takes a newer one", async () => {
+    process.env.RAWJOBS_JOBS_URL = "https://feed.example/jobs";
+    const dir = tmp();
+    const s = shard({ "lever:acme": { fetched_at: at(0), jobs: [["1", "Product Manager", "Dubai", "onsite", null]] } });
+    expect(await syncJobFeed(dir, { fetchImpl: feedServer({ lever: s }).fetchImpl, now: NOW })).toMatchObject({ updated: true });
+    const older = feedServer({ lever: shard({}) }, JOB_FEED_SCHEMA, at(2));
+    expect(await syncJobFeed(dir, { fetchImpl: older.fetchImpl, now: NOW })).toMatchObject({ updated: false, message: "The job feed offered an older copy; kept yours." });
+    expect(older.calls.some((u) => u.endsWith(".json.gz"))).toBe(false);
+    expect(jobFeedStatus(dir, NOW)).toMatchObject({ companies: 1, ageDays: 0 });
+    const newer = new Date(NOW + 3_600_000).toISOString();
+    expect((await syncJobFeed(dir, { fetchImpl: feedServer({ lever: s }, JOB_FEED_SCHEMA, newer).fetchImpl, now: NOW })).message).toMatch(/up to date/);
+    expect(jobFeedStatus(dir, NOW).generated_at).toBe(newer);
   });
 
   it("ignores a feed in a format it doesn't know, and never throws offline", async () => {

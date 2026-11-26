@@ -1,3 +1,5 @@
+import { allowPrivate, privateAddressReason, privateHost, publicOnlyAgent } from "./network-guard";
+
 /** Set by the bundle build (scripts/bundle/build.ts) to the release's version. */
 declare const __RAWJOBS_VERSION__: string | undefined;
 /** This version, for the User-Agent: the bundle's, or package.json's when running the sources. */
@@ -17,6 +19,8 @@ export class HttpError extends Error {
     readonly status?: number,
     /** On a 403: who refused (server, CDN and firewall headers, the start of the body), to tell a rate limit from a block. */
     readonly detail?: string,
+    /** "EPRIVATE": the host is a private address (network-guard.ts). Permanent, like a 4xx. */
+    readonly code?: string,
   ) {
     super(message);
   }
@@ -305,7 +309,7 @@ export class HttpClient {
       climbHoldMs: opts.climbHoldMs ?? 0,
       paceCeilings: opts.paceCeilings ?? {},
       adaptiveConcurrency: opts.adaptiveConcurrency ?? false,
-      fetchImpl: opts.fetchImpl ?? fetch,
+      fetchImpl: opts.fetchImpl ?? guardedFetch,
       sleep: opts.sleep ?? realSleep,
       stopped: opts.stopped,
       sign: opts.sign,
@@ -358,8 +362,12 @@ export class HttpClient {
   }
 
   private async send(url: string, init: RequestInit, readBody: boolean): Promise<{ res: Response; body?: string }> {
-    const host = new URL(url).host;
+    const parsed = new URL(url);
+    const host = parsed.host;
     if (this.isStopped()) throw new StoppedError(url);
+    // IP literals and localhost never reach publicOnlyAgent's DNS check, so they're refused here.
+    const blocked = this.opts.fetchImpl === guardedFetch && !allowPrivate() ? privateHost(parsed) : null;
+    if (blocked) throw new HttpError(`blocked: ${blocked} (${url})`, url, undefined, undefined, "EPRIVATE");
     const probe = await this.waitOutRest(host, url);
     this.track(1);
     try {
@@ -370,7 +378,8 @@ export class HttpClient {
       this.rests.delete(host);
       return out;
     } catch (err) {
-      if (err instanceof StoppedError) throw err;
+      // A private address is refused for good: not an answer, and not a sign the host is flaky.
+      if (err instanceof StoppedError || (err as HttpError).code === "EPRIVATE") throw err;
       const status = (err as HttpError).status;
       if (status !== undefined) {
         this.lastAnswerAt = Date.now();
@@ -572,6 +581,8 @@ export class HttpClient {
       } catch (err) {
         clearTimeout(timer);
         if (ctrl.signal.reason instanceof StoppedError) throw ctrl.signal.reason;
+        const refused = privateAddressReason(err);
+        if (refused) throw new HttpError(`blocked: ${refused} (${url})`, url, undefined, undefined, "EPRIVATE");
         const e = err as Error;
         const timedOut = e.name === "TimeoutError" || (ctrl.signal.reason as Error | undefined)?.name === "TimeoutError";
         if (timedOut) {
@@ -678,6 +689,9 @@ export class HttpClient {
     if (!this.stats.slowedHosts.includes(host)) this.stats.slowedHosts.push(host);
   }
 }
+
+/** The default fetch: connections go to public addresses only, unless RAWJOBS_ALLOW_PRIVATE=1. */
+const guardedFetch: typeof fetch = async (input, init) => (allowPrivate() ? fetch(input, init) : fetch(input, { ...init, dispatcher: await publicOnlyAgent() } as RequestInit));
 
 function parseRetryAfter(value: string | null): number | undefined {
   if (!value) return undefined;

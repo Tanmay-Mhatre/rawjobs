@@ -29,9 +29,27 @@ import {
   takeReady,
   TASK_REFUSED,
   TASK_RUNNING,
+  type UpdateOverride,
   type UpdateSystem,
+  updateOverride,
   writeUpdateFile,
 } from "../src/update";
+
+describe("update overrides", () => {
+  const names: UpdateOverride[] = ["RAWJOBS_PUBLIC_KEY", "RAWJOBS_RELEASE_URL", "RAWJOBS_BEACON_URL", "RAWJOBS_NODE_DIST"];
+  const env = Object.fromEntries(names.map((n) => [n, `custom-${n}`])) as NodeJS.ProcessEnv;
+
+  it("ignores every override in a bundled build", () => {
+    for (const n of names) expect(updateOverride(n, env, true)).toBeUndefined();
+    for (const n of names) expect(updateOverride(n, { ...env, RAWJOBS_TEST: "true" }, true)).toBeUndefined();
+  });
+
+  it("honours them in a bundled build with RAWJOBS_TEST=1, and from the sources", () => {
+    for (const n of names) expect(updateOverride(n, { ...env, RAWJOBS_TEST: "1" }, true)).toBe(`custom-${n}`);
+    for (const n of names) expect(updateOverride(n, env, false)).toBe(`custom-${n}`);
+    expect(updateOverride("RAWJOBS_RELEASE_URL", { RAWJOBS_RELEASE_URL: "" }, false)).toBeUndefined();
+  });
+});
 
 const tar = process.platform === "win32" ? join(process.env.SystemRoot ?? "C:\\Windows", "System32", "tar.exe") : "tar";
 const servers: Server[] = [];

@@ -1,6 +1,7 @@
 import { createReadStream, statSync } from "node:fs";
 import type { IncomingMessage, ServerResponse } from "node:http";
-import { extname, resolve, sep } from "node:path";
+import { extname, join, resolve, sep } from "node:path";
+import { CSP_HEADER, plainPolicy, serverPagesPolicy, webPolicy } from "./csp";
 import { notFoundPage, offlinePage, SERVICE_WORKER, sectionRedirect } from "./pages";
 
 const TYPES: Record<string, string> = {
@@ -57,7 +58,11 @@ export function serveStatic(roots: string[], req: IncomingMessage, res: ServerRe
   // Built assets have hashed names and can be kept; the page and the data change between scans.
   res.setHeader("cache-control", /[\\/]assets[\\/]/.test(file) && !html ? "public, max-age=31536000, immutable" : "no-store");
   res.setHeader("x-content-type-options", "nosniff");
-  if (html) res.setHeader("x-frame-options", "DENY");
+  if (html) {
+    res.setHeader("x-frame-options", "DENY");
+    // The dashboard (first root) gets its own inline scripts allowed; any other HTML (the data folder), none.
+    res.setHeader(CSP_HEADER, file === resolve(join(roots[0]!, "index.html")) ? webPolicy(roots[0]!) : plainPolicy());
+  }
   if (req.method === "HEAD") {
     res.end();
     return true;
@@ -88,7 +93,10 @@ export function servePages(req: IncomingMessage, res: ServerResponse, ctx: PageC
     res.setHeader("content-type", type);
     res.setHeader("cache-control", "no-store");
     res.setHeader("x-content-type-options", "nosniff");
-    if (type.startsWith("text/html")) res.setHeader("x-frame-options", "DENY");
+    if (type.startsWith("text/html")) {
+      res.setHeader("x-frame-options", "DENY");
+      res.setHeader(CSP_HEADER, serverPagesPolicy());
+    }
     res.end(req.method === "HEAD" ? undefined : body);
   };
   const page = req.method === "GET" || req.method === "HEAD";

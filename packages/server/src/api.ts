@@ -32,7 +32,8 @@ import { readTracking, saveTracking, suggestPoolSize, type ScanScope } from "@ra
 import { CONNECTION_ID, createNetworkStore, createReminder, createWatcher, nodeWatchDeps, type ReminderDeps, sendTelegram, telegramSecrets, type WatchDeps } from "@rawjobs/core";
 import type { ScanOrigin } from "@rawjobs/core/protocol";
 import { folderId } from "@rawjobs/core/update";
-import { refuse } from "./guard";
+import { CSP_REPORT_PATH, cspReportLine } from "./csp";
+import { refuse, refuseHost } from "./guard";
 import { createReaders } from "./readers";
 import type { Updater } from "./updater";
 
@@ -470,6 +471,9 @@ Stopped after ${Math.round(timeoutMs / 1000)} s without finishing.`.trim(),
   }
 
   /** Answer an /api request. Returns false when the URL isn't ours (let the caller serve it). */
+  /** CSP reports already logged this start. */
+  const cspSeen = new Set<string>();
+
   async function handle(req: IncomingMessage, res: ServerResponse): Promise<boolean> {
     const url = req.url?.split("?")[0] ?? "";
     if (!url.startsWith("/api/")) return false;
@@ -478,6 +482,21 @@ Stopped after ${Math.round(timeoutMs / 1000)} s without finishing.`.trim(),
       res.setHeader("cache-control", "no-store");
       res.setHeader("x-content-type-options", "nosniff");
       res.setHeader("cross-origin-resource-policy", "same-origin");
+    }
+    if (url === CSP_REPORT_PATH && req.method === "POST") {
+      // What the Content-Security-Policy blocked: one log line per kind, at
+      // most 50 a start. The browser sends these on its own, sometimes without an Origin, so only the
+      // Host is checked; the route changes nothing.
+      if (!refuseHost(req)) {
+        const line = cspReportLine(await readBody(req, 64_000).catch(() => ""));
+        if (line && !cspSeen.has(line) && cspSeen.size < 50) {
+          cspSeen.add(line);
+          console.warn(`RawJobs: ${line}`);
+        }
+      }
+      res.statusCode = 204;
+      res.end();
+      return true;
     }
     const why = refuse(req);
     if (why) json(res, { ok: false, errors: why }, 403);

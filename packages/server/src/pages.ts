@@ -219,6 +219,9 @@ details div{margin-top:8px;padding:10px 12px;border-radius:4px;background:var(--
 @media (prefers-reduced-motion:reduce){.enter{animation:none}}
 `;
 
+/** Inline scripts of these pages, each a constant: csp.ts allows exactly these by hash. */
+export const pageScripts = (): string[] => [THEME_SCRIPT, OFFLINE_SCRIPT];
+
 /** Before first paint: the theme you picked in Settings, else the system's (as index.html does). */
 const THEME_SCRIPT = `<script>(function(){var t=null;try{t=localStorage.getItem("rawjobs.theme")}catch(e){}var d=t==="dark"||(t!=="light"&&matchMedia("(prefers-color-scheme: dark)").matches);document.documentElement.dataset.theme=d?"dark":"light"})()</script>`;
 
@@ -311,6 +314,25 @@ const FIND_ELSEWHERE = `function findElsewhere(done){var ports=${JSON.stringify(
 ports.forEach(function(p){var o=location.protocol+"//"+location.hostname+":"+p,c=new AbortController();setTimeout(function(){c.abort()},1500);
 fetch(o+"/api/health",{cache:"no-store",signal:c.signal}).then(function(r){return r.json()}).then(function(h){if(h&&h.ok&&!found)found=o}).catch(function(){}).then(function(){if(--left===0)done(found)})})}`;
 
+/** The offline page's script: a constant, so the Content-Security-Policy can allow it by its hash (csp.ts). */
+const OFFLINE_SCRIPT = `<script>(function(){
+var page=document.getElementById("page"),art=document.getElementById("art"),start=document.getElementById("start"),label=document.getElementById("label"),hint=document.getElementById("hint");
+var fast=false,stuck=null;
+function back(go){page.dataset.state="back";art.dataset.p="awake";if(label)label.textContent="RawJobs is back";setTimeout(go,700)}
+function here(){if(location.pathname==="/offline.html")location.replace("/");else location.reload()}
+function up(){fetch("/api/health",{cache:"no-store"}).then(function(r){return r.json()}).then(function(h){if(h&&h.ok)back(here);else elsewhere()}).catch(elsewhere)}
+${FIND_ELSEWHERE}
+function elsewhere(){findElsewhere(function(origin){if(!origin)return later();back(function(){location.replace(origin+(location.pathname==="/offline.html"?"/":location.pathname)+location.search+location.hash)})})}
+function later(){setTimeout(up,fast?1000:4000)}
+if(start)start.addEventListener("click",function(){
+  page.dataset.state="starting";fast=true;label.textContent="Starting…";hint.hidden=false;
+  if(art.querySelector(".rjd-scene"))art.dataset.p="waking";
+  location.href="rawjobs://open";
+  clearTimeout(stuck);stuck=setTimeout(function(){if(page.dataset.state!=="starting")return;page.dataset.state="stuck";fast=false;label.textContent="Try again";hint.hidden=true;art.dataset.p="asleep"},20000);
+});
+later();
+})()</script>`;
+
 /**
  * "RawJobs isn't running", for when you open the dashboard's address while the server is stopped.
  * The browser's service worker (SERVICE_WORKER) keeps this page and shows it instead of "This site
@@ -335,23 +357,7 @@ ${how}
 </div>
 <div class="rjd-art" aria-hidden="true" id="art" data-p="asleep">${o.startLink ? sleepScene() : desktopScene(o.platform)}</div>
 </main>
-<script>(function(){
-var page=document.getElementById("page"),art=document.getElementById("art"),start=document.getElementById("start"),label=document.getElementById("label"),hint=document.getElementById("hint");
-var fast=false,stuck=null;
-function back(go){page.dataset.state="back";art.dataset.p="awake";if(label)label.textContent="RawJobs is back";setTimeout(go,700)}
-function here(){if(location.pathname==="/offline.html")location.replace("/");else location.reload()}
-function up(){fetch("/api/health",{cache:"no-store"}).then(function(r){return r.json()}).then(function(h){if(h&&h.ok)back(here);else elsewhere()}).catch(elsewhere)}
-${FIND_ELSEWHERE}
-function elsewhere(){findElsewhere(function(origin){if(!origin)return later();back(function(){location.replace(origin+(location.pathname==="/offline.html"?"/":location.pathname)+location.search+location.hash)})})}
-function later(){setTimeout(up,fast?1000:4000)}
-if(start)start.addEventListener("click",function(){
-  page.dataset.state="starting";fast=true;label.textContent="Starting…";hint.hidden=false;
-  if(art.querySelector(".rjd-scene"))art.dataset.p="waking";
-  location.href="rawjobs://open";
-  clearTimeout(stuck);stuck=setTimeout(function(){if(page.dataset.state!=="starting")return;page.dataset.state="stuck";fast=false;label.textContent="Try again";hint.hidden=true;art.dataset.p="asleep"},20000);
-});
-later();
-})()</script>`;
+${OFFLINE_SCRIPT}`;
   return shell("RawJobs · Not running", OFFLINE_CSS, body);
 }
 
