@@ -329,9 +329,12 @@ describe("scan lock", () => {
     expect(readFileSync(join(dataDir, "scan.lock"), "utf8")).toBe(String(process.ppid));
   });
 
-  it("takes over an empty or unreadable lock file", () => {
+  it("takes over an empty or unreadable lock file once it's a few seconds old (a fresh one is being written)", () => {
     const dataDir = mkdtempSync(join(tmpdir(), "jh-lock-"));
     writeFileSync(join(dataDir, "scan.lock"), "");
+    expect(acquireScanLock(dataDir)).toBe(false);
+    const old = new Date(Date.now() - 10_000);
+    utimesSync(join(dataDir, "scan.lock"), old, old);
     expect(acquireScanLock(dataDir)).toBe(true);
     expect(readFileSync(join(dataDir, "scan.lock"), "utf8")).toBe(String(process.pid));
     releaseScanLock(dataDir);

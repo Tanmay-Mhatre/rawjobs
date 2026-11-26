@@ -1,4 +1,4 @@
-import { appendFileSync, existsSync, readdirSync, readFileSync, rmSync, statSync, utimesSync, writeFileSync } from "node:fs";
+import { appendFileSync, existsSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { writeFileAtomic } from "./atomic";
 import { isChronic, knownFirstPages, planBoards, pruneBoards, readBoardHealth, recordBoards, writeBoardHealth } from "./board-health";
@@ -22,7 +22,7 @@ import { byMatchChance, estimateScan, findMoves, readDirectory, readDirectoryMov
 import { fetchedSince, quickPicks } from "./stages";
 import { readJobs, readMeta, saveRun } from "./store";
 import type { ScanSource } from "./protocol";
-import { isRunning } from "./pid";
+import { acquireLock, lockHolder, releaseLock } from "./lock";
 
 export type ScanStart = {
   /** Your companies' names, in fetch order. */
@@ -510,72 +510,20 @@ export async function scan(config: Config, opts: ScanOptions): Promise<ScanResul
   return { result, merged, summary, checks, moves, stopped, ...boardNews, stats, ...(openCheck ? { openCheck } : {}) };
 }
 
-/** The scan holding the lock touches it this often, so a lock nobody touched for LOCK_STALE_MS is left over. */
-const LOCK_BEAT_MS = 60_000;
-const LOCK_STALE_MS = 15 * 60_000;
-let lockBeat: ReturnType<typeof setInterval> | undefined;
-
 /**
  * One scan at a time per data folder (a scheduled scan and a dashboard scan could otherwise both
- * write history). The lock holds the scan's process id and is created with "wx", so of two scans
- * starting at the same moment only one gets it. A lock left by a process that's gone is taken over,
- * and so is one nobody touched for a while: a scan that crashed whose process id now belongs to
- * another program (Windows reuses them). The holder touches it every minute until it lets go.
+ * write history): data/scan.lock, held through lock.ts. A lock left by a process that's gone, or one
+ * nobody touched for 15 minutes, is taken over.
  */
+const scanLockPath = (dataDir: string) => join(dataDir, "scan.lock");
+
 export function acquireScanLock(dataDir: string): boolean {
-  const path = join(dataDir, "scan.lock");
-  for (let attempt = 0; attempt < 2; attempt++) {
-    try {
-      writeFileSync(path, String(process.pid), { flag: "wx" });
-      startLockBeat(path);
-      return true;
-    } catch (err) {
-      if ((err as NodeJS.ErrnoException).code !== "EEXIST") throw err;
-    }
-    const holder = lockHolder(path);
-    if (holder === process.pid) return true;
-    if (holder !== undefined && isRunning(holder) && !lockStale(path)) return false;
-    // Left by a process that's gone: remove it (unless another scan just took it over) and try again.
-    if (lockHolder(path) === holder) rmSync(path, { force: true });
-  }
-  return false;
-}
-
-/** The process id in a lock file; undefined when it's gone or unreadable. */
-function lockHolder(path: string): number | undefined {
-  try {
-    return Number(readFileSync(path, "utf8")) || undefined;
-  } catch {
-    return undefined;
-  }
-}
-
-function startLockBeat(path: string): void {
-  clearInterval(lockBeat);
-  lockBeat = setInterval(() => {
-    try {
-      const now = new Date();
-      utimesSync(path, now, now);
-    } catch {
-      // Gone: released, or taken over.
-    }
-  }, LOCK_BEAT_MS);
-  lockBeat.unref?.();
-}
-
-/** Nobody touched the lock for LOCK_STALE_MS: its scan is gone, whatever its process id says now. */
-function lockStale(path: string, now = Date.now()): boolean {
-  try {
-    return now - statSync(path).mtimeMs > LOCK_STALE_MS;
-  } catch {
-    return false;
-  }
+  return acquireLock(scanLockPath(dataDir)) !== null;
 }
 
 /** The process id of the scan holding the lock right now (not this process): a scheduled one, or one the dashboard started. */
 export function scanLockHolder(dataDir: string): number | undefined {
-  const holder = lockHolder(join(dataDir, "scan.lock"));
-  return holder !== undefined && holder !== process.pid && isRunning(holder) && !lockStale(join(dataDir, "scan.lock")) ? holder : undefined;
+  return lockHolder(scanLockPath(dataDir));
 }
 
 /** Whether a scan holds the lock right now: a scheduled one, or one the dashboard started. */
@@ -584,12 +532,5 @@ export function scanLockHeld(dataDir: string): boolean {
 }
 
 export function releaseScanLock(dataDir: string): void {
-  const path = join(dataDir, "scan.lock");
-  clearInterval(lockBeat);
-  lockBeat = undefined;
-  try {
-    if (Number(readFileSync(path, "utf8")) === process.pid) rmSync(path, { force: true });
-  } catch {
-    // already gone
-  }
+  releaseLock(scanLockPath(dataDir));
 }

@@ -33,6 +33,7 @@ export * from "./suggest";
 export * from "./suggest-cache";
 export * from "./discover";
 export * from "./scan";
+export * from "./lock";
 export * from "./live";
 export * from "./migrate";
 export * from "./resume-parse";
