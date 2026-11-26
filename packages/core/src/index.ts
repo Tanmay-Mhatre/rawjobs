@@ -34,7 +34,6 @@ export * from "./suggest-cache";
 export * from "./discover";
 export * from "./scan";
 export * from "./lock";
-export { writeFileAtomic } from "./atomic";
 export * from "./live";
 export * from "./migrate";
 export * from "./resume-parse";
