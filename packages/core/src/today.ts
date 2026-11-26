@@ -1,6 +1,7 @@
 import { existsSync, mkdirSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { writeFileAtomic } from "./atomic";
+import { tryWithLock } from "./lock";
 import { displayName } from "./display-name";
 import { daysBetween, plusDays, type Task, type TaskEntry, tasksFor, today } from "./next-steps";
 import { sendTelegram, type TelegramSecrets, telegramMessage } from "./notify";
@@ -140,7 +141,7 @@ export function readDailySent(dataDir: string): DailySent | undefined {
   }
 }
 
-export type DailyResult = "sent" | "nothing-due" | "already-sent" | "too-late" | "off" | `failed: ${string}`;
+export type DailyResult = "sent" | "nothing-due" | "already-sent" | "already-sending" | "too-late" | "off" | `failed: ${string}`;
 
 /**
  * Send today's summary once a day. `scheduled`: the run the computer's scheduler started, which sends
@@ -148,6 +149,13 @@ export type DailyResult = "sent" | "nothing-due" | "already-sent" | "too-late" |
  * Never throws: says what happened.
  */
 export async function sendDailySummary(dataDir: string, secrets: TelegramSecrets, opts: { home?: string; now?: Date; fetchImpl?: Fetch; scheduled?: boolean } = {}): Promise<DailyResult> {
+  if (!secrets.token || !secrets.chatId) return "off";
+  mkdirSync(dataDir, { recursive: true });
+  // Two runs at once (the scheduler catching up a missed one while another runs) would both send.
+  return (await tryWithLock(resolve(dataDir, "daily.lock"), () => sendDailyLocked(dataDir, secrets, opts), { staleMs: 5 * 60_000, beatMs: 30_000 })) ?? "already-sending";
+}
+
+async function sendDailyLocked(dataDir: string, secrets: TelegramSecrets, opts: { home?: string; now?: Date; fetchImpl?: Fetch; scheduled?: boolean }): Promise<DailyResult> {
   if (!secrets.token || !secrets.chatId) return "off";
   const now = opts.now ?? new Date();
   if (opts.scheduled && now.getHours() * 60 + now.getMinutes() > TODAY_CUTOFF) return "too-late";

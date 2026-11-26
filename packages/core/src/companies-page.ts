@@ -1,6 +1,8 @@
-import { existsSync, mkdirSync, readFileSync } from "node:fs";
+import { mkdirSync } from "node:fs";
 import { dirname, resolve } from "node:path";
-import { writeFileAtomic } from "./atomic";
+import { readJsonOrSetAside, writeFileAtomic } from "./atomic";
+import { CATALOG_FILES_LOCK } from "./directory";
+import { withLockSync } from "./lock";
 import { connectors } from "./connectors";
 import { type CompanyShape, companyWords, lookalikes, matchEmployers, rolesFromResume, seedFromRole } from "./employers";
 import type { CompanyCheck } from "./protocol";
@@ -25,25 +27,28 @@ export function recordAdditions(dataDir: string, results: CompanyCheck[]): void 
   const fresh = results.filter((r) => (r.status === "live" || r.status === "dormant") && !r.in_directory && r.key && isAts(r.ats));
   if (!fresh.length) return;
   const file = resolve(dataDir, "catalog", "additions.json");
-  const current = existsSync(file) ? (JSON.parse(readFileSync(file, "utf8")) as { companies: (DirectoryEntry & { added_at: string })[] }).companies : [];
-  const byKey = new Map(current.map((c) => [c.key, c]));
-  for (const r of fresh) {
-    byKey.set(r.key!, {
-      key: r.key!,
-      name: r.name!,
-      ats: r.ats!,
-      slug: r.slug!,
-      ...(r.region ? { region: r.region } : {}),
-      ...(r.shard ? { shard: r.shard } : {}),
-      ...(r.site ? { site: r.site } : {}),
-      careers_url: r.careers_url!,
-      status: r.status,
-      open_jobs: r.open_jobs ?? null,
-      added_at: byKey.get(r.key!)?.added_at ?? new Date().toISOString(),
-    });
-  }
   mkdirSync(dirname(file), { recursive: true });
-  writeFileAtomic(file, JSON.stringify({ companies: [...byKey.values()] }, null, 1));
+  // Two checks at once (two tabs, or a quick second paste) run in two processes: one at a time, or one drops the other's.
+  withLockSync(resolve(dataDir, "catalog", CATALOG_FILES_LOCK), () => {
+    const current = readJsonOrSetAside<{ companies: (DirectoryEntry & { added_at: string })[] }>(file, (bad) => console.warn(`RawJobs: ${file} didn't parse; moved it to ${bad}.`))?.companies ?? [];
+    const byKey = new Map(current.map((c) => [c.key, c]));
+    for (const r of fresh) {
+      byKey.set(r.key!, {
+        key: r.key!,
+        name: r.name!,
+        ats: r.ats!,
+        slug: r.slug!,
+        ...(r.region ? { region: r.region } : {}),
+        ...(r.shard ? { shard: r.shard } : {}),
+        ...(r.site ? { site: r.site } : {}),
+        careers_url: r.careers_url!,
+        status: r.status,
+        open_jobs: r.open_jobs ?? null,
+        added_at: byKey.get(r.key!)?.added_at ?? new Date().toISOString(),
+      });
+    }
+    writeFileAtomic(file, JSON.stringify({ companies: [...byKey.values()] }, null, 1));
+  });
 }
 
 /**

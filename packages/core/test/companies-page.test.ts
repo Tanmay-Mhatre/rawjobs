@@ -1,8 +1,9 @@
-import { mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { addedCounts, companyExtras, PACK_MORE, PACK_SIZE, recordAdditions } from "../src/companies-page";
+import { LockBusyError } from "../src/lock";
 import { suggestCompanies, type IndexedCompany } from "../src/suggest";
 import { profile } from "./helpers";
 import type { CompanyCheck } from "../src/protocol";
@@ -31,6 +32,25 @@ describe("recordAdditions", () => {
     const first = read()[0]!.added_at;
     recordAdditions(dir, [check("acme", { open_jobs: 9 })]);
     expect(read()[0]).toMatchObject({ key: "lever:acme", open_jobs: 9, added_at: first });
+  });
+});
+
+describe("recordAdditions with a damaged or busy file", () => {
+  it("sets a damaged additions.json aside and records the new ones", () => {
+    dir = mkdtempSync(join(tmpdir(), "rawjobs-additions-"));
+    mkdirSync(join(dir, "catalog"), { recursive: true });
+    writeFileSync(join(dir, "catalog", "additions.json"), '{"companies":[');
+    recordAdditions(dir, [check("acme")]);
+    expect(existsSync(join(dir, "catalog", "additions.json.bad"))).toBe(true);
+    expect(JSON.parse(readFileSync(join(dir, "catalog", "additions.json"), "utf8")).companies.map((c: { key: string }) => c.key)).toEqual(["lever:acme"]);
+  });
+
+  it("writes nothing while another process holds the file", () => {
+    dir = mkdtempSync(join(tmpdir(), "rawjobs-additions-"));
+    mkdirSync(join(dir, "catalog"), { recursive: true });
+    writeFileSync(join(dir, "catalog", ".files.lock"), String(process.ppid));
+    expect(() => recordAdditions(dir, [check("acme")])).toThrow(LockBusyError);
+    expect(existsSync(join(dir, "catalog", "additions.json"))).toBe(false);
   });
 });
 
