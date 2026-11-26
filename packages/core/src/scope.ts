@@ -1,4 +1,5 @@
-import { closeSync, existsSync, openSync, readFileSync, readSync, writeFileSync } from "node:fs";
+import { closeSync, existsSync, openSync, readFileSync, readSync } from "node:fs";
+import { writeFileAtomic } from "./atomic";
 import { join } from "node:path";
 import { companyKey, connectors } from "./connectors";
 import { companyWords } from "./employers";
@@ -206,7 +207,7 @@ export function recordSpeeds(dataDir: string, health: readonly CompanyHealth[]):
     const measured = median(ms) / 1000 / Math.min(laneWorkers(ats), ms.length);
     speeds[ats] = Math.round((speeds[ats] === undefined ? measured : (speeds[ats] + measured) / 2) * 1000) / 1000;
   }
-  writeFileSync(join(dataDir, "scan-speed.json"), JSON.stringify({ _model: SPEED_MODEL, ...speeds }, null, 1));
+  writeFileAtomic(join(dataDir, "scan-speed.json"), JSON.stringify({ _model: SPEED_MODEL, ...speeds }, null, 1));
   return speeds;
 }
 
