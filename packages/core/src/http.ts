@@ -691,7 +691,7 @@ export class HttpClient {
 }
 
 /** The default fetch: connections go to public addresses only, unless RAWJOBS_ALLOW_PRIVATE=1. */
-const guardedFetch: typeof fetch = (input, init) => fetch(input, allowPrivate() ? init : ({ ...init, dispatcher: publicOnlyAgent } as RequestInit));
+const guardedFetch: typeof fetch = async (input, init) => (allowPrivate() ? fetch(input, init) : fetch(input, { ...init, dispatcher: await publicOnlyAgent() } as RequestInit));
 
 function parseRetryAfter(value: string | null): number | undefined {
   if (!value) return undefined;

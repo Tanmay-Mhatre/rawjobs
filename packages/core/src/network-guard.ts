@@ -8,7 +8,7 @@
  */
 import { type LookupAddress, lookup as dnsLookup } from "node:dns";
 import { isIP } from "node:net";
-import { Agent } from "undici";
+import type { Dispatcher } from "undici";
 import { envSetting } from "./env";
 
 /** A fetch was refused because its host is (or resolves to) a private address. Permanent: never retried. */
@@ -76,8 +76,16 @@ export function publicOnlyLookup(resolve: Resolve = dnsLookup as unknown as Reso
   };
 }
 
-/** An undici dispatcher for fetch() whose connections only ever go to public addresses. */
-export const publicOnlyAgent = new Agent({ connect: { lookup: publicOnlyLookup() } });
+let agent: Promise<Dispatcher> | undefined;
+/**
+ * An undici dispatcher for fetch() whose connections only ever go to public addresses. Loaded on
+ * first use, never at import: undici is Node-only (it reads `process` when it loads), and the
+ * dashboard's bundle imports @rawjobs/core too. An import at the top broke the page (v0.7.13).
+ */
+export function publicOnlyAgent(): Promise<Dispatcher> {
+  agent ??= import("undici").then(({ Agent }) => new Agent({ connect: { lookup: publicOnlyLookup() } }));
+  return agent;
+}
 
 /** When fetch() failed because publicOnlyAgent refused the address: the refusal's message (fetch wraps it in a cause). */
 export function privateAddressReason(err: unknown): string | undefined {
