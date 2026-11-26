@@ -485,12 +485,14 @@ the contributions workflow (`17 */3 * * *`) got about 110 of its about 238 slots
    `npx wrangler secret put INBOX_TOKEN` (a long random string), `npx wrangler secret put REPORTER_SECRET`
    (another long random string, kept only in the Worker; it keys the reporter hashes on move reports, and
    without it `/v1/moves` answers 503), `npx wrangler deploy`. `DAILY_CAP` and `MOVES_DAILY_CAP` are in `wrangler.toml`.
-5. **Secrets in the code repo** (`gh secret set NAME`):
-   - `INBOX_URL`: the Worker URL from step 4
-   - `INBOX_TOKEN`: the same string as step 4
-   - `DATA_REPO_TOKEN`: a fine-grained token with *Contents: read and write* on the directory repo only, expiring in 90 days
+5. **Secrets in the code repo**, in GitHub environments that only `main` may use (Settings →
+   Environments; deployment branches: `main` only). Make `data-repo` and `data-signing`, then
+   `gh secret set NAME --env ENVIRONMENT` (details: [self-hosting.md](self-hosting.md#tokens)):
+   - `INBOX_URL` (both environments): the Worker URL from step 4
+   - `INBOX_TOKEN` (both environments): the same string as step 4
+   - `DATA_REPO_TOKEN` (both environments): a fine-grained token with *Contents: read and write* on the directory repo only, expiring in 90 days
      (rotation steps: [self-hosting.md](self-hosting.md#tokens))
-   - `RAWJOBS_DATA_SIGNING_KEY`: the private data signing key (PEM). Apps accept `manifest.json`,
+   - `RAWJOBS_DATA_SIGNING_KEY` (`data-signing` only): the private data signing key (PEM). Apps accept `manifest.json`,
      `jobs-manifest.json` and `jobs-v2-manifest.json` only with a valid `.sig` made with it
      (`packages/core/src/data-signing.ts`; making the key: [self-hosting.md](self-hosting.md#run-your-own-directory))
      The publishing workflows sign what they publish. To sign what's already out there (the first
