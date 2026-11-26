@@ -75,7 +75,7 @@ export function slimRunHistory(dir: string, config: Config): void {
   if (!meta) return;
   const yours = yourKeys(config);
   const runs = meta.runs.map((r) => slimRun(r, yours));
-  writeFileAtomic(join(dir, "meta.json"), JSON.stringify({ ...meta, runs }));
+  writeFileAtomic(join(dir, "meta.json"), JSON.stringify({ ...meta, runs }), undefined, { fsync: true });
   const kept = new Map(runs.map((r) => [runFile(r), r]));
   const runsDir = join(dir, "runs");
   if (!existsSync(runsDir)) return;
@@ -193,7 +193,7 @@ export function saveRun(
 
   const jobs = merged.jobs.map((j) => (j.why.gate ? { ...j, description: undefined } : j));
   const history: JobsFile = { version: 1, generatedAt, jobs };
-  writeFileAtomic(join(dir, "history.json"), JSON.stringify(history));
+  writeFileAtomic(join(dir, "history.json"), JSON.stringify(history), undefined, { fsync: true });
 
   const { companies: directory, moves } = readDirectory(dir);
   const industries = directoryIndustries(directory);
@@ -252,7 +252,7 @@ export function saveRun(
     ...(activity.ready ? { hiringReady: true } : {}),
     ...(boardHealth && Object.keys(boardHealth).length ? { boardHealth } : {}),
   };
-  writeFileAtomic(join(dir, "meta.json"), JSON.stringify(meta));
+  writeFileAtomic(join(dir, "meta.json"), JSON.stringify(meta), undefined, { fsync: true });
 
   if (opts.record === false) return summary;
   writeFileAtomic(join(dir, "runs", runFile(summary)), JSON.stringify(summary));

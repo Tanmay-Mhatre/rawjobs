@@ -59,7 +59,7 @@ export function saveConfig(input: unknown, cwd = rawjobsHome()): SaveResult {
     };
   }
   const path = personalConfigPath(cwd);
-  writeFileAtomic(path, configToYaml(parsed.data));
+  writeFileAtomic(path, configToYaml(parsed.data), undefined, { fsync: true });
   return { ok: true, path };
 }
 

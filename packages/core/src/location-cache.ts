@@ -1,4 +1,5 @@
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync } from "node:fs";
+import { writeFileAtomic } from "./atomic";
 import { dirname, join } from "node:path";
 import type { LocationCache, ResolvedLocation } from "./run";
 
@@ -29,5 +30,5 @@ export function writeLocationCache(dataDir: string, cache: LocationCache, before
   const entries = [...cache].slice(-MAX_ENTRIES);
   const file = fileOf(dataDir);
   mkdirSync(dirname(file), { recursive: true });
-  writeFileSync(file, JSON.stringify({ version: 1, jobs: Object.fromEntries(entries) }));
+  writeFileAtomic(file, JSON.stringify({ version: 1, jobs: Object.fromEntries(entries) }));
 }

@@ -1,5 +1,6 @@
-import { existsSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, rmSync } from "node:fs";
 import { resolve } from "node:path";
+import { readJsonOrSetAside, writeFileAtomic } from "./atomic";
 import { sendTelegram, type TelegramSecrets, telegramMessage } from "./notify";
 import { readTracking } from "./tracking";
 
@@ -34,28 +35,70 @@ export const followUpMessage = (n: number) => telegramMessage("⏰ <b>Time to fo
 const localDay = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 
 /**
+ * A "sent" record: its value, or `damaged` when it didn't parse (it's moved aside to `.bad`). A
+ * damaged record counts what's due now as already sent, so damage never sends a burst of old
+ * reminders.
+ */
+function readSent<T>(path: string): { value: T | undefined; damaged: boolean } {
+  let damaged = false;
+  try {
+    const value = readJsonOrSetAside<T>(path, (bad) => {
+      damaged = true;
+      console.warn(`${path} couldn't be read; moved it to ${bad} and counted what's due now as already sent.`);
+    });
+    // Still there but not read: damaged, and Windows wouldn't let it move.
+    return { value, damaged: damaged || (value === undefined && existsSync(path)) };
+  } catch (err) {
+    console.warn(`${path} couldn't be read (${(err as Error).message}); counted what's due now as already sent.`);
+    return { value: undefined, damaged: true };
+  }
+}
+
+/** Save a "sent" record, or remove it when `value` is undefined. Never throws: false when it couldn't. */
+function record(path: string, value: unknown): boolean {
+  try {
+    if (value === undefined) rmSync(path, { force: true });
+    else writeFileAtomic(path, JSON.stringify(value));
+    return true;
+  } catch (err) {
+    console.warn(`Couldn't save ${path}: ${(err as Error).message}`);
+    return false;
+  }
+}
+
+/**
+ * Record first, then send, and put the old record back if the send fails. A crash between the two
+ * loses one reminder instead of sending it twice; one that can't be recorded isn't sent.
+ */
+async function sendOnce(path: string, prev: unknown, next: unknown, send: () => Promise<unknown>): Promise<"sent" | `failed: ${string}`> {
+  if (!record(path, next)) return "failed: couldn't save which reminders were sent";
+  try {
+    await send();
+  } catch (err) {
+    record(path, prev);
+    return `failed: ${(err as Error).message}`;
+  }
+  return "sent";
+}
+
+/**
  * Send one Telegram message for follow-ups that came due since the last one. A job is sent again only
  * when you move its date. Never throws: says what happened.
  */
 export async function remindFollowUps(dataDir: string, secrets: TelegramSecrets, opts: { home?: string; now?: Date; fetchImpl?: Fetch } = {}): Promise<"sent" | "nothing-due" | `failed: ${string}`> {
   const due = dueFollowUps(readTracking(opts.home)?.state, localDay(opts.now ?? new Date()));
   const path = resolve(dataDir, FOLLOW_UPS_SENT);
-  let sent: Record<string, string> = {};
-  try {
-    if (existsSync(path)) sent = JSON.parse(readFileSync(path, "utf8")) as Record<string, string>;
-  } catch {
-    sent = {};
+  // Only what's still due is kept, so the file never grows past your open applications.
+  const next = Object.fromEntries(due.map((d) => [d.id, d.followUp]));
+  const prev = readSent<Record<string, string>>(path);
+  if (prev.damaged) {
+    record(path, next);
+    return "nothing-due";
   }
+  const sent = prev.value && typeof prev.value === "object" && !Array.isArray(prev.value) ? prev.value : {};
   const fresh = due.filter((d) => sent[d.id] !== d.followUp);
   if (!fresh.length) return "nothing-due";
-  try {
-    await sendTelegram(followUpMessage(fresh.length), secrets, opts.fetchImpl);
-  } catch (err) {
-    return `failed: ${(err as Error).message}`;
-  }
-  // Only what's still due is kept, so the file never grows past your open applications.
-  writeFileSync(path, JSON.stringify(Object.fromEntries(due.map((d) => [d.id, d.followUp]))));
-  return "sent";
+  return sendOnce(path, prev.value, next, () => sendTelegram(followUpMessage(fresh.length), secrets, opts.fetchImpl));
 }
 
 /** Which interview reminders were already sent ("<job id> <day>"), so each is sent once. */
@@ -82,22 +125,16 @@ export async function remindInterviews(dataDir: string, secrets: TelegramSecrets
   tomorrow.setDate(tomorrow.getDate() + 1);
   const due = dueInterviews(readTracking(opts.home)?.state, localDay(now), localDay(tomorrow));
   const path = resolve(dataDir, INTERVIEWS_SENT);
-  let sent: string[] = [];
-  try {
-    if (existsSync(path)) sent = JSON.parse(readFileSync(path, "utf8")) as string[];
-  } catch {
-    sent = [];
+  const prev = readSent<string[]>(path);
+  if (prev.damaged) {
+    record(path, due);
+    return "nothing-due";
   }
+  const sent = Array.isArray(prev.value) ? prev.value : [];
   const fresh = due.filter((k) => !sent.includes(k));
   if (!fresh.length) return "nothing-due";
-  try {
-    await sendTelegram(interviewMessage(fresh.length), secrets, opts.fetchImpl);
-  } catch (err) {
-    return `failed: ${(err as Error).message}`;
-  }
   // Only what's still coming up is kept, so the file stays tiny.
-  writeFileSync(path, JSON.stringify(due));
-  return "sent";
+  return sendOnce(path, prev.value, due, () => sendTelegram(interviewMessage(fresh.length), secrets, opts.fetchImpl));
 }
 
 /** Which week's summary was sent last ("2026-10-19", that week's Monday), so it's sent once a week. */
@@ -169,27 +206,22 @@ export async function sendWeeklySummary(
   monday.setDate(monday.getDate() - ((monday.getDay() + 6) % 7));
   const week = localDay(monday);
   const path = resolve(dataDir, WEEKLY_SENT);
-  try {
-    if (existsSync(path) && JSON.parse(readFileSync(path, "utf8")) === week) return "not-yet";
-  } catch {
-    // A broken file: send, then write it fresh.
+  const last = readSent<string>(path);
+  if (last.damaged) {
+    record(path, week);
+    return "not-yet";
   }
+  if (last.value === week) return "not-yet";
   const tracking = readTracking(opts.home);
   const prev = new Date(monday);
   prev.setDate(prev.getDate() - 7);
   const w = lastWeek(tracking?.state, prev.getTime(), monday.getTime());
   // Nothing tracked last week: no message, and don't check again until next week.
   if (!w.applied && !w.followUps && !w.replies) {
-    writeFileSync(path, JSON.stringify(week));
+    record(path, week);
     return "nothing";
   }
-  try {
-    await sendTelegram(weeklyMessage(w, applicationsPlan(tracking?.prefs)), secrets, opts.fetchImpl);
-  } catch (err) {
-    return `failed: ${(err as Error).message}`;
-  }
-  writeFileSync(path, JSON.stringify(week));
-  return "sent";
+  return sendOnce(path, last.value, week, () => sendTelegram(weeklyMessage(w, applicationsPlan(tracking?.prefs)), secrets, opts.fetchImpl));
 }
 
 /** Which offer-deadline reminders were already sent ("<job id> <day>"). */
@@ -216,19 +248,13 @@ export async function remindDeadlines(dataDir: string, secrets: TelegramSecrets,
   tomorrow.setDate(tomorrow.getDate() + 1);
   const due = dueDeadlines(readTracking(opts.home)?.state, localDay(now), localDay(tomorrow));
   const path = resolve(dataDir, DEADLINES_SENT);
-  let sent: string[] = [];
-  try {
-    if (existsSync(path)) sent = JSON.parse(readFileSync(path, "utf8")) as string[];
-  } catch {
-    sent = [];
+  const prev = readSent<string[]>(path);
+  if (prev.damaged) {
+    record(path, due);
+    return "nothing-due";
   }
+  const sent = Array.isArray(prev.value) ? prev.value : [];
   const fresh = due.filter((k) => !sent.includes(k));
   if (!fresh.length) return "nothing-due";
-  try {
-    await sendTelegram(deadlineMessage(fresh.length), secrets, opts.fetchImpl);
-  } catch (err) {
-    return `failed: ${(err as Error).message}`;
-  }
-  writeFileSync(path, JSON.stringify(due));
-  return "sent";
+  return sendOnce(path, prev.value, due, () => sendTelegram(deadlineMessage(fresh.length), secrets, opts.fetchImpl));
 }

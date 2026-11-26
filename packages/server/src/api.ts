@@ -28,7 +28,20 @@ import {
   telegramStatus,
   writeCacheFile,
 } from "@rawjobs/core";
-import { MAX_DOWNLOAD_MS, readTracking, saveTracking, suggestPoolSize, type ScanScope } from "@rawjobs/core";
+import {
+  MAX_DOWNLOAD_MS,
+  parseTrackingTag,
+  patchTracking,
+  readTrackingStrict,
+  saveTracking,
+  suggestPoolSize,
+  TRACKING_PATH,
+  trackingRevFromHead,
+  trackingTag,
+  TrackingUnreadable,
+  type ScanScope,
+  type TrackingDoc,
+} from "@rawjobs/core";
 import { CONNECTION_ID, createNetworkStore, createReminder, createWatcher, nodeWatchDeps, type ReminderDeps, sendTelegram, telegramSecrets, type WatchDeps } from "@rawjobs/core";
 import type { ScanOrigin } from "@rawjobs/core/protocol";
 import { folderId } from "@rawjobs/core/update";
@@ -83,12 +96,14 @@ function readHead(path: string, bytes: number): string {
 
 /**
  * The dashboard's API: everything it needs to set up and run RawJobs on this computer.
- *   GET  /api/health          { ok, version, scanning, background, dataVersion, update, startLink, platform, home, pid }: is the server up,
+ *   GET  /api/health          { ok, version, scanning, background, dataVersion, trackingRev, update, startLink, platform, home, pid }: is the server up,
  *                             which version, one waiting to install, and (for the page to remember while it's down) how to
  *                             start it again. background: a scan this server didn't start (a scheduled one) is running.
  *                             scanOrigin: who started the running scan ("page", "scheduled", "terminal"; null: none)
  *                             dataVersion: meta.json's generatedAt, so an open page sees when a scan wrote new results
+ *                             trackingRev: tracking.json's rev, so an open page pulls another window's saves
  *   GET/PUT /api/tracking     your statuses, notes and Radar preferences (profile/tracking.json)
+ *   PATCH /api/tracking       key-level changes, If-Match "<epoch>:<rev>"; 409 with the current tracking on a conflict
  *   GET  /api/network         your LinkedIn connections: { status, me, watchable, reminder } (me: your own positions and schools, or
  *                             null; status.watch: a Downloads watch any server here is running; watchable: offered here)
  *   POST /api/network/watch   { hours? }: watch Downloads for LinkedIn's export. { watch: { since, until, folder } }, or
@@ -398,6 +413,24 @@ Stopped after ${Math.round(timeoutMs / 1000)} s without finishing.`.trim(),
     }
   }
 
+  /** tracking.json's rev, read again only when the file changes: open pages pull another window's
+   *  saves when it moves. It's in the file's first bytes. */
+  let trackingStamp: { stamp: string; rev: number } | null = null;
+  function trackingRev(): number {
+    const path = resolve(home, TRACKING_PATH);
+    try {
+      // Every save is a new file moved into place, so its ino changes even when size and time match.
+      const { mtimeMs, size, ino } = statSync(path);
+      const stamp = `${mtimeMs}:${size}:${ino}`;
+      if (trackingStamp?.stamp !== stamp) trackingStamp = { stamp, rev: trackingRevFromHead(readHead(path, 256)) };
+      return trackingStamp.rev;
+    } catch {
+      // Nothing saved yet (or locked for a moment): rev 0 until it can be read.
+      trackingStamp = null;
+      return 0;
+    }
+  }
+
   function follow(res: ServerResponse) {
     if (!scan) return;
     res.setHeader("content-type", "application/x-ndjson");
@@ -569,6 +602,7 @@ Stopped after ${Math.round(timeoutMs / 1000)} s without finishing.`.trim(),
         background: scan === null && scanLockHeld(dataDir),
         scanOrigin: scan ? "page" : (otherScan()?.origin ?? null),
         dataVersion: dataVersion(),
+        trackingRev: trackingRev(),
         update: opts.updater?.updateHint() ?? null,
         startLink: opts.startLink?.() ?? false,
         platform: process.platform,
@@ -584,16 +618,39 @@ Stopped after ${Math.round(timeoutMs / 1000)} s without finishing.`.trim(),
         return json(res, { installed: false, current: version, lastUpdate: null, available: null, tooOld: false, state: "idle", settings: { mode: "off", channel: "stable" } });
       return json(res, { ok: false, errors: "This copy updates with git (git pull), not by itself." }, 400);
     }
-    if (url === "/api/tracking" && req.method === "GET") return json(res, { tracking: readTracking(home) });
-    if (url === "/api/tracking" && req.method === "PUT") {
+    if (url === "/api/tracking" && req.method === "GET") {
+      let doc: TrackingDoc | null;
+      try {
+        doc = readTrackingStrict(home).doc;
+      } catch (err) {
+        // 503, not "nothing saved": the page then keeps its own copy instead of uploading it over the file.
+        if (err instanceof TrackingUnreadable) return json(res, { ok: false, errors: "Couldn't read your tracking file. Try again in a moment." }, 503);
+        throw err;
+      }
+      const rev = doc?.rev ?? 0;
+      const epoch = doc?.epoch ?? "";
+      res.setHeader("etag", trackingTag(epoch, rev));
+      return json(res, { tracking: doc?.tracking ?? null, rev, epoch });
+    }
+    if (url === "/api/tracking" && (req.method === "PUT" || req.method === "PATCH")) {
+      // PATCH: key-level changes on top of what the page last saw (If-Match "<epoch>:<rev>").
+      // PUT: whole parts, from pages cached before PATCH existed.
+      const base = req.method === "PATCH" ? parseTrackingTag(req.headers["if-match"]) : null;
+      if (req.method === "PATCH" && !base) return json(res, { ok: false, errors: 'Send If-Match: "<epoch>:<rev>" from the last GET.' }, 400);
       let body: unknown;
       try {
         body = JSON.parse(await readBody(req, 20_000_000));
       } catch (err) {
         return json(res, { ok: false, errors: (err as Error).message }, 400);
       }
+      if (base) {
+        const r = patchTracking(body, base, home);
+        if (r.ok) return json(res, r);
+        if (r.status === 409) return json(res, { ok: false, rev: r.rev, epoch: r.epoch, tracking: r.tracking, conflicts: r.conflicts }, 409);
+        return json(res, { ok: false, errors: r.error }, r.status);
+      }
       const r = saveTracking(body, home);
-      return r.ok ? json(res, { ok: true, updatedAt: r.tracking.updatedAt }) : json(res, { ok: false, errors: r.error }, 400);
+      return r.ok ? json(res, { ok: true, updatedAt: r.tracking.updatedAt, rev: r.rev, epoch: r.epoch }) : json(res, { ok: false, errors: r.error }, r.status);
     }
     if (url === "/api/network" || url.startsWith("/api/network/")) return await networkRoute(url, req, res);
     if (url === "/api/setup" && req.method === "GET") return await respondRead(res, () => readers.memo("setup", 10_000, () => setupStatus(home, dataDir)));
