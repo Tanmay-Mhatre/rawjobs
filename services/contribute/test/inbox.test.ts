@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { ATS_TYPES } from "../../../packages/core/src/schema";
 import { cleanBoard } from "../../../scripts/catalog/contributions";
-import worker, { SCANNABLE, type Env } from "../src/index";
+import worker, { type Env, limitKey, SCANNABLE } from "../src/index";
 
 function fakeEnv(limitOk = true, extra: Partial<Env> = {}): Env & { store: Map<string, string> } {
   const store = new Map<string, string>();
@@ -19,7 +19,8 @@ function fakeEnv(limitOk = true, extra: Partial<Env> = {}): Env & { store: Map<s
   return { store, INBOX_TOKEN: "secret-token", LIMITER: { limit: async () => ({ success: limitOk }) }, INBOX: kv as unknown as Env["INBOX"], ...extra };
 }
 const call = (env: Env, path: string, init: RequestInit = {}) => worker.fetch(new Request(`https://inbox.test${path}`, init), env);
-const post = (env: Env, path: string, body: unknown, headers: Record<string, string> = {}) => call(env, path, { method: "POST", body: JSON.stringify(body), headers });
+const post = (env: Env, path: string, body: unknown, headers: Record<string, string> = {}) =>
+  call(env, path, { method: "POST", body: JSON.stringify(body), headers: { "content-type": "application/json", ...headers } });
 /** The stored contributions (what the workflow sees), oldest first. */
 const contributions = (env: { store: Map<string, string> }) => [...env.store.entries()].filter(([k]) => k.startsWith("c:")).map(([, v]) => JSON.parse(v) as Record<string, unknown>);
 
@@ -163,8 +164,130 @@ describe("contribution inbox", () => {
     const env = fakeEnv();
     expect((await post(env, "/v1/contributions", { boards: [{ ats: "lever", slug: "../etc" }] })).status).toBe(400);
     expect((await post(env, "/v1/contributions", null)).status).toBe(400);
-    expect((await call(env, "/v1/contributions", { method: "POST", body: "x".repeat(30_000) })).status).toBe(413);
+    expect((await call(env, "/v1/contributions", { method: "POST", body: "x".repeat(30_000), headers: { "content-type": "application/json" } })).status).toBe(413);
     expect((await post(fakeEnv(false), "/v1/contributions", { boards: [{ ats: "lever", slug: "a" }] })).status).toBe(429);
+  });
+
+  it("refuses anything but JSON with 415 on both routes, so web pages can't post through browsers", async () => {
+    const env = fakeEnv(true, { REPORTER_SECRET: "s" });
+    const body = JSON.stringify({ boards: [{ ats: "lever", slug: "a" }], moves: [] });
+    for (const path of ["/v1/contributions", "/v1/moves"]) {
+      // A string body without headers gets text/plain;charset=UTF-8, as a no-cors fetch from a page would.
+      expect((await call(env, path, { method: "POST", body })).status, path).toBe(415);
+      expect((await call(env, path, { method: "POST", body, headers: { "content-type": "text/plain" } })).status, path).toBe(415);
+      expect((await call(env, path, { method: "POST", body: new Uint8Array(new TextEncoder().encode(body)) })).status, path).toBe(415);
+      expect((await call(env, path, { method: "POST", body, headers: { "content-type": "application/jsonx" } })).status, path).toBe(415);
+    }
+    expect(env.store.size).toBe(0);
+    expect((await post(env, "/v1/contributions", { boards: [{ ats: "lever", slug: "a" }] }, { "content-type": "application/json; charset=utf-8" })).status).toBe(202);
+  });
+
+  it("keys the rate limiter on the IPv4 address or the IPv6 /64", async () => {
+    expect(limitKey("203.0.113.7")).toBe("203.0.113.7");
+    expect(limitKey("2001:db8:1:2::1")).toBe("2001:db8:1:2::/64");
+    expect(limitKey("2001:0DB8:0001:0002:ffff:0:0:9")).toBe("2001:db8:1:2::/64");
+    expect(limitKey("2001:db8:1:3::1")).toBe("2001:db8:1:3::/64");
+    expect(limitKey("2001:db8::1")).toBe("2001:db8:0:0::/64");
+    expect(limitKey("::1")).toBe("0:0:0:0::/64");
+    expect(limitKey("::ffff:203.0.113.7")).toBe("203.0.113.7");
+    expect(limitKey("unknown")).toBe("unknown");
+    expect(limitKey("not:an:address::x")).toBe("not:an:address::x");
+
+    const keys: string[] = [];
+    const env = fakeEnv(true, {
+      LIMITER: {
+        limit: async ({ key }) => {
+          keys.push(key);
+          return { success: true };
+        },
+      },
+    });
+    await post(env, "/v1/contributions", { boards: [{ ats: "lever", slug: "a" }] }, { "cf-connecting-ip": "2001:db8:1:2::1" });
+    await post(env, "/v1/contributions", { boards: [{ ats: "lever", slug: "b" }] }, { "cf-connecting-ip": "2001:db8:1:2:aaaa::2" });
+    await post(env, "/v1/contributions", { boards: [{ ats: "lever", slug: "c" }] }, { "cf-connecting-ip": "2001:db8:1:3::1" });
+    expect(keys).toEqual(["2001:db8:1:2::/64", "2001:db8:1:2::/64", "2001:db8:1:3::/64"]);
+  });
+
+  it("gives each network a daily budget, counted by a keyed hash, with no extra writes", async () => {
+    const env = fakeEnv(true, { REPORTER_SECRET: "s", PER_KEY_DAILY: "3" });
+    let writes = 0;
+    const put = env.INBOX.put.bind(env.INBOX);
+    (env.INBOX as unknown as { put: unknown }).put = async (k: string, v: string) => {
+      writes++;
+      return put(k, v);
+    };
+    const send = (ip: string, ...slugs: string[]) => post(env, "/v1/contributions", { boards: slugs.map((slug) => ({ ats: "lever", slug })) }, { "cf-connecting-ip": ip });
+    expect((await send("2001:db8:1:2::1", "a", "b")).status).toBe(202);
+    expect(writes).toBe(2);
+    // Another address in the same /64 is the same network.
+    const over = await send("2001:db8:1:2::99", "c", "d");
+    expect(over.status).toBe(429);
+    expect(((await over.json()) as { error: string }).error).toContain("Your app will try again later.");
+    expect((await send("2001:db8:1:2::99", "c")).status).toBe(202);
+    expect((await send("2001:db8:1:2::1", "e")).status).toBe(429);
+    // A different network still gets in.
+    expect((await send("203.0.113.7", "f", "g", "h")).status).toBe(202);
+    expect(writes).toBe(6);
+    const [dayKey, day] = [...env.store.entries()].find(([k]) => k.startsWith("day:"))!;
+    expect(dayKey).toMatch(/^day:\d{4}-\d{2}-\d{2}$/);
+    const parsed = JSON.parse(day) as { keys: string[]; per: Record<string, number> };
+    expect(parsed.keys).toHaveLength(6);
+    expect(Object.values(parsed.per).sort()).toEqual([3, 3]);
+    expect(Object.keys(parsed.per).every((h) => /^[0-9a-f]{16}$/.test(h))).toBe(true);
+    expect(day).not.toMatch(/2001|203\.0/);
+  });
+
+  it("defaults the per-network budget to 200 boards", async () => {
+    const env = fakeEnv(true, { REPORTER_SECRET: "s" });
+    const batch = (n: number) => ({ boards: Array.from({ length: 25 }, (_, i) => ({ ats: "lever", slug: `s${n}-${i}` })) });
+    for (let n = 0; n < 8; n++) expect((await post(env, "/v1/contributions", batch(n), { "cf-connecting-ip": "203.0.113.7" })).status).toBe(202);
+    expect((await post(env, "/v1/contributions", batch(8), { "cf-connecting-ip": "203.0.113.7" })).status).toBe(429);
+    expect((await post(env, "/v1/contributions", batch(8), { "cf-connecting-ip": "203.0.113.8" })).status).toBe(202);
+  });
+
+  it("still reads a day record written as a bare array", async () => {
+    const env = fakeEnv(true, { REPORTER_SECRET: "s", DAILY_CAP: "3" });
+    const day = `day:${new Date().toISOString().slice(0, 10)}`;
+    env.store.set(day, JSON.stringify(["lever:acme||", "lever:other||"]));
+    const res = await post(env, "/v1/contributions", {
+      boards: [
+        { ats: "lever", slug: "acme" },
+        { ats: "lever", slug: "new" },
+      ],
+    });
+    expect(await res.json()).toEqual({ received: 1, duplicates: 1 });
+    const stored = JSON.parse(env.store.get(day)!) as { keys: string[]; per: Record<string, number> };
+    expect(stored.keys).toEqual(["lever:acme||", "lever:other||", "lever:new||"]);
+    expect(Object.values(stored.per)).toEqual([1]);
+    // The old keys still count toward the cap.
+    expect((await post(env, "/v1/contributions", { boards: [{ ats: "lever", slug: "more" }] })).status).toBe(429);
+  });
+
+  it("refuses slugs and hosts that are IP addresses or localhost", async () => {
+    const env = fakeEnv();
+    for (const b of [
+      { ats: "lever", slug: "127.0.0.1" },
+      { ats: "teamtailor", slug: "10.0.0.5" },
+      { ats: "greenhouse", slug: "localhost" },
+      { ats: "successfactors", slug: "LOCALHOST" },
+      { ats: "teamtailor", slug: "jobs.localhost" },
+      { ats: "eightfold", slug: "acme", shard: "127.0.0.1" },
+      { ats: "eightfold", slug: "acme", shard: "evil.localhost" },
+    ]) {
+      expect((await post(env, "/v1/contributions", { boards: [b] })).status, JSON.stringify(b)).toBe(400);
+    }
+    expect(
+      (
+        await post(env, "/v1/contributions", {
+          boards: [
+            { ats: "teamtailor", slug: "careers.acme.com" },
+            { ats: "lever", slug: "localhost-labs" },
+            { ats: "eightfold", slug: "acme", shard: "acme.com" },
+          ],
+        })
+      ).status,
+    ).toBe(202);
+    expect(contributions(env)[0]!.boards).toHaveLength(3);
   });
 
   it("lists and acknowledges pending items only with the token", async () => {
@@ -266,7 +389,7 @@ describe("move reports", () => {
     expect((await post(env, "/v1/moves", { moves: Array.from({ length: 11 }, (_, i) => move(`old${i}`)) })).status).toBe(400);
     expect((await post(env, "/v1/moves", { moves: "nope" })).status).toBe(400);
     expect((await post(env, "/v1/moves", null)).status).toBe(400);
-    expect((await call(env, "/v1/moves", { method: "POST", body: "x".repeat(11_000) })).status).toBe(400);
+    expect((await call(env, "/v1/moves", { method: "POST", body: "x".repeat(11_000), headers: { "content-type": "application/json" } })).status).toBe(400);
     expect(env.writes).toEqual([]);
   });
 
