@@ -1,10 +1,10 @@
 import { createHash } from "node:crypto";
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { gzipSync } from "node:zlib";
 import { afterAll, afterEach, beforeEach, describe, expect, it } from "vitest";
-import { cleanMove, contributeUrl, directoryStatus, directoryUrl, queueContributions, queueMove, sendContributions, sendMoves, updateDirectory } from "../src/directory";
+import { cleanMove, contributeUrl, directoryStatus, directoryUrl, queueContributions, queueMove, sendContributions, sendMoves, syncDirectory, updateDirectory } from "../src/directory";
 import { readDirectory, suggestPoolSize } from "../src/scope";
 import { testDataKey } from "./helpers";
 
@@ -84,6 +84,67 @@ describe("updateDirectory", () => {
     expect(r.updated).toBe(false);
     expect(r.message).toMatch(/checksum/);
     expect(existsSync(join(dir, "catalog", "directory.json"))).toBe(false);
+  });
+});
+
+describe("updateDirectory one at a time", () => {
+  /** The test server, answering each file only once `go()` is called: an update caught mid-download. */
+  const slow = (m: object) => {
+    let go!: () => void;
+    const gate = new Promise<void>((done) => (go = done));
+    const gets: string[] = [];
+    const inner = server(m);
+    const fetchImpl = (async (url: string, init?: RequestInit) => {
+      gets.push(url);
+      if (!url.includes("manifest.json")) await gate;
+      return inner(url, init);
+    }) as unknown as typeof fetch;
+    return { fetchImpl, gets, go: () => go() };
+  };
+
+  it("lets a second update wait it out instead of downloading into the same files", async () => {
+    const s = slow(manifest("v1"));
+    const first = updateDirectory(dir, { fetchImpl: s.fetchImpl });
+    await new Promise((done) => setTimeout(done, 50));
+    expect(await updateDirectory(dir, { fetchImpl: s.fetchImpl })).toMatchObject({ updated: false, busy: true });
+    s.go();
+    expect(await first).toMatchObject({ updated: true, version: "v1" });
+    expect(s.gets.filter((u) => u.endsWith("directory.json.gz"))).toHaveLength(1);
+    expect(existsSync(join(dir, "catalog", ".sync.lock"))).toBe(false);
+  });
+
+  it("gives a scan the local copy while another process updates it", async () => {
+    mkdirSync(join(dir, "catalog"), { recursive: true });
+    writeFileSync(join(dir, "catalog", ".sync.lock"), String(process.ppid));
+    expect(await syncDirectory(dir, { fetchImpl: server(manifest("v1")) })).toMatchObject({ updated: false, offline: true });
+  });
+
+  it("keeps the lock while a download goes on after the scan stopped waiting for it", async () => {
+    const s = slow(manifest("v1"));
+    expect(await syncDirectory(dir, { fetchImpl: s.fetchImpl, budgetMs: 30 })).toMatchObject({ offline: true });
+    expect(await updateDirectory(dir, { fetchImpl: s.fetchImpl })).toMatchObject({ busy: true });
+    s.go();
+    await new Promise((done) => setTimeout(done, 100));
+    expect(existsSync(join(dir, "catalog", ".sync.lock"))).toBe(false);
+  });
+
+  it("downloads the same version again when a file of it is torn", async () => {
+    await updateDirectory(dir, { fetchImpl: server(manifest("v1")) });
+    writeFileSync(join(dir, "catalog", "directory.json"), '{"companies":[');
+    expect(await updateDirectory(dir, { fetchImpl: server(manifest("v1")) })).toMatchObject({ updated: true });
+    expect(JSON.parse(readFileSync(join(dir, "catalog", "directory.json"), "utf8")).count).toBe(2);
+  });
+
+  it("writes its files through temp files named after this process", async () => {
+    await updateDirectory(dir, { fetchImpl: server(manifest("v1")) });
+    expect(readdirSync(join(dir, "catalog")).filter((f) => f.endsWith(".tmp"))).toEqual([]);
+    expect(directoryStatus(dir).local?.version).toBe("v1");
+  });
+
+  it("reads a torn manifest as no local copy instead of throwing", () => {
+    mkdirSync(join(dir, "catalog"), { recursive: true });
+    writeFileSync(join(dir, "catalog", "manifest.json"), '{"version":');
+    expect(directoryStatus(dir).local).toBeUndefined();
   });
 });
 
@@ -178,6 +239,25 @@ describe("sharing additions", () => {
     expect(await sendContributions(dir, { fetchImpl: up })).toMatchObject({ sent: 1 });
     expect(bodies[0]).toMatchObject({ boards: [{ ats: "lever", slug: "acme" }] });
     expect(directoryStatus(dir).outbox).toBe(0);
+  });
+
+  it("keeps a board queued while a send was on its way", async () => {
+    queueContributions(dir, [{ ats: "lever", slug: "acme" }]);
+    const up = (async () => {
+      // Another process (a check from the Companies page) adds a board mid-send.
+      queueContributions(dir, [{ ats: "greenhouse", slug: "zeta" }]);
+      return new Response("{}", { status: 202 });
+    }) as unknown as typeof fetch;
+    expect(await sendContributions(dir, { fetchImpl: up })).toMatchObject({ sent: 1 });
+    const left = JSON.parse(readFileSync(join(dir, "catalog", "outbox.json"), "utf8")).boards;
+    expect(left).toEqual([{ ats: "greenhouse", slug: "zeta" }]);
+  });
+
+  it("sets a damaged outbox aside instead of failing every check after it", () => {
+    mkdirSync(join(dir, "catalog"), { recursive: true });
+    writeFileSync(join(dir, "catalog", "outbox.json"), '{"boards":[');
+    expect(queueContributions(dir, [{ ats: "lever", slug: "acme" }])).toBe(1);
+    expect(existsSync(join(dir, "catalog", "outbox.json.bad"))).toBe(true);
   });
 
   it("drops waiting boards without sending them once sharing is turned off", async () => {

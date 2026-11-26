@@ -60,6 +60,16 @@ function feedServer(shards: Record<string, JobFeedShard>, schema = JOB_FEED_SCHE
 }
 
 describe("syncJobFeed", () => {
+  it("leaves the feed to a sync that's already running in another process", async () => {
+    process.env.RAWJOBS_JOBS_URL = "https://feed.example/jobs";
+    const dir = tmp();
+    mkdirSync(join(dir, "catalog", "jobs"), { recursive: true });
+    writeFileSync(join(dir, "catalog", "jobs", ".sync.lock"), String(process.ppid));
+    const server = feedServer({});
+    expect(await syncJobFeed(dir, { fetchImpl: server.fetchImpl, now: NOW })).toMatchObject({ updated: false, message: expect.stringMatching(/Another job feed sync/) });
+    expect(server.calls).toEqual([]);
+  });
+
   it("downloads the shards, then only ones that changed", async () => {
     process.env.RAWJOBS_JOBS_URL = "https://feed.example/jobs";
     const dir = tmp();

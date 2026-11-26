@@ -192,6 +192,14 @@ describe("sending it", () => {
     expect(s.sent).toHaveLength(2);
   });
 
+  it("sends nothing while another run of it is sending", async () => {
+    const s = setup(busy);
+    mkdirSync(s.dataDir, { recursive: true });
+    writeFileSync(join(s.dataDir, "daily.lock"), String(process.ppid));
+    expect(await sendDailySummary(s.dataDir, secrets, { home: s.home, now: NOW, fetchImpl: s.fetchImpl })).toBe("already-sending");
+    expect(s.sent).toEqual([]);
+  });
+
   it("notes a day with nothing due, and still sends later that day once something is", async () => {
     const s = setup({});
     const opts = { home: s.home, now: NOW, fetchImpl: s.fetchImpl };
