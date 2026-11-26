@@ -87,6 +87,36 @@ describe("updateDirectory", () => {
   });
 });
 
+describe("updateDirectory refuses an older copy", () => {
+  const at = (version: string, generated_at: string, extra: object = {}) => ({ ...manifest(version), generated_at, ...extra });
+  beforeEach(async () => {
+    expect((await updateDirectory(dir, { fetchImpl: server(at("v2", "2026-10-13T00:00:00Z")) })).updated).toBe(true);
+  });
+
+  it("keeps the local copy when offered an older signed manifest", async () => {
+    const r = await updateDirectory(dir, { fetchImpl: server(at("v1", "2026-10-06T00:00:00Z")) });
+    expect(r).toMatchObject({ updated: false, version: "v2", message: "The shared directory offered an older version; kept your current one." });
+    expect(directoryStatus(dir).local?.version).toBe("v2");
+  });
+
+  it("reports an equal one as up to date", async () => {
+    expect(await updateDirectory(dir, { fetchImpl: server(at("v2", "2026-10-13T00:00:00Z")) })).toMatchObject({ updated: false, message: "Already up to date." });
+  });
+
+  it("takes a newer one", async () => {
+    expect(await updateDirectory(dir, { fetchImpl: server(at("v3", "2026-10-20T00:00:00Z")) })).toMatchObject({ updated: true, version: "v3" });
+  });
+
+  it("takes an older one with force", async () => {
+    expect(await updateDirectory(dir, { force: true, fetchImpl: server(at("v1", "2026-10-06T00:00:00Z")) })).toMatchObject({ updated: true, version: "v1" });
+  });
+
+  it("takes a deliberate rollback, which is published later than the copy here", async () => {
+    const r = await updateDirectory(dir, { fetchImpl: server(at("v1", "2026-10-06T00:00:00Z", { published_at: "2026-10-14T00:00:00Z" })) });
+    expect(r).toMatchObject({ updated: true, version: "v1" });
+  });
+});
+
 describe("updateDirectory with a tampered manifest", () => {
   it("refuses file names that would leave the catalog folder, before downloading anything", async () => {
     const calls: string[] = [];

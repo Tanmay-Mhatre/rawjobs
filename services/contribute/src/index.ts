@@ -14,15 +14,20 @@
  *   GET  /v1/moves/pending   list waiting move reports, 500 a page; ?cursor= for the next    (Bearer INBOX_TOKEN)
  *   POST /v1/moves/ack       { ids: [...] } remove processed move reports                    (Bearer INBOX_TOKEN)
  *
- * Abuse limits: 20 requests a minute per IP (Cloudflare rate limiter; the IP is not stored), at
- * most 25 boards a request, at most DAILY_CAP boards accepted a day for everyone together, and a
+ * Abuse limits: both public routes take only `content-type: application/json` (415 otherwise; a
+ * browser can't send that cross-site without a CORS preflight, which the Worker never approves).
+ * 20 requests a minute per network (Cloudflare rate limiter keyed on the IPv4 address or the IPv6
+ * /64, see limitKey; the IP is not stored), at most 25 boards a request, at most PER_KEY_DAILY
+ * boards accepted a day per network, at most DAILY_CAP boards a day for everyone together, and a
  * board already received in the last 7 days is skipped. Only boards on the hiring systems the
  * directory takes (SCANNABLE) are accepted, stored as a system and a slug (plus shard and site
  * where the system needs them), never as a free-form link.
  *
  * KV keys: "c:…" contributions (the only keys /v1/pending lists) and "day:YYYY-MM-DD", the boards
- * accepted that day (for the cap and the dedupe). One accepted request costs two KV writes, which
- * matters on the free plan (1,000 writes a day).
+ * accepted that day (for the cap and the dedupe) and how many each network sent:
+ * { keys: [...], per: { <hash>: count } }, where the hash is HMAC-SHA256(REPORTER_SECRET, network)
+ * cut to 16 hex characters, so no IP is stored. Older days hold a bare array of keys. One accepted
+ * request costs two KV writes, which matters on the free plan (1,000 writes a day).
  *
  * Move reports ("this company's careers page moved from board A to board B"): at most 10 a request,
  * body at most 10 KB, the same board rules and name cleaning as contributions, and the same rate
@@ -35,8 +40,8 @@
  * writes: one per new or changed record, plus the day counter when a record is new.
  *
  * Settings: INBOX_TOKEN (secret, shared with the workflow), REPORTER_SECRET (secret, keys the
- * reporter hashes; without it /v1/moves answers 503), DAILY_CAP and MOVES_DAILY_CAP (wrangler.toml
- * [vars]).
+ * reporter hashes and the per-network counts; without it /v1/moves answers 503 and the per-network
+ * budget is off), DAILY_CAP, PER_KEY_DAILY and MOVES_DAILY_CAP (wrangler.toml [vars]).
  */
 
 export interface Env {
@@ -46,7 +51,9 @@ export interface Env {
   INBOX_TOKEN: string;
   /** Most boards accepted per UTC day, for everyone together (wrangler.toml [vars]). Default 2000. */
   DAILY_CAP?: string;
-  /** Key for the reporter hashes on move reports (a secret). Without it, /v1/moves answers 503. */
+  /** Most boards accepted per UTC day from one network (wrangler.toml [vars]). Default 200. */
+  PER_KEY_DAILY?: string;
+  /** Key for the reporter hashes on move reports and the per-network counts (a secret). Without it, /v1/moves answers 503. */
   REPORTER_SECRET?: string;
   /** Most new move records per UTC day, for everyone together (wrangler.toml [vars]). Default 100. */
   MOVES_DAILY_CAP?: string;
@@ -150,7 +157,54 @@ const MAX_BODY = 20_000;
 const MAX_BOARDS = 25;
 const KEEP_DAYS = 30;
 const DEFAULT_DAILY_CAP = 2000;
+const DEFAULT_PER_KEY_DAILY = 200;
 const DEDUPE_DAYS = 7;
+
+/** Both public routes take JSON only, so a web page can't make its visitors' browsers post to them. */
+const isJson = (req: Request) => /^application\/json\s*(;|$)/i.test(req.headers.get("content-type") ?? "");
+const notJson = () => json({ error: "Send the request as JSON (content-type: application/json)." }, 415);
+
+/** An IPv6 address as its 8 groups (lowercase, no leading zeros), or null when it isn't one. */
+function expandV6(ip: string): string[] | null {
+  let s = ip.split("%")[0]!.toLowerCase();
+  // An IPv4 tail (::ffff:1.2.3.4) becomes two groups.
+  const v4 = /(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/.exec(s);
+  if (v4) {
+    const [a, b, c, d] = v4.slice(1).map(Number) as [number, number, number, number];
+    if ([a, b, c, d].some((n) => n > 255)) return null;
+    s = `${s.slice(0, v4.index)}${((a << 8) | b).toString(16)}:${((c << 8) | d).toString(16)}`;
+  }
+  const halves = s.split("::");
+  if (halves.length > 2) return null;
+  const head = halves[0] ? halves[0].split(":") : [];
+  const tail = halves.length === 2 && halves[1] ? halves[1].split(":") : [];
+  const fill = 8 - head.length - tail.length;
+  if (halves.length === 2 ? fill < 1 : fill !== 0) return null;
+  const groups = [...head, ...Array<string>(halves.length === 2 ? fill : 0).fill("0"), ...tail];
+  if (!groups.every((g) => /^[0-9a-f]{1,4}$/.test(g))) return null;
+  return groups.map((g) => Number.parseInt(g, 16).toString(16));
+}
+
+/**
+ * The network a request comes from, for the rate limiter and the per-network budget: an IPv4
+ * address as is, an IPv6 address cut to its /64 (one home or office network holds 2^64 addresses).
+ * Anything else is used as is.
+ */
+export function limitKey(ip: string): string {
+  if (!ip.includes(":")) return ip;
+  const groups = expandV6(ip);
+  if (!groups) return ip;
+  // An IPv4-mapped address (::ffff:1.2.3.4) is the IPv4 address it maps.
+  if (groups.slice(0, 5).every((g) => g === "0") && groups[5] === "ffff") {
+    const hi = Number.parseInt(groups[6]!, 16);
+    const lo = Number.parseInt(groups[7]!, 16);
+    return `${hi >> 8}.${hi & 255}.${lo >> 8}.${lo & 255}`;
+  }
+  return `${groups.slice(0, 4).join(":")}::/64`;
+}
+
+/** A slug or host that names an IP address or this machine instead of a company's board. */
+const LOCAL_HOST = /^(\d{1,3}(\.\d{1,3}){3}|(.+\.)?localhost\.?)$/i;
 
 const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: { "content-type": "application/json" } });
 
@@ -159,9 +213,9 @@ function clean(b: unknown): Board | null {
   if (!b || typeof b !== "object") return null;
   const o = b as Record<string, unknown>;
   if (typeof o.ats !== "string" || !SCANNABLE.has(o.ats)) return null;
-  if (typeof o.slug !== "string" || !SLUG.test(o.slug)) return null;
+  if (typeof o.slug !== "string" || !SLUG.test(o.slug) || LOCAL_HOST.test(o.slug)) return null;
   const shard = SHARD[o.ats];
-  if (o.shard !== undefined && !(shard && typeof o.shard === "string" && shard.test(o.shard))) return null;
+  if (o.shard !== undefined && !(shard && typeof o.shard === "string" && shard.test(o.shard) && !LOCAL_HOST.test(o.shard))) return null;
   if ((o.ats === "workday" || o.ats === "oracle" || o.ats === "ukg") && o.shard === undefined) return null;
   if (o.site !== undefined && !(typeof o.site === "string" && SLUG.test(o.site))) return null;
   if (NEEDS_SITE.has(o.ats) && o.site === undefined) return null;
@@ -198,8 +252,9 @@ function authorized(req: Request, env: Env): boolean {
 }
 
 async function contribute(req: Request, env: Env): Promise<Response> {
-  const ip = req.headers.get("cf-connecting-ip") ?? "unknown";
-  if (env.LIMITER && !(await env.LIMITER.limit({ key: ip })).success) return json({ error: "Too many requests, try again in a minute." }, 429);
+  if (!isJson(req)) return notJson();
+  const network = limitKey(req.headers.get("cf-connecting-ip") ?? "unknown");
+  if (env.LIMITER && !(await env.LIMITER.limit({ key: network })).success) return json({ error: "Too many requests, try again in a minute." }, 429);
   const text = await req.text();
   if (text.length > MAX_BODY) return json({ error: "Request too large." }, 413);
   let body: { client?: unknown; boards?: unknown[] };
@@ -224,7 +279,7 @@ async function contribute(req: Request, env: Env): Promise<Response> {
   const now = Date.now();
   const days = Array.from({ length: DEDUPE_DAYS }, (_, i) => `day:${new Date(now - i * 86_400_000).toISOString().slice(0, 10)}`);
   const logs = await Promise.all(days.map(async (k) => parseDay(await env.INBOX.get(k))));
-  const recent = new Set(logs.flat());
+  const recent = new Set(logs.flatMap((d) => d.keys));
   const fresh = boards.filter((b) => !recent.has(b.key));
   const duplicates = boards.length - fresh.length;
   if (!fresh.length) return json({ received: 0, duplicates }, 202);
@@ -233,24 +288,44 @@ async function contribute(req: Request, env: Env): Promise<Response> {
   // at the same moment can go slightly over (or miss a dedupe entry); that's fine for a cap.
   // All or nothing: the app keeps a rejected batch in its outbox and sends it again later.
   const today = logs[0]!;
-  if (today.length + fresh.length > dailyCap(env)) return json({ error: "The inbox is full for today. Your app will try again later." }, 429);
+  if (today.keys.length + fresh.length > dailyCap(env)) return json({ error: "The inbox is full for today. Your app will try again later." }, 429);
+
+  // A budget per network, so one network can't fill the day's cap for everyone. Counted under a
+  // keyed hash of the network (never the IP itself), in the record that already holds the day's
+  // keys, so it costs no extra write. Without REPORTER_SECRET it can't be counted without keeping
+  // the IP, so the budget is off.
+  const who = env.REPORTER_SECRET ? await keyedHash(env.REPORTER_SECRET, network) : undefined;
+  const mine = who ? (today.per[who] ?? 0) : 0;
+  if (who && mine + fresh.length > perKeyDaily(env)) return json({ error: "Your network sent enough boards for today. Your app will try again later." }, 429);
 
   // No IP or user data is stored: only the boards, when they arrived, and the app name/version if valid.
   const client = typeof body.client === "string" && CLIENT.test(body.client) ? body.client : undefined;
   const id = `c:${now}:${crypto.randomUUID()}`;
   const record = { boards: fresh.map((b) => b.board), received_at: new Date(now).toISOString(), ...(client ? { client } : {}) };
   await env.INBOX.put(id, JSON.stringify(record), { expirationTtl: KEEP_DAYS * 86_400 });
-  await env.INBOX.put(days[0]!, JSON.stringify([...today, ...fresh.map((b) => b.key)]), { expirationTtl: (DEDUPE_DAYS + 1) * 86_400 });
+  const day: Day = { keys: [...today.keys, ...fresh.map((b) => b.key)], per: who ? { ...today.per, [who]: mine + fresh.length } : today.per };
+  await env.INBOX.put(days[0]!, JSON.stringify(day), { expirationTtl: (DEDUPE_DAYS + 1) * 86_400 });
   return json({ received: fresh.length, duplicates }, 202);
 }
 
-/** A day's accepted board keys (the dedupe log); unreadable values count as empty. */
-function parseDay(value: string | null): string[] {
+/** A day's accepted board keys (the dedupe log) and how many boards each network sent, by keyed hash. */
+type Day = { keys: string[]; per: Record<string, number> };
+
+/** A day record. Days written before the per-network budget hold a bare array of keys. Unreadable values count as empty. */
+function parseDay(value: string | null): Day {
+  const strings = (list: unknown) => (Array.isArray(list) ? list.filter((x): x is string => typeof x === "string") : []);
   try {
-    const list = value ? (JSON.parse(value) as unknown) : [];
-    return Array.isArray(list) ? list.filter((x): x is string => typeof x === "string") : [];
+    const v = value ? (JSON.parse(value) as unknown) : [];
+    if (Array.isArray(v)) return { keys: strings(v), per: {} };
+    if (!v || typeof v !== "object") return { keys: [], per: {} };
+    const o = v as { keys?: unknown; per?: unknown };
+    const per: Record<string, number> = {};
+    if (o.per && typeof o.per === "object") {
+      for (const [k, n] of Object.entries(o.per)) if (typeof n === "number" && Number.isFinite(n)) per[k] = n;
+    }
+    return { keys: strings(o.keys), per };
   } catch {
-    return [];
+    return { keys: [], per: {} };
   }
 }
 
@@ -259,6 +334,11 @@ const boardKey = (b: Board) => `${b.ats}:${b.slug}|${b.shard ?? ""}|${b.site ?? 
 function dailyCap(env: Env): number {
   const n = Number(env.DAILY_CAP);
   return Number.isFinite(n) && n > 0 ? Math.floor(n) : DEFAULT_DAILY_CAP;
+}
+
+function perKeyDaily(env: Env): number {
+  const n = Number(env.PER_KEY_DAILY);
+  return Number.isFinite(n) && n > 0 ? Math.floor(n) : DEFAULT_PER_KEY_DAILY;
 }
 
 async function pending(req: Request, env: Env): Promise<Response> {
@@ -326,10 +406,13 @@ function cleanMove(raw: unknown): { key: string; fromKey: string; name: string; 
 }
 
 /** HMAC-SHA256(secret, ip + "|" + fromKey) as hex, first 16 characters: tells reporters apart without keeping the IP. */
-async function reporterHash(secret: string, ip: string, fromKey: string): Promise<string> {
+const reporterHash = (secret: string, ip: string, fromKey: string) => keyedHash(secret, `${ip}|${fromKey}`);
+
+/** HMAC-SHA256(secret, text) as hex, first 16 characters. */
+async function keyedHash(secret: string, text: string): Promise<string> {
   const enc = new TextEncoder();
   const key = await crypto.subtle.importKey("raw", enc.encode(secret), { name: "HMAC", hash: "SHA-256" }, false, ["sign"]);
-  const sig = new Uint8Array(await crypto.subtle.sign("HMAC", key, enc.encode(`${ip}|${fromKey}`)));
+  const sig = new Uint8Array(await crypto.subtle.sign("HMAC", key, enc.encode(text)));
   return Array.from(sig, (x) => x.toString(16).padStart(2, "0"))
     .join("")
     .slice(0, 16);
@@ -351,10 +434,11 @@ function parseMove(value: string | null): MoveRecord | null {
 }
 
 async function reportMoves(req: Request, env: Env): Promise<Response> {
+  if (!isJson(req)) return notJson();
   // Without the key the reporter hashes can't be made, and we never store reporters any other way.
   if (!env.REPORTER_SECRET) return json({ error: "Move reports aren't open yet. Your app will try again later." }, 503);
   const ip = req.headers.get("cf-connecting-ip") ?? "unknown";
-  if (env.LIMITER && !(await env.LIMITER.limit({ key: ip })).success) return json({ error: "Too many requests, try again in a minute." }, 429);
+  if (env.LIMITER && !(await env.LIMITER.limit({ key: limitKey(ip) })).success) return json({ error: "Too many requests, try again in a minute." }, 429);
   const text = await req.text();
   if (text.length > MAX_MOVES_BODY) return json({ error: "Request too large." }, 400);
   let body: { moves?: unknown };

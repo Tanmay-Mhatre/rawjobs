@@ -8,6 +8,7 @@ import { watchMissedScans } from "./catch-up";
 import { createApi } from "./api";
 import { createUpdater } from "./updater";
 import { alreadyRunning, DEFAULT_PORT, ensureAutostart, logTo, openBrowser, readServerState, watchEventLoop, writeServerState } from "./desktop";
+import { makeHomePrivate } from "./private-home";
 import { ensureShortcuts, startLinkInstalled } from "./shortcuts";
 import { createHandler } from "./handler";
 
@@ -28,9 +29,14 @@ export async function serve(args: string[]): Promise<number> {
   } catch {
     // not allowed here
   }
+  // Your files are yours alone on macOS and Linux: everything written from here on, and (once) the
+  // installed copy's folder itself. A dev checkout's folder is left as it is.
+  if (process.platform !== "win32") process.umask(0o077);
   const home = rawjobsHome();
   const dataDir = defaultDataDir(home);
   mkdirSync(dataDir, { recursive: true });
+  if (BUNDLED) makeHomePrivate(home);
+  if (process.env.RAWJOBS_DATA_PUBLIC_KEY || process.env.JOBHUNTER_DATA_PUBLIC_KEY) console.log("Using a custom data signing key (RAWJOBS_DATA_PUBLIC_KEY).");
   if (!existsSync(`${WEB_DIR}/index.html`)) {
     console.error(
       BUNDLED
