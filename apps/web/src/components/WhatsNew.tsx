@@ -318,8 +318,8 @@ export function UpdatePill() {
   );
 }
 
-/** Under the pill, on phones across the page under the header. */
-const POP = "absolute top-full right-0 z-40 mt-2 w-[min(20rem,calc(100vw-2rem))] rounded-md border border-line bg-overlay p-3 text-left shadow-l2";
+/** Under the pill, on phones across the page under the header. Wraps: the header row is nowrap. */
+const POP = "absolute top-full right-0 z-40 mt-2 whitespace-normal w-[min(20rem,calc(100vw-2rem))] rounded-md border border-line bg-overlay p-3 text-left shadow-l2";
 
 /** The pill's click didn't get the update (offline, GitHub away): what happened, Try again, right where you clicked. */
 function CouldntUpdate({ from, to, error, onDismiss, onRetry }: { from: string; to: string; error: string; onDismiss: () => void; onRetry: () => void }) {
