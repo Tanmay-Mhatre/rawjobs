@@ -773,8 +773,9 @@ export async function startUpdate(o: { home: string; base: string; manifest: Rel
   if (!now) throw new Error("This isn't an installed copy of RawJobs.");
   const { version, node } = takeReady(o.home, o.manifest) ?? (await prepareVersion(o.home, o.base, o.manifest, o.fetchImpl));
   // From the backup to the switch, no scan may start (a scheduled one would be saving while the
-  // backup copies): the scan lock, kept until this process ends (the server exits right after;
-  // its lock is then left by a process that's gone, which the next scan takes over).
+  // backup copies): the scan lock, let go once the new version is in place. Not kept for the
+  // hand-over: `rawjobs update` waits here for the verdict, and the helper may need the lock to put
+  // the backup back.
   mkdirSync(join(o.home, "data"), { recursive: true });
   const lock = acquireLock(join(o.home, "data", "scan.lock"));
   if (!lock) throw new ScanRunningError();
@@ -785,14 +786,12 @@ export async function startUpdate(o: { home: string; base: string; manifest: Rel
     const pending: Pending = { from: now.current, to: version, backup, notes: o.manifest.notes, pid: o.serverPid, insideTask: insideServerTask() };
     writeJson(join(o.home, "app/pending-update.json"), pending);
     switchTo(o.home, version, node);
-    // This very version's CLI, on the Node it runs on: both stay in place until the update is done.
-    const how = cliCommand();
-    spawn(how.command, [...how.args, "update", "--finish"], { cwd: o.home, detached: true, stdio: "ignore", windowsHide: true }).unref();
-  } catch (err) {
-    // Nothing switched (or it failed partway): scans may run again.
+  } finally {
     lock.release();
-    throw err;
   }
+  // This very version's CLI, on the Node it runs on: both stay in place until the update is done.
+  const how = cliCommand();
+  spawn(how.command, [...how.args, "update", "--finish"], { cwd: o.home, detached: true, stdio: "ignore", windowsHide: true }).unref();
 }
 
 /** startUpdate found a scan running: it waits for it to finish, then tries again. */
