@@ -21,6 +21,10 @@ on:
         description: Report the install checks as passed without running them (pushes to main)
         type: boolean
         default: false
+      skip-macos:
+        description: Report the macOS install check as passed without running it (pull requests that change no install, update or desktop files)
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -33,12 +37,14 @@ jobs:
         os: [ubuntu-24.04, macos-15, windows-2025]
     # Skipping still runs one job per OS, so the required checks named after the matrix report success;
     # on ubuntu, so a skip never waits for a macOS or Windows runner.
-    runs-on: ${{ inputs.skip && 'ubuntu-24.04' || matrix.os }}
+    runs-on: ${{ (inputs.skip || (inputs.skip-macos && startsWith(matrix.os, 'macos'))) && 'ubuntu-24.04' || matrix.os }}
     # The job's limit also counts the wait for a runner, and macOS runners can take a while to free up:
     # a 15-minute job limit cancelled jobs that never got a machine (0 steps run). The install steps
     # keep their own 15 minutes below, so a hung install still fails fast.
     timeout-minutes: 60
     env:
+      # "true" when this job only reports success (see runs-on above).
+      SKIP: ${{ inputs.skip || (inputs.skip-macos && startsWith(matrix.os, 'macos')) }}
       RAWJOBS_RELEASE_URL: http://127.0.0.1:8765
       RAWJOBS_PUBLIC_KEY: ${{ inputs.public-key }}
       # An installed copy ignores the key and address overrides above unless this is set.
@@ -46,15 +52,15 @@ jobs:
       RAWJOBS_NO_OPEN: "1"
     steps:
       - name: Skipped
-        if: inputs.skip
-        run: echo "Skipped on a push to main; the pull request ran the install test."
+        if: env.SKIP == 'true'
+        run: echo "Skipped${{ inputs.skip && ' on a push to main; the pull request ran the install test' || ': this pull request changes no install, update or desktop files, and a release always runs it' }}."
       - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
-        if: ${{ !inputs.skip }}
+        if: ${{ env.SKIP != 'true' }}
         with:
           name: ${{ inputs.artifact }}
           path: release
       - name: Serve the release files
-        if: ${{ !inputs.skip }}
+        if: ${{ env.SKIP != 'true' }}
         shell: bash
         run: |
           # http.server's server_bind() looks up the host's name (socket.getfqdn) before it listens, which
@@ -73,7 +79,7 @@ jobs:
           curl -fsS http://127.0.0.1:8765/latest.json >/dev/null || { echo "::error::the release file server didn't start"; cat "$RUNNER_TEMP/serve.log"; exit 1; }
 
       - name: Install, repair, uninstall (macOS, Linux)
-        if: ${{ !inputs.skip && runner.os != 'Windows' }}
+        if: ${{ env.SKIP != 'true' && runner.os != 'Windows' }}
         timeout-minutes: 15
         shell: bash
         run: |
@@ -120,14 +126,14 @@ jobs:
           test ! -e "${XDG_DATA_HOME:-$HOME/.local/share}/applications/rawjobs.desktop"
 
       - name: The logs, when something failed (macOS, Linux)
-        if: ${{ !inputs.skip && failure() && runner.os != 'Windows' }}
+        if: ${{ env.SKIP != 'true' && failure() && runner.os != 'Windows' }}
         shell: bash
         run: |
           for f in "$RUNNER_TEMP/Raw Jobs/logs/"*; do echo "=== $f"; tail -n 80 "$f"; done || true
           [ "$RUNNER_OS" = macOS ] && launchctl print "gui/$(id -u)/com.rawjobs.server" | head -n 40 || true
 
       - name: Install, repair, uninstall (Windows PowerShell)
-        if: ${{ !inputs.skip && runner.os == 'Windows' }}
+        if: ${{ env.SKIP != 'true' && runner.os == 'Windows' }}
         timeout-minutes: 15
         shell: powershell
         run: |
@@ -169,7 +175,7 @@ jobs:
           if (-not (Get-ChildItem (Join-Path $env:RAWJOBS_HOME 'backups\*\profile\resume.md'))) { throw 'reinstalling made no backup' }
 
       - name: The logs, when something failed (Windows)
-        if: ${{ !inputs.skip && failure() && runner.os == 'Windows' }}
+        if: ${{ env.SKIP != 'true' && failure() && runner.os == 'Windows' }}
         shell: powershell
         run: |
           Get-ChildItem (Join-Path $env:RUNNER_TEMP 'Raw Jobs\logs') -ErrorAction SilentlyContinue | ForEach-Object { "=== $($_.FullName)"; Get-Content $_.FullName -Tail 80 }
