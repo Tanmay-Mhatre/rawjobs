@@ -8,6 +8,15 @@ function hostname(host: string): string {
 }
 
 /**
+ * Why a request is refused for its Host, or null. Run for every request (handler.ts), not only the
+ * API: a website that points its own name at 127.0.0.1 (DNS rebinding) arrives with its own Host.
+ */
+export function refuseHost(req: IncomingMessage): string | null {
+  const host = (req.headers.host ?? "").toLowerCase();
+  return LOOPBACK.has(hostname(host)) ? null : "This server only answers on this computer (127.0.0.1).";
+}
+
+/**
  * Only this computer's own pages may use the API.
  * - Host must be a loopback name: a website that points its own domain at 127.0.0.1
  *   (DNS rebinding) arrives with its own Host and is turned away.
@@ -18,7 +27,8 @@ function hostname(host: string): string {
  */
 export function refuse(req: IncomingMessage): string | null {
   const host = (req.headers.host ?? "").toLowerCase();
-  if (!LOOPBACK.has(hostname(host))) return "This server only answers on this computer (127.0.0.1).";
+  const wrongHost = refuseHost(req);
+  if (wrongHost) return wrongHost;
   if (req.method === "GET" || req.method === "HEAD") return null;
   const origin = req.headers.origin;
   if (!origin) return "Missing Origin.";

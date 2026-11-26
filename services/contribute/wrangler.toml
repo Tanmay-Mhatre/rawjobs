@@ -10,7 +10,7 @@ compatibility_date = "2026-09-01"
 binding = "INBOX"
 id = "4f1d60f6a7644dfe9a93db87c9560fd0"
 
-# 20 submissions per minute per IP address.
+# 20 submissions per minute per network (an IPv4 address, or an IPv6 /64).
 [[ratelimits]]
 name = "LIMITER"
 namespace_id = "1001"
@@ -20,6 +20,10 @@ simple = { limit = 20, period = 60 }
 # retry later. Each accepted request costs 2 KV writes (free plan: 1,000 writes a day).
 [vars]
 DAILY_CAP = "2000"
+# Most boards accepted per day (UTC) from one network (an IPv4 address, or an IPv6 /64), so one
+# network can't fill DAILY_CAP for everyone. Counted under a keyed hash, never the IP, inside the
+# day's record (no extra KV writes). Needs REPORTER_SECRET; without it this budget is off.
+PER_KEY_DAILY = "200"
 # Most new move reports (POST /v1/moves) stored per day (UTC), for everyone together. Each new one
 # costs 2 KV writes, a new reporter on a known one costs 1.
 MOVES_DAILY_CAP = "100"
@@ -27,6 +31,6 @@ MOVES_DAILY_CAP = "100"
 # Secrets (not in this file):
 #   INBOX_TOKEN, shared with the GitHub workflow:
 #     npx wrangler secret put INBOX_TOKEN
-#   REPORTER_SECRET, a long random string that keys the reporter hashes on move reports (never
-#   shared; without it /v1/moves answers 503):
+#   REPORTER_SECRET, a long random string that keys the reporter hashes on move reports and the
+#   per-network counts (never shared; without it /v1/moves answers 503 and PER_KEY_DAILY is off):
 #     npx wrangler secret put REPORTER_SECRET

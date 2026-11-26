@@ -8,8 +8,9 @@ import { watchMissedScans } from "./catch-up";
 import { createApi } from "./api";
 import { createUpdater } from "./updater";
 import { alreadyRunning, DEFAULT_PORT, ensureAutostart, logTo, openBrowser, readServerState, watchEventLoop, writeServerState } from "./desktop";
+import { makeHomePrivate } from "./private-home";
 import { ensureShortcuts, startLinkInstalled } from "./shortcuts";
-import { servePages, serveStatic } from "./static";
+import { createHandler } from "./handler";
 
 const TRIES = 10;
 
@@ -28,9 +29,14 @@ export async function serve(args: string[]): Promise<number> {
   } catch {
     // not allowed here
   }
+  // Your files are yours alone on macOS and Linux: everything written from here on, and (once) the
+  // installed copy's folder itself. A dev checkout's folder is left as it is.
+  if (process.platform !== "win32") process.umask(0o077);
   const home = rawjobsHome();
   const dataDir = defaultDataDir(home);
   mkdirSync(dataDir, { recursive: true });
+  if (BUNDLED) makeHomePrivate(home);
+  if (process.env.RAWJOBS_DATA_PUBLIC_KEY || process.env.JOBHUNTER_DATA_PUBLIC_KEY) console.log("Using a custom data signing key (RAWJOBS_DATA_PUBLIC_KEY).");
   if (!existsSync(`${WEB_DIR}/index.html`)) {
     console.error(
       BUNDLED
@@ -78,20 +84,7 @@ export async function serve(args: string[]): Promise<number> {
   const startLink = () => BUNDLED && startLinkInstalled(home);
   const api = createApi({ home, dataDir, updater, startLink });
   const pages = { startLink, platform: process.platform };
-  const server = createServer((req, res) => {
-    void api
-      .handle(req, res)
-      .then((handled) => {
-        if (handled || serveStatic([WEB_DIR, dataDir], req, res)) return;
-        servePages(req, res, pages);
-      })
-      .catch((err) => {
-        // One request going wrong must not take the server (and every other page) down with it.
-        console.error(`RawJobs: ${req.method} ${req.url} failed: ${(err as Error)?.stack ?? err}`);
-        if (!res.headersSent) res.writeHead(500, { "content-type": "text/plain; charset=utf-8" }).end("Something went wrong. Try again.");
-        else res.destroy();
-      });
-  });
+  const server = createServer(createHandler({ api, roots: [WEB_DIR, dataDir], pages }));
   // A promise nobody awaited that failed (a background task, a timer): logged, not fatal. Node would
   // otherwise end the whole server, and with it the dashboard and scheduled scans.
   process.on("unhandledRejection", (reason) => console.error(`RawJobs: unhandled rejection: ${(reason as Error)?.stack ?? reason}`));

@@ -41,6 +41,14 @@ The contribution inbox (`services/contribute`) is a Cloudflare Worker in the sam
 - Never commit a personal config, resume or token. `rawjobs.config.local.yaml`, `profile/` and
   `data/` are gitignored for this reason.
 
+### New package versions wait a week
+
+pnpm won't install a package version published less than 7 days ago (`minimumReleaseAge` in
+`pnpm-workspace.yaml`), Dependabot waits the same week, and CI fails a Dependabot pull request that
+adds a younger version. For an urgent fix that can't wait, add that exact version to
+`minimumReleaseAgeExclude` in `pnpm-workspace.yaml` (for example `- some-package@1.2.3`) in its own
+pull request, and say why in it.
+
 ## Rules that keep the project safe to run
 
 - **No telemetry.** Don't add analytics, crash reporting or any call that sends data about the

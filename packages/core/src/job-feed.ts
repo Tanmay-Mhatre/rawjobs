@@ -67,6 +67,8 @@ export function jobFeedStatus(dataDir: string, now = Date.now()): JobFeedStatus 
   return { generated_at: m?.generated_at, ageDays: m ? (now - Date.parse(m.generated_at)) / 86_400_000 : Infinity, companies };
 }
 
+const OLDER_FEED = "The job feed offered an older copy; kept yours.";
+
 export type FeedSyncResult = { updated: boolean; message: string; ageDays: number };
 
 /** Where a sync keeps what it downloaded until it's applied (download.ts). */
@@ -106,6 +108,8 @@ async function syncJobFeedNow(dataDir: string, opts: { fetchImpl?: typeof fetch;
     const manifest = res.value;
     if (manifest.schema !== JOB_FEED_SCHEMA) return { updated: false, ageDays: stale(), message: "The job feed has a newer format than this app; update the app to use it." };
     const local = readJson<JobFeedManifest>(join(dir, "manifest.json"));
+    // Never go back to an older feed than the one here: a re-served old manifest would freeze it.
+    if (local && Date.parse(manifest.generated_at) < Date.parse(local.generated_at)) return { updated: false, ageDays: stale(), message: OLDER_FEED };
     mkdirSync(dir, { recursive: true });
     let fetched = 0;
     const failed: string[] = [];
@@ -187,6 +191,8 @@ async function download(get: typeof fetch, dir: string, file: string, sha256: st
  */
 async function syncV3(dir: string, m: FeedManifestV2, get: typeof fetch, expired: () => boolean, now?: number): Promise<{ updated: boolean; message: string }> {
   const index = readJson<V3Index>(join(dir, V3_INDEX));
+  // A lower number is an older feed (re-served, or rolled back): keep the newer copy here.
+  if (index && m.seq < index.seq) return { updated: false, message: OLDER_FEED };
   if (index?.seq === m.seq && index.state_sha256 === m.state_sha256) return { updated: false, message: `Job feed is up to date (${when(m.generated_at, now)}).` };
   mkdirSync(dir, { recursive: true });
   const tag = `${m.seq}-${Date.now().toString(36)}`;
