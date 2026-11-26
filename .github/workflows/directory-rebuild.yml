@@ -702,3 +702,5 @@ jobs:
           body=$(printf 'The weekly rebuild ended without a new release. Installs keep the current one.\n\nRun: %s\n\nSteps:\n%s\n\nIf the release gate refused a deliberate shrink, re-run with: gh workflow run directory-rebuild.yml -f allow_shrink=true' "$run_url" "$steps")
           open=$(gh issue list -R "${{ github.repository }}" --state open --search "\"$title\" in:title" --json number -q '.[0].number')
           if [ -n "$open" ]; then gh issue comment "$open" -R "${{ github.repository }}" --body "$body"; else gh issue create -R "${{ github.repository }}" --title "$title" --body "$body"; fi
+          # The run shows as failed, as it did when the gate stopped the single publish job.
+          exit 1
