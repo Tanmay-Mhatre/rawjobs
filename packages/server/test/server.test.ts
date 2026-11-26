@@ -107,13 +107,13 @@ describe("every request (handler)", () => {
     expect((await get(port, "/meta.json", `127.0.0.1:${port}`)).text).toContain("Test Person");
   });
 
-  it("sends the Content-Security-Policy (report-only) on pages, not on data", async () => {
+  it("sends the Content-Security-Policy on pages, not on data", async () => {
     const port = await start();
     const host = `127.0.0.1:${port}`;
     for (const path of ["/", "/offline.html", "/nothing-here"]) {
-      expect((await get(port, path, host, { accept: "text/html" })).headers["content-security-policy-report-only"], path).toMatch(/script-src 'self'/);
+      expect((await get(port, path, host, { accept: "text/html" })).headers["content-security-policy"], path).toMatch(/script-src 'self'/);
     }
-    expect((await get(port, "/meta.json", host)).headers["content-security-policy-report-only"]).toBeUndefined();
+    expect((await get(port, "/meta.json", host)).headers["content-security-policy"]).toBeUndefined();
   });
 
   it("logs a CSP report once, without an Origin, and only on this computer's Host", async () => {
@@ -133,7 +133,7 @@ describe("every request (handler)", () => {
     expect(await post(`127.0.0.1:${port}`)).toBe(204);
     expect(await post(`evil.example:${port}`)).toBe(403);
     expect(warn).toHaveBeenCalledTimes(1);
-    expect(warn.mock.calls[0]![0]).toMatch(/would block inline by script-src-elem/);
+    expect(warn.mock.calls[0]![0]).toMatch(/CSP blocked inline by script-src-elem/);
     warn.mockRestore();
   });
 
