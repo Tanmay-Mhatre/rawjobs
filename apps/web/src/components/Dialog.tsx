@@ -73,6 +73,8 @@ export function Dialog({
       aria-describedby={describedBy}
       className={cx(
         "jh-dialog",
+        // Tall content (a long "What's new") scrolls inside the window instead of running off it.
+        placement !== "right" && "max-h-[calc(100dvh-2rem)] overflow-y-auto overscroll-contain",
         placement === "center" && "m-auto w-[calc(100%-2rem)] max-w-lg",
         // design/components/Drawer: drawer-width (560px), full width under 720px.
         placement === "right" && "jh-drawer ml-auto mr-0 h-dvh max-h-dvh w-full min-[721px]:max-w-[var(--drawer-width)]",
