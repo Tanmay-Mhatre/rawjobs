@@ -107,6 +107,36 @@ describe("every request (handler)", () => {
     expect((await get(port, "/meta.json", `127.0.0.1:${port}`)).text).toContain("Test Person");
   });
 
+  it("sends the Content-Security-Policy (report-only) on pages, not on data", async () => {
+    const port = await start();
+    const host = `127.0.0.1:${port}`;
+    for (const path of ["/", "/offline.html", "/nothing-here"]) {
+      expect((await get(port, path, host, { accept: "text/html" })).headers["content-security-policy-report-only"], path).toMatch(/script-src 'self'/);
+    }
+    expect((await get(port, "/meta.json", host)).headers["content-security-policy-report-only"]).toBeUndefined();
+  });
+
+  it("logs a CSP report once, without an Origin, and only on this computer's Host", async () => {
+    const port = await start();
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const body = JSON.stringify({ "csp-report": { "document-uri": `http://127.0.0.1:${port}/`, "blocked-uri": "inline", "effective-directive": "script-src-elem" } });
+    const post = (host: string) =>
+      new Promise<number>((done, fail) => {
+        const r = request({ host: "127.0.0.1", port, path: "/api/csp-report", method: "POST", setHost: false, headers: { host, "content-type": "application/csp-report" } }, (res) => {
+          res.resume();
+          res.on("end", () => done(res.statusCode!));
+        });
+        r.on("error", fail);
+        r.end(body);
+      });
+    expect(await post(`127.0.0.1:${port}`)).toBe(204);
+    expect(await post(`127.0.0.1:${port}`)).toBe(204);
+    expect(await post(`evil.example:${port}`)).toBe(403);
+    expect(warn).toHaveBeenCalledTimes(1);
+    expect(warn.mock.calls[0]![0]).toMatch(/would block inline by script-src-elem/);
+    warn.mockRestore();
+  });
+
   it("still lets a dashboard on another port of this computer read /api/health", async () => {
     const port = await start();
     const res = await get(port, "/api/health", `127.0.0.1:${port}`, { origin: "http://127.0.0.1:4318" });
