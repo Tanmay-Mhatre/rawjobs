@@ -56,7 +56,7 @@ describe("cspReportLine", () => {
     const body = JSON.stringify({
       "csp-report": { "document-uri": "http://127.0.0.1:4317/#radar", "blocked-uri": "inline", "effective-directive": "script-src-elem", "source-file": "http://127.0.0.1:4317/", "line-number": 12 },
     });
-    expect(cspReportLine(body)).toBe("CSP (report-only) would block inline by script-src-elem on / at http://127.0.0.1:4317/:12");
+    expect(cspReportLine(body)).toBe("CSP blocked inline by script-src-elem on / at http://127.0.0.1:4317/:12");
   });
 
   it("ignores what isn't a report, and keeps a hostile one to a single short line", () => {

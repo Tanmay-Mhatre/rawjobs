@@ -6,8 +6,8 @@ import { pageScripts } from "./pages";
 /**
  * The Content-Security-Policy of the dashboard's pages: scripts only from this server, plus the few
  * inline ones we wrote, each allowed by its SHA-256. A script injected into a page (a future XSS)
- * doesn't run. Sent as Report-Only for now: the browser runs everything as before and reports what
- * the policy would have blocked to /api/csp-report (logged in logs/server.log).
+ * doesn't run. The browser also reports what it blocked to /api/csp-report (logged in logs/server.log),
+ * so a page that breaks because of the policy says why. (Report-Only for one release first: v0.7.13-0.7.14.)
  *
  * Which inline scripts are allowed:
  * - the dashboard's index.html: the ones in that file as it was built (read once per start: an
@@ -15,7 +15,7 @@ import { pageScripts } from "./pages";
  * - the server's own pages (offline, 404…): their constants (pages.ts `pageScripts`);
  * - anything else served as HTML (a file in the data folder): none.
  */
-export const CSP_HEADER = "content-security-policy-report-only";
+export const CSP_HEADER = "content-security-policy";
 export const CSP_REPORT_PATH = "/api/csp-report";
 
 const INLINE_SCRIPT = /<script\b(?![^>]*\bsrc\s*=)[^>]*>([\s\S]*?)<\/script>/gi;
@@ -90,7 +90,7 @@ export function cspReportLine(body: string): string | null {
     }
   })();
   const where = text("source-file") ? ` at ${text("source-file")}:${text("line-number")}` : "";
-  const line = `CSP (report-only) would block ${text("blocked-uri") || "?"} by ${text("effective-directive") || text("violated-directive") || "?"} on ${page || "?"}${where}`;
+  const line = `CSP blocked ${text("blocked-uri") || "?"} by ${text("effective-directive") || text("violated-directive") || "?"} on ${page || "?"}${where}`;
   return line.replace(/[\r\n]+/g, " ").slice(0, 300);
 }
 
