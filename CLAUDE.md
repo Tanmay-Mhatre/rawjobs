@@ -126,15 +126,16 @@ they ask: the installed RawJobs runs on ports 4317/4318, and test pages opened t
 Run test servers on a non-default port with auto-open off: Vite already has `open: false`; give the
 desktop launcher `--no-browser`.
 
-## Releasing: after your PR merges, the user approves
+## Releasing: only when the user says, then they approve
 
 Merging releases nothing: a release happens when a version tag is pushed
-(`.github/workflows/release.yml`). Once your PR has merged, release it yourself, then ask the user
-to approve it. Skip the release when every PR merged since the last tag has the release note
-`none`. The user's approval of the `sign` job is the gate: nothing reaches installed copies until
-they approve it.
+(`.github/workflows/release.yml`). PRs merge through the queue on their own, but a release happens
+only when the user says so ("create tag", "release"). Never create or push a `v*` tag after a merge
+on your own, and don't add a tag reminder after merges. When the user asks, create and push the tag
+yourself (don't just give them the commands), then they approve it: nothing reaches installed copies
+until they approve the `sign` job.
 
-1. Your PR is merged and nothing else is half-way: no queued PR of yours still waiting to merge.
+1. The user asked for a release in this session.
 2. In a worktree at `origin/main` with `pnpm install` done (the pre-push hook refuses pushes from the
    main checkout and needs dependencies), run `git fetch --tags origin`. The next version is the
    latest `vX.Y.Z` tag with the patch + 1.
@@ -148,15 +149,11 @@ they approve it.
    git tag -a v0.6.1 <origin/main sha> -F <scratchpad>/v0.6.1-tag.txt
    git push origin v0.6.1
    ```
-   If the push is refused because the tag already exists, another session released first: fetch
-   the tags again and check whether your change is already in that release. If it isn't, take the
-   next number.
+   If the push is refused because the tag already exists, someone released in the meantime: fetch
+   the tags again and tell the user before taking the next number.
 5. Tell the user the version, the run link and what it ships. The `sign` job waits in Actions until
    they approve the `release` environment. Never approve a deployment yourself.
 6. After they approve, check that the release published and its jobs passed.
-
-Releases run one at a time, in the order the tags were pushed (release.yml's concurrency group), so
-two sessions releasing close together queue rather than clash.
 
 Write a "Release note" section in every PR you open (`New:` / `Improved:` / `Fixed:` lines, or
 `none`): it becomes the app's "What's new".
