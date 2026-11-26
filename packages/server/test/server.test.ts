@@ -8,7 +8,8 @@ import { folderId } from "@rawjobs/core/update";
 import { cmdAlerts } from "../../cli/src/commands/alerts";
 import { cmdSetup } from "../../cli/src/commands/setup";
 import { createApi } from "../src/api";
-import { refuse } from "../src/guard";
+import { refuse, refuseHost } from "../src/guard";
+import { createHandler } from "../src/handler";
 import { findFile } from "../src/static";
 
 /** Wait until `ok()` is true (checked every 10 ms, for up to 5 s). */
@@ -34,6 +35,83 @@ describe("refuse", () => {
     expect(refuse(req("POST", { host: "127.0.0.1:4317" }))).toMatch(/Origin/);
     expect(refuse(req("GET", { host: "evil.example:4317" }))).toMatch(/only answers/);
     expect(refuse(req("POST", { host: "evil.example:4317", origin: "http://evil.example:4317" }))).toMatch(/only answers/);
+  });
+
+  it("checks the Host alone for any method (refuseHost)", () => {
+    for (const host of ["127.0.0.1:4317", "localhost:4317", "[::1]:4317", "LOCALHOST:4317"]) expect(refuseHost(req("GET", { host }))).toBeNull();
+    for (const host of ["evil.example:4317", "127.0.0.1.evil.example:4317", "rawjobs.local:4317", ""]) expect(refuseHost(req("GET", { host }))).toMatch(/only answers/);
+  });
+});
+
+describe("every request (handler)", () => {
+  let server: Server | undefined;
+  afterEach(() => server?.close());
+
+  async function start() {
+    const dir = mkdtempSync(join(tmpdir(), "rawjobs-handler-"));
+    const web = join(dir, "web");
+    const dataDir = join(dir, "data");
+    const home = join(dir, "home");
+    for (const d of [web, dataDir, home]) mkdirSync(d);
+    writeFileSync(join(web, "index.html"), "<!doctype html><title>RawJobs</title>");
+    writeFileSync(join(dataDir, "meta.json"), JSON.stringify({ profile: { name: "Test Person" } }));
+    const api = createApi({ home, dataDir, version: "9.9.9" });
+    server = createServer(createHandler({ api, roots: [web, dataDir], pages: { startLink: () => false, platform: "linux" } }));
+    await new Promise<void>((r) => server!.listen(0, "127.0.0.1", r));
+    return (server!.address() as AddressInfo).port;
+  }
+
+  /** GET `path` with exactly these headers (Host included: `undefined` sends none). */
+  function get(port: number, path: string, host: string | undefined, extra: Record<string, string> = {}) {
+    return new Promise<{ status: number; headers: IncomingMessage["headers"]; text: string }>((done, fail) => {
+      const r = request({ host: "127.0.0.1", port, path, setHost: false, headers: { ...(host ? { host } : {}), ...extra } }, (res) => {
+        let text = "";
+        res.setEncoding("utf8");
+        res.on("data", (d) => (text += d));
+        res.on("end", () => done({ status: res.statusCode!, headers: res.headers, text }));
+      });
+      r.on("error", fail);
+      r.end();
+    });
+  }
+
+  it("turns a foreign Host away from every path, data files included (DNS rebinding)", async () => {
+    const port = await start();
+    for (const path of ["/meta.json", "/", "/index.html", "/offline.html", "/sw.js", "/radar", "/api/health", "/nothing-here"]) {
+      const res = await get(port, path, `evil.example:${port}`);
+      expect(res.status, path).toBe(403);
+      expect(res.text, path).toMatch(/only answers on this computer/);
+      expect(res.text, path).not.toContain("Test Person");
+      expect(res.headers["cross-origin-resource-policy"], path).toBe("same-origin");
+    }
+  });
+
+  it("refuses a request with no Host", async () => {
+    const port = await start();
+    // Node answers 400 itself (HTTP/1.1 requires Host); refuseHost covers it anyway (empty Host).
+    const res = await get(port, "/meta.json", undefined);
+    expect(res.status).toBeGreaterThanOrEqual(400);
+    expect(res.text).not.toContain("Test Person");
+  });
+
+  it("serves this computer's own names, with CORP on every response", async () => {
+    const port = await start();
+    for (const host of [`127.0.0.1:${port}`, `localhost:${port}`, `[::1]:${port}`]) {
+      for (const path of ["/meta.json", "/", "/offline.html", "/sw.js", "/api/health"]) {
+        const res = await get(port, path, host);
+        expect(res.status, `${host}${path}`).toBe(200);
+        expect(res.headers["cross-origin-resource-policy"], `${host}${path}`).toBe("same-origin");
+      }
+      expect((await get(port, "/no-such-file.json", host)).headers["cross-origin-resource-policy"]).toBe("same-origin");
+    }
+    expect((await get(port, "/meta.json", `127.0.0.1:${port}`)).text).toContain("Test Person");
+  });
+
+  it("still lets a dashboard on another port of this computer read /api/health", async () => {
+    const port = await start();
+    const res = await get(port, "/api/health", `127.0.0.1:${port}`, { origin: "http://127.0.0.1:4318" });
+    expect(res.status).toBe(200);
+    expect(res.headers["access-control-allow-origin"]).toBe("http://127.0.0.1:4318");
   });
 });
 

@@ -98,7 +98,7 @@ async function extractDocx(file: File): Promise<Extracted> {
 }
 
 /** Just enough HTML -> Markdown for resumes: headings, lists, paragraphs, bold. */
-function htmlToMarkdown(html: string): string {
+export function htmlToMarkdown(html: string): string {
   const dom = new DOMParser().parseFromString(html, "text/html");
   const out: string[] = [];
   const inline = (el: Element): string =>
@@ -125,7 +125,12 @@ function htmlToMarkdown(html: string): string {
           const own = li.cloneNode(true) as Element;
           for (const n of own.querySelectorAll("ul,ol")) n.remove();
           out.push(`${"  ".repeat(depth)}- ${inline(own).trim()}`);
-          for (const n of nested) walk(Object.assign(document.createElement("div"), { innerHTML: n.outerHTML }), depth + 1);
+          // A copy inside the parsed document, never re-parsed into the page: nothing in it loads or runs.
+          for (const n of nested) {
+            const box = dom.createElement("div");
+            box.append(n.cloneNode(true));
+            walk(box, depth + 1);
+          }
         }
         out.push("");
       } else if (tag === "TABLE") {
