@@ -4,6 +4,7 @@ import { dirname, join, resolve } from "node:path";
 import { parseArgs } from "node:util";
 import { build } from "esbuild";
 import { changelogFromTags, readTags } from "../release/changelog";
+import { nodeOnlyInEntry } from "./web-check";
 
 /**
  * Build the copy of RawJobs that gets installed: it needs only Node, no pnpm or tsx.
@@ -33,6 +34,10 @@ if (!existsSync(join(root, "apps/web/dist/index.html"))) fail("apps/web/dist is 
 for (const personal of ["jobs.json", "meta.json", "history.json", "catalog", "runs", "profile"]) {
   if (existsSync(join(root, "apps/web/dist", personal))) fail(`apps/web/dist/${personal} is run data, not part of the dashboard. Delete apps/web/dist and build again.`);
 }
+// The scripts the page runs at start must be browser code: Node-only code there (undici read
+// `process.versions` when it loaded) left the dashboard blank in v0.7.13.
+const nodeOnly = nodeOnlyInEntry(join(root, "apps/web/dist"));
+if (nodeOnly) fail(`The dashboard loads Node-only code at start (${nodeOnly}). Import it lazily (await import()) or keep it out of what apps/web imports.`);
 
 rmSync(out, { recursive: true, force: true });
 mkdirSync(out, { recursive: true });
