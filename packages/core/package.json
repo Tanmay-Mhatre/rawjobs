@@ -38,9 +38,13 @@
     "./network/linkedin-export": "./src/network/linkedin-export.ts",
     "./network/company": "./src/network/company.ts",
     "./network/score": "./src/network/score.ts",
-    "./network/paste": "./src/network/paste.ts"
+    "./network/paste": "./src/network/paste.ts",
+    "./company-search": "./src/company-search.ts",
+    "./directory-search": "./src/directory-search.ts",
+    "./directory-browse": "./src/directory-browse.ts"
   },
   "dependencies": {
+    "minisearch": "^7.2.0",
     "undici": "^7.30.2",
     "yaml": "^2.8.0",
     "zod": "^4.6.7"

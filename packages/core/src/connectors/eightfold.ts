@@ -1,6 +1,6 @@
 import type { CompanyRef, NormalizedJob, Workplace } from "../schema";
 import { htmlToText, inferWorkplace } from "../text";
-import { HttpError } from "../http";
+import { HttpError } from "../http-error";
 import { jobId, SEARCH_MAX_POSTINGS, type Connector, type Ctx } from "./types";
 
 /**

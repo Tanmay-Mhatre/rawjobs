@@ -1,5 +1,5 @@
 import type { HttpClient } from "./http";
-import { HttpError } from "./http";
+import { HttpError } from "./http-error";
 
 /**
  * robots.txt for the connectors that need it: fetched once per host and kept for a day. Reads the
