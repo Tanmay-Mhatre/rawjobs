@@ -1,4 +1,4 @@
-import { HttpError } from "../http";
+import { HttpError } from "../http-error";
 import type { CompanyRef, NormalizedJob } from "../schema";
 import { inferWorkplace } from "../text";
 import { countryName, joinParts } from "./parse";

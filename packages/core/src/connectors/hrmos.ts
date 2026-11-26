@@ -1,6 +1,6 @@
 import type { EmploymentType } from "../catalog/employment";
 import { employmentType } from "../catalog/employment";
-import { HttpError } from "../http";
+import { HttpError } from "../http-error";
 import { robotsAllows } from "../robots";
 import type { NormalizedJob, Salary, Workplace } from "../schema";
 import { htmlToText, inferWorkplace } from "../text";

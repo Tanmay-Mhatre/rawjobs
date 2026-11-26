@@ -1,4 +1,4 @@
-import { HttpError } from "../http";
+import { HttpError } from "../http-error";
 import { robotsAllows } from "../robots";
 import type { NormalizedJob } from "../schema";
 import { htmlToText } from "../text";
