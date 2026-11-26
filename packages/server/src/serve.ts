@@ -9,7 +9,7 @@ import { createApi } from "./api";
 import { createUpdater } from "./updater";
 import { alreadyRunning, DEFAULT_PORT, ensureAutostart, logTo, openBrowser, readServerState, watchEventLoop, writeServerState } from "./desktop";
 import { ensureShortcuts, startLinkInstalled } from "./shortcuts";
-import { servePages, serveStatic } from "./static";
+import { createHandler } from "./handler";
 
 const TRIES = 10;
 
@@ -78,20 +78,7 @@ export async function serve(args: string[]): Promise<number> {
   const startLink = () => BUNDLED && startLinkInstalled(home);
   const api = createApi({ home, dataDir, updater, startLink });
   const pages = { startLink, platform: process.platform };
-  const server = createServer((req, res) => {
-    void api
-      .handle(req, res)
-      .then((handled) => {
-        if (handled || serveStatic([WEB_DIR, dataDir], req, res)) return;
-        servePages(req, res, pages);
-      })
-      .catch((err) => {
-        // One request going wrong must not take the server (and every other page) down with it.
-        console.error(`RawJobs: ${req.method} ${req.url} failed: ${(err as Error)?.stack ?? err}`);
-        if (!res.headersSent) res.writeHead(500, { "content-type": "text/plain; charset=utf-8" }).end("Something went wrong. Try again.");
-        else res.destroy();
-      });
-  });
+  const server = createServer(createHandler({ api, roots: [WEB_DIR, dataDir], pages }));
   // A promise nobody awaited that failed (a background task, a timer): logged, not fatal. Node would
   // otherwise end the whole server, and with it the dashboard and scheduled scans.
   process.on("unhandledRejection", (reason) => console.error(`RawJobs: unhandled rejection: ${(reason as Error)?.stack ?? reason}`));
