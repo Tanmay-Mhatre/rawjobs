@@ -64,7 +64,7 @@ const actionFor = (i: Item, { onStep, onScan, onCompanies }: Actions): (() => vo
 
 function ChecklistRows({ items, ...actions }: { items: Item[] } & Actions) {
   return (
-    <ul className="grid divide-y divide-line sm:grid-cols-2 sm:divide-y-0">
+    <ul className="grid grid-cols-1 divide-y divide-line sm:grid-cols-2 sm:divide-y-0">
       {items.map((i) => {
         const action = actionFor(i, actions);
         return (
