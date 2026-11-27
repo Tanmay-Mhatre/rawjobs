@@ -55,7 +55,7 @@ export function RemovedDrawer({
     <Dialog open={open} onClose={onClose} labelledBy="removed-title" describedBy="removed-intro" placement="right">
       <div ref={rootRef} className="flex h-full w-full flex-col overflow-y-auto bg-overlay p-5 shadow-l3 min-[721px]:border-l min-[721px]:border-line sm:p-6">
         <div className="flex items-start gap-3">
-          <h2 /* design-lint-ignore: weight moves into the type style in 6I */ id="removed-title" className="min-w-0 flex-1 type-subheading font-semibold">
+          <h2 id="removed-title" className="min-w-0 flex-1 type-subheading">
             Removed from the Pipeline
           </h2>
           <IconButton data-focus="close" label="Close" className="-mr-2 -mt-1" onClick={onClose}>

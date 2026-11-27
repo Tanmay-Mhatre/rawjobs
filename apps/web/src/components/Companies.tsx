@@ -30,7 +30,7 @@ import {
   type Seen,
 } from "../lib/myCompanies";
 import type { CompanyRow } from "../lib/setup";
-import { Chip, ChipGroup } from "./primitives";
+import { Chip, ChipGroup, IconLink } from "./primitives";
 import { Button, Card, cx, IconButton, Pagination, Select } from "./ui";
 import { UpdateLink } from "./UpdateLink";
 
@@ -559,15 +559,9 @@ function NameCell({ x }: { x: Row }) {
         {name}
       </a>
       {/^https?:/.test(x.r.input) && (
-        <a
-          href={safeUrl(x.r.input)}
-          target="_blank"
-          rel="noreferrer"
-          className="inline-flex size-6 shrink-0 items-center justify-center rounded-md text-muted hover:text-ink"
-          aria-label={`${name} careers page`}
-        >
+        <IconLink size="sm" href={safeUrl(x.r.input)} label={`Open ${name} careers page (opens in a new tab)`} className="shrink-0">
           <ExternalLink className="size-3.5" />
-        </a>
+        </IconLink>
       )}
     </div>
   );

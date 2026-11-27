@@ -8,6 +8,9 @@ import { canRunLocally, type DataMeta, type Job } from "../lib/data";
 import type { ScanState } from "../lib/scan";
 import { STEP, STEP_COUNT } from "../lib/setup";
 import { load, save } from "../lib/storage";
+import { useMedia } from "../lib/useMedia";
+import { PRIORITY, type Notice } from "../app/notices";
+import { IconButton } from "./primitives";
 import { ScanProgress } from "./ScanProgress";
 import { Button, Card, cx } from "./ui";
 import { settingsHash } from "./settings/registry";
@@ -113,8 +116,24 @@ function ProgressBar({ done, total, className }: { done: number; total: number; 
 }
 
 /** Configured, but something's still missing (or it's all done and collapses to one line). */
-export function SetupChecklist({ items, onStep, onScan, onCompanies }: { items: Item[]; onStep: (n: number) => void; onScan: () => void; onCompanies: () => void }) {
-  const [dismissed, setDismissed] = useState(() => load(DISMISS_KEY, false));
+export function SetupChecklist({
+  items,
+  onStep,
+  onScan,
+  onCompanies,
+  dismissed: hidden,
+  onDismiss,
+}: {
+  items: Item[];
+  onStep: (n: number) => void;
+  onScan: () => void;
+  onCompanies: () => void;
+  /** Kept by the caller (useSetupChecklistNotice), so it doesn't depend on when this mounted. */
+  dismissed?: boolean;
+  onDismiss?: () => void;
+}) {
+  const [own, setOwn] = useState(() => load(DISMISS_KEY, false));
+  const dismissed = hidden ?? own;
   const [expanded, setExpanded] = useState(false);
   const { done, total } = countDone(items);
   const complete = done === total;
@@ -151,17 +170,17 @@ export function SetupChecklist({ items, onStep, onScan, onCompanies }: { items: 
             </span>
           )}
         </span>
-        <button
-          type="button"
-          aria-label="Hide setup checklist"
-          className="inline-flex size-8 items-center justify-center rounded-md text-muted hover:bg-inset hover:text-ink"
+        <IconButton
+          size="sm"
+          label="Hide setup checklist"
           onClick={() => {
             save(DISMISS_KEY, true);
-            setDismissed(true);
+            setOwn(true);
+            onDismiss?.();
           }}
         >
           <X className="size-4" />
-        </button>
+        </IconButton>
       </div>
     );
   }
@@ -228,6 +247,19 @@ export function SetupChecklist({ items, onStep, onScan, onCompanies }: { items: 
   );
 }
 
+/** The checklist as a notice (low: it waits for a calm visit, one low notice a day). */
+export function useSetupChecklistNotice({ enabled, items, ...actions }: { enabled: boolean; items: Item[] } & Actions): Notice | null {
+  const [dismissed, setDismissed] = useState(() => load(DISMISS_KEY, false));
+  const { done, total } = countDone(items);
+  if (!enabled || (done === total && dismissed)) return null;
+  return {
+    id: "setup-checklist",
+    priority: PRIORITY.checklist,
+    tone: "info",
+    render: () => <SetupChecklist items={items} {...actions} dismissed={dismissed} onDismiss={() => setDismissed(true)} />,
+  };
+}
+
 /** Not set up yet: what RawJobs does, how far they got, and one clear next step. */
 export function SetupHero({ items, started, nextStep, onStep, onCompanies }: { items: Item[]; started: boolean; nextStep: number; onStep: (n: number) => void; onCompanies: () => void }) {
   const { done, total } = countDone(items);
@@ -235,7 +267,7 @@ export function SetupHero({ items, started, nextStep, onStep, onCompanies }: { i
     <Card className="overflow-hidden">
       <div className="flex flex-col gap-4 p-5 sm:flex-row sm:items-center sm:p-6">
         <div className="min-w-0 flex-1">
-          <h2 /* design-lint-ignore: weight moves into the type style in 6I */ className="type-subheading font-semibold">{started ? "Finish setting up your radar" : "Set up your radar"}</h2>
+          <h2 className="type-subheading">{started ? "Finish setting up your radar" : "Set up your radar"}</h2>
           <p className="mt-0.5 type-small text-muted">Pick the roles and places you want. RawJobs finds and ranks matching jobs across thousands of companies. Setup takes about 3 minutes.</p>
           <div className="mt-3 flex items-center gap-3">
             <ProgressBar done={done} total={total} className="w-40" />
@@ -310,7 +342,7 @@ export function NoMatches({ jobs, onStep, onCompanies }: { jobs: Job[]; onStep: 
     <Card className="p-5 sm:p-6">
       <div className="max-w-prose">
         <div>
-          <h2 /* design-lint-ignore: weight moves into the type style in 6I */ className="type-subheading font-semibold">No matches yet. Here's why.</h2>
+          <h2 className="type-subheading">No matches yet. Here's why.</h2>
           <p className="mt-1 type-small text-muted">
             Checked <b className="tabular font-semibold text-ink">{d.scanned.toLocaleString()}</b> open jobs: <b className="tabular font-semibold text-ink">{d.titleMiss.toLocaleString()}</b> had other
             job titles and <b className="tabular font-semibold text-ink">{d.locationMiss.toLocaleString()}</b> had the right title but were in other places.
@@ -366,24 +398,38 @@ export function NoMatches({ jobs, onStep, onCompanies }: { jobs: Job[]; onStep: 
   );
 }
 
-export function FailingBanner({ count, onOpen, className }: { count: number; onOpen: () => void; className?: string }) {
+const FAILING_SEEN_KEY = "rawjobs.failingDismissed";
+
+/** Phones: your companies that failed in the last scan (laptops show a chip in the header). Dismiss lasts until the next scan. */
+export function useFailingNotice({ enabled, count, runId, onOpen }: { enabled: boolean; count: number; runId: string | undefined; onOpen: () => void }): Notice | null {
+  const laptop = useMedia("(min-width: 1024px)");
+  const [seen, setSeen] = useState(() => load<string | null>(FAILING_SEEN_KEY, null));
+  if (!enabled || laptop || count <= 0 || !runId || seen === runId) return null;
+  const dismiss = () => {
+    save(FAILING_SEEN_KEY, runId);
+    setSeen(runId);
+  };
+  return { id: `failing:${runId}`, priority: PRIORITY.failingCompanies, tone: "warn", render: () => <FailingBanner count={count} onOpen={onOpen} onDismiss={dismiss} /> };
+}
+
+export function FailingBanner({ count, onOpen, onDismiss, className }: { count: number; onOpen: () => void; onDismiss?: () => void; className?: string }) {
   return (
-    <button
-      type="button"
-      onClick={onOpen}
-      className={cx(
-        className,
-        "flex w-full flex-wrap items-center gap-x-2.5 gap-y-1 rounded-md border border-warning/40 bg-warning-subtle/40 px-4 py-2.5 text-left type-small hover:bg-warning-subtle/60",
+    <div className={cx(className, "flex flex-col rounded-md border border-warning/40 bg-warning-subtle/40 sm:flex-row sm:items-center sm:pr-2")}>
+      <button type="button" onClick={onOpen} className="flex min-w-0 flex-1 flex-wrap items-center gap-x-2.5 gap-y-1 rounded-md px-4 py-2.5 text-left type-small hover:bg-warning-subtle/60">
+        <TriangleAlert className="size-4 shrink-0 text-warning-text" aria-hidden />
+        <span className="min-w-48 flex-1">
+          <b>
+            {count} compan{count === 1 ? "y" : "ies"}
+          </b>{" "}
+          couldn't be scanned last time. Usually the careers page moved.
+        </span>
+        <span className="pl-6.5 font-medium text-warning-text underline underline-offset-2 sm:pl-0">Review failing companies</span>
+      </button>
+      {onDismiss && (
+        <Button size="sm" variant="ghost" className="max-sm:mb-2 max-sm:ml-10 self-start sm:self-auto" onClick={onDismiss}>
+          Dismiss until next scan
+        </Button>
       )}
-    >
-      <TriangleAlert className="size-4 shrink-0 text-warning-text" />
-      <span className="min-w-48 flex-1">
-        <b>
-          {count} compan{count === 1 ? "y" : "ies"}
-        </b>{" "}
-        couldn't be scanned last time. Usually the careers page moved.
-      </span>
-      <span className="pl-6.5 font-medium text-warning-text underline underline-offset-2 sm:pl-0">Review failing companies</span>
-    </button>
+    </div>
   );
 }

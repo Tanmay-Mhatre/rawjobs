@@ -2,7 +2,9 @@
 import { cleanup, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { type Notice, PRIORITY } from "../src/app/notices";
 import { SetupChecklist } from "../src/components/Guidance";
+import { NoticeSlot, resetNoticeSession } from "../src/components/NoticeSlot";
 
 // "Setup complete" asks whether scans are scheduled; no server here.
 vi.mock("../src/lib/automation", () => ({ scheduleStatus: () => Promise.resolve({ installed: false }) }));
@@ -54,5 +56,48 @@ describe("SetupChecklist", () => {
   it("says Setup complete when every core step is done", () => {
     render(<SetupChecklist items={[item("roles", "Target roles", true), item("scan", "First scan", true)]} onStep={noop} onScan={noop} onCompanies={noop} />);
     expect(screen.getByText("Setup complete.")).toBeTruthy();
+  });
+});
+
+describe("NoticeSlot", () => {
+  const notice = (id: string, priority: number): Notice => ({ id, priority, tone: "warn", render: () => <p>Notice {id}</p> });
+  const three = [notice("scheduled", PRIORITY.scheduledMissed), notice("telegram", PRIORITY.telegramFailed), notice("failing", PRIORITY.failingCompanies)];
+  beforeEach(resetNoticeSession);
+
+  it('3 active → one visible + "2 more notices"', () => {
+    render(<NoticeSlot notices={three} />);
+    expect(screen.getByText("Notice scheduled")).toBeTruthy();
+    expect(screen.queryByText("Notice telegram")).toBeNull();
+    expect(screen.getByRole("button", { name: "2 more notices" }).getAttribute("aria-expanded")).toBe("false");
+  });
+
+  it("expanding lists the rest", async () => {
+    render(<NoticeSlot notices={three} />);
+    await userEvent.click(screen.getByRole("button", { name: "2 more notices" }));
+    const hide = screen.getByRole("button", { name: "Hide 2 more" });
+    expect(hide.getAttribute("aria-expanded")).toBe("true");
+    expect(document.getElementById(hide.getAttribute("aria-controls")!)!.textContent).toBe("Notice telegramNotice failing");
+  });
+
+  it("says 1 more notice for one", () => {
+    render(<NoticeSlot notices={three.slice(0, 2)} />);
+    expect(screen.getByRole("button", { name: "1 more notice" })).toBeTruthy();
+  });
+
+  it("exactly one live region", () => {
+    render(<NoticeSlot notices={[notice("page", PRIORITY.pageFailed), ...three]} />);
+    expect(screen.getAllByRole("status")).toHaveLength(1);
+    // A page that can't load is also read out at once.
+    expect(screen.getByRole("alert").textContent).toBe("Notice page");
+    cleanup();
+    render(<NoticeSlot notices={three} />);
+    expect(screen.getAllByRole("status")).toHaveLength(1);
+    expect(screen.queryByRole("alert")).toBeNull();
+  });
+
+  it("a blocking window pauses it, but a notice's dialog stays", () => {
+    render(<NoticeSlot paused notices={[{ ...three[0]!, dialog: <p>Its dialog</p> }]} />);
+    expect(screen.queryByText("Notice scheduled")).toBeNull();
+    expect(screen.getByText("Its dialog")).toBeTruthy();
   });
 });

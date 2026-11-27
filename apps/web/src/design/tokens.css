@@ -494,7 +494,7 @@
   --font-mono: "Geist Mono", ui-monospace, "SF Mono", Menlo, Consolas, monospace;
   --text-title: 600 1.5rem/1.875rem var(--font-sans);
   --text-heading: 600 1.25rem/1.5rem var(--font-sans);
-  --text-subheading: 500 1.125rem/1.5rem var(--font-sans);
+  --text-subheading: 600 1.125rem/1.5rem var(--font-sans);
   --text-body: 400 1rem/1.5rem var(--font-sans);
   --text-body-strong: 500 1rem/1.5rem var(--font-sans);
   --text-small: 400 0.875rem/1.3125rem var(--font-sans);

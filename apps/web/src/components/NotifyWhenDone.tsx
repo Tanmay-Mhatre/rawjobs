@@ -1,7 +1,9 @@
 import { Bell, BellOff, BellRing, LoaderCircle, X } from "lucide-react";
 import { useState } from "react";
 import type { TelegramStatus } from "../lib/automation";
+import { PRIORITY, type Notice } from "../app/notices";
 import type { ScanState } from "../lib/scan";
+import { useScanSelector } from "../lib/scanStore";
 import { Dialog } from "./Dialog";
 import { TelegramAlerts } from "./TelegramAlerts";
 import { IconButton as RjIconButton } from "./primitives";
@@ -108,7 +110,7 @@ export function TelegramSetupDialog({
       <Card className="relative max-h-[90vh] overflow-y-auto p-5 shadow-l3 sm:p-6">
         <div className="mb-4 flex items-start gap-3">
           <div className="min-w-0 flex-1">
-            <h2 /* design-lint-ignore: weight moves into the type style in 6I */ id="tg-setup-title" className="type-subheading font-semibold">
+            <h2 id="tg-setup-title" className="type-subheading">
               {title}
             </h2>
             <p className="mt-0.5 type-small text-muted">{intro}</p>
@@ -130,16 +132,27 @@ export function TelegramSetupDialog({
   );
 }
 
-/** After a scan: a Telegram message that couldn't be sent, and what to do. (A sent one is a toast.) */
-export function NotifyFailed({ scan }: { scan: ScanState }) {
-  const result = scan.notify?.result;
-  if (scan.phase === "running" || !result || result === "sent") return null;
+/**
+ * After a scan: a Telegram message that couldn't be sent, and what to do. (A sent one is a toast.)
+ * Dismiss hides it for this scan; the next scan's result shows again.
+ */
+export function useNotifyFailedNotice(): Notice | null {
+  const running = useScanSelector((s) => s.phase === "running");
+  const result = useScanSelector((s) => s.notify?.result);
+  const startedAt = useScanSelector((s) => s.startedAt);
+  const [dismissed, setDismissed] = useState<string | null>(null);
+  const key = `${startedAt ?? ""}:${result}`;
+  if (running || !result || result === "sent" || dismissed === key) return null;
+  return { id: "telegram-failed", priority: PRIORITY.telegramFailed, tone: "danger", at: startedAt, render: () => <NotifyFailed result={result} onDismiss={() => setDismissed(key)} /> };
+}
+
+function NotifyFailed({ result, onDismiss }: { result: string; onDismiss: () => void }) {
   const reason = result.replace(/^failed: /, "");
   return (
     <Card className="px-4 py-2.5 type-small">
-      <p className="flex flex-wrap items-center gap-x-2 gap-y-1" role="alert">
-        <X className="size-4 shrink-0 text-danger-text" />
-        <span className="min-w-0 flex-1">
+      <p className="flex flex-wrap items-center gap-x-2 gap-y-1">
+        <X className="size-4 shrink-0 text-danger-text max-sm:hidden" aria-hidden />
+        <span className="min-w-0 basis-full sm:basis-0 sm:flex-1">
           <span className="text-danger-text">Couldn't send the Telegram message.</span>{" "}
           <span className="text-muted">
             {result === "off" ? "Telegram isn't connected yet." : "Check that Telegram is still connected and send a test message."} Your results are on the Radar either way.
@@ -147,6 +160,9 @@ export function NotifyFailed({ scan }: { scan: ScanState }) {
         </span>
         <Button size="sm" onClick={toTelegramSettings}>
           {result === "off" ? "Set up Telegram" : "Open Telegram settings"}
+        </Button>
+        <Button size="sm" variant="ghost" onClick={onDismiss}>
+          Dismiss
         </Button>
       </p>
       {result !== "off" && (

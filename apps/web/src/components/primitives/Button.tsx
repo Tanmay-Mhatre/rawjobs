@@ -1,4 +1,4 @@
-import type { ButtonHTMLAttributes, ReactNode } from "react";
+import type { AnchorHTMLAttributes, ButtonHTMLAttributes, ReactNode } from "react";
 import { cx } from "../../lib/cx";
 import { Kbd } from "./Kbd";
 
@@ -48,6 +48,26 @@ export function IconButton({ label, shortcut, tip = "below", variant = "quiet", 
       {children}
       <Tooltip label={label} shortcut={shortcut} side={tip} />
     </button>
+  );
+}
+
+export type IconLinkProps = Omit<AnchorHTMLAttributes<HTMLAnchorElement>, "children" | "aria-label" | "target" | "rel" | "href"> & {
+  href: string | undefined;
+  /** Where it goes, verb first, saying it opens a new tab ("Open Careem careers page (opens in a new tab)"). */
+  label: string;
+  variant?: ButtonVariant;
+  size?: "md" | "sm";
+  tip?: "below" | "above";
+  children: ReactNode;
+};
+
+/** An icon-only link to another site, styled as an icon button. Always opens in a new tab. */
+export function IconLink({ href, label, tip = "below", variant = "quiet", size, className, children, ...rest }: IconLinkProps) {
+  return (
+    <a href={href} target="_blank" rel="noreferrer" aria-label={label} className={buttonClass(variant, size, cx("rj-btn--icon", className))} {...rest}>
+      {children}
+      <Tooltip label={label} side={tip} />
+    </a>
   );
 }
 
