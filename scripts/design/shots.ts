@@ -161,6 +161,12 @@ const clickView = (name: RegExp) => async (page: Page) => {
   await page.getByRole("tab", { name }).first().click();
 };
 
+/** The interviewing job in the demo Pipeline. */
+const GROWTH = "Senior Product Manager, Growth";
+/** The demo tracking state with one contact added to the tracked job titled `title`. */
+const withContact = (title: string, contact: Record<string, unknown>) =>
+  Object.fromEntries(Object.entries(demo.USER_STATE).map(([id, e]) => [id, e.snapshot.title === title ? { ...e, contacts: [contact] } : e]));
+
 const SCREENS: Screen[] = [
   { id: "radar", what: "Radar, All view (default)", scenario: "demo", hash: "#radar", ready: strong },
   {
@@ -279,7 +285,9 @@ const SCREENS: Screen[] = [
     act: async (page) => {
       await page.getByRole("button", { name: strong, exact: true }).first().click();
       const dialog = page.getByRole("dialog");
-      await dialog.getByRole("button", { name: "Not interested" }).click();
+      // Not interested is in the More menu.
+      await dialog.getByRole("button", { name: "More job actions" }).click();
+      await page.getByRole("menuitem", { name: /^Not interested/ }).click();
       await dialog.getByRole("button", { name: "Location" }).click();
       await dialog.getByRole("button", { name: "Location" }).scrollIntoViewIfNeeded();
     },
@@ -299,6 +307,33 @@ const SCREENS: Screen[] = [
     },
   },
   { id: "pipeline", what: "Pipeline", scenario: "demo", hash: "#pipeline", ready: strong },
+  {
+    id: "toast-in-dialog",
+    viewportOnly: true,
+    what: "Tracked job open, remove its one contact: the Undo toast shows inside the dialog, clickable above the backdrop",
+    scenario: "demo",
+    hash: "#pipeline",
+    ready: strong,
+    storage: { "rawjobs.state.v1": withContact(GROWTH, { id: "c1", name: "Priya Nair", role: "recruiter" }) },
+    act: async (page) => {
+      // Phones show one Pipeline column at a time.
+      const column = page.getByRole("group", { name: "Pipeline column" }).getByRole("button", { name: /^Interviewing/ });
+      if (await column.isVisible()) await column.click();
+      await page.getByRole("button", { name: GROWTH, exact: true }).filter({ visible: true }).first().click();
+      const dialog = page.getByRole("dialog");
+      await dialog.waitFor();
+      const people = dialog.getByRole("tab", { name: /^People/ });
+      if (await people.isVisible()) await people.click();
+      await dialog.getByRole("button", { name: "Remove Priya Nair from this job" }).click();
+      const undo = dialog.getByRole("button", { name: "Undo" });
+      await undo.waitFor();
+      // Inside the modal, so not inert: the page's own hit test lands on Undo, not the backdrop.
+      const hit = await page.evaluate<boolean>(
+        `(() => { const b = [...document.querySelectorAll("dialog button")].find((e) => e.textContent.trim() === "Undo"); const r = b.getBoundingClientRect(); return document.elementFromPoint(r.x + r.width / 2, r.y + r.height / 2) === b; })()`,
+      );
+      if (!hit) throw new Error("the toast's Undo isn't the element under its own centre");
+    },
+  },
   {
     id: "radar-salary",
     what: "My companies sorted by salary (no folding): pounds first by yearly pay, then euros, then the hourly US-dollar contract, then no pay",

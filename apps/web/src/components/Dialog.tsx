@@ -1,4 +1,5 @@
 import { useEffect, useRef, useLayoutEffect, type ReactNode } from "react";
+import { ToastHost } from "./Toast";
 import { cx } from "./ui";
 
 /**
@@ -98,6 +99,8 @@ export function Dialog({
       }}
     >
       {children}
+      {/* Last, so toasts fired while this is open are inside the modal (not inert) and Tab reaches Undo. */}
+      <ToastHost />
     </dialog>
   );
 }

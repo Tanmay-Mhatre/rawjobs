@@ -3,7 +3,7 @@ import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-li
 import { useState } from "react";
 import { afterEach, describe, expect, it, onTestFinished, vi } from "vitest";
 
-vi.mock("../src/components/Toast", () => ({ toast: vi.fn() }));
+vi.mock("../src/components/Toast", () => ({ toast: vi.fn(), ToastHost: () => null }));
 import { contactText, filterTimeline, knownPeople, pasteField, timeline, touchLine } from "../src/components/pipeline/detail";
 import { JobTracking } from "../src/components/pipeline/JobTracking";
 import { PeopleProvider } from "../src/components/pipeline/PeopleContext";

@@ -4,7 +4,7 @@ import userEvent from "@testing-library/user-event";
 import { useState } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-vi.mock("../src/components/Toast", () => ({ toast: vi.fn() }));
+vi.mock("../src/components/Toast", () => ({ toast: vi.fn(), ToastHost: () => null }));
 vi.mock("../src/lib/clipboard", () => ({ copyText: vi.fn(async () => true) }));
 import { MessageDrafts } from "../src/components/referral/MessageDrafts";
 import { TalkToSomeone } from "../src/components/referral/TalkToSomeone";

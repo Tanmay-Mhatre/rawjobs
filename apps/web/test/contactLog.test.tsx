@@ -4,7 +4,7 @@ import userEvent from "@testing-library/user-event";
 import { useState } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-vi.mock("../src/components/Toast", () => ({ toast: vi.fn() }));
+vi.mock("../src/components/Toast", () => ({ toast: vi.fn(), ToastHost: () => null }));
 import { JobTracking } from "../src/components/pipeline/JobTracking";
 import { JobCard } from "../src/components/radar/JobCard";
 import { TalkToSomeone } from "../src/components/referral/TalkToSomeone";
