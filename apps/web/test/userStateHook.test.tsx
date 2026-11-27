@@ -114,3 +114,18 @@ describe("saving to your RawJobs folder", () => {
     await waitFor(() => expect(result.current.state.a!.activities!.map((t) => t.id).sort()).toEqual(["t1", "t2", "t3"]));
   });
 });
+
+describe("restore", () => {
+  it("restore writes the entry back byte-identical", () => {
+    const before = entry({ history: [{ status: "applied", at: "2026-10-10T09:00:00.000Z" }], followUp: "2026-10-30", followUpPicked: true });
+    localStorage.setItem("rawjobs.state.v1", JSON.stringify({ a: before }));
+    const { result } = renderHook(() => useUserState());
+    const job = { id: "a", ...snapshot };
+    act(() => result.current.update(job, { status: undefined }));
+    expect(result.current.state.a!.status).toBeUndefined();
+    act(() => result.current.restore("a", before));
+    expect(JSON.stringify(result.current.state.a)).toBe(JSON.stringify(before));
+    act(() => result.current.restore("a", null));
+    expect(result.current.state).not.toHaveProperty("a");
+  });
+});

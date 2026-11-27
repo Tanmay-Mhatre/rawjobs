@@ -69,7 +69,8 @@ describe("keeping entries", () => {
     expect(withTouch?.activities).toHaveLength(1);
     const withPerson = applyPatch(entry({ contacts: [{ id: "p", name: "Priya" }] }), job, { status: undefined });
     expect(withPerson?.contacts).toHaveLength(1);
-    expect(applyPatch(entry(), job, { status: undefined })).toBeNull();
+    // Never on the Pipeline (only Not interested): nothing left to keep.
+    expect(applyPatch(entry({ status: "dismissed" }), job, { status: undefined })).toBeNull();
   });
 });
 

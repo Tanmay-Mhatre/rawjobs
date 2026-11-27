@@ -223,6 +223,7 @@ export function TrackedJobDialog({
   minScore,
   onClose,
   onUpdate,
+  onRemove,
   onApply,
   onOpenFull,
 }: {
@@ -232,6 +233,8 @@ export function TrackedJobDialog({
   minScore?: number;
   onClose: () => void;
   onUpdate: (patch: EntryPatch, job?: JobFieldsValue) => void;
+  /** The Stage select's "Remove from Pipeline": the board's remove, with its Undo toast. */
+  onRemove?: () => void;
   onApply?: (job: Job) => void;
   /** Close this and open the Radar's view of `job`. */
   onOpenFull?: (job: Job) => void;
@@ -263,7 +266,11 @@ export function TrackedJobDialog({
           </div>
           <label htmlFor="tracked-status" className="order-last flex basis-full items-center gap-2 type-small text-muted sm:order-none sm:basis-auto">
             Stage
-            <Select id="tracked-status" value={entry.status ?? ""} onChange={(e) => onUpdate({ status: (e.target.value || undefined) as Status | undefined })}>
+            <Select
+              id="tracked-status"
+              value={entry.status ?? ""}
+              onChange={(e) => (e.target.value ? onUpdate({ status: e.target.value as Status }) : onRemove ? onRemove() : onUpdate({ status: undefined }))}
+            >
               {PIPELINE.map((p) => (
                 <option key={p} value={p}>
                   {STATUS_LABEL[p]}
