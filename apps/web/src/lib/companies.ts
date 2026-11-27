@@ -1,9 +1,10 @@
 import { careersUrl, companyKey } from "@rawjobs/core/company-key";
-import { type CompanyRef, SUPPORTED } from "@rawjobs/core/directory-search";
+import { type CompanyRef, SUPPORTED } from "@rawjobs/core/directory-boards";
 import { rowId, type CompanyRow, type Draft } from "./setup";
 
-// The directory search lives in core (shared with the local server): kept importable from here.
-export { ATS_LABEL, type BoardGroup, type CompanyRef, countCompanies, groupBoards, SUPPORTED } from "@rawjobs/core/directory-search";
+// The hiring systems and board grouping live in core (shared with the local server). Not the search
+// index (directory-search): it loads with the pages that search companies, not when the dashboard opens.
+export { ATS_LABEL, type BoardGroup, type CompanyRef, countCompanies, groupBoards, SUPPORTED } from "@rawjobs/core/directory-boards";
 
 /** "Review failing companies" links: My companies, sorted by Needs attention. */
 export const FAILING_HASH = "companies?sort=attention";

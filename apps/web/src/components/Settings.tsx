@@ -1,12 +1,12 @@
 import { INDUSTRY_BY_ID } from "@rawjobs/core/catalog/industries";
 import { groupPlaces } from "@rawjobs/core/catalog/places";
 import { ArrowRight, Check, ChevronLeft, ChevronRight, Download, Layers, RefreshCw, RotateCcw, Save, Upload, X } from "lucide-react";
-import { Fragment, useEffect, useRef, useState, type MouseEvent, type ReactNode } from "react";
+import { Fragment, useEffect, useMemo, useRef, useState, type MouseEvent, type ReactNode } from "react";
 import { canRunLocally, useDirectorySize } from "../lib/data";
 import { DealbreakersStep } from "./Dealbreakers";
 import { displayPlace, roughCount } from "../lib/format";
 import { draftToConfig, officePlaces, saveBlockers, saveConfig, type Draft } from "../lib/setup";
-import type { Suggestions } from "../lib/suggest";
+import { buildSuggestions } from "../lib/suggest";
 import { ResumeStep } from "../setup/ResumeStep";
 import { offerWhat, ruleKey, ruleLabel, type HideRule } from "../lib/notForMe";
 import type { Prefs } from "../lib/prefs";
@@ -53,7 +53,6 @@ type Props = {
   onImport: (s: UserState, prefs?: Partial<Prefs>) => void;
   /** Stop a Not interested rule hiding jobs. */
   onRemoveRule?: (rule: HideRule) => void;
-  suggest: Suggestions;
   resumeText: string;
   saveResume: (text: string) => Promise<{ ok: true } | { ok: false; error: string }>;
   removeResume: () => Promise<{ ok: true } | { ok: false; error: string }>;
@@ -95,7 +94,6 @@ export function Settings({
   prefs,
   onImport,
   onRemoveRule,
-  suggest,
   resumeText,
   saveResume,
   removeResume,
@@ -104,6 +102,8 @@ export function Settings({
   canScan = false,
   onCheckEvery,
 }: Props) {
+  // Built here, not in App: the resume reader and its word lists load with this page, not at start.
+  const suggest = useMemo(() => buildSuggestions(resumeText, draft.aiProfile), [resumeText, draft.aiProfile]);
   const scanPlanNow = useScanPlan(scanning);
   const [status, setStatus] = useState<{ tone: "ok" | "bad"; text: string; detail?: string; retry?: boolean } | null>(null);
   const [saving, setSaving] = useState(false);

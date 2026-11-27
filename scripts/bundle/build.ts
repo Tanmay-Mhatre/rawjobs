@@ -40,7 +40,7 @@ const nodeOnly = nodeOnlyInEntry(join(root, "apps/web/dist"));
 if (nodeOnly) fail(`The dashboard loads Node-only code at start (${nodeOnly}). Import it lazily (await import()) or keep it out of what apps/web imports.`);
 // What the page parses before it shows anything. Lazy pages and lazy imports keep it down; the limit
 // trips if they slip back into the first load.
-const FIRST_LOAD_LIMIT_KB = 1000;
+const FIRST_LOAD_LIMIT_KB = 900;
 const firstLoadKb = entryBytes(join(root, "apps/web/dist")) / 1000;
 console.log(`Dashboard first-load JS: ${firstLoadKb.toFixed(1)} KB (limit ${FIRST_LOAD_LIMIT_KB} KB)`);
 if (firstLoadKb > FIRST_LOAD_LIMIT_KB)

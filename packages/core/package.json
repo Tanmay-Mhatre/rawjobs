@@ -42,6 +42,7 @@
     "./network/paste": "./src/network/paste.ts",
     "./company-search": "./src/company-search.ts",
     "./directory-search": "./src/directory-search.ts",
+    "./directory-boards": "./src/directory-boards.ts",
     "./directory-browse": "./src/directory-browse.ts"
   },
   "dependencies": {
