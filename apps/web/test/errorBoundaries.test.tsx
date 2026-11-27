@@ -54,4 +54,10 @@ describe("the job drawer's error boundary", () => {
     expect(document.querySelector("dialog")).toBeNull();
     expect(screen.queryByText("Something went wrong on this job")).toBeNull();
   });
+
+  it("the error card has its own Close, since JobDetail's close button broke with it (phones have no Esc)", () => {
+    render(<Page />);
+    fireEvent.click(screen.getByRole("button", { name: "Close", hidden: true }));
+    expect(document.querySelector("dialog")).toBeNull();
+  });
 });
