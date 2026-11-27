@@ -163,7 +163,7 @@ export function ServerNotices({ onRadar = false, star }: { onRadar?: boolean; st
     <section role="status" aria-labelledby="went-back-title" className="mb-3 flex items-start gap-4 rounded-md border border-line bg-raised p-4">
       <Anchor kind="warn" />
       <div className="min-w-0 flex-1">
-        <h2 id="went-back-title" className="type-subheading font-semibold text-balance">
+        <h2 /* design-lint-ignore: weight moves into the type style in 6I */ id="went-back-title" className="type-subheading font-semibold text-balance">
           The update to {last.to} didn't start
         </h2>
         <p className="mt-1 flex items-center gap-1.5 type-small text-muted">

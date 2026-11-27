@@ -89,9 +89,10 @@ export function Tray({ visit, actions }: { visit: Visit; actions: PackActions & 
   if (!visit.touched) return null;
   const last = visit.hist.at(-1);
   return (
-    <section ref={lift} aria-label="Last change" className="sticky bottom-18 z-20 rounded-md border border-line bg-overlay shadow-l3 md:bottom-4">
+    <section ref={lift} aria-label="Last change" className="sticky bottom-18 z-sticky rounded-md border border-line bg-overlay shadow-l3 md:bottom-4">
       <div className="flex items-center gap-4 py-2 pr-2 pl-4">
         <span className={cx("min-w-0 flex-1 truncate type-small", !last && "text-muted")}>{last ? last.text : "Nothing left to undo"}</span>
+        {/* design-lint-ignore-next-line: disabled state, reviewed in 6B */}
         <Button size="sm" aria-disabled={!last} title={last ? `Undo: ${last.text}` : "Nothing to undo"} className="aria-disabled:opacity-50" onClick={() => last && actions.undo()}>
           <Undo2 className="size-3.5" /> Undo
         </Button>

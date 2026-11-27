@@ -71,7 +71,7 @@ export function Combobox({ label, placeholder, search, onPick, onFreeText }: Pro
       />
       {open && q.trim() && (
         // biome-ignore lint/a11y/noNoninteractiveElementToInteractiveRole: ARIA combobox: focus stays in the input and options are reached with aria-activedescendant
-        <ul id={listId} role="listbox" className="absolute inset-x-0 top-12 z-20 max-h-72 overflow-y-auto rounded-md border border-line bg-raised p-1 shadow-l3">
+        <ul id={listId} role="listbox" className="absolute inset-x-0 top-12 z-menu max-h-72 overflow-y-auto rounded-md border border-line bg-raised p-1 shadow-l3">
           {items.length === 0 ? (
             <li className="px-3 py-2 type-small text-muted">
               {onFreeText ? (

@@ -1,5 +1,5 @@
 import type { ButtonHTMLAttributes, ReactNode, SelectHTMLAttributes } from "react";
-import { Button as RjButton, IconButton as RjIconButton, Kbd as RjKbd, type ButtonVariant } from "./primitives";
+import { Button as RjButton, IconButton as RjIconButton, Kbd as RjKbd, type ButtonVariant, useRovingRadio } from "./primitives";
 import { cx } from "../lib/cx";
 
 export { cx } from "../lib/cx";
@@ -31,12 +31,18 @@ export function Select({ className, children, ...rest }: SelectHTMLAttributes<HT
 }
 
 export function Segmented<T extends string | number>({ value, options, onChange, label }: { value: T; options: { value: T; label: string }[]; onChange: (v: T) => void; label: string }) {
+  const { itemProps } = useRovingRadio(
+    options.map((o) => o.value),
+    value,
+    onChange,
+  );
   return (
     <div role="radiogroup" aria-label={label} className="inline-flex h-9 rounded-md border border-line bg-raised p-0.5">
-      {options.map((o) => (
+      {options.map((o, i) => (
         // biome-ignore lint/a11y/useSemanticElements: an ARIA role on purpose: the native element (fieldset, output, input, hr, ul) would change layout or behaviour here
         <button
           key={String(o.value)}
+          {...itemProps(i)}
           type="button"
           role="radio"
           aria-checked={o.value === value}
@@ -52,6 +58,7 @@ export function Segmented<T extends string | number>({ value, options, onChange,
 
 export function Toggle({ checked, onChange, disabled, children }: { checked: boolean; onChange: (v: boolean) => void; disabled?: boolean; children: ReactNode }) {
   return (
+    // design-lint-ignore-next-line: disabled state, reviewed in 6B
     <label className={cx("inline-flex select-none items-center gap-2 type-small text-muted", disabled ? "cursor-not-allowed opacity-50" : "cursor-pointer hover:text-ink")}>
       <input type="checkbox" checked={checked} disabled={disabled} onChange={(e) => onChange(e.target.checked)} className="size-4 accent-ink" />
       {children}

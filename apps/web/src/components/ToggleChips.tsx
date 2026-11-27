@@ -59,7 +59,7 @@ export function ToggleChips({ options, selected, onChange, label, tone = "accent
           >
             {active ? <Check className="size-3.5" /> : <Plus className="size-3.5" />}
             {format(v)}
-            {note?.(v) && <span className="font-normal opacity-70">· {note(v)}</span>}
+            {note?.(v) && <span /* design-lint-ignore: muted state, reviewed in 6B */ className="font-normal opacity-70">· {note(v)}</span>}
           </button>
         );
       })}
