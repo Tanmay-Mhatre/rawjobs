@@ -25,6 +25,7 @@ const REASONS: [RegExp, string][] = [
     "Another program, often antivirus or a backup app, was using RawJobs' files when the scan tried to save. Your earlier results are safe. It tries again at the next scheduled time, or press Scan now.",
   ],
   [/\bENOSPC\b/, "Your disk is full. Free up some space, then press Scan now."],
+  [/^Your config can't be read/, "RawJobs couldn't read your settings file. Open Settings, check your last change and save; the next scan tries again."],
   [/^Ran far past its time limit/, "It ran far past its time limit, so RawJobs stopped it. What it checked is saved; the next scan carries on from there."],
   [/^Stopped before the end/, "It ran past its time limit, or the computer went to sleep or shut down. What it checked is saved; the next scan carries on from there."],
   [/\b(ENOTFOUND|ETIMEDOUT|ECONNRESET|EAI_AGAIN|ENETUNREACH)\b|fetch failed/, "No internet connection during the scan. It tries again at the next scheduled time."],

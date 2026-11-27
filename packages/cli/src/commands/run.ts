@@ -259,8 +259,22 @@ export async function cmdRun(args: string[]): Promise<number> {
   lowerPriority();
   if (values.progress === "ndjson") return runNdjson(values);
   const scope = parseScope(values.scope);
-  const { config, path } = loadConfig(values.config);
   const dataDir = resolve(values.data);
+  let loaded: ReturnType<typeof loadConfig>;
+  try {
+    loaded = loadConfig(values.config);
+  } catch (err) {
+    // A scheduled scan with a config it can't read: say so in Settings' run list, and on Telegram
+    // when it's set up (its token lives apart from the config), since nobody sees this output.
+    if (values.scheduled) {
+      const now = new Date().toISOString();
+      recordScheduledRun(dataDir, { startedAt: now, finishedAt: now, scope, ok: false, error: `Your config can't be read: ${(err as Error).message}` });
+      const secrets = telegramSecrets();
+      if (values.notify && secrets.token && secrets.chatId) await sendTelegram(scheduledFailedMessage(), secrets).catch(() => {});
+    }
+    throw err;
+  }
+  const { config, path } = loaded;
   console.error(`Config: ${path}`);
 
   const startedAt = new Date().toISOString();

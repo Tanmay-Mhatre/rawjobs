@@ -7,7 +7,7 @@ import { join, resolve } from "node:path";
 import { createInterface } from "node:readline/promises";
 import { parseArgs } from "node:util";
 import { defaultDataDir, rawjobsHome } from "@rawjobs/core";
-import { APP_VERSION, BUNDLED, CODE_ROOT, cliCommand } from "@rawjobs/core";
+import { APP_VERSION, BUNDLED, CODE_ROOT, cliCommand, type Log, openLog, teeConsole } from "@rawjobs/core";
 import { DAILY_SCHEDULER_NAMES, removeDailySummary, removeSchedule, SCHEDULER_NAMES } from "@rawjobs/core";
 import { acquireLock, type Lock, scanLockHeld, writeFileAtomic } from "@rawjobs/core";
 import { compareVersions } from "@rawjobs/core/release";
@@ -153,25 +153,11 @@ export function watchEventLoop(log: (line: string) => void = console.log): () =>
   };
 }
 
-/** Send this process's output to a log file too (kept under 5 MB: the old one moves to .1). */
-export function logTo(file: string): void {
-  mkdirSync(resolve(file, ".."), { recursive: true });
-  try {
-    if (statSync(file).size > 5_000_000) renameSync(file, `${file}.1`);
-  } catch {
-    // no log yet
-  }
-  for (const stream of [process.stdout, process.stderr]) {
-    const write = stream.write.bind(stream);
-    stream.write = ((chunk: string | Uint8Array, ...rest: unknown[]) => {
-      try {
-        appendFileSync(file, `${new Date().toISOString()} ${String(chunk)}`);
-      } catch {
-        // a full disk shouldn't stop the server
-      }
-      return (write as (c: string | Uint8Array, ...r: unknown[]) => boolean)(chunk, ...rest);
-    }) as typeof stream.write;
-  }
+/** Send this process's output to a log file too (rotated at 5 MB: the old one moves to .1, .2). */
+export function logTo(file: string): Log {
+  const log = openLog(file);
+  teeConsole(log);
+  return log;
 }
 
 export function openBrowser(target: string) {

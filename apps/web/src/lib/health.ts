@@ -13,6 +13,8 @@ export type Health = {
   trackingRev?: number;
   update?: { version: string } | null;
   startLink?: boolean;
+  /** The server crashed several times just now, so it started without its background work for a while. */
+  safeMode?: boolean;
   platform?: string;
   home?: string;
   pid?: number;

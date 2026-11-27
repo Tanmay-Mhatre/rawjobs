@@ -508,6 +508,11 @@ export function Settings({
                 </p>
               </div>
             </Section>
+            {canRunLocally && (
+              <Section id="diagnostics" title="Diagnostics" hint="Something not working? Save a file that shows what RawJobs was doing, to attach to a GitHub issue.">
+                <Diagnostics />
+              </Section>
+            )}
             <Section id="tips" title="Tips you've closed" hint="The setup checklist on the Radar and the suggestions to go back to past employers.">
               <ShowTipsAgain />
             </Section>
@@ -634,6 +639,67 @@ function SettingCheck({ checked, onChange, label, hint, state, className }: { ch
 }
 
 /** Bring back the tips you've closed; each shows again where it applies. */
+/**
+ * Settings > Data & privacy: save a diagnostics file (rawjobs doctor --zip). It stays on this computer:
+ * RawJobs shows it in your file manager, and you decide whether to attach it to an issue.
+ */
+function Diagnostics() {
+  // Asked once: the notice is for a server that restarted in safe mode before this page opened.
+  const [safeMode, setSafeMode] = useState(false);
+  useEffect(() => {
+    let live = true;
+    fetch("/api/health", { cache: "no-store" })
+      .then((r) => r.json() as Promise<{ safeMode?: boolean }>)
+      .then((h) => live && setSafeMode(!!h.safeMode))
+      .catch(() => {});
+    return () => {
+      live = false;
+    };
+  }, []);
+  const [state, setState] = useState<{ kind: "idle" | "saving" } | { kind: "saved"; path: string; problems: number } | { kind: "error" }>({ kind: "idle" });
+  const save = async () => {
+    setState({ kind: "saving" });
+    try {
+      const res = await fetch("/api/doctor", { method: "POST" });
+      const out = (await res.json()) as { zip?: string; checks?: { status: string }[] };
+      if (!res.ok || !out.zip) throw new Error("no file");
+      setState({ kind: "saved", path: out.zip, problems: out.checks?.filter((c) => c.status !== "ok").length ?? 0 });
+    } catch {
+      setState({ kind: "error" });
+    }
+  };
+  return (
+    <div className="space-y-2">
+      {safeMode && (
+        <p role="status" className="type-small text-danger-text">
+          RawJobs restarted after crashing several times, so it started without its background work for 30 minutes. A diagnostics file helps find out why.
+        </p>
+      )}
+      <div className="flex flex-wrap items-center gap-3">
+        <Button size="sm" onClick={() => void save()} disabled={state.kind === "saving"}>
+          <Download className="size-3.5" aria-hidden="true" />
+          {state.kind === "saving" ? "Saving…" : "Save a diagnostics file"}
+        </Button>
+        {state.kind === "saved" && (
+          <span role="status" className="inline-flex items-center gap-1 type-small text-muted">
+            <Check className="size-3.5 text-success-text" aria-hidden="true" /> Saved{state.problems ? `, with ${state.problems} thing${state.problems === 1 ? "" : "s"} to look at` : ""}. It's open in
+            your file manager.
+          </span>
+        )}
+        {state.kind === "error" && (
+          <span role="alert" className="type-small text-danger-text">
+            Couldn't save the file. Try again; if it keeps failing, run rawjobs doctor in a terminal.
+          </span>
+        )}
+      </div>
+      <p className="type-small text-muted">
+        Your logs and what RawJobs checked, with your name, folders, tokens, emails and companies taken out. Never your resume, profile, tracking or jobs. Nothing is uploaded: you choose whether to
+        attach it to an issue.
+      </p>
+    </div>
+  );
+}
+
 function ShowTipsAgain() {
   const [done, setDone] = useState(false);
   return (

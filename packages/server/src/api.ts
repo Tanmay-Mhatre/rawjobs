@@ -67,6 +67,10 @@ export type ApiOptions = {
   updater?: Pick<Updater, "route" | "updating" | "updateHint">;
   /** Whether rawjobs://open starts RawJobs on this computer (/api/health's startLink). Default: no. */
   startLink?: () => boolean;
+  /** Whether the server started in safe mode after crashing several times (/api/health's safeMode). Default: no. */
+  safeMode?: () => boolean;
+  /** Show a saved file in the file manager (the diagnostics file). Default: nothing. */
+  reveal?: (path: string) => void;
   /** The Downloads watcher's view of the computer (tests point it at a temp folder). Default: the real one. */
   watchDeps?: Partial<WatchDeps>;
   /** The LinkedIn file reminder's clock and Telegram (tests use a fake clock). Default: the real ones. */
@@ -622,6 +626,7 @@ Stopped after ${Math.round(timeoutMs / 1000)} s without finishing.`.trim(),
         trackingRev: trackingRev(),
         update: opts.updater?.updateHint() ?? null,
         startLink: opts.startLink?.() ?? false,
+        safeMode: opts.safeMode?.() ?? false,
         platform: process.platform,
         // Which RawJobs folder this server is for (an id, not the path) and its process: an update
         // stops every server of its folder before it starts the new version.
@@ -756,6 +761,17 @@ Stopped after ${Math.round(timeoutMs / 1000)} s without finishing.`.trim(),
     const alert = url.match(/^\/api\/alerts\/telegram\/(token|connect|test|on|off|forget)$/);
     if (alert && req.method === "POST") return await respondJson(res, ["alerts", "telegram", alert[1]!], await readBody(req));
     // Reading the scheduled tasks runs PowerShell on Windows: kept for 5 minutes.
+    if (url === "/api/doctor" && req.method === "POST") {
+      // A redacted diagnostics file in logs/, shown in the file manager. Nothing is uploaded.
+      const r = await collect(["doctor", "--json", "--zip", "--data", dataDir], undefined, 120_000);
+      try {
+        const out = JSON.parse(r.stdout.trim()) as { zip?: string };
+        if (out.zip) opts.reveal?.(out.zip);
+      } catch {
+        // respondOutput says what went wrong
+      }
+      return respondOutput(res, r);
+    }
     if (url === "/api/schedule" && req.method === "GET") return await respondRead(res, () => readCli("schedule", 5 * 60_000, ["schedule", "status", "--data", dataDir]));
     if (url === "/api/schedule" && req.method === "POST") return await respondJson(res, ["schedule", "install", "--stdin", "--data", dataDir], await readBody(req));
     if (url === "/api/schedule" && req.method === "DELETE") return await respondJson(res, ["schedule", "remove", "--data", dataDir]);
