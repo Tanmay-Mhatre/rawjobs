@@ -9,7 +9,7 @@ import { clearFresh, isAdded, type NextUp, packMembers, packState, revealNext, u
 import { load, save } from "../../lib/storage";
 import { settingsHash } from "../settings/registry";
 import { AddAll, AddButton } from "../CompanyButtons";
-import { buttonClass, Chip } from "../primitives";
+import { buttonClass, Chip, IconButton } from "../primitives";
 import { Button, Card, cx } from "../ui";
 import { Monogram, SuggestionCard } from "./SuggestionCard";
 import { type Lens, MatchingStatus, openingLens, SuggestSkeleton } from "./SuggestSkeleton";
@@ -799,15 +799,9 @@ function LikeLens({
                 <Monogram name={companyLabel(c!)} size="sm" />
                 <span className="type-label">{companyLabel(c!)}</span>
                 <AddButton added={watched.has(c!.key)} onAdd={() => void onAddMany([c!])} onRemove={() => onRemoveMany([c!.key])} name={companyLabel(c!)} />
-                <button
-                  type="button"
-                  aria-label={`Don't suggest ${companyLabel(c!)}`}
-                  title="Don't suggest"
-                  className="inline-flex size-7 items-center justify-center rounded-md text-muted hover:bg-inset hover:text-ink"
-                  onClick={() => onDismiss(c!.key)}
-                >
+                <IconButton size="sm" label={`Don't suggest ${companyLabel(c!)}`} onClick={() => onDismiss(c!.key)}>
                   <X className="size-4" />
-                </button>
+                </IconButton>
               </li>
             ))}
           </ul>
@@ -1059,15 +1053,9 @@ export function PastEmployers({ names, suggested = [], onChange }: { names: stri
       {names.map((n) => (
         <span key={n} className="rj-chip cursor-default gap-1 pr-1">
           {n}
-          <button
-            type="button"
-            aria-label={`Remove ${n}`}
-            title={`Remove ${n}`}
-            className="inline-flex size-6 items-center justify-center rounded-md hover:bg-inset hover:text-ink"
-            onClick={() => onChange(names.filter((x) => x !== n))}
-          >
+          <IconButton size="sm" label={`Remove ${n}`} onClick={() => onChange(names.filter((x) => x !== n))}>
             <X className="size-3.5" />
-          </button>
+          </IconButton>
         </span>
       ))}
       <span className="flex w-full max-w-sm gap-2">

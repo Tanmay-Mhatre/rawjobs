@@ -35,7 +35,7 @@ export class ErrorBoundary extends Component<Props, State> {
     return (
       <Card className={cx("mx-auto my-6 max-w-lg p-8 text-center", this.props.className)}>
         <div role="alert">
-          <h2 /* design-lint-ignore: weight moves into the type style in 6I */ className="type-subheading font-semibold">Something went wrong on {this.props.where ?? "this page"}</h2>
+          <h2 className="type-subheading">Something went wrong on {this.props.where ?? "this page"}</h2>
           <p className="mt-1 type-small text-muted">Your jobs and tracking are saved. Try again, or reload RawJobs if it keeps happening.</p>
         </div>
         <div className="mt-4 flex flex-wrap justify-center gap-2">

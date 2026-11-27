@@ -78,7 +78,7 @@ export function Wizard(props: Props) {
     <div className="mx-auto max-w-2xl">
       <Progress step={step} goStep={goStep} draft={draft} />
       <Card className="mt-4 p-5 sm:p-7">
-        <h1 /* design-lint-ignore: weight moves into the type style in 6I */ ref={heading} tabIndex={-1} className="type-heading font-semibold tracking-tight outline-none sm:type-title">
+        <h1 ref={heading} tabIndex={-1} className="type-heading tracking-tight outline-none sm:type-title">
           {COPY[step]?.title}
         </h1>
         <p className="mt-1 type-small text-muted">{COPY[step]?.intro}</p>
@@ -195,7 +195,7 @@ function Welcome({
   return (
     <div className="mx-auto max-w-xl">
       <Card className="p-6 sm:p-9">
-        <h1 /* design-lint-ignore: weight moves into the type style in 6I */ ref={headingRef} tabIndex={-1} className="type-title font-semibold tracking-tight outline-none sm:type-title">
+        <h1 ref={headingRef} tabIndex={-1} className="type-title tracking-tight outline-none sm:type-title">
           {existing ? "Fix your setup" : resuming ? "Welcome back" : "Let's set up your job radar"}
         </h1>
         <p className="mt-2 text-muted">
