@@ -1,7 +1,7 @@
 // @vitest-environment happy-dom
 import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { DateField, parseTime, TimeField } from "../src/components/DateField";
+import { DateField, fieldTime, parseTime, TimeField } from "../src/components/DateField";
 
 afterEach(cleanup);
 
@@ -48,5 +48,85 @@ describe("TimeField", () => {
     fireEvent.focus(screen.getByLabelText("Time"));
     fireEvent.click(within(screen.getByRole("listbox", { name: "Time" })).getAllByRole("option")[8]!);
     expect(onChange).toHaveBeenCalledWith("09:00");
+  });
+
+  it("input has role combobox and aria-expanded", () => {
+    render(<TimeField label="Time" value="" onChange={() => {}} />);
+    const input = screen.getByRole("combobox", { name: "Time" });
+    expect(input.getAttribute("aria-expanded")).toBe("false");
+    expect(input.getAttribute("aria-autocomplete")).toBe("list");
+    fireEvent.click(input);
+    expect(input.getAttribute("aria-expanded")).toBe("true");
+    const list = screen.getByRole("listbox", { name: "Time" });
+    expect(list.tagName).toBe("UL");
+    expect(input.getAttribute("aria-controls")).toBe(list.id);
+    expect(within(list).getAllByRole("option")[0]!.tagName).toBe("LI");
+  });
+
+  it("ArrowDown sets aria-activedescendant and keeps focus on input", () => {
+    render(<TimeField label="Time" value="" onChange={() => {}} />);
+    const input = screen.getByRole("combobox", { name: "Time" });
+    input.focus();
+    fireEvent.keyDown(input, { key: "ArrowDown" });
+    const first = input.getAttribute("aria-activedescendant");
+    expect(document.getElementById(first!)?.textContent).toBe(fieldTime("09:00"));
+    fireEvent.keyDown(input, { key: "ArrowDown" });
+    expect(document.getElementById(input.getAttribute("aria-activedescendant")!)?.textContent).toBe(fieldTime("09:15"));
+    expect(document.activeElement).toBe(input);
+  });
+
+  it("Enter commits", () => {
+    const onChange = vi.fn();
+    const { rerender } = render(<TimeField label="Time" value="" onChange={onChange} />);
+    const input = screen.getByRole("combobox", { name: "Time" });
+    input.focus();
+    fireEvent.keyDown(input, { key: "ArrowDown" });
+    fireEvent.keyDown(input, { key: "ArrowUp" });
+    fireEvent.keyDown(input, { key: "Enter" });
+    expect(onChange).toHaveBeenLastCalledWith("08:45");
+    expect(input.getAttribute("aria-expanded")).toBe("false");
+    // A typed time that isn't on the list commits as typed.
+    rerender(<TimeField label="Time" value="08:45" onChange={onChange} />);
+    fireEvent.change(input, { target: { value: "10:10" } });
+    fireEvent.keyDown(input, { key: "Enter" });
+    expect(onChange).toHaveBeenLastCalledWith("10:10");
+  });
+
+  it("Escape closes and focus stays in input; wrapper matches :focus-within", () => {
+    const onDialogKey = vi.fn();
+    render(
+      // biome-ignore lint/a11y/noStaticElementInteractions: stands in for the dialog around the field
+      <div onKeyDown={(e) => onDialogKey(e.key)}>
+        <TimeField label="Time" value="" onChange={() => {}} />
+      </div>,
+    );
+    const input = screen.getByRole("combobox", { name: "Time" });
+    input.focus();
+    fireEvent.keyDown(input, { key: "ArrowDown" });
+    fireEvent.keyDown(input, { key: "Escape" });
+    expect(input.getAttribute("aria-expanded")).toBe("false");
+    expect(screen.queryByRole("listbox")).toBeNull();
+    expect(onDialogKey).not.toHaveBeenCalledWith("Escape");
+    expect(document.activeElement).toBe(input);
+    const wrapper = input.parentElement!;
+    // happy-dom has no :focus-within; this is what it matches.
+    expect(wrapper.contains(document.activeElement)).toBe(true);
+    expect(wrapper.className).toContain("focus-within:outline-[var(--focus-ring)]");
+    // With the list closed, the next Escape reaches the dialog.
+    fireEvent.keyDown(input, { key: "Escape" });
+    expect(onDialogKey).toHaveBeenCalledWith("Escape");
+  });
+
+  it("Alt+ArrowDown opens without changing value", () => {
+    const onChange = vi.fn();
+    render(<TimeField label="Time" value="14:30" onChange={onChange} />);
+    const input = screen.getByRole("combobox", { name: "Time" }) as HTMLInputElement;
+    input.focus();
+    fireEvent.keyDown(input, { key: "Escape" });
+    fireEvent.keyDown(input, { key: "ArrowDown", altKey: true });
+    expect(input.getAttribute("aria-expanded")).toBe("true");
+    expect(input.getAttribute("aria-activedescendant")).toBeNull();
+    expect(input.value).toBe(fieldTime("14:30"));
+    expect(onChange).not.toHaveBeenCalled();
   });
 });

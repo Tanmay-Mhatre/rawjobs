@@ -21,7 +21,7 @@ import {
   type Step,
 } from "../lib/scan";
 import { scanPlan, type ScanPlan, type ScanScope } from "../lib/setup";
-import { IconButton as RjIconButton, Menu, Tooltip } from "./primitives";
+import { IconButton as RjIconButton, Menu, Popover, Tooltip } from "./primitives";
 import { ScanBars } from "./ScanBars";
 import { Button, cx } from "./ui";
 
@@ -177,23 +177,6 @@ function useHoverDetails() {
     timer.current = window.setTimeout(fn, ms);
   };
   useEffect(() => () => window.clearTimeout(timer.current), []);
-  useEffect(() => {
-    if (open !== "pinned") return;
-    const away = (e: PointerEvent) => {
-      if (!root.current?.contains(e.target as Node)) setOpen(false);
-    };
-    const esc = (e: KeyboardEvent) => {
-      if (e.key !== "Escape") return;
-      setOpen(false);
-      root.current?.querySelector<HTMLElement>("[aria-expanded]")?.focus();
-    };
-    document.addEventListener("pointerdown", away);
-    document.addEventListener("keydown", esc);
-    return () => {
-      document.removeEventListener("pointerdown", away);
-      document.removeEventListener("keydown", esc);
-    };
-  }, [open]);
   const rootProps = {
     ref: root,
     onPointerEnter: (e: React.PointerEvent) => e.pointerType === "mouse" && later(() => setOpen((o) => o || "hover"), 120),
@@ -205,7 +188,9 @@ function useHoverDetails() {
     onFocus: (e: React.FocusEvent<HTMLButtonElement>) => e.currentTarget.matches(":focus-visible") && setOpen((o) => o || "hover"),
     "aria-expanded": !!open,
   };
-  return { open, setOpen, rootProps, triggerProps };
+  // The whole row (details, bell, Stop) anchors it: presses there aren't outside. Escape or a press outside closes it.
+  const popoverProps = { anchor: root, onDismiss: () => setOpen(false), align: "end" as const, offset: 8 };
+  return { open, setOpen, rootProps, triggerProps, popoverProps };
 }
 
 /** The time now, every second while `on` (an open pop-over's timer and "2s ago"). */
@@ -307,7 +292,7 @@ function LastChecked({ last, lastAt, now, stalled }: { last?: string; lastAt?: n
  * Stop (what's done is kept, and the next scan of the same type carries on).
  */
 export function ScanStatus({ scan, onStop, notify, notifyLine }: { scan: ScanState & { found?: number }; onStop: () => void; notify?: (openDetails: () => void) => ReactNode; notifyLine?: string }) {
-  const { open, setOpen, rootProps, triggerProps } = useHoverDetails();
+  const { open, setOpen, rootProps, triggerProps, popoverProps } = useHoverDetails();
   const done = Math.min(scan.done, scan.total);
   const value = scan.syncing || !scan.total ? null : done / scan.total;
   const percent = value === null ? null : Math.floor(value * 100);
@@ -336,10 +321,7 @@ export function ScanStatus({ scan, onStop, notify, notifyLine }: { scan: ScanSta
       </span>
 
       {open && (
-        <div
-          id="scan-details"
-          className="absolute right-0 top-full z-menu mt-2 whitespace-normal flex max-h-[min(36rem,calc(100dvh-6rem))] w-[24rem] max-w-[calc(100vw-2rem)] flex-col rounded-md border border-line bg-raised p-4 shadow-l3 max-sm:fixed max-sm:inset-x-4 max-sm:top-16 max-sm:w-auto max-sm:max-w-none"
-        >
+        <Popover {...popoverProps} id="scan-details" role="dialog" aria-label="Scan details" className="flex max-h-[min(36rem,calc(100dvh-6rem))] w-[24rem] max-w-[calc(100vw-2rem)] flex-col p-4">
           {steps ? (
             <>
               <p className="flex justify-between gap-3 type-small font-semibold">
@@ -370,7 +352,7 @@ export function ScanStatus({ scan, onStop, notify, notifyLine }: { scan: ScanSta
             </p>
           )}
           {notifyLine && <p className="mt-2 border-t border-line pt-2 type-small text-muted">{notifyLine}</p>}
-        </div>
+        </Popover>
       )}
     </div>
   );
@@ -383,7 +365,7 @@ export function ScanStatus({ scan, onStop, notify, notifyLine }: { scan: ScanSta
  * stopped, or after the next Scan now).
  */
 export function BackgroundPill({ scan, bg, onPause, onResume }: { scan: ScanState; bg: Background; onPause: () => void; onResume: () => void }) {
-  const { open, rootProps, triggerProps } = useHoverDetails();
+  const { open, rootProps, triggerProps, popoverProps } = useHoverDetails();
   const now = useNow(!!open);
   const paused = !!bg.summary?.stopped;
   const done = Math.min(bg.done, bg.total);
@@ -411,10 +393,7 @@ export function BackgroundPill({ scan, bg, onPause, onResume }: { scan: ScanStat
         {percent !== null && !paused && <span className="tabular">{percent}%</span>}
       </button>
       {open && (
-        <div
-          id="background-details"
-          className="absolute right-0 top-full z-menu mt-2 whitespace-normal w-[24rem] max-w-[calc(100vw-2rem)] rounded-md border border-line bg-raised p-4 shadow-l3 max-sm:fixed max-sm:inset-x-4 max-sm:top-16 max-sm:w-auto max-sm:max-w-none"
-        >
+        <Popover {...popoverProps} id="background-details" role="dialog" aria-label="Background check details" className="w-[24rem] max-w-[calc(100vw-2rem)] p-4">
           {paused ? (
             <>
               <p className="type-small font-semibold">Paused</p>
@@ -467,7 +446,7 @@ export function BackgroundPill({ scan, bg, onPause, onResume }: { scan: ScanStat
               </div>
             </>
           )}
-        </div>
+        </Popover>
       )}
       <span className="sr-only" role="status">
         {paused ? "Background check paused" : "Background check running"}

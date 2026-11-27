@@ -3,7 +3,25 @@ import { act, cleanup, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { useState } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { Button, Chip, ChipGroup, Field, IconButton, Kbd, Menu, ScoreBadge, scoreBandOf, ScoreBreakdown, scoreParts, SearchField, SourceTag, Status, Tabs } from "../src/components/primitives";
+import {
+  Button,
+  Chip,
+  ChipGroup,
+  Field,
+  IconButton,
+  Kbd,
+  Menu,
+  Popover,
+  ScoreBadge,
+  scoreBandOf,
+  ScoreBreakdown,
+  scoreParts,
+  SearchField,
+  SourceTag,
+  Status,
+  Tabs,
+  usePopover,
+} from "../src/components/primitives";
 import { dismissToast, toast, Toaster } from "../src/components/Toast";
 import { Segmented } from "../src/components/ui";
 
@@ -359,6 +377,73 @@ describe("Menu", () => {
     await user.click(screen.getByRole("menuitem", { name: "Save" }));
     expect(onSave).toHaveBeenCalledOnce();
     expect(screen.getByRole("button", { name: "More actions" }).getAttribute("aria-expanded")).toBe("false");
+  });
+});
+
+describe("Popover", () => {
+  function PopDemo({ onDialogClose }: { onDialogClose?: () => void }) {
+    const pop = usePopover();
+    return (
+      // biome-ignore lint/a11y/noStaticElementInteractions: stands in for a dialog that closes on Escape
+      <div role="presentation" onKeyDown={(e) => e.key === "Escape" && onDialogClose?.()}>
+        <button
+          ref={(el) => {
+            pop.triggerRef.current = el;
+          }}
+          type="button"
+          aria-expanded={pop.open}
+          onClick={() => pop.setOpen((v) => !v)}
+        >
+          Pick
+        </button>
+        <p>Outside</p>
+        {pop.open && (
+          <Popover {...pop.props} role="dialog" aria-label="Picker" className="p-3">
+            <button type="button">Inside</button>
+          </Popover>
+        )}
+      </div>
+    );
+  }
+
+  it("Escape closes popover but not the parent dialog", async () => {
+    const onDialogClose = vi.fn();
+    render(<PopDemo onDialogClose={onDialogClose} />);
+    const user = userEvent.setup();
+    await user.click(screen.getByRole("button", { name: "Pick" }));
+    const pop = screen.getByRole("dialog", { name: "Picker" });
+    expect(pop.className).toContain("bg-overlay");
+    expect(pop.className).toContain("shadow-l3");
+    expect(pop.className).toContain("z-menu");
+    await user.click(screen.getByRole("button", { name: "Inside" }));
+    await user.keyboard("{Escape}");
+    expect(screen.queryByRole("dialog")).toBeNull();
+    expect(onDialogClose).not.toHaveBeenCalled();
+    // Closed, Escape reaches the dialog again.
+    await user.keyboard("{Escape}");
+    expect(onDialogClose).toHaveBeenCalledOnce();
+  });
+
+  it("focus returns to trigger", async () => {
+    render(<PopDemo />);
+    const user = userEvent.setup();
+    const trigger = screen.getByRole("button", { name: "Pick" });
+    await user.click(trigger);
+    screen.getByRole("button", { name: "Inside" }).focus();
+    await user.keyboard("{Escape}");
+    expect(document.activeElement).toBe(trigger);
+    expect(trigger.getAttribute("aria-expanded")).toBe("false");
+  });
+
+  it("outside pointerdown closes", async () => {
+    render(<PopDemo />);
+    const user = userEvent.setup();
+    await user.click(screen.getByRole("button", { name: "Pick" }));
+    // A press inside stays open.
+    await user.click(screen.getByRole("button", { name: "Inside" }));
+    expect(screen.getByRole("dialog", { name: "Picker" })).toBeTruthy();
+    await user.pointer({ keys: "[MouseLeft>]", target: screen.getByText("Outside") });
+    expect(screen.queryByRole("dialog")).toBeNull();
   });
 });
 

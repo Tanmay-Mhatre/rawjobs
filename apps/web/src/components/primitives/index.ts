@@ -7,6 +7,7 @@ export { Chip, ChipGroup } from "./Chip";
 export { Field, SearchField } from "./Field";
 export { Kbd } from "./Kbd";
 export { Menu, type MenuItem } from "./Menu";
+export { Popover, usePopover, usePopoverPlace, type PopoverAlign, type PopoverPlace } from "./Popover";
 export { DEFAULT_THRESHOLD, FAIR_FROM, ScoreBadge, scoreBandOf, scoreLabel, type ScoreBand } from "./ScoreBadge";
 export { ScoreBreakdown, scoreParts, type ScorePart } from "./ScoreBreakdown";
 export { SourceTag } from "./SourceTag";

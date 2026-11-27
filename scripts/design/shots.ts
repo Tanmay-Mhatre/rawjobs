@@ -593,6 +593,62 @@ const SCREENS: Screen[] = [
     },
   },
   {
+    id: "update-pill",
+    viewportOnly: true,
+    what: "Header Update pill hovered: its card under it (the version, what's new, Click to update)",
+    scenario: "demo",
+    hash: "#radar",
+    ready: strong,
+    mock: (path, method) =>
+      path === "/api/update" && method === "GET"
+        ? {
+            installed: true,
+            current: "0.7.17",
+            settings: { mode: "ask", channel: "stable", telegram: true },
+            available: { version: "0.7.18", notes: "New: One popover for dates, filters and scan details.", critical: false, date: demo.NOW.toISOString(), major: false, ready: true },
+            tooOld: false,
+            state: "idle",
+            lastUpdate: null,
+          }
+        : undefined,
+    act: async (page) => {
+      await page.getByRole("button", { name: "Update to 0.7.18" }).hover();
+      await page.getByRole("tooltip").waitFor();
+    },
+  },
+  ...(["interviews-time-list", "interviews-time-escaped"] as const).map(
+    (id): Screen => ({
+      id,
+      viewportOnly: true,
+      what:
+        id === "interviews-time-list"
+          ? "Tracked job, Interviews, Add interview: the time list open with an option highlighted (Down arrow)"
+          : "The time field after Escape: list closed, focus ring on the field",
+      scenario: "demo",
+      hash: "#pipeline",
+      ready: strong,
+      act: async (page) => {
+        const column = page.getByRole("group", { name: "Pipeline column" }).getByRole("button", { name: /^Interviewing/ });
+        if (await column.isVisible()) await column.click();
+        await page.getByRole("button", { name: GROWTH, exact: true }).filter({ visible: true }).first().click();
+        const dialog = page.getByRole("dialog");
+        await dialog.waitFor();
+        const tab = dialog.getByRole("tab", { name: /^Interviews/ });
+        if (await tab.isVisible()) await tab.click();
+        await dialog.getByRole("button", { name: "Add interview" }).filter({ visible: true }).first().click();
+        const time = dialog.getByRole("combobox", { name: "Time" });
+        await time.focus();
+        await page.keyboard.press("ArrowDown");
+        await page.keyboard.press("ArrowDown");
+        await page.getByRole("listbox", { name: "Time" }).waitFor();
+        if (id === "interviews-time-escaped") {
+          await page.keyboard.press("Escape");
+          await page.getByRole("listbox").waitFor({ state: "detached" });
+        }
+      },
+    }),
+  ),
+  {
     id: "scan-stale-feed",
     viewportOnly: true,
     health: () => ({ ok: true, background: false, dataVersion: demo.META.generatedAt }),

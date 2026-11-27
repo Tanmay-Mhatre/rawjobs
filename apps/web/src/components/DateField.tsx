@@ -1,7 +1,7 @@
 import { CalendarDays, ChevronLeft, ChevronRight, Clock } from "lucide-react";
-import { type KeyboardEvent, type ReactNode, type RefObject, useEffect, useId, useLayoutEffect, useRef, useState } from "react";
+import { type KeyboardEvent, useEffect, useId, useRef, useState } from "react";
 import { dayAfter, isDay } from "../lib/userState";
-import { Chip } from "./primitives";
+import { Chip, Popover, usePopover } from "./primitives";
 import { cx, IconButton } from "./ui";
 
 const field = "inline-flex h-9 w-full min-w-0 items-center gap-2 rounded-md border border-line bg-raised px-2.5 text-left type-small text-ink hover:border-control aria-expanded:border-ink";
@@ -29,84 +29,6 @@ function weeksOf(month: string): string[] {
   const first = new Date(`${month}-01T12:00:00`);
   const start = localDay(new Date(first.getTime() - ((first.getDay() + 6) % 7) * 864e5));
   return Array.from({ length: 42 }, (_, i) => dayAfter(`${start}T12:00:00`, i));
-}
-
-/**
- * Where a popover opens: under its trigger, or above it when there's no room below. Fixed to the
- * window, so a scrolling panel or the dialog's edge never cuts it off.
- */
-function usePopoverPlace(open: boolean, trigger: RefObject<HTMLElement | null>, pop: RefObject<HTMLElement | null>) {
-  const [place, setPlace] = useState<{ top: number; left: number } | null>(null);
-  useLayoutEffect(() => {
-    if (!open) return setPlace(null);
-    const update = () => {
-      const t = trigger.current?.getBoundingClientRect();
-      const p = pop.current?.getBoundingClientRect();
-      if (!t || !p) return;
-      const below = t.bottom + 4;
-      const top = below + p.height <= innerHeight - 8 ? below : Math.max(8, t.top - 4 - p.height);
-      const left = Math.min(Math.max(8, t.left), innerWidth - p.width - 8);
-      setPlace({ top, left });
-    };
-    update();
-    addEventListener("resize", update);
-    // Capture: any scrolling panel moves the trigger.
-    addEventListener("scroll", update, true);
-    return () => {
-      removeEventListener("resize", update);
-      removeEventListener("scroll", update, true);
-    };
-  }, [open, trigger, pop]);
-  return place;
-}
-
-/** Open, close on a press outside or Escape (focus back on the trigger), and place it. */
-function usePopover() {
-  const [open, setOpen] = useState(false);
-  const triggerRef = useRef<HTMLElement | null>(null);
-  const popRef = useRef<HTMLDivElement>(null);
-  const place = usePopoverPlace(open, triggerRef, popRef);
-  const close = (refocus = true) => {
-    setOpen(false);
-    // The trigger is the date's button, or the time field's box with its input inside.
-    const t = triggerRef.current;
-    if (refocus) (t?.matches("button, input") ? t : t?.querySelector("input"))?.focus();
-  };
-  // biome-ignore lint/correctness/useExhaustiveDependencies: re-registered on each open; close only uses refs and setters
-  useEffect(() => {
-    if (!open) return;
-    const onDown = (e: PointerEvent) => {
-      const t = e.target as Node;
-      if (!popRef.current?.contains(t) && !triggerRef.current?.contains(t)) close(false);
-    };
-    document.addEventListener("pointerdown", onDown);
-    return () => document.removeEventListener("pointerdown", onDown);
-  }, [open]);
-  const onPopKey = (e: KeyboardEvent) => {
-    if (e.key !== "Escape") return;
-    // Only the popover closes, not the dialog it's in.
-    e.preventDefault();
-    e.stopPropagation();
-    close();
-  };
-  return { open, setOpen, close, triggerRef, popRef, place, onPopKey };
-}
-
-function Popover({ id, label, pop, children, className }: { id: string; label: string; pop: ReturnType<typeof usePopover>; children: ReactNode; className?: string }) {
-  return (
-    // A non-modal popover: a native <dialog> would trap focus inside the job's own dialog.
-    <div
-      id={id}
-      ref={pop.popRef}
-      role="dialog"
-      aria-label={label}
-      onKeyDown={pop.onPopKey}
-      style={pop.place ? { top: pop.place.top, left: pop.place.left } : { top: 0, left: 0, visibility: "hidden" }}
-      className={cx("rj-menu fixed z-menu", className)}
-    >
-      {children}
-    </div>
-  );
 }
 
 /**
@@ -164,8 +86,8 @@ export function DateField({
   }, []);
   // The focused day follows the keyboard, also into the next month.
   useEffect(() => {
-    if (pop.open && pop.place) dayRefs.current.get(focus)?.focus();
-  }, [pop.open, pop.place, focus]);
+    if (pop.open) dayRefs.current.get(focus)?.focus();
+  }, [pop.open, focus]);
 
   const pick = (d: string) => {
     if (!allowed(d)) return;
@@ -217,7 +139,7 @@ export function DateField({
       </button>
       {name && <input type="hidden" name={name} value={value} />}
       {pop.open && (
-        <Popover id={`${id}-pop`} label={label} pop={pop} className="grid w-72 gap-3 p-3">
+        <Popover {...pop.props} id={`${id}-pop`} role="dialog" aria-label={label} className="grid w-72 gap-3 p-3">
           {quick && quick.length > 0 && (
             <div className="flex flex-wrap gap-1.5">
               {quick.map((q) => (
@@ -321,9 +243,14 @@ export function parseTime(raw: string): string | undefined {
 /** "2:30 PM" in the reader's own clock. */
 export const fieldTime = (hhmm: string) => new Date(`2000-01-01T${hhmm}:00`).toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" });
 
+/** The id of the list's option at index `i`. */
+const optionId = (id: string, i: number) => `${id}-opt-${i}`;
+
 /**
- * A time (HH:MM): type it ("2:30 pm", "14:30") or pick one from the list that opens on a press
- * anywhere on the field (every 15 minutes, 07:00 to 21:45). Empty means no time.
+ * A time (HH:MM): type it ("2:30 pm", "14:30") or pick one from the list (every 15 minutes, 07:00 to
+ * 21:45). Empty means no time. An ARIA editable combobox with a list: focus stays in the input; Down
+ * and Up open the list and move through it, Alt+Down only opens it, Enter takes the highlighted time
+ * (or what was typed), Escape closes the list, and Tab or leaving the field keeps what was typed.
  */
 export function TimeField({
   label,
@@ -342,93 +269,119 @@ export function TimeField({
 }) {
   const autoId = useId();
   const id = givenId ?? autoId;
+  const listId = `${id}-list`;
   const pop = usePopover();
   const [text, setText] = useState(value ? fieldTime(value) : "");
-  const listRef = useRef<HTMLDivElement>(null);
+  // The highlighted option (aria-activedescendant); null until the arrow keys, a hover or typing pick one.
+  const [active, setActive] = useState<number | null>(null);
   useEffect(() => setText(value ? fieldTime(value) : ""), [value]);
-  // Scroll the list to the chosen time, or to 09:00.
   useEffect(() => {
-    if (!pop.open || !pop.place) return;
-    const at = listRef.current?.querySelector<HTMLElement>(`[data-time="${value || "09:00"}"]`);
-    at?.scrollIntoView({ block: "center" });
-  }, [pop.open, pop.place, value]);
+    if (!pop.open) setActive(null);
+  }, [pop.open]);
+  // Keep the highlighted time in view; on opening, show the chosen time, or 09:00, in the middle.
+  useEffect(() => {
+    const list = pop.popRef.current;
+    if (!pop.open || !list) return;
+    const at = (active === null ? list.querySelector(`[data-time="${value || "09:00"}"]`) : list.children[active]) as HTMLElement | null;
+    if (!at) return;
+    if (active === null) list.scrollTop = at.offsetTop - (list.clientHeight - at.offsetHeight) / 2;
+    else if (at.offsetTop < list.scrollTop) list.scrollTop = at.offsetTop;
+    else if (at.offsetTop + at.offsetHeight > list.scrollTop + list.clientHeight) list.scrollTop = at.offsetTop + at.offsetHeight - list.clientHeight;
+  }, [pop.open, active, value, pop.popRef]);
   const commit = () => {
     if (!text.trim()) return onChange("");
     const t = parseTime(text);
     if (t) onChange(t);
     else setText(value ? fieldTime(value) : "");
   };
+  const take = (t: string) => {
+    onChange(t);
+    setText(fieldTime(t));
+    pop.setOpen(false);
+  };
+  /** Where the arrow keys start: the chosen time, else 09:00. */
+  const start = () => {
+    const i = TIMES.indexOf(value);
+    return i >= 0 ? i : TIMES.indexOf("09:00");
+  };
+  const onKey = (e: KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === "ArrowDown" || e.key === "ArrowUp") {
+      e.preventDefault();
+      pop.setOpen(true);
+      if (e.altKey) return;
+      const step = e.key === "ArrowDown" ? 1 : -1;
+      setActive((a) => (a === null ? start() : Math.min(Math.max(a + step, 0), TIMES.length - 1)));
+    } else if (e.key === "Enter") {
+      e.preventDefault();
+      if (pop.open && active !== null) take(TIMES[active]!);
+      else {
+        commit();
+        pop.setOpen(false);
+      }
+    }
+    // Escape is the popover's: it closes the list and stops there. With the list closed, it reaches the dialog.
+  };
   return (
     <>
       <div
-        // The whole box anchors the list, so it lines up with the field.
+        // The whole box anchors the list, so it lines up with the field; the ring shows while the input has focus.
         ref={(el) => {
           pop.triggerRef.current = el;
         }}
-        className={cx(field, "pr-1", pop.open && "border-ink", className)}
+        className={cx(field, "pr-1 focus-within:outline-2 focus-within:outline-offset-2 focus-within:outline-[var(--focus-ring)]", pop.open && "border-ink", className)}
       >
         <Clock className="size-3.5 shrink-0 text-muted" aria-hidden />
         <input
           id={id}
+          role="combobox"
+          aria-label={label}
+          aria-expanded={pop.open}
+          aria-controls={listId}
+          aria-autocomplete="list"
+          aria-activedescendant={pop.open && active !== null ? optionId(id, active) : undefined}
           value={text}
           placeholder="Add a time"
           autoComplete="off"
-          onChange={(e) => setText(e.target.value)}
+          onChange={(e) => {
+            setText(e.target.value);
+            pop.setOpen(true);
+            // A typed time that's in the list is highlighted; Enter still keeps what was typed when it isn't.
+            const t = parseTime(e.target.value);
+            const i = t ? TIMES.indexOf(t) : -1;
+            setActive(i >= 0 ? i : null);
+          }}
           onFocus={() => pop.setOpen(true)}
           onClick={() => pop.setOpen(true)}
-          onBlur={(e) => {
-            // Leaving for the list keeps it open; anywhere else commits what was typed.
-            if (!pop.popRef.current?.contains(e.relatedTarget as Node)) {
-              commit();
-              pop.setOpen(false);
-            }
+          onBlur={() => {
+            // Options keep focus here (mousedown is cancelled), so a blur is leaving the field: keep what was typed.
+            commit();
+            pop.setOpen(false);
           }}
-          onKeyDown={(e) => {
-            if (e.key === "Enter") {
-              e.preventDefault();
-              commit();
-              pop.setOpen(false);
-            } else if (e.key === "ArrowDown") {
-              e.preventDefault();
-              listRef.current?.querySelector<HTMLElement>("[aria-selected=true], button")?.focus();
-            } else if (e.key === "Escape" && pop.open) {
-              e.preventDefault();
-              e.stopPropagation();
-              pop.setOpen(false);
-            }
-          }}
-          aria-label={label}
+          onKeyDown={onKey}
           className="min-w-0 flex-1 bg-transparent outline-none placeholder:text-muted"
         />
       </div>
       {name && <input type="hidden" name={name} value={value} />}
       {pop.open && (
-        <Popover id={`${id}-pop`} label={label} pop={pop} className="w-44 p-1">
-          <div ref={listRef} role="listbox" aria-label={label} className="grid max-h-56 overflow-y-auto">
-            {TIMES.map((t) => (
-              <button
-                key={t}
-                type="button"
-                role="option"
-                data-time={t}
-                aria-selected={t === value}
-                className={cx("rj-menu__item tabular", t === value && "bg-active")}
-                onClick={() => {
-                  onChange(t);
-                  pop.setOpen(false);
-                }}
-                onKeyDown={(e) => {
-                  const sib = e.key === "ArrowDown" ? e.currentTarget.nextElementSibling : e.key === "ArrowUp" ? e.currentTarget.previousElementSibling : null;
-                  if (sib) {
-                    e.preventDefault();
-                    (sib as HTMLElement).focus();
-                  }
-                }}
-              >
-                {fieldTime(t)}
-              </button>
-            ))}
-          </div>
+        <Popover {...pop.props} id={listId} role="listbox" aria-label={label} onMouseDown={(e) => e.preventDefault()} className="grid max-h-56 w-44 overflow-y-auto p-1">
+          {/* A press on the list (an option, its scrollbar) keeps focus in the input. */}
+          {TIMES.map((t, i) => (
+            // biome-ignore lint/a11y/useFocusableInteractive: ARIA combobox option: reached with aria-activedescendant, so not focusable itself
+            // biome-ignore lint/a11y/useKeyWithClickEvents: the keys are on the input (Enter takes the highlighted option)
+            <li
+              key={t}
+              id={optionId(id, i)}
+              // biome-ignore lint/a11y/noNoninteractiveElementToInteractiveRole: ARIA combobox: focus stays in the input and options are reached with aria-activedescendant
+              role="option"
+              data-time={t}
+              aria-selected={t === value}
+              onMouseEnter={() => setActive(i)}
+              onClick={() => take(t)}
+              className={cx("rj-menu__item cursor-pointer tabular", t === value && "font-semibold", i === active && "bg-active")}
+            >
+              {fieldTime(t)}
+            </li>
+          ))}
         </Popover>
       )}
     </>

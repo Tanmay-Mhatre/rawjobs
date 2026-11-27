@@ -1,11 +1,12 @@
 import type { ChangelogEntry, ReleaseChange } from "@rawjobs/core/release-notes";
 import { releaseItems } from "@rawjobs/core/release-notes";
 import { ArrowDownToLine, ChevronDown, LoaderCircle, RefreshCw, ShieldCheck } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import { type ComponentProps, useEffect, useRef, useState } from "react";
 import { formatDate } from "../lib/format";
 import { settingsHash } from "./settings/registry";
 import { announceUpdateStatus, loadChangelog, markUpdateSeen, updateNow, useUpdateStatus, type Changelog, type UpdateStatus } from "../lib/update";
 import { Dialog } from "./Dialog";
+import { Popover } from "./primitives";
 import { Button, Card, cx, Segmented } from "./ui";
 import { Anchor, ChangeRows, ChangeTag, Head, Points, sortedItems, VersionLine } from "./UpdateParts";
 import { toast } from "./Toast";
@@ -229,6 +230,7 @@ export function UpdatePill() {
   const [busy, setBusy] = useState(false);
   const [hint, setHint] = useState(false);
   const [failed, setFailed] = useState<string | null>(null);
+  const pill = useRef<HTMLButtonElement | null>(null);
   const a = status?.available;
   const waiting = status?.state === "waiting";
   const scan = useScanProgress();
@@ -262,15 +264,21 @@ export function UpdatePill() {
     </>
   );
   const top = sortedItems(a.notes, a.changes).slice(0, 2);
+  const pop = (onDismiss: () => void) => ({ anchor: pill, onDismiss, ...POP });
   return (
     // biome-ignore lint/a11y/noStaticElementInteractions: hover only shows the preview; the button inside is the control
-    <div className="relative" onMouseEnter={() => setHint(!failed)} onMouseLeave={() => setHint(false)}>
+    <div
+      className="relative"
+      onMouseEnter={() => setHint(!failed)}
+      onMouseLeave={() => setHint(false)}
+      // Tabbing into the card (Stop the scan and update) keeps it open.
+      onBlur={(e) => !e.currentTarget.contains(e.relatedTarget as Node) && setHint(false)}
+    >
       <button
+        ref={pill}
         type="button"
         onClick={() => void click()}
         onFocus={() => setHint(!failed)}
-        onBlur={() => setHint(false)}
-        onKeyDown={(e) => e.key === "Escape" && setHint(false)}
         disabled={updating}
         aria-describedby={hint && !updating ? "update-pill-preview" : undefined}
         aria-expanded={waiting ? hint : undefined}
@@ -289,15 +297,15 @@ export function UpdatePill() {
         <span className="whitespace-nowrap max-xl:hidden">{label}</span>
       </button>
       {hint && waiting && (
-        <div id="update-pill-preview" className={POP}>
+        <Popover {...pop(() => setHint(false))} id="update-pill-preview" role="dialog" aria-label={`RawJobs ${a.version} installs after the scan`}>
           <p className="type-label text-ink">RawJobs {a.version} installs after the scan</p>
           <p className="mt-1 type-small text-muted">{waitLine(scan)}</p>
           <StopScanAndUpdate className="mt-3" />
           <p className="mt-2 type-meta text-muted">What the scan checked is kept; the next scan carries on from there.</p>
-        </div>
+        </Popover>
       )}
       {hint && !updating && !waiting && !failed && (
-        <div id="update-pill-preview" role="tooltip" className={POP}>
+        <Popover {...pop(() => setHint(false))} id="update-pill-preview" role="tooltip">
           <div className="flex items-center gap-3">
             <Anchor kind="mark" size="sm" />
             <div className="min-w-0">
@@ -311,24 +319,38 @@ export function UpdatePill() {
             </div>
           )}
           <p className="mt-3 border-t border-hairline pt-2 type-meta text-muted">Click to update. Takes a few seconds. Your data stays.</p>
-        </div>
+        </Popover>
       )}
-      {failed && <CouldntUpdate to={a.version} from={status.current} error={failed} onDismiss={() => setFailed(null)} onRetry={() => void click()} />}
+      {failed && <CouldntUpdate pop={pop(() => setFailed(null))} to={a.version} from={status.current} error={failed} onDismiss={() => setFailed(null)} onRetry={() => void click()} />}
     </div>
   );
 }
 
-/** Under the pill, on phones across the page under the header. Wraps: the header row is nowrap. */
-const POP = "absolute top-full right-0 z-menu mt-2 whitespace-normal w-[min(20rem,calc(100vw-2rem))] rounded-md border border-line bg-overlay p-3 text-left shadow-l2";
+/** Under the pill, its right edge on the pill's (kept inside the window on phones). */
+const POP = { align: "end", offset: 8, className: "w-[min(20rem,calc(100vw-2rem))] p-3" } as const;
 
 /** The pill's click didn't get the update (offline, GitHub away): what happened, Try again, right where you clicked. */
-function CouldntUpdate({ from, to, error, onDismiss, onRetry }: { from: string; to: string; error: string; onDismiss: () => void; onRetry: () => void }) {
+function CouldntUpdate({
+  pop,
+  from,
+  to,
+  error,
+  onDismiss,
+  onRetry,
+}: {
+  pop: Pick<ComponentProps<typeof Popover>, "anchor" | "onDismiss" | "align" | "offset" | "className">;
+  from: string;
+  to: string;
+  error: string;
+  onDismiss: () => void;
+  onRetry: () => void;
+}) {
   // Focus goes to Try again, so Enter retries and Escape dismisses.
-  const card = useRef<HTMLDivElement>(null);
+  const card = useRef<HTMLElement | null>(null);
   useEffect(() => card.current?.querySelector<HTMLButtonElement>("[data-retry]")?.focus(), []);
   const offline = /^Couldn't reach GitHub/.test(error);
   return (
-    <div ref={card} role="alert" aria-labelledby="couldnt-update-title" className={POP} onKeyDown={(e) => e.key === "Escape" && onDismiss()}>
+    <Popover {...pop} popRef={card} role="alert" aria-labelledby="couldnt-update-title">
       <div className="flex items-center gap-3">
         <Anchor kind="alert" size="sm" />
         <div className="min-w-0">
@@ -348,6 +370,6 @@ function CouldntUpdate({ from, to, error, onDismiss, onRetry }: { from: string; 
           <RefreshCw className="size-3.5" aria-hidden /> Try again
         </Button>
       </div>
-    </div>
+    </Popover>
   );
 }
