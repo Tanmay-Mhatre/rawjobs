@@ -12,6 +12,7 @@
     "./text": "./src/text.ts",
     "./display-name": "./src/display-name.ts",
     "./detect": "./src/connectors/index.ts",
+    "./company-key": "./src/connectors/keys.ts",
     "./resume-parse": "./src/resume-parse.ts",
     "./employers": "./src/employers.ts",
     "./suggest": "./src/suggest.ts",

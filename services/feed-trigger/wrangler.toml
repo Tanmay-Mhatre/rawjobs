@@ -12,6 +12,10 @@ name = "rawjobs-feed-trigger"
 main = "src/index.ts"
 compatibility_date = "2026-09-01"
 
+# Keep the Worker's logs (Cloudflare dashboard, Workers > Observability).
+[observability]
+enabled = true
+
 # 10 minutes before GitHub's own cron (23 */6), so this one usually starts the run.
 [triggers]
 crons = ["13 */6 * * *"]

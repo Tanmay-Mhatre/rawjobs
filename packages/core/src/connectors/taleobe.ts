@@ -2,7 +2,10 @@ import type { NormalizedJob } from "../schema";
 import { robotsAllows } from "../robots";
 import { htmlToText, inferWorkplace } from "../text";
 import { BoardClosedError, countryName, isoDate, joinParts, xmlBlocks, xmlOne } from "./parse";
+import { TALEO_BE_SHARD as SHARD, taleoBeDispatcher as dispatcher } from "./keys";
 import { jobId, type Connector, type Ctx } from "./types";
+
+export { taleoBeUrl } from "./keys";
 
 /**
  * Taleo Business Edition (Oracle's small-business Taleo, not enterprise Taleo): careers sites at
@@ -25,17 +28,6 @@ export type TaleoBeItem = {
 };
 
 const ORG = /^[A-Za-z0-9_-]+$/;
-const SHARD = /^([a-z]+\d*)\.tbe\.taleo\.net\/([a-z]+\d+)$/i;
-
-/** The careers-site address for a board (the dispatcher when its pod isn't known). */
-export function taleoBeUrl(c: { slug: string; shard?: string; site?: string }): string {
-  const org = encodeURIComponent(c.slug);
-  if (c.shard && SHARD.test(c.shard) && c.site) return `https://${c.shard}/ats/careers/v2/jobSearch?org=${org}&cws=${encodeURIComponent(c.site)}`;
-  return dispatcher(c);
-}
-
-const dispatcher = (c: { slug: string; shard?: string; site?: string }) =>
-  `https://${c.shard?.match(SHARD)?.[1] ?? "phh"}.tbe.taleo.net/dispatcher/servlet/DispatcherServlet?org=${encodeURIComponent(c.slug)}&act=redirectCws&cws=${encodeURIComponent(c.site || "1")}`;
 
 export function parseTaleoBeFeed(xml: string): TaleoBeItem[] {
   return xmlBlocks(xml, "item").map((i) => ({
