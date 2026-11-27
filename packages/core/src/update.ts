@@ -1,6 +1,6 @@
 import { spawn, spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
-import { cpSync, createReadStream, existsSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync, statSync } from "node:fs";
+import { closeSync, cpSync, createReadStream, existsSync, mkdirSync, openSync, readdirSync, readFileSync, readSync, renameSync, rmSync, statSync } from "node:fs";
 import { cp, mkdir, rename, rm } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import { compareVersions, nodeArchive, RELEASE_URL, type ReleaseChange, verifyRelease, type ReleaseManifest } from "./release";
@@ -297,6 +297,8 @@ export async function prepareVersion(
 const REFETCHED = new Set(["cache", "catalog"]);
 /** A running scan's lock, stop flags and live progress belong to that scan, not to a backup. */
 const SCAN_FLAGS = new Set(["scan.lock", "scan-stop", "scan-notify", "scan-live.ndjson"]);
+/** Logs older versions' scheduled runs kept in data/ (now in logs/): never backed up. */
+const OLD_LOGS = new Set(["schedule.log", "daily-summary.log"]);
 
 /**
  * Copy everything that's yours before an update or a reinstall: the config, profile/ (resume,
@@ -312,7 +314,7 @@ export async function backupData(home: string, label: string): Promise<string> {
   const data = join(home, "data");
   if (existsSync(data)) {
     mkdirSync(join(dir, "data"), { recursive: true });
-    for (const f of readdirSync(data)) if (!REFETCHED.has(f) && !SCAN_FLAGS.has(f)) await cp(join(data, f), join(dir, "data", f), { recursive: true });
+    for (const f of readdirSync(data)) if (!REFETCHED.has(f) && !SCAN_FLAGS.has(f) && !OLD_LOGS.has(f)) await cp(join(data, f), join(dir, "data", f), { recursive: true });
     const additions = join(data, "catalog/additions.json");
     if (existsSync(additions)) await cp(additions, join(dir, "data/catalog/additions.json"));
   }
@@ -643,13 +645,33 @@ const sizeOf = (file: string) => {
   }
 };
 
+/** The text of `file` from byte `from` on, at most its last 1 MB (the start line is near the end); "" when it's missing. */
+function readTail(file: string, from: number): string {
+  let fd: number | undefined;
+  try {
+    fd = openSync(file, "r");
+    const size = statSync(file).size;
+    const start = Math.max(from, size - 1_000_000, 0);
+    const buf = Buffer.alloc(Math.max(0, size - start));
+    readSync(fd, buf, 0, buf.length, start);
+    return buf.toString("utf8");
+  } catch {
+    return "";
+  } finally {
+    if (fd !== undefined) closeSync(fd);
+  }
+}
+
 /** Whether `version`'s server got as far as starting (serve's "RawJobs X is starting." line) in logs/server.log after `offset`. */
 export function startedSince(home: string, offset: number, version: string): boolean {
   try {
-    const log = readFileSync(join(home, "logs/server.log"));
-    // A log over 5 MB moves to server.log.1 when the server starts: then it's all new.
-    const text = (log.length >= offset ? log.subarray(offset) : log).toString("utf8");
-    return text.includes(`RawJobs ${version} is starting.`);
+    const line = `RawJobs ${version} is starting.`;
+    const file = join(home, "logs/server.log");
+    const size = statSync(file).size;
+    // Smaller than before: the log rotated (to server.log.1) since, so all of it is new, and the
+    // start line may have gone into .1 past the old offset.
+    if (size < offset) return readTail(`${file}.1`, offset).includes(line) || readTail(file, 0).includes(line);
+    return readTail(file, offset).includes(line);
   } catch {
     return false;
   }

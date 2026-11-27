@@ -241,6 +241,7 @@ console.log(JSON.stringify({ type: "done", scope: args[args.indexOf("--scope") +
       trackingRev: 0,
       update: null,
       startLink: false,
+      safeMode: false,
       platform: process.platform,
       home: folderId(home),
       pid: process.pid,

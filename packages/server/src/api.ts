@@ -64,6 +64,8 @@ export type ApiOptions = {
   updater?: Pick<Updater, "route" | "updating" | "updateHint">;
   /** Whether rawjobs://open starts RawJobs on this computer (/api/health's startLink). Default: no. */
   startLink?: () => boolean;
+  /** Whether the server started in safe mode after crashing several times (/api/health's safeMode). Default: no. */
+  safeMode?: () => boolean;
   /** The Downloads watcher's view of the computer (tests point it at a temp folder). Default: the real one. */
   watchDeps?: Partial<WatchDeps>;
   /** The LinkedIn file reminder's clock and Telegram (tests use a fake clock). Default: the real ones. */
@@ -606,6 +608,7 @@ Stopped after ${Math.round(timeoutMs / 1000)} s without finishing.`.trim(),
         trackingRev: trackingRev(),
         update: opts.updater?.updateHint() ?? null,
         startLink: opts.startLink?.() ?? false,
+        safeMode: opts.safeMode?.() ?? false,
         platform: process.platform,
         // Which RawJobs folder this server is for (an id, not the path) and its process: an update
         // stops every server of its folder before it starts the new version.

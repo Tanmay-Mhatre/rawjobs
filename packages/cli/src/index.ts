@@ -1,5 +1,6 @@
 #!/usr/bin/env -S npx tsx
-import { ConfigError } from "@rawjobs/core";
+import { resolve } from "node:path";
+import { APP_VERSION, ConfigError, type Log, openLog, recordCrash, teeConsole } from "@rawjobs/core";
 import { cmdCompanies } from "./commands/companies";
 import { cmdRun } from "./commands/run";
 import { cmdAlerts } from "./commands/alerts";
@@ -52,9 +53,27 @@ Options for scan (alias: run):
   -n, --limit <n>       Max jobs to print (default 50)
   -d, --data <dir>      Where history is kept for the dashboard (default: data)
       --dry-run         Don't save anything
+      --deadline <min>  Stop (progress saved) after this many minutes, or at an ISO time; scheduled scans get one
+
+Any command but serve also takes --log <file>: its output and any crash go to that file too (rotated at 2 MB).
       --json <path>     Also write this run's raw result as JSON
       --progress ndjson Print one JSON line per event instead of the report (for the dashboard)
 `;
+
+/**
+ * `--log <file>` (any command but serve, which has its own): output and crashes go to that rotating
+ * file too. The scheduler passes it, since on Windows a scheduled run's console is thrown away.
+ */
+function takeLog(argv: string[]): { argv: string[]; log?: Log } {
+  const i = argv.indexOf("--log");
+  if (argv[0] === "serve" || i < 0 || argv[i + 1] === undefined) return { argv };
+  const file = resolve(argv[i + 1]!);
+  const log = openLog(file, { maxBytes: 2_000_000 });
+  teeConsole(log);
+  log.write(`rawjobs ${argv[0] ?? ""} (RawJobs ${APP_VERSION}) started.`);
+  process.on("uncaughtExceptionMonitor", (err, origin) => recordCrash(resolve(file, ".."), err, { origin, where: argv[0] ?? "cli", version: APP_VERSION, log }));
+  return { argv: [...argv.slice(0, i), ...argv.slice(i + 2)], log };
+}
 
 async function main(argv: string[]): Promise<number> {
   const [cmd, ...rest] = argv;
@@ -106,7 +125,9 @@ async function main(argv: string[]): Promise<number> {
 // wherever it was, a save included. A scan stops through its own checks instead (stopSignal).
 for (const stream of [process.stdout, process.stderr]) stream.on("error", () => {});
 
-main(process.argv.slice(2)).then(
+const { argv } = takeLog(process.argv.slice(2));
+
+main(argv).then(
   (code) => process.exit(code),
   (err) => {
     if (err instanceof ConfigError || (err as { code?: string }).code?.startsWith("ERR_PARSE_ARGS")) {
