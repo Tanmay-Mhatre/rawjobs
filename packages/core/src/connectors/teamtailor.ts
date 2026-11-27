@@ -1,15 +1,11 @@
 import type { NormalizedJob, Workplace } from "../schema";
 import { htmlToText, inferWorkplace } from "../text";
 import { detectAs, isoDate, joinParts, xmlBlocks, xmlOne } from "./parse";
+import { isTeamtailorHost, teamtailorBase } from "./keys";
 import { jobId, type Connector } from "./types";
 
-/**
- * Teamtailor careers sites live on {company}.teamtailor.com or on the company's own domain
- * (careers.acme.com). A slug with a dot is that host; both serve the same /jobs.rss.
- */
-const HOST = /^[a-z0-9-]+(\.[a-z0-9-]+)+$/i;
-export const isTeamtailorHost = (slug: string) => slug.includes(".") && HOST.test(slug);
-export const teamtailorBase = (slug: string) => (isTeamtailorHost(slug) ? `https://${slug.toLowerCase()}` : `https://${slug}.teamtailor.com`);
+export { isTeamtailorHost, teamtailorBase } from "./keys";
+
 /** Teamtailor's feeds declare its namespace: how a feed on any domain proves it is one. */
 export const isTeamtailorFeed = (xml: string) => /<rss[\s>]/.test(xml) && /xmlns:tt="https?:\/\/teamtailor\.com/.test(xml);
 

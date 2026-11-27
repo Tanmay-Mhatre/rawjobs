@@ -1,8 +1,10 @@
 import type { NormalizedJob } from "../schema";
 import { decodeEntities, htmlToText, inferWorkplace } from "../text";
-import { ZOHO_HOST } from "./detect-known";
 import { detectAs, isoDate, joinParts } from "./parse";
+import { zohoHost } from "./keys";
 import { jobId, type Connector } from "./types";
+
+export { zohoHost } from "./keys";
 
 /** A job opening as a Zoho Recruit careers page embeds it (hidden input id="jobs"), descriptions included. */
 export type ZohoJob = {
@@ -18,9 +20,6 @@ export type ZohoJob = {
   Date_Opened?: string;
   Publish?: boolean;
 };
-
-/** The board's host: its data centre's domain (`shard`, e.g. "in", "eu"), .com when unset. */
-export const zohoHost = (ref: { slug: string; shard?: string }) => `https://${ref.slug}.zohorecruit.${ref.shard && ZOHO_HOST.test(`.zohorecruit.${ref.shard}`) ? ref.shard : "com"}`;
 
 /** The careers page name from its URL (/jobs/{page}); "Careers" is Zoho's default. */
 const pageOf = (ref: { site?: string }) => ref.site || "Careers";

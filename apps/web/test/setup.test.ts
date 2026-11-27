@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { draftFromConfig, draftToConfig, emptyDraft, rebaseDraft, setupProgress, STEP, stepBlocker, type Draft } from "../src/lib/setup";
 
 const base: Draft = { ...emptyDraft(), include: ["product manager"], places: ["dubai"] };
@@ -57,5 +57,30 @@ describe("setupProgress", () => {
   it("asks about industries, not topics, after roles and places", () => {
     expect(setupProgress({ ...ready, keywords: { payments: 3 } }).nextStep).toBe(STEP.industries);
     expect(setupProgress({ ...ready, industries: ["fintech"] }).nextStep).toBe(STEP.review);
+  });
+});
+
+describe("hosted mode (no local server)", () => {
+  it("checkCompanies still detects a Greenhouse URL, loading detection on demand", async () => {
+    vi.resetModules();
+    vi.doMock("../src/lib/data", async (orig) => ({ ...(await orig<typeof import("../src/lib/data")>()), canRunLocally: false }));
+    try {
+      const { checkCompanies } = await import("../src/lib/setup");
+      const [row] = await checkCompanies(["https://job-boards.greenhouse.io/stripe"]);
+      expect(row).toMatchObject({ ats: "greenhouse", slug: "stripe", key: "greenhouse:stripe", careers_url: "https://job-boards.greenhouse.io/stripe", status: "live" });
+    } finally {
+      vi.doUnmock("../src/lib/data");
+      vi.resetModules();
+    }
+  });
+
+  it("draftFromConfig marks saved companies on unsupported systems as coming soon", () => {
+    const d = draftFromConfig({
+      companies: [
+        { ats: "greenhouse", slug: "stripe" },
+        { ats: "nosuchats", slug: "x" },
+      ],
+    });
+    expect(d.companies.map((c) => c.state)).toEqual(["saved", "soon"]);
   });
 });
