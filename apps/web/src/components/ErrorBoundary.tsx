@@ -1,11 +1,15 @@
 import { RefreshCw } from "lucide-react";
 import { Component, type ErrorInfo, type ReactNode } from "react";
-import { Button, Card } from "./ui";
+import { Button, Card, cx } from "./ui";
 
 type Props = {
   children: ReactNode;
   /** What broke, in the message: "this page", "RawJobs". */
   where?: string;
+  /** More buttons next to Try again, such as Close where the broken part had the only close button. */
+  actions?: ReactNode;
+  /** Extra classes for the card. */
+  className?: string;
 };
 type State = { error: Error | null };
 
@@ -29,16 +33,17 @@ export class ErrorBoundary extends Component<Props, State> {
     const { error } = this.state;
     if (!error) return this.props.children;
     return (
-      <Card className="mx-auto my-6 max-w-lg p-8 text-center">
+      <Card className={cx("mx-auto my-6 max-w-lg p-8 text-center", this.props.className)}>
         <div role="alert">
           <h2 className="type-subheading font-semibold">Something went wrong on {this.props.where ?? "this page"}</h2>
           <p className="mt-1 type-small text-muted">Your jobs and tracking are saved. Try again, or reload RawJobs if it keeps happening.</p>
         </div>
-        <div className="mt-4 flex justify-center gap-2">
+        <div className="mt-4 flex flex-wrap justify-center gap-2">
           <Button variant="primary" onClick={() => this.setState({ error: null })}>
             <RefreshCw className="size-4" /> Try again
           </Button>
           <Button onClick={() => location.reload()}>Reload RawJobs</Button>
+          {this.props.actions}
         </div>
         <details className="mt-4 text-left type-meta text-muted">
           <summary className="cursor-pointer">Technical details</summary>

@@ -2,7 +2,7 @@ import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-import { nodeOnlyInEntry } from "./web-check";
+import { entryBytes, nodeOnlyInEntry } from "./web-check";
 
 function dist(files: Record<string, string>) {
   const dir = mkdtempSync(join(tmpdir(), "rawjobs-webcheck-"));
@@ -20,5 +20,12 @@ describe("nodeOnlyInEntry", () => {
   it("finds Node-only code in the entry or in a chunk it imports at start", () => {
     expect(nodeOnlyInEntry(dist({ "index-a.js": "var[a]=process.versions.node.split('.')" }))).toMatch(/index-a\.js has process\.versions/);
     expect(nodeOnlyInEntry(dist({ "index-a.js": `import"./chunk-b.js"`, "chunk-b.js": "/* undici */" }))).toMatch(/chunk-b\.js has undici/);
+  });
+});
+
+describe("entryBytes", () => {
+  it("counts the entry and the chunks it imports at start, each once, and not lazy chunks", () => {
+    const d = dist({ "index-a.js": `import"./chunk-b.js";import{y}from"./chunk-b.js";import("./lazy-c.js")`, "chunk-b.js": "0123456789", "lazy-c.js": "x".repeat(5000) });
+    expect(entryBytes(d)).toBe(`import"./chunk-b.js";import{y}from"./chunk-b.js";import("./lazy-c.js")`.length + 10);
   });
 });
