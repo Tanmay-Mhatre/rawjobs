@@ -228,7 +228,7 @@ function UpdateWentBack({ last, onSeen }: { last: FailedUpdate; onSeen: () => vo
     <section aria-labelledby="went-back-title" className="flex items-start gap-4 rounded-md border border-line bg-raised p-4">
       <Anchor kind="warn" />
       <div className="min-w-0 flex-1">
-        <h2 /* design-lint-ignore: weight moves into the type style in 6I */ id="went-back-title" className="type-subheading font-semibold text-balance">
+        <h2 id="went-back-title" className="type-subheading text-balance">
           The update to {last.to} didn't start
         </h2>
         <p className="mt-1 flex items-center gap-1.5 type-small text-muted">

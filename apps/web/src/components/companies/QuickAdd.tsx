@@ -1,6 +1,7 @@
 import { Link2, Search, X } from "lucide-react";
 import type { ReactNode } from "react";
 import { roughCount } from "../../lib/format";
+import { IconButton } from "../primitives";
 import { Button, cx } from "../ui";
 
 type Props = {
@@ -48,15 +49,9 @@ export function QuickAdd({ q, onQ, count, placeholder, linkOpen, onToggleLink, l
             className="h-11 w-full rounded-md border border-line bg-raised pl-9 pr-10 type-small placeholder:text-muted [&::-webkit-search-cancel-button]:hidden"
           />
           {q && (
-            <button
-              type="button"
-              aria-label="Clear search"
-              title="Clear search"
-              className="absolute right-1.5 top-1.5 inline-flex size-8 items-center justify-center rounded-md text-muted hover:bg-inset hover:text-ink"
-              onClick={() => onQ("")}
-            >
+            <IconButton size="sm" label="Clear search" className="absolute right-2 top-2" onClick={() => onQ("")}>
               <X className="size-4" />
-            </button>
+            </IconButton>
           )}
         </div>
         <Button className={cx("h-11 shrink-0", linkOpen && "border-ink bg-active text-ink")} onClick={onToggleLink} aria-expanded={linkOpen} aria-controls={linkPanelId}>

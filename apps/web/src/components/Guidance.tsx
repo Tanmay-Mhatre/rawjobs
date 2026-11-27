@@ -10,6 +10,7 @@ import { STEP, STEP_COUNT } from "../lib/setup";
 import { load, save } from "../lib/storage";
 import { useMedia } from "../lib/useMedia";
 import { PRIORITY, type Notice } from "../app/notices";
+import { IconButton } from "./primitives";
 import { ScanProgress } from "./ScanProgress";
 import { Button, Card, cx } from "./ui";
 import { settingsHash } from "./settings/registry";
@@ -169,10 +170,9 @@ export function SetupChecklist({
             </span>
           )}
         </span>
-        <button
-          type="button"
-          aria-label="Hide setup checklist"
-          className="inline-flex size-8 items-center justify-center rounded-md text-muted hover:bg-inset hover:text-ink"
+        <IconButton
+          size="sm"
+          label="Hide setup checklist"
           onClick={() => {
             save(DISMISS_KEY, true);
             setOwn(true);
@@ -180,7 +180,7 @@ export function SetupChecklist({
           }}
         >
           <X className="size-4" />
-        </button>
+        </IconButton>
       </div>
     );
   }
@@ -267,7 +267,7 @@ export function SetupHero({ items, started, nextStep, onStep, onCompanies }: { i
     <Card className="overflow-hidden">
       <div className="flex flex-col gap-4 p-5 sm:flex-row sm:items-center sm:p-6">
         <div className="min-w-0 flex-1">
-          <h2 /* design-lint-ignore: weight moves into the type style in 6I */ className="type-subheading font-semibold">{started ? "Finish setting up your radar" : "Set up your radar"}</h2>
+          <h2 className="type-subheading">{started ? "Finish setting up your radar" : "Set up your radar"}</h2>
           <p className="mt-0.5 type-small text-muted">Pick the roles and places you want. RawJobs finds and ranks matching jobs across thousands of companies. Setup takes about 3 minutes.</p>
           <div className="mt-3 flex items-center gap-3">
             <ProgressBar done={done} total={total} className="w-40" />
@@ -342,7 +342,7 @@ export function NoMatches({ jobs, onStep, onCompanies }: { jobs: Job[]; onStep: 
     <Card className="p-5 sm:p-6">
       <div className="max-w-prose">
         <div>
-          <h2 /* design-lint-ignore: weight moves into the type style in 6I */ className="type-subheading font-semibold">No matches yet. Here's why.</h2>
+          <h2 className="type-subheading">No matches yet. Here's why.</h2>
           <p className="mt-1 type-small text-muted">
             Checked <b className="tabular font-semibold text-ink">{d.scanned.toLocaleString()}</b> open jobs: <b className="tabular font-semibold text-ink">{d.titleMiss.toLocaleString()}</b> had other
             job titles and <b className="tabular font-semibold text-ink">{d.locationMiss.toLocaleString()}</b> had the right title but were in other places.

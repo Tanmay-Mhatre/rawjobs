@@ -86,7 +86,7 @@ export function CompareOffers({ offers, onClose }: { offers: { id: string; entry
     <Dialog open onClose={onClose} labelledBy="compare-title" className="max-w-4xl">
       <Card className="p-5 shadow-l3 sm:p-6">
         <div className="flex items-start gap-3">
-          <h2 /* design-lint-ignore: weight moves into the type style in 6I */ id="compare-title" className="min-w-0 flex-1 type-subheading font-semibold">
+          <h2 id="compare-title" className="min-w-0 flex-1 type-subheading">
             Compare offers
           </h2>
           <IconButton label="Close" className="-mr-2 -mt-1" onClick={onClose}>
@@ -249,7 +249,7 @@ export function TrackedJobDialog({
       <div className="flex h-full flex-col overflow-hidden rounded-md border border-line bg-overlay shadow-l3 max-sm:rounded-none">
         <div className="flex flex-wrap items-center gap-x-4 gap-y-2 border-b border-hairline px-5 py-3">
           <div className="min-w-0 flex-1">
-            <h2 /* design-lint-ignore: weight moves into the type style in 6I */ id="tracked-title" className="type-subheading font-semibold">
+            <h2 id="tracked-title" className="type-subheading">
               {s.title}
             </h2>
             <p className="type-small text-muted">
@@ -325,7 +325,7 @@ export function AddJobDialog({ open, onClose, onAdd }: { open: boolean; onClose:
       <Card className="p-5 shadow-l3 sm:p-6">
         <form onSubmit={submit} className="grid gap-3">
           <div className="flex items-start gap-3">
-            <h2 /* design-lint-ignore: weight moves into the type style in 6I */ id="add-job-title" className="min-w-0 flex-1 type-subheading font-semibold">
+            <h2 id="add-job-title" className="min-w-0 flex-1 type-subheading">
               Track a job
             </h2>
             <IconButton label="Close" className="-mr-2 -mt-1" onClick={onClose}>
