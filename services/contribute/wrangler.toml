@@ -3,6 +3,10 @@ name = "rawjobs-contribute"
 main = "src/index.ts"
 compatibility_date = "2026-09-01"
 
+# Keep the Worker's logs (Cloudflare dashboard, Workers > Observability).
+[observability]
+enabled = true
+
 # Waiting contributions (kept 30 days at most). Create it with:
 #   npx wrangler kv namespace create INBOX
 # and paste the id it prints below.

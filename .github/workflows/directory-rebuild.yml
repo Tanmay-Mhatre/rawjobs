@@ -681,7 +681,11 @@ jobs:
           git config user.name "rawjobs-bot"
           git config user.email "rawjobs-bot@users.noreply.github.com"
           git add coverage.md manifest.json
-          git diff --cached --quiet || (git commit -m "Weekly directory $(date -u +%Y-%m-%d)" && git push)
+          if git diff --cached --quiet; then echo "Nothing changed."; exit 0; fi
+          git commit -m "Weekly directory $(date -u +%Y-%m-%d)"
+          # The contributions and move approval workflows push here too, each in its own concurrency group.
+          . "$GITHUB_WORKSPACE/scripts/catalog/release-io.sh"
+          push_with_retry
 
       - name: Report a run that didn't publish
         # Keyed on the publish step, not on failure()/cancelled(): a timeout, a failed step and a
