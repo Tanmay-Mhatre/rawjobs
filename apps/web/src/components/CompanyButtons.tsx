@@ -1,7 +1,7 @@
 import { Check, Plus, Undo2 } from "lucide-react";
 import { type ReactNode, useState } from "react";
 import { keyOf, SUPPORTED, type CompanyRef } from "../lib/companies";
-import { Button } from "./ui";
+import { Button } from "./primitives";
 
 /**
  * Add to / remove from My companies. `name` makes the label specific for screen readers ("Add Acme").
@@ -84,7 +84,7 @@ export function AddAll({
   return (
     <Button
       size="sm"
-      variant={primary ? "primary" : "outline"}
+      variant={primary ? "primary" : "secondary"}
       onClick={() => {
         const keys = onAddMany(todo);
         const soon = todo.filter((c) => keys.includes(keyOf(c)) && !SUPPORTED.has(c.ats)).length;

@@ -6,8 +6,8 @@ import { formatDate } from "../lib/format";
 import { settingsHash } from "./settings/registry";
 import { announceUpdateStatus, loadChangelog, markUpdateSeen, updateNow, useUpdateStatus, type Changelog, type UpdateStatus } from "../lib/update";
 import { Dialog } from "./Dialog";
-import { Popover } from "./primitives";
-import { Button, Card, cx, Segmented } from "./ui";
+import { Button, Popover } from "./primitives";
+import { Card, cx, Segmented } from "./ui";
 import { Anchor, ChangeRows, ChangeTag, Head, Points, sortedItems, VersionLine } from "./UpdateParts";
 import { toast } from "./Toast";
 import { useScanProgress } from "../lib/scan";
@@ -209,7 +209,7 @@ export function ReleaseNotes() {
         ))}
       </ol>
       {visible.length > shown && (
-        <Button size="sm" variant="ghost" onClick={() => setShown((n) => n + PAGE)}>
+        <Button size="sm" variant="quiet" onClick={() => setShown((n) => n + PAGE)}>
           Show older versions
         </Button>
       )}
@@ -363,7 +363,7 @@ function CouldntUpdate({
       <p className="mt-3 type-small text-ink">{offline ? "RawJobs couldn't reach GitHub. Check your internet connection, then try again." : error}</p>
       <Points className="mt-2" items={[[ShieldCheck, `Nothing changed. You're still on ${from}.`]]} />
       <div className="mt-3 flex justify-end gap-2">
-        <Button size="sm" variant="ghost" onClick={onDismiss}>
+        <Button size="sm" variant="quiet" onClick={onDismiss}>
           Dismiss
         </Button>
         <Button size="sm" variant="primary" data-retry onClick={onRetry}>

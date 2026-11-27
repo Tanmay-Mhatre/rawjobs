@@ -4,7 +4,8 @@ import { ExternalLink, EyeOff } from "lucide-react";
 import { SUPPORTED } from "../../lib/companies";
 import { type CompanySuggestion, whereTheyHire } from "../../lib/companySuggest";
 import { AddButton } from "../CompanyButtons";
-import { Button, cx } from "../ui";
+import { Button } from "../primitives";
+import { cx } from "../ui";
 
 /** Initials on a tinted square: no logo fetches (they'd tell a third party which companies you look at). */
 const MONOGRAM_SIZE = { xs: "size-5 rounded-sm type-meta", sm: "size-7 rounded-sm type-meta", md: "size-10 rounded-sm type-label" };
@@ -64,7 +65,7 @@ export function SuggestionCard({ s, added, onAdd, onRemove, onHide, note, addedT
       <footer className="mt-auto flex items-center gap-1.5 pt-1">
         <AddButton added={added} onAdd={onAdd} onRemove={onRemove} soon={soon} name={name} addedText={addedText} />
         {onHide && !added && (
-          <Button size="sm" variant="ghost" onClick={onHide} className="text-muted" aria-label={`Hide ${name}`} title="No more suggestions, and its jobs leave your Radar">
+          <Button size="sm" variant="quiet" onClick={onHide} className="text-muted" aria-label={`Hide ${name}`} title="No more suggestions, and its jobs leave your Radar">
             <EyeOff className="size-3.5" /> Hide
           </Button>
         )}

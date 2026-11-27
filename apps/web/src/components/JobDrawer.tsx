@@ -1,7 +1,7 @@
 import { Dialog } from "./Dialog";
 import { ErrorBoundary } from "./ErrorBoundary";
 import { JobDetail, type JobDetailProps } from "./JobDetail";
-import { Button } from "./ui";
+import { Button } from "./primitives";
 
 /** JobDetail as a full-height side drawer: phones (Radar) and the Pipeline. Focus is trapped and returns on close. */
 export function JobDrawer(props: JobDetailProps & { onClose: () => void }) {

@@ -5,8 +5,8 @@ import { ATS_LABEL, keyOf, SUPPORTED, type CompanyRef } from "../lib/companies";
 import { displayPlace } from "../lib/format";
 import { checkCompanies, type CompanyCheck } from "../lib/setup";
 import { AddAll, AddButton } from "./CompanyButtons";
-import { Status } from "./primitives";
-import { Button, cx } from "./ui";
+import { Button, Status } from "./primitives";
+import { cx } from "./ui";
 
 type Result = CompanyCheck & { id: string };
 
@@ -194,7 +194,7 @@ export function AddByLink({
             </h3>
             <div className="flex items-center gap-2">
               {refs.length > 1 && <AddAll items={refs} watched={watched} onAddMany={onAddMany} onRemoveMany={(keys) => keys.forEach(onRemove)} />}
-              <Button size="sm" variant="ghost" onClick={() => setResults([])}>
+              <Button size="sm" variant="quiet" onClick={() => setResults([])}>
                 Clear
               </Button>
             </div>

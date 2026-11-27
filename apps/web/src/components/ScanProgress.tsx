@@ -3,7 +3,8 @@ import { FAILING_HASH } from "../lib/companies";
 import { atsLabel } from "../lib/filters";
 import { progressRows, scanLine, type ScanState } from "../lib/scan";
 import { ScanBars } from "./ScanBars";
-import { Button, cx } from "./ui";
+import { Button } from "./primitives";
+import { cx } from "./ui";
 
 /** Rows listed under the progress bars: your companies, then directory ones that matched or failed. */
 const MAX_ROWS = 60;

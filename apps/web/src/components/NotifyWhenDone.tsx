@@ -6,8 +6,8 @@ import type { ScanState } from "../lib/scan";
 import { useScanSelector } from "../lib/scanStore";
 import { Dialog } from "./Dialog";
 import { TelegramAlerts } from "./TelegramAlerts";
-import { IconButton as RjIconButton } from "./primitives";
-import { Button, Card, cx, IconButton } from "./ui";
+import { Button, IconButton as RjIconButton } from "./primitives";
+import { Card, cx, IconButton } from "./ui";
 import { settingsHash } from "./settings/registry";
 
 /** Settings › Telegram alerts. */
@@ -161,7 +161,7 @@ function NotifyFailed({ result, onDismiss }: { result: string; onDismiss: () => 
         <Button size="sm" onClick={toTelegramSettings}>
           {result === "off" ? "Set up Telegram" : "Open Telegram settings"}
         </Button>
-        <Button size="sm" variant="ghost" onClick={onDismiss}>
+        <Button size="sm" variant="quiet" onClick={onDismiss}>
           Dismiss
         </Button>
       </p>

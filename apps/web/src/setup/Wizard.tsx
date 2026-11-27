@@ -2,7 +2,8 @@ import { groupPlaces } from "@rawjobs/core/catalog/places";
 import { configToYaml } from "@rawjobs/core/yaml-writer";
 import { ArrowLeft, ArrowRight, ChevronDown, CircleAlert, Download, FileText } from "lucide-react";
 import { useEffect, useMemo, useRef, useState, type ReactNode, type RefObject } from "react";
-import { Button, Card, cx } from "../components/ui";
+import { Button } from "../components/primitives";
+import { Card, cx } from "../components/ui";
 import { copyDetails } from "../lib/copyDetails";
 import { canRunLocally } from "../lib/data";
 import { causeOf, draftToConfig, officePlaces, saveBlockers, saveConfig, STEP, STEP_COUNT, stepBlocker, STEPS, type Draft, type SaveCause, type SetupProgress } from "../lib/setup";
@@ -130,7 +131,7 @@ function StepFooter({ onBack, blocker, children }: { onBack: () => void; blocker
   return (
     // Sticky, so Continue is always on screen however long the step is.
     <footer className="sticky bottom-0 z-sticky -mx-5 -mb-5 mt-8 flex items-center justify-between gap-3 rounded-b-md border-t border-line bg-raised/95 px-5 py-3 backdrop-blur sm:-mx-7 sm:-mb-7 sm:px-7 sm:py-4">
-      <Button variant="ghost" className="h-11 sm:h-9" onClick={onBack}>
+      <Button variant="quiet" className="h-11 sm:h-9" onClick={onBack}>
         <ArrowLeft className="size-4" /> Back
       </Button>
       <div className="flex min-w-0 flex-col items-end gap-1 sm:flex-row sm:items-center sm:gap-3">
@@ -219,11 +220,11 @@ function Welcome({
             {existing ? "Review my setup" : resuming ? `Continue · step ${progress.nextStep} of ${STEP_COUNT}` : "Start setup"} <ArrowRight className="size-4" />
           </Button>
           {resuming && (
-            <Button variant="ghost" className="h-11" onClick={onStartOver}>
+            <Button variant="quiet" className="h-11" onClick={onStartOver}>
               Start over
             </Button>
           )}
-          <Button variant="ghost" className="h-11 sm:ml-auto" onClick={onExit}>
+          <Button variant="quiet" className="h-11 sm:ml-auto" onClick={onExit}>
             {existing ? "Back to Radar" : "Skip for now"}
           </Button>
         </div>
@@ -372,7 +373,7 @@ export function Review({
         {lines.map(([n, text]) => (
           <li key={n} className="flex items-start gap-3 p-3 type-small">
             <span className="min-w-0 flex-1 leading-6">{text}</span>
-            <Button size="sm" variant="ghost" onClick={() => goStep(n)} aria-label={`Edit ${EDIT_LABEL[n] ?? "this step"}`}>
+            <Button size="sm" variant="quiet" onClick={() => goStep(n)} aria-label={`Edit ${EDIT_LABEL[n] ?? "this step"}`}>
               Edit
             </Button>
           </li>
@@ -399,7 +400,7 @@ export function Review({
               <li key={b.step} className="flex items-center gap-2">
                 <CircleAlert className="size-4 shrink-0 text-warning-text" />
                 <span className="flex-1">{b.message}</span>
-                <Button size="sm" variant="ghost" onClick={() => goStep(b.step)}>
+                <Button size="sm" variant="quiet" onClick={() => goStep(b.step)}>
                   Fix
                 </Button>
               </li>
@@ -417,7 +418,7 @@ export function Review({
                 Try again
               </Button>
               {error.cause === "server" && (
-                <Button size="sm" variant="ghost" onClick={() => void copyDetails({ action: "Save your setup", cause: error.cause, errors: error.text })}>
+                <Button size="sm" variant="quiet" onClick={() => void copyDetails({ action: "Save your setup", cause: error.cause, errors: error.text })}>
                   Copy details
                 </Button>
               )}

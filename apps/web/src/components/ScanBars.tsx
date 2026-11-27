@@ -3,8 +3,7 @@ import { useId, useState } from "react";
 import { shortCount } from "../lib/format";
 import { splitProgress } from "../lib/scan";
 import { useMedia } from "../lib/useMedia";
-import { SourceTag } from "./primitives";
-import { Button } from "./ui";
+import { Button, SourceTag } from "./primitives";
 
 export type ScanBar = { key: string; label: string; done: number; total: number; feed?: true };
 
@@ -44,7 +43,7 @@ export function ScanBars({ rows, noun, onExpand }: { rows: ScanBar[]; noun: "hir
       {rest.length > 0 && (
         <Button
           size="sm"
-          variant="ghost"
+          variant="quiet"
           className="rj-progress__more mt-2"
           aria-expanded={expanded}
           aria-controls={`${id}-list`}

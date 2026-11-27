@@ -5,7 +5,8 @@ import { PRIORITY, type Notice } from "../app/notices";
 import { load, save } from "../lib/storage";
 import { TelegramSetupDialog, telegramReady } from "./NotifyWhenDone";
 import { settingsHash } from "./settings/registry";
-import { Button, cx, IconButton } from "./ui";
+import { Button } from "./primitives";
+import { cx, IconButton } from "./ui";
 
 /** How the Radar's Telegram banner was answered: "Not now" count, hidden until, closed for good. */
 export type TelegramBannerState = { notNow: number; until: number; closed?: boolean };
@@ -172,7 +173,7 @@ function TelegramBanner({
         </div>
       </div>
       <div className="flex items-center gap-2 sm:shrink-0">
-        <Button variant="ghost" onClick={() => update({ notNow: state.notNow + 1, until: Date.now() + SNOOZE_MS })}>
+        <Button variant="quiet" onClick={() => update({ notNow: state.notNow + 1, until: Date.now() + SNOOZE_MS })}>
           Not now
         </Button>
         <Button variant="primary" className="max-sm:flex-1" onClick={onSetup}>

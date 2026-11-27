@@ -1,6 +1,6 @@
 import type { ReactNode } from "react";
 import type { FacetKey, Filters } from "../../lib/filters";
-import { Button } from "../ui";
+import { Button } from "../primitives";
 import { FacetMenu } from "./FacetMenu";
 import { type FacetCounts, FACETS, facetOptions } from "./facetTable";
 import { MoreMenu } from "./MoreFilters";
@@ -55,7 +55,7 @@ export function RadarFilterPanel(
           networkReady={p.networkReady}
           knownCount={p.knownCount}
         />
-        <Button variant="ghost" size="sm" aria-expanded={p.moreFacets} onClick={p.onMoreFacets}>
+        <Button variant="quiet" size="sm" aria-expanded={p.moreFacets} onClick={p.onMoreFacets}>
           {p.moreFacets ? "Fewer filters" : "More filters"}
         </Button>
       </div>

@@ -4,7 +4,8 @@ import { type ReactNode, useEffect, useRef, useState } from "react";
 import { INSTALL_LINE, type UpdateStatus } from "../lib/update";
 import { Dialog } from "./Dialog";
 import { toast } from "./Toast";
-import { Button, Card } from "./ui";
+import { Button } from "./primitives";
+import { Card } from "./ui";
 import { Anchor, ChangeRows, Head, Points, SeeAll, sortedItems } from "./UpdateParts";
 
 /**
@@ -63,7 +64,7 @@ export function RequiredUpdate({ status, update, busy }: { status: UpdateStatus;
           </button>
         )}
         <Foot>
-          <Button variant="ghost" onClick={() => setLater(true)}>
+          <Button variant="quiet" onClick={() => setLater(true)}>
             Continue for now
           </Button>
           <Button variant="primary" data-autofocus onClick={() => void go()} className="max-sm:h-11 max-sm:w-full">

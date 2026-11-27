@@ -5,7 +5,7 @@ import { introTemplate } from "../../lib/referralDrafts";
 import { friendsSearch } from "../../lib/referralLinks";
 import { type Contact, newId, type Outreach, toContact } from "../../lib/userState";
 import { toast } from "../Toast";
-import { Button } from "../ui";
+import { Button } from "../primitives";
 
 /**
  * What you pasted, per company, in memory only: it survives switching jobs but not a reload, and is
@@ -107,11 +107,11 @@ export function FindFriends({ company, memoryKey, title, onJob, add }: Props) {
             className="w-full rounded-md border border-line bg-raised px-2.5 py-2 type-small text-ink"
           />
           <div className="flex flex-wrap gap-1.5">
-            <Button size="sm" variant="outline" onClick={() => read(text)}>
+            <Button size="sm" onClick={() => read(text)}>
               Find my friends
             </Button>
             {(result || text) && (
-              <Button size="sm" variant="ghost" onClick={clear}>
+              <Button size="sm" variant="quiet" onClick={clear}>
                 Clear
               </Button>
             )}

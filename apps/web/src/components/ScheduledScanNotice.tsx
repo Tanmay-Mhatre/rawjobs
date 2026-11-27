@@ -6,7 +6,7 @@ import { SCAN_ENDED } from "../lib/scan";
 import { load, save } from "../lib/storage";
 import { failedRun, runLine } from "./ScheduledScans";
 import { settingsHash } from "./settings/registry";
-import { Button } from "./ui";
+import { Button } from "./primitives";
 
 const SEEN_KEY = "rawjobs.scheduledNoticeSeen";
 
@@ -77,7 +77,7 @@ function ScheduledScanNotice({ notice, onScan, onDismiss }: { notice: NonNullabl
         >
           {notice.fix ? "Fix the schedule" : "Details"}
         </Button>
-        <Button size="sm" variant="ghost" onClick={onDismiss}>
+        <Button size="sm" variant="quiet" onClick={onDismiss}>
           Dismiss
         </Button>
       </div>

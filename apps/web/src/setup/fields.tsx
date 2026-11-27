@@ -1,7 +1,8 @@
 import { Check, ChevronDown } from "lucide-react";
 import { createContext, useContext, type ReactNode } from "react";
 import { toast } from "../components/Toast";
-import { Button, cx } from "../components/ui";
+import { Button } from "../components/primitives";
+import { cx } from "../components/ui";
 import type { Suggestions } from "../lib/suggest";
 import type { Draft } from "../lib/setup";
 
@@ -66,7 +67,7 @@ export function ClearButton({
   return (
     <Button
       size="sm"
-      variant="ghost"
+      variant="quiet"
       className="shrink-0"
       aria-label={name ?? `${label} ${noun[1]}`}
       onClick={() => {

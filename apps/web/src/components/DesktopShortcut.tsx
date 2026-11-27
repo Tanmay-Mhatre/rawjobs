@@ -4,7 +4,8 @@ import mark from "../design/logos/rawjobs-mark.svg";
 import { addDesktopShortcut, announceUpdateStatus, markShortcutNoticeSeen, type UpdateStatus } from "../lib/update";
 import { Dialog } from "./Dialog";
 import { toast } from "./Toast";
-import { Button, Card } from "./ui";
+import { Button } from "./primitives";
+import { Card } from "./ui";
 import { settingsHash } from "./settings/registry";
 
 /**
@@ -134,7 +135,7 @@ export function DesktopShortcutSettings({ status, setStatus }: { status: UpdateS
         <Row label="Address">
           <span className="flex flex-wrap items-center gap-x-2 gap-y-1">
             <code className="break-all font-mono">{location.origin}</code>
-            <Button size="sm" variant="ghost" onClick={copy}>
+            <Button size="sm" variant="quiet" onClick={copy}>
               <Copy className="size-3.5" /> Copy address
             </Button>
           </span>

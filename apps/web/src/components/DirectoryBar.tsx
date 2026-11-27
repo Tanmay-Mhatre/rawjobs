@@ -3,7 +3,8 @@ import { useCallback, useEffect, useState } from "react";
 import { getJson } from "../lib/api";
 import { canRunLocally } from "../lib/data";
 import { roughCount, timeAgo } from "../lib/format";
-import { Button, cx } from "./ui";
+import { Button } from "./primitives";
+import { cx } from "./ui";
 
 type Status = {
   local?: { version: string; companies: number; generated_at: string; updated_at: string; checked_at?: string };
@@ -79,7 +80,7 @@ export function DirectoryBar({ onUpdated, companies }: { onUpdated: () => void; 
         <span className="font-medium">Company directory:</span> <span className="text-muted">{text}</span>
         {status.outbox > 0 && <span className="text-muted"> · {status.outbox} of your additions waiting to be shared</span>}
       </p>
-      <Button size="sm" variant={status.present ? "ghost" : "primary"} onClick={() => void update()} disabled={busy}>
+      <Button size="sm" variant={status.present ? "quiet" : "primary"} onClick={() => void update()} disabled={busy}>
         {busy ? <LoaderCircle className="size-3.5 animate-spin" /> : <CloudDownload className="size-3.5" />}
         {busy ? "Updating…" : status.present ? "Update directory" : "Download directory"}
       </Button>

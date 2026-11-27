@@ -9,8 +9,8 @@ import { clearFresh, isAdded, type NextUp, packMembers, packState, revealNext, u
 import { load, save } from "../../lib/storage";
 import { settingsHash } from "../settings/registry";
 import { AddAll, AddButton } from "../CompanyButtons";
-import { buttonClass, Chip, IconButton } from "../primitives";
-import { Button, Card, cx } from "../ui";
+import { Button, buttonClass, Chip, IconButton } from "../primitives";
+import { Card, cx } from "../ui";
 import { Monogram, SuggestionCard } from "./SuggestionCard";
 import { type Lens, MatchingStatus, openingLens, SuggestSkeleton } from "./SuggestSkeleton";
 import { TabList, TabPanel, useTabIds } from "./Tabs";
@@ -204,7 +204,7 @@ export function ForYou({
     ];
     const next = order.find(([id, , n]) => id !== from && n > 0);
     return next ? (
-      <Button key="try" size="sm" variant="ghost" onClick={() => setLens(next[0])}>
+      <Button key="try" size="sm" variant="quiet" onClick={() => setLens(next[0])}>
         Try {next[1]}
       </Button>
     ) : null;
@@ -404,7 +404,7 @@ export function ForYou({
                 actions={[
                   seeMine,
                   onBrowse && (
-                    <Button key="browse" size="sm" variant="ghost" onClick={onBrowse}>
+                    <Button key="browse" size="sm" variant="quiet" onClick={onBrowse}>
                       Browse all companies
                     </Button>
                   ),
@@ -501,7 +501,7 @@ function LensHeader({
 function ShowMore({ onClick, children }: { onClick: () => void; children: ReactNode }) {
   return (
     <div className="flex justify-center">
-      <Button variant="ghost" onClick={onClick}>
+      <Button variant="quiet" onClick={onClick}>
         {children}
       </Button>
     </div>
@@ -665,7 +665,7 @@ function PacksHeader({
       {(!done || onSeeMine) && (
         <Button
           size="sm"
-          variant={watched.size === 0 ? "primary" : "outline"}
+          variant={watched.size === 0 ? "primary" : "secondary"}
           onClick={() => {
             if (done) {
               if (Date.now() - lastAdd.current >= DOUBLE_PRESS_MS) onSeeMine?.();
@@ -893,7 +893,7 @@ function FinishedPack({ pack: f, actions }: { pack: Finished; actions: PackActio
           <Package className="mt-0.5 size-4 shrink-0 text-muted" aria-hidden />
           {label}
         </h3>
-        <Button size="sm" variant="ghost" aria-label={`Remove the ${label} pack`} onClick={() => actions.remove(f.keys, (k) => `Removed ${k} from ${label}`)}>
+        <Button size="sm" variant="quiet" aria-label={`Remove the ${label} pack`} onClick={() => actions.remove(f.keys, (k) => `Removed ${k} from ${label}`)}>
           Remove pack
         </Button>
       </header>
@@ -952,7 +952,7 @@ function PackCard({
             </span>
             <span className={buttonClass("secondary", "sm", "col-start-1 row-start-1")}>Remove pack</span>
           </span>
-          <Button size="sm" variant={kind === "done" ? "ghost" : "outline"} className="col-start-1 row-start-1" aria-label={kind === "done" ? `Remove the ${label} pack` : undefined} onClick={act}>
+          <Button size="sm" variant={kind === "done" ? "quiet" : "secondary"} className="col-start-1 row-start-1" aria-label={kind === "done" ? `Remove the ${label} pack` : undefined} onClick={act}>
             {kind !== "done" && <Plus className="size-3.5" />}
             {kind === "all" ? `Add all ${todo}` : kind === "more" ? `Add ${todo} more` : "Remove pack"}
           </Button>

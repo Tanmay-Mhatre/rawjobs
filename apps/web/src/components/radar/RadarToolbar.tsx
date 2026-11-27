@@ -2,9 +2,9 @@ import { ArrowUpDown, SlidersHorizontal, X } from "lucide-react";
 import { type ReactNode, type RefObject, useState } from "react";
 import type { Filters, Sort } from "../../lib/filters";
 import type { SavedView } from "../../lib/prefs";
-import { Chip, SearchField } from "../primitives";
+import { Button, Chip, SearchField } from "../primitives";
 import { toast } from "../Toast";
-import { Button, Card } from "../ui";
+import { Card } from "../ui";
 import type { FacetCounts } from "./facetTable";
 import { sortsFor } from "./FilterSheet";
 import { ageLimit } from "./MoreFilters";
@@ -140,13 +140,13 @@ export function RadarToolbar({
             </Chip>
           ))}
           {chips.length > 0 && (
-            <Button variant="ghost" size="sm" onClick={() => p.replace(p.base, sort)}>
+            <Button variant="quiet" size="sm" onClick={() => p.replace(p.base, sort)}>
               Clear all
             </Button>
           )}
           {olderCount > 0 && (
             <Button
-              variant="ghost"
+              variant="quiet"
               size="sm"
               onClick={() => setFilters({ showOld: true })}
               title={`Postings older than ${ageLimit(p.maxAgeDays)} are hidden: they're usually filled. Change this in Settings › Matching.`}

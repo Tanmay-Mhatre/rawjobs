@@ -1,7 +1,8 @@
 import { X } from "lucide-react";
 import { useState, type ReactNode } from "react";
 import { Dialog } from "../Dialog";
-import { Button, Card, IconButton } from "../ui";
+import { Button } from "../primitives";
+import { Card, IconButton } from "../ui";
 
 /**
  * "Are you sure?" for something that can't be undone (Start setup over, Delete connections). Cancel
@@ -59,7 +60,7 @@ export function ConfirmDialog({
           </p>
         )}
         <div className="mt-5 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
-          <Button variant="ghost" onClick={close} disabled={working} data-autofocus>
+          <Button variant="quiet" onClick={close} disabled={working} data-autofocus>
             Cancel
           </Button>
           <Button variant="danger" onClick={() => void confirm()} disabled={working}>

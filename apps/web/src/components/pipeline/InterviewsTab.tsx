@@ -2,8 +2,8 @@ import { Plus, X } from "lucide-react";
 import { type FormEvent, useId, useState } from "react";
 import { dayAfter, type Entry, type EntryPatch, type Interview, today } from "../../lib/userState";
 import { DateField, fieldTime, TimeField } from "../DateField";
-import { Chip, ChipGroup } from "../primitives";
-import { Button, IconButton, Select } from "../ui";
+import { Button, Chip, ChipGroup } from "../primitives";
+import { IconButton, Select } from "../ui";
 
 const input = "h-9 min-w-0 rounded-md border border-line bg-raised px-2.5 type-small text-ink placeholder:text-muted";
 const day = (d: string) => new Date(`${d}T12:00:00`).toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric" });
@@ -150,7 +150,7 @@ function AddInterview({ id, contacts, now, onSave, onCancel }: { id: string; con
         </label>
       )}
       <div className="flex justify-end gap-2">
-        <Button size="sm" variant="ghost" onClick={onCancel}>
+        <Button size="sm" variant="quiet" onClick={onCancel}>
           Cancel
         </Button>
         <Button size="sm" type="submit" variant="primary">

@@ -57,6 +57,11 @@ export const RULES: { id: string; pattern: RegExp; message: string }[] = [
     pattern: /\bopacity-(?:[1-8]\d)\b/,
     message: "Opacity on text lowers its contrast below the token's: use a muted color (text-muted, text-secondary) instead. Icons may opt out.",
   },
+  {
+    id: "old-button",
+    pattern: /\bvariant=(?:"|\{[^}]*")(?:outline|ghost)"/,
+    message: 'Old Button variant: secondary is the default (drop variant="outline") and ghost is now quiet. Button comes from components/primitives.',
+  },
 ];
 
 /** Plain-CSS checks for the marketing site, where the Tailwind-class rules above can't see var(--…) and px. */

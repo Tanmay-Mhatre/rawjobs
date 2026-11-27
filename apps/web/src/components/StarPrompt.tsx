@@ -6,8 +6,8 @@ import { REPO_URL } from "../lib/update";
 import type { UserState } from "../lib/userState";
 import { firstSeenFrom, RUNS_KEPT, STAR_KEY, starDue, starFacts, type StarPrompt as Saved } from "../lib/starPrompt";
 import { Dialog } from "./Dialog";
-import { buttonClass } from "./primitives";
-import { Button, Card } from "./ui";
+import { Button, buttonClass } from "./primitives";
+import { Card } from "./ui";
 
 /** What the Radar knows that the question needs: your tracking and the scans so far (meta.json). */
 export type StarInput = { state: UserState; runs: readonly RunSummary[] };

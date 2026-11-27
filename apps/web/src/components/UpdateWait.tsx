@@ -2,7 +2,7 @@ import { LoaderCircle, Square } from "lucide-react";
 import { useState } from "react";
 import { aboutTime, type ScanProgress } from "../lib/scan";
 import { stopScan } from "../lib/setup";
-import { Button } from "./ui";
+import { Button } from "./primitives";
 
 /**
  * An update waiting for a scan: how far along the scan is and about how long is left (a page,

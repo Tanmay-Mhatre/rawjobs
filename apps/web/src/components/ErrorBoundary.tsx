@@ -1,6 +1,7 @@
 import { RefreshCw } from "lucide-react";
 import { Component, type ErrorInfo, type ReactNode } from "react";
-import { Button, Card, cx } from "./ui";
+import { Button } from "./primitives";
+import { Card, cx } from "./ui";
 
 type Props = {
   children: ReactNode;

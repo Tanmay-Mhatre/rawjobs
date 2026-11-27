@@ -57,6 +57,14 @@ describe("design lint", () => {
     expect(rules(`<p className="type-label font-medium">`)).toEqual([]);
   });
 
+  it("keeps buttons on the design system's variant names", () => {
+    expect(rules(`<Button variant="outline">`)).toEqual(["old-button"]);
+    expect(rules(`<Button size="sm" variant="ghost" onClick={close}>`)).toEqual(["old-button"]);
+    expect(rules(`<Button variant={done ? "ghost" : "primary"}>`)).toEqual(["old-button"]);
+    expect(rules(`<Button variant="quiet">`)).toEqual([]);
+    expect(rules(`<Button variant={done ? "quiet" : "secondary"}>`)).toEqual([]);
+  });
+
   it("flags opacity used to mute text, but not 0, 90 or 100", () => {
     expect(rules(`className={cx("rj-row", muted && "opacity-60")}`)).toEqual(["opacity-text"]);
     expect(rules(`className="disabled:opacity-40"`)).toEqual(["opacity-text"]);

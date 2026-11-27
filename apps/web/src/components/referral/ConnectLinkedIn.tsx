@@ -16,7 +16,8 @@ import {
   type WatchState,
 } from "../../lib/network";
 import { Dialog } from "../Dialog";
-import { Button, Card, cx, IconButton } from "../ui";
+import { Button } from "../primitives";
+import { Card, cx, IconButton } from "../ui";
 
 /** LinkedIn's "Get a copy of your data" page. */
 export const LINKEDIN_DATA_URL = "https://www.linkedin.com/mypreferences/d/download-my-data";
@@ -249,7 +250,7 @@ export function ConnectLinkedIn({ open, onClose }: { open: boolean; onClose: () 
           )}
 
           <div className="mt-5 flex justify-end">
-            <Button variant={step.kind === "done" ? "primary" : "ghost"} onClick={close} disabled={busy}>
+            <Button variant={step.kind === "done" ? "primary" : "quiet"} onClick={close} disabled={busy}>
               {step.kind === "done" ? "Done" : "Close"}
             </Button>
           </div>

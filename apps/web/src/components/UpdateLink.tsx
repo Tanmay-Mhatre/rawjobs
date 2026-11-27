@@ -5,7 +5,7 @@ import { ATS_LABEL, type CompanyRef } from "../lib/companies";
 import { canRunLocally } from "../lib/data";
 import { checkCompanies } from "../lib/setup";
 import { judgeLink, type LinkVerdict } from "../lib/updateLink";
-import { Button } from "./ui";
+import { Button } from "./primitives";
 
 const atsName = (ats: string) => ATS_LABEL[ats] ?? ats;
 const short = (url: string) => url.replace(/^https?:\/\//, "").replace(/\/$/, "");
@@ -127,7 +127,7 @@ export function UpdateLink({
             Use this link
           </Button>
         )}
-        <Button size="sm" variant="ghost" onClick={onClose}>
+        <Button size="sm" variant="quiet" onClick={onClose}>
           Cancel
         </Button>
         {verdict?.kind === "ok" && <span className="text-muted">Past scans of the old link aren't kept.</span>}

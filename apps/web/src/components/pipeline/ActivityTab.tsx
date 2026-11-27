@@ -3,8 +3,8 @@ import { useEffect, useId, useState } from "react";
 import { type Task, tasksFor } from "../../lib/nextSteps";
 import { addActivity, CHANNEL_LABEL, type Channel, dayAfter, type Entry, type EntryPatch, today } from "../../lib/userState";
 import { DateField } from "../DateField";
-import { buttonClass, Chip, ChipGroup, Menu } from "../primitives";
-import { Button, cx } from "../ui";
+import { Button, buttonClass, Chip, ChipGroup, Menu } from "../primitives";
+import { cx } from "../ui";
 import { CHANNEL_ICON, Composer, type ComposerProps } from "./Composer";
 import { filterTimeline, isLong, TIMELINE_FILTERS, type TimelineFilter, type TimelineItem, taskPrefill, timeline } from "./detail";
 
@@ -147,7 +147,7 @@ export function ActivityTab({
               {QUICK.map((c) => {
                 const Icon = CHANNEL_ICON[c];
                 return (
-                  <Button key={c} size="sm" variant="ghost" aria-label={`Log ${CHANNEL_LABEL[c].toLowerCase()}`} onClick={() => compose({ channel: c })}>
+                  <Button key={c} size="sm" variant="quiet" aria-label={`Log ${CHANNEL_LABEL[c].toLowerCase()}`} onClick={() => compose({ channel: c })}>
                     <Icon className="rj-icon" aria-hidden />
                     <span className="hidden sm:inline">{CHANNEL_LABEL[c]}</span>
                   </Button>
@@ -403,7 +403,7 @@ function Row({ item, onNote }: { item: TimelineItem; onNote: (note: string) => v
               <Button size="sm" type="submit" variant="primary">
                 Save note
               </Button>
-              <Button size="sm" variant="ghost" onClick={() => setEditing(false)}>
+              <Button size="sm" variant="quiet" onClick={() => setEditing(false)}>
                 Cancel
               </Button>
             </div>
@@ -418,10 +418,10 @@ function Row({ item, onNote }: { item: TimelineItem; onNote: (note: string) => v
         )}
         {legacy && !editing && (
           <div className="flex gap-1.5">
-            <Button size="sm" variant="ghost" onClick={() => setEditing(true)}>
+            <Button size="sm" variant="quiet" onClick={() => setEditing(true)}>
               Edit note
             </Button>
-            <Button size="sm" variant="ghost" onClick={() => onNote("")}>
+            <Button size="sm" variant="quiet" onClick={() => onNote("")}>
               Delete note
             </Button>
           </div>

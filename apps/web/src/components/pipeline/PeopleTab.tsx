@@ -21,9 +21,9 @@ import {
   toContact,
   VIA_LABEL,
 } from "../../lib/userState";
-import { buttonClass } from "../primitives";
+import { Button, buttonClass } from "../primitives";
 import { toast } from "../Toast";
-import { Button, cx, Select } from "../ui";
+import { cx, Select } from "../ui";
 import { contactText, knownPeople, pasteField, touchLine } from "./detail";
 import { usePeople } from "./PeopleContext";
 
@@ -251,14 +251,14 @@ function PersonCard({
         {links.whatsapp && link(links.whatsapp, "WhatsApp", <MessageCircle className="rj-icon" aria-hidden />, true)}
         {links.call && link(links.call, "Call", <Phone className="rj-icon" aria-hidden />)}
         {links.linkedin && link(links.linkedin, "LinkedIn", <ExternalLink className="rj-icon" aria-hidden />, true)}
-        <Button size="sm" variant="ghost" onClick={() => void copy()}>
+        <Button size="sm" variant="quiet" onClick={() => void copy()}>
           <Copy className="rj-icon" aria-hidden /> Copy
         </Button>
         <span className="ml-auto flex gap-1.5">
-          <Button size="sm" variant="ghost" onClick={onEdit} aria-label={`Edit ${c.name}`}>
+          <Button size="sm" variant="quiet" onClick={onEdit} aria-label={`Edit ${c.name}`}>
             <Pencil className="rj-icon" aria-hidden /> Edit
           </Button>
-          <Button size="sm" variant="ghost" onClick={onRemove} aria-label={`Remove ${c.name} from this job`}>
+          <Button size="sm" variant="quiet" onClick={onRemove} aria-label={`Remove ${c.name} from this job`}>
             Remove
           </Button>
         </span>
@@ -374,7 +374,7 @@ export function PersonForm({ initial, onSave, onCancel }: { initial?: Contact; o
         {field("howMet", "How you met", "text", CAPS.howMet)}
       </div>
       <div className="flex justify-end gap-2">
-        <Button variant="ghost" onClick={onCancel}>
+        <Button variant="quiet" onClick={onCancel}>
           Cancel
         </Button>
         <Button type="submit" variant="primary">

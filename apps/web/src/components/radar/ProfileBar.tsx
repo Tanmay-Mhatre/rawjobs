@@ -4,7 +4,8 @@ import { useState } from "react";
 import type { Profile } from "../../lib/data";
 import { REMOTE } from "../../lib/filters";
 import { displayPlace } from "../../lib/format";
-import { Button, cx } from "../ui";
+import { Button } from "../primitives";
+import { cx } from "../ui";
 
 /**
  * What your profile searches for, always visible, with Edit. When the place or industry filters
@@ -70,19 +71,19 @@ export function ProfileBar({
           <span className="font-medium">Your profile:</span> <span className="text-muted">{parts.join(" · ")}</span>
         </p>
         {placeFilter.length > 0 && !changed && (
-          <Button size="sm" variant="ghost" className="shrink-0" onClick={() => onEverywhere(!everywhere)} title={everywhere ? "Showing jobs everywhere" : `Showing your places: ${places}`}>
+          <Button size="sm" variant="quiet" className="shrink-0" onClick={() => onEverywhere(!everywhere)} title={everywhere ? "Showing jobs everywhere" : `Showing your places: ${places}`}>
             {everywhere ? <MapPin className="rj-icon" aria-hidden /> : <Globe className="rj-icon" aria-hidden />}
             {everywhere ? "Only my places" : "Show everywhere"}
           </Button>
         )}
-        <Button size="sm" variant="ghost" className="shrink-0" onClick={onEdit}>
+        <Button size="sm" variant="quiet" className="shrink-0" onClick={onEdit}>
           <Pencil className="rj-icon" aria-hidden /> Edit
         </Button>
       </div>
       {changed && (
         <div className="mt-2 flex flex-wrap items-center gap-2 border-t border-hairline pt-2">
           <p className="min-w-0 flex-1 type-small text-ink">Your place filters differ from your profile. This only changes what you see here; your scans and alerts still use your profile.</p>
-          <Button size="sm" variant="ghost" onClick={onReset} disabled={saving}>
+          <Button size="sm" variant="quiet" onClick={onReset} disabled={saving}>
             Reset to my profile
           </Button>
           {onSave && (

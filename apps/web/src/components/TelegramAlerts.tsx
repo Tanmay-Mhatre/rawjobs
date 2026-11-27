@@ -2,8 +2,8 @@ import { Check, ExternalLink, LoaderCircle, RefreshCw, Send, X } from "lucide-re
 import { useCallback, useEffect, useState, type ReactNode } from "react";
 import { telegramAction, telegramStatus, type TelegramAction, type TelegramStatus } from "../lib/automation";
 import { Dialog } from "./Dialog";
-import { StatusGlyph } from "./primitives";
-import { Button, Card, cx, IconButton, Toggle } from "./ui";
+import { Button, StatusGlyph } from "./primitives";
+import { Card, cx, IconButton, Toggle } from "./ui";
 
 /** What failed, and how to fix it. The raw reason goes under "Technical details" unless it's already plain advice. */
 const FAILED: Record<TelegramAction, string> = {
@@ -80,7 +80,7 @@ export function TelegramAlerts({
     return (
       <div className="type-small" role="alert">
         <p className="text-danger-text">Couldn't check your Telegram alerts. Make sure RawJobs is running on this computer, then try again.</p>
-        <Button size="sm" variant="ghost" className="mt-1" onClick={() => void refresh()}>
+        <Button size="sm" variant="quiet" className="mt-1" onClick={() => void refresh()}>
           <RefreshCw className="size-3.5" /> Try again
         </Button>
         <details className="mt-1 type-meta text-muted">
@@ -181,7 +181,7 @@ export function TelegramAlerts({
             <Button size="sm" onClick={() => void act("test", undefined, () => "Sent. Check Telegram.")} disabled={!!busy}>
               {busy === "test" ? <LoaderCircle className="size-3.5 animate-spin" /> : <Send className="size-3.5" />} Send a test message
             </Button>
-            <Button size="sm" variant="ghost" onClick={() => setConfirmForget(true)} disabled={!!busy || status.fromEnv}>
+            <Button size="sm" variant="quiet" onClick={() => setConfirmForget(true)} disabled={!!busy || status.fromEnv}>
               Disconnect
             </Button>
           </div>
@@ -191,7 +191,7 @@ export function TelegramAlerts({
         <div role={note.tone === "bad" ? "alert" : "status"} className="type-small">
           <p className={note.tone === "bad" ? "text-danger-text" : "text-success-text"}>{note.text}</p>
           {note.retry && (
-            <Button size="sm" variant="ghost" className="mt-1" onClick={note.retry} disabled={!!busy}>
+            <Button size="sm" variant="quiet" className="mt-1" onClick={note.retry} disabled={!!busy}>
               <RefreshCw className="size-3.5" /> Try again
             </Button>
           )}
@@ -222,7 +222,7 @@ export function TelegramAlerts({
             {botName}'s token is removed from this computer. To use it again, you'll paste its token from @BotFather again.
           </p>
           <div className="mt-5 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
-            <Button variant="ghost" onClick={() => setConfirmForget(false)} data-autofocus>
+            <Button variant="quiet" onClick={() => setConfirmForget(false)} data-autofocus>
               {step === 3 ? "Keep connected" : "Keep this bot"}
             </Button>
             <Button

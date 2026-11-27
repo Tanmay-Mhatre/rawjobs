@@ -2,7 +2,8 @@ import { CircleAlert, LoaderCircle, RefreshCw, Send } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import { type DailySummaryStatus, dailySummaryStatus, removeDailySummary, saveDailySummary, testDailySummary } from "../lib/automation";
 import { today } from "../lib/userState";
-import { Button, Select, Toggle } from "./ui";
+import { Button } from "./primitives";
+import { Select, Toggle } from "./ui";
 
 /** Morning times, every 30 minutes from 05:00 to 11:30: a scheduled run after noon sends nothing. */
 export const DAILY_TIMES = Array.from({ length: 14 }, (_, i) => `${String(5 + Math.floor(i / 2)).padStart(2, "0")}:${i % 2 ? "30" : "00"}`);
@@ -84,7 +85,7 @@ export function DailySummary({ refresh = 0 }: { refresh?: number }) {
     return (
       <div className="type-small" role="alert">
         <p className="text-danger-text">Couldn't check the daily summary. Make sure RawJobs is running on this computer, then try again.</p>
-        <Button size="sm" variant="ghost" className="mt-1" onClick={() => void load()}>
+        <Button size="sm" variant="quiet" className="mt-1" onClick={() => void load()}>
           <RefreshCw className="size-3.5" /> Try again
         </Button>
       </div>
@@ -139,7 +140,7 @@ export function DailySummary({ refresh = 0 }: { refresh?: number }) {
         <div role={note.tone === "bad" ? "alert" : "status"} className="type-small">
           <p className={note.tone === "bad" ? "text-danger-text" : "text-success-text"}>{note.text}</p>
           {note.retry && (
-            <Button size="sm" variant="ghost" className="mt-1" onClick={note.retry} disabled={!!busy}>
+            <Button size="sm" variant="quiet" className="mt-1" onClick={note.retry} disabled={!!busy}>
               <RefreshCw className="size-3.5" /> Try again
             </Button>
           )}

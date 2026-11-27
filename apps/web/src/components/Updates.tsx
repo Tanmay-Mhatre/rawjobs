@@ -27,7 +27,8 @@ import { RequiredUpdate } from "./RequiredUpdate";
 import { type StarInput, StarPrompt } from "./StarPrompt";
 import { ServerDownWindow } from "./ServerDown";
 import { toast } from "./Toast";
-import { Button, Card, Toggle } from "./ui";
+import { Button } from "./primitives";
+import { Card, Toggle } from "./ui";
 import { Anchor, ChangeRows, Head, Points, sortedItems, VersionLine } from "./UpdateParts";
 import { WhatsNewDialog } from "./WhatsNew";
 import { Dialog } from "./Dialog";
@@ -38,7 +39,7 @@ function CopyInstallLine() {
   return (
     <div className="mt-1.5 flex flex-wrap items-center gap-2">
       <code className="min-w-0 flex-1 truncate rounded-sm bg-inset px-2 py-1 font-mono type-meta">{line}</code>
-      <Button size="sm" variant="ghost" onClick={() => void navigator.clipboard?.writeText(line).then(() => toast({ message: "Copied the install line" }))}>
+      <Button size="sm" variant="quiet" onClick={() => void navigator.clipboard?.writeText(line).then(() => toast({ message: "Copied the install line" }))}>
         <Copy className="size-3.5" /> Copy
       </Button>
     </div>
