@@ -10,6 +10,8 @@ import { trackingServer } from "./trackingServer";
 const snapshot = { title: "Head of Product", company: "Acme", url: "https://acme.example/1", location: "Dubai", score: 83 };
 const entry = (o: Partial<Entry>): Entry => ({ status: "applied", updatedAt: "2026-10-10T09:00:00.000Z", snapshot, ...o });
 
+const stops: (() => void)[] = [];
+
 beforeEach(() => {
   resetTrackingSync();
   localStorage.clear();
@@ -23,7 +25,7 @@ afterEach(() => {
   __resetHealthForTests();
   vi.useRealTimers();
   vi.unstubAllGlobals();
-  onSaveFailed(undefined);
+  for (const stop of stops.splice(0)) stop();
 });
 
 describe("useUserState", () => {
@@ -51,25 +53,26 @@ describe("useUserState", () => {
 describe("save failures", () => {
   it("says when the browser refuses a save, at most once a minute", () => {
     const failed = vi.fn();
-    onSaveFailed(failed);
+    stops.push(onSaveFailed(failed));
     const setItem = vi.spyOn(localStorage, "setItem").mockImplementation(() => {
       throw new Error("QuotaExceededError");
     });
     expect(save("rawjobs.state.v1", {})).toBe(false);
-    saveFailed();
-    saveFailed();
-    expect(failed).toHaveBeenCalledTimes(1);
+    saveFailed("browser");
+    saveFailed("browser");
+    expect(failed.mock.calls).toEqual([["browser"]]);
     setItem.mockRestore();
     expect(save("rawjobs.state.v1", {})).toBe(true);
   });
 
   it("says when the local API refuses the save", async () => {
     const failed = vi.fn();
-    onSaveFailed(failed);
+    stops.push(onSaveFailed(failed));
     localStorage.setItem("rawjobs.state.v1", JSON.stringify({ a: entry({}) }));
     trackingServer(null, { status: (m) => (m === "PATCH" ? 400 : undefined) });
     renderHook(() => useUserState());
     await waitFor(() => expect(failed).toHaveBeenCalledTimes(1));
+    expect(failed).toHaveBeenCalledWith("server");
   });
 });
 

@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { DEFAULT_FILTERS, type Filters, type Sort } from "./filters";
 import { ruleKey, type HideRule } from "./notForMe";
-import { load, save, saveFailed } from "./storage";
+import { load, save, saveFailed, saveWorked } from "./storage";
 import { useSavedOnDisk } from "./tracking";
 
 /** A named filter + sort combination the user saved on the Radar. */
@@ -60,7 +60,8 @@ export const removeRule = (rules: HideRule[], rule: HideRule) => rules.filter((r
 export function usePrefs() {
   const [prefs, setPrefs] = useState<Prefs>(() => withDefaults(load<Partial<Prefs>>(KEY, {})));
   useEffect(() => {
-    if (!save(KEY, prefs)) saveFailed();
+    if (save(KEY, prefs)) saveWorked("browser");
+    else saveFailed("browser");
   }, [prefs]);
   useSavedOnDisk<Prefs>("prefs", prefs, (p) => setPrefs(withDefaults(p)));
 

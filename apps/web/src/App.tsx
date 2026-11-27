@@ -43,18 +43,19 @@ import { ProfileFixProvider, type ProfileFixApi } from "./lib/profileFix";
 import { draftToConfig, emptyDraft, resetSetup, saveConfig, setupProgress, STEP, useSetupStatus } from "./lib/setup";
 import { useOnline } from "./lib/net";
 import { ErrorBoundary } from "./components/ErrorBoundary";
-import { load, onSaveFailed, save } from "./lib/storage";
+import { load, save } from "./lib/storage";
 import { timeAgo } from "./lib/format";
 import { hasNewTag } from "./lib/filters";
 import { roleOf } from "./lib/identity";
 import { ignoreShortcut, useGoToKeys } from "./lib/keys";
 import { useSavedAppearance, useTheme } from "./lib/theme";
 import { type CardJob, type LogInput, type LogResult, logPersonPatch } from "./lib/seePeople";
-import { type JobLike, quickStatus, STATUS_LABEL, type Status, useUserState } from "./lib/userState";
+import { exportState, type JobLike, quickStatus, STATUS_LABEL, type Status, useUserState } from "./lib/userState";
 import wordmarkInk from "./design/logos/rawjobs-wordmark-ink.svg";
 import wordmarkPaper from "./design/logos/rawjobs-wordmark-paper.svg";
 import { TABS, type Tab, useHashRoute } from "./app/route";
 import { useCompanyActions } from "./app/useCompanyActions";
+import { useSaveFailedNotice } from "./app/saveFailedNotice";
 import { useScanAnnouncement } from "./app/useScanAnnouncement";
 import { useScanNotify } from "./app/useScanNotify";
 import { DRAFT_KEY, useSetupDraft, WELCOME_SEEN_KEY } from "./app/useSetupDraft";
@@ -75,9 +76,6 @@ function prefetchPage(tab: Tab) {
 }
 
 const NO_JOBS: Job[] = [];
-
-// Saving your tracking failed (the browser refused it, or the local API did): say so, at most once a minute, rather than fail silently.
-onSaveFailed(() => toast({ message: "Couldn't save your tracking" }));
 
 export function App() {
   const { state, reload } = useData();
@@ -450,6 +448,7 @@ export function App() {
               telegram={canRunLocally && setupState === "configured" && personal && !!lastRun && state.kind !== "loading"}
               tg={tg}
               onTgConnected={refreshTg}
+              onExportTracking={() => exportState(user.state, prefs.prefs)}
             />
           )}
           {/* A page that breaks shows its own error card; the header, and the other pages, keep working. */}
@@ -737,10 +736,12 @@ function PageNotices(p: {
   telegram: boolean;
   tg: TelegramStatus | null | undefined;
   onTgConnected: () => Promise<void>;
+  onExportTracking: () => void;
 }) {
   const notices = [
     useReconnectingNotice(),
     p.setupFailed ? { id: "setup-failed", priority: PRIORITY.pageFailed, tone: "warn" as const, render: () => <SetupCheckFailed onRetry={p.onRetrySetup} /> } : null,
+    useSaveFailedNotice(p.onExportTracking),
     useFeedStaleNotice({ enabled: p.radar, onOnlyMine: p.onOnlyMine }),
     useUpdateFailedNotice(),
     useScheduledScanNotice({ enabled: p.radar && p.scheduled, scanning: p.scanning, onScan: p.onScan }),
