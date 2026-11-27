@@ -2,7 +2,7 @@ A tooltip names an icon-only button and its shortcut.
 
 ## Use
 - `<span class="rj-tip" aria-hidden="true">` inside the `rj-btn` it describes, with an optional `<kbd class="rj-kbd rj-tip__kbd">` for the key: "Save S". In the app: the `Tooltip` in `apps/web/src/components/primitives/Button.tsx`, which `IconButton` adds for you from its `label` and `shortcut`.
-- It opens below the button; `rj-tip--above` opens it above (for buttons at the bottom of a panel). The last button in a row opens it leftwards, so it never runs off the edge.
+- It opens below the button; `rj-tip--above` opens it above (for buttons at the bottom of a panel). The last button in a row opens it leftwards, so it never runs off the edge; `rj-tip--end` does the same for a button near the right edge that isn't last (Scan now, before its menu arrow).
 - The button itself carries the name (`aria-label`) and the key (`aria-keyshortcuts`), so the tooltip is hidden from screen readers.
 
 ## Rules

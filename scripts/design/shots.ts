@@ -11,6 +11,7 @@
  * - Every /api/* call is answered by Playwright with demo JSON; any request off this server is blocked.
  * - The page clock is frozen at demo-data's NOW, animations are off, locale and time zone are fixed.
  * - Each capture gets a fresh browser context, so nothing carries over between screens.
+ * - A capture that fails leaves FAIL-<screen>-<theme>-<width>.png in the output folder: what the page showed.
  *
  * Uses the system Edge (playwright-core, channel "msedge"); no Playwright browser download.
  */
@@ -22,6 +23,7 @@ import { join, relative, resolve } from "node:path";
 import { parseArgs } from "node:util";
 import { pathToFileURL } from "node:url";
 import { chromium, type Browser, type BrowserContext, type Page, type Route } from "playwright-core";
+import { cleanBrowseRequest, type DirCompany, pageOf, searchDirectory } from "@rawjobs/core/directory-search";
 import * as demo from "./demo-data";
 
 const repoRoot = resolve(import.meta.dirname, "../..");
@@ -89,7 +91,7 @@ type Screen = {
   act?: (page: Page) => Promise<void>;
   /** Modal screens: the viewport only (a full-page shot would show the page running on below the fixed dialog). */
   viewportOnly?: boolean;
-  /** What GET /api/health answers, given the ms since the page first asked; without it, health isn't answered. */
+  /** What GET /api/health answers, given the ms since the page first asked; without it, a plain "up, no scan running". */
   health?: (ms: number) => Record<string, unknown>;
   /** API answers on top of the scenario's: return undefined to fall through. */
   mock?: (path: string, method: string) => unknown;
@@ -195,8 +197,9 @@ const scanForNotices = async (page: Page) => {
 const DRAFT_KEY = "rawjobs.setupDraft.v1";
 const WELCOME_KEY = "rawjobs.welcomeSeen";
 
+/** A quick filter in the Radar's views bar (toggle buttons in the "Quick filters" group). */
 const clickView = (name: RegExp) => async (page: Page) => {
-  await page.getByRole("tab", { name }).first().click();
+  await page.getByRole("group", { name: "Quick filters" }).getByRole("button", { name }).first().click();
 };
 
 /** The interviewing job in the demo Pipeline. */
@@ -397,9 +400,8 @@ const SCREENS: Screen[] = [
     ready: strong,
     act: async (page) => {
       await page.getByRole("button", { name: strong, exact: true }).first().click();
-      await page.getByRole("dialog").waitFor();
-      // The description loads when the job opens.
-      await page.getByText("About the team").first().waitFor();
+      // The tracked job's dialog: its activity, the job and next step (no description since the Pipeline redesign).
+      await page.getByRole("dialog").getByText("Found on your Radar").waitFor();
     },
   },
   { id: "pipeline", what: "Pipeline", scenario: "demo", hash: "#pipeline", ready: strong },
@@ -531,7 +533,8 @@ const SCREENS: Screen[] = [
     ready: "Copperkettle Pay",
   },
   { id: "companies-browse", what: "Companies, Browse all tab", scenario: "demo", hash: "#companies", storage: { "rawjobs.companiesTab": "browse" }, ready: "Halcyon Clearing" },
-  { id: "settings", what: "Settings (full page)", scenario: "demo", hash: "#settings", ready: "demo_radar_bot" },
+  { id: "settings", what: "Settings: Profile on a wide screen, the list of pages on a phone", scenario: "demo", hash: "#settings", ready: "Who you're looking for" },
+  { id: "settings-notifications", what: "Settings, Notifications: Telegram connected, the daily summary", scenario: "demo", hash: "#settings/notifications", ready: "demo_radar_bot" },
   {
     id: "shortcuts",
     viewportOnly: true,
@@ -745,6 +748,18 @@ const json = (route: Route, body: unknown, status = 200) => route.fulfill({ stat
 /** Requests the mock didn't know (so missing fixtures show up in the log). */
 const unmocked = new Set<string>();
 
+/** Companies → Browse all's one page of the demo directory, searched as the server's search process does it. */
+function browse(body: unknown) {
+  const r = cleanBrowseRequest(body);
+  const watched = new Set(r.watched);
+  let list = searchDirectory(demo.DIRECTORY.companies as DirCompany[], { q: r.q, watched, fit: new Map(Object.entries(r.fit)), system: r.system, industry: r.industry || undefined });
+  if (r.hideWatched) list = list.filter((g) => !watched.has(g.lead.key) && !g.others.some((c) => watched.has(c.key)));
+  return pageOf(list, r, true);
+}
+
+/** The server is up and no scan is running. */
+const UP = () => ({ ok: true, background: false, dataVersion: demo.META.generatedAt });
+
 function api(scenario: Scenario, health?: Screen["health"], mock?: Screen["mock"]) {
   let firstAsked: number | undefined;
   return async (route: Route) => {
@@ -754,13 +769,15 @@ function api(scenario: Scenario, health?: Screen["health"], mock?: Screen["mock"
     const configured = scenario !== "fresh";
     const mocked = mock?.(path, m);
     if (mocked !== undefined) return json(route, mocked);
-    if (path === "/api/health" && m === "GET" && health) return json(route, health(Date.now() - (firstAsked ??= Date.now())));
+    // Unanswered, the page counts the server as down and, after 15 s, covers itself with "RawJobs isn't running".
+    if (path === "/api/health" && m === "GET") return json(route, (health ?? UP)(Date.now() - (firstAsked ??= Date.now())));
     if (path === "/api/setup" && m === "GET") return json(route, configured ? { ...demo.SETUP_STATUS, hasData: scenario === "demo" } : demo.SETUP_STATUS_FRESH);
     if (path === "/api/setup/config" && m === "POST") return json(route, { ok: true, path: demo.SETUP_STATUS.configPath });
     if (path === "/api/setup/resume" && m === "GET") return json(route, { path: "profile/resume.md", text: demo.RESUME_TEXT, updatedAt: demo.NOW.toISOString() });
     if (path === "/api/setup/resume" && m === "POST") return json(route, { ok: true, path: "profile/resume.md" });
     if (path === "/api/setup/check" && m === "POST") return json(route, []);
     if (path === "/api/directory" && m === "GET") return json(route, demo.DIRECTORY_STATUS);
+    if (path === "/api/directory/search" && m === "POST") return json(route, browse(req.postDataJSON()));
     if (path === "/api/directory/update" && m === "POST") return json(route, { updated: false, message: "Already up to date.", shared: 0 });
     if (path === "/api/companies/suggest" && m === "POST") return json(route, demo.SUGGESTIONS);
     if (path === "/api/scan/plan" && m === "GET") return json(route, demo.SCAN_PLAN);
@@ -839,6 +856,8 @@ function storageFor(screen: Screen, theme: ThemeId): Record<string, string> {
   const base: Record<string, unknown> = {
     // Already migrated, so the pre-rename copy step never runs.
     "rawjobs.migrated.v1": 1,
+    // Answered, so the "Star on GitHub" question doesn't cover screens about something else.
+    "rawjobs.starPrompt": { answer: "never" },
   };
   if (screen.scenario === "demo") base["rawjobs.state.v1"] = demo.USER_STATE;
   if (screen.scenario !== "fresh") base[WELCOME_KEY] = true;
@@ -908,6 +927,13 @@ async function capture(browser: Browser, baseUrl: string, screen: Screen, theme:
     await page.addScriptTag({ path: require.resolve("axe-core/axe.min.js") });
     const violations = (await page.evaluate(`axe.run(document, { runOnly: ["wcag2a", "wcag2aa", "wcag21a", "wcag21aa", "best-practice"] }).then((r) => r.violations)`)) as AxeResult[];
     return { screen: screen.id, theme, width, violations };
+  } catch (e) {
+    // What the page showed when it failed, to see why (a window over it, a step that changed).
+    await context
+      .pages()[0]
+      ?.screenshot({ path: join(outDir, `FAIL-${screen.id}-${theme}-${width}.png`) })
+      .catch(() => {});
+    throw e;
   } finally {
     await context.close();
   }

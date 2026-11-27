@@ -76,9 +76,9 @@ export function IconLink({ href, label, tip = "below", variant = "quiet", size, 
  * and key (aria-keyshortcuts). The key is drawn by CSS (data-key), so the button's visible text is just
  * its label and matches its name (WCAG 2.5.3, label in name).
  */
-export function Tooltip({ label, shortcut, side = "below" }: { label: string; shortcut?: string; side?: "below" | "above" }) {
+export function Tooltip({ label, shortcut, side = "below", align = "center" }: { label: string; shortcut?: string; side?: "below" | "above"; align?: "center" | "end" }) {
   return (
-    <span className={cx("rj-tip", side === "above" && "rj-tip--above")} aria-hidden>
+    <span className={cx("rj-tip", side === "above" && "rj-tip--above", align === "end" && "rj-tip--end")} aria-hidden>
       {label}
       {shortcut && <kbd className="rj-kbd rj-tip__kbd" data-key={shortcut} aria-hidden />}
     </span>
