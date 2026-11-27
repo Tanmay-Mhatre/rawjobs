@@ -531,6 +531,7 @@ export function App() {
                       onApply={onApply}
                       minScore={meta?.profile.min_score}
                       onPatch={(id, entry, patch) => user.update({ id, ...entry.snapshot, ...pick(jobsById.get(id)) }, patch)}
+                      onRestore={user.restore}
                       weeklyPlan={prefs.prefs.weeklyPlan}
                       onWeeklyPlan={prefs.setWeeklyPlan}
                       onAdd={(j, status) => user.update({ id: `manual:${Date.now().toString(36)}`, ...j, location: "", score: 0 }, { status })}

@@ -1,11 +1,12 @@
 // @vitest-environment happy-dom
-import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import { useState } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { cardChip, closedHint, Pipeline, sortCards } from "../src/components/Pipeline";
+import { dismissToast, toast, Toaster } from "../src/components/Toast";
 import type { Job } from "../src/lib/data";
 import { cardState, nextSteps } from "../src/lib/nextSteps";
-import type { Entry, Status, UserState } from "../src/lib/userState";
+import { applyPatch, type Entry, type Status, stageSince, type UserState } from "../src/lib/userState";
 import { makeJob } from "./helpers";
 
 afterEach(cleanup);
@@ -240,5 +241,121 @@ describe("a Radar job opened from the board", () => {
     fireEvent.click(screen.getByRole("button", { name: "Close" }));
     fireEvent.click(screen.getAllByRole("button", { name: "By hand" }).at(-1)!);
     expect(screen.queryByRole("button", { name: "Open full job" })).toBeNull();
+  });
+});
+
+describe("removing from the Pipeline (U2)", () => {
+  afterEach(() => {
+    act(() => {
+      dismissToast(toast({ message: "" }));
+    });
+  });
+
+  /** The board on real tracking rules: patches go through applyPatch, Undo and Delete through restore. */
+  function live(initial: UserState) {
+    const state = { current: initial };
+    function Harness() {
+      const [user, setUser] = useState(initial);
+      state.current = user;
+      const write = (id: string, e: Entry | null) =>
+        setUser((u) => {
+          const { [id]: _, ...rest } = u;
+          return e ? { ...rest, [id]: e } : rest;
+        });
+      return (
+        <>
+          <Toaster />
+          <Pipeline
+            user={user}
+            jobsById={new Map()}
+            onOpen={() => {}}
+            onPatch={(id, e, patch) => write(id, applyPatch(state.current[id], { id, ...e.snapshot }, patch, now.toISOString()))}
+            onRestore={write}
+            onAdd={() => {}}
+            onWeeklyPlan={() => {}}
+            goRadar={() => {}}
+            now={now}
+          />
+        </>
+      );
+    }
+    render(<Harness />);
+    return state;
+  }
+  const named = (title: string) => ({ snapshot: { title, company: "Acme", url: "", location: "Dubai", score: 80 } });
+  const removeViaMenu = (title: string) => {
+    fireEvent.click(screen.getByRole("button", { name: `Move ${title} to` }));
+    fireEvent.click(screen.getByRole("menuitem", { name: "Remove from Pipeline" }));
+  };
+  const card = (title: string) => screen.queryAllByRole("button", { name: title }).find((b) => b.hasAttribute("data-card-title"));
+
+  it("Remove from Pipeline via menu shows toast with Undo; Undo puts the card back in the same column with the same stageSince", () => {
+    const before = entry("interviewing", "2026-10-05", named("Head of Product"));
+    const state = live({ a: before, b: entry("saved", "2026-10-10") });
+    removeViaMenu("Head of Product");
+    expect(card("Head of Product")).toBeUndefined();
+    expect(screen.getByText(/ from the Pipeline$/).textContent).toBe("Removed Head of Product from the Pipeline");
+    fireEvent.click(screen.getByRole("button", { name: "Undo" }));
+    expect(state.current.a).toEqual(before);
+    expect(stageSince(state.current.a!)).toBe(stageSince(before));
+    const column = card("Head of Product")!.closest("section")!;
+    expect(within(column).getByRole("heading").textContent).toMatch(/^Interviewing/);
+    expect(screen.getByText("Back on the Pipeline in Interviewing.")).toBeTruthy();
+  });
+
+  it("remove from the TrackedJob select: Undo is inside the dialog and clickable", () => {
+    const before = entry("applied", "2026-10-10", named("Data Lead"));
+    const state = live({ a: before, b: entry("saved", "2026-10-10") });
+    fireEvent.click(card("Data Lead")!);
+    const dialog = screen.getByRole("dialog", { name: "Data Lead" });
+    fireEvent.change(within(dialog).getByLabelText("Stage"), { target: { value: "" } });
+    expect(state.current.a!.status).toBeUndefined();
+    // The dialog stays open on the job, and its toast is inside it (not behind the modal).
+    expect(dialog.isConnected).toBe(true);
+    fireEvent.click(within(dialog).getByRole("button", { name: "Undo" }));
+    expect(state.current.a).toEqual(before);
+    expect(within(dialog).getByLabelText<HTMLSelectElement>("Stage").value).toBe("applied");
+  });
+
+  it("manual job removed appears under Removed (1); Put back restores its stage", () => {
+    const state = live({ "manual:x": entry("applied", "2026-10-02", named("By hand")), b: entry("saved", "2026-10-10") });
+    expect(screen.queryByRole("button", { name: /^Removed \(/ })).toBeNull();
+    removeViaMenu("By hand");
+    fireEvent.click(screen.getByRole("button", { name: "Removed (1)" }));
+    const drawer = within(screen.getByRole("dialog", { name: "Removed from the Pipeline" }));
+    expect(drawer.getByText(/^Was Applied · removed/)).toBeTruthy();
+    fireEvent.click(drawer.getByRole("button", { name: "Put back By hand" }));
+    expect(state.current["manual:x"]!.status).toBe("applied");
+    // Days in the stage count from the day it got there, not from Put back.
+    expect(stageSince(state.current["manual:x"]!).slice(0, 10)).toBe(noon("2026-10-02").slice(0, 10));
+    expect(drawer.getByText("Nothing removed. Jobs you take off the board show up here.")).toBeTruthy();
+    expect(screen.getByText("Put By hand back in Applied")).toBeTruthy();
+  });
+
+  it("Delete asks inline, Keep it has focus, Escape keeps it, Delete for good deletes", () => {
+    const state = live({ a: entry("saved", "2026-10-02", named("Ops Manager")), b: entry("saved", "2026-10-10") });
+    removeViaMenu("Ops Manager");
+    fireEvent.click(screen.getByRole("button", { name: "Removed (1)" }));
+    const dialog = screen.getByRole("dialog", { name: "Removed from the Pipeline" });
+    const drawer = within(dialog);
+    fireEvent.click(drawer.getByRole("button", { name: "Delete Ops Manager" }));
+    expect(drawer.getByText("Delete Ops Manager and its history for good?")).toBeTruthy();
+    expect(document.activeElement?.textContent).toBe("Keep it");
+    fireEvent.keyDown(document.activeElement!, { key: "Escape" });
+    expect(drawer.queryByText(/for good\?$/)).toBeNull();
+    expect(screen.getByRole("dialog", { name: "Removed from the Pipeline" })).toBe(dialog);
+    expect(document.activeElement?.getAttribute("aria-label")).toBe("Delete Ops Manager");
+    expect(state.current).toHaveProperty("a");
+    fireEvent.click(drawer.getByRole("button", { name: "Delete Ops Manager" }));
+    fireEvent.click(drawer.getByRole("button", { name: "Delete for good" }));
+    expect(state.current).not.toHaveProperty("a");
+    expect(screen.getByText("Deleted Ops Manager")).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Undo" })).toBeNull();
+  });
+
+  it("focus moves to the next card after remove", () => {
+    live({ a: entry("applied", "2026-10-02", named("First")), b: entry("applied", "2026-10-05", named("Second")) });
+    removeViaMenu("First");
+    expect(document.activeElement).toBe(card("Second"));
   });
 });
