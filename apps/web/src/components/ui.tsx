@@ -1,17 +1,8 @@
 import type { ButtonHTMLAttributes, ReactNode, SelectHTMLAttributes } from "react";
-import { Button as RjButton, IconButton as RjIconButton, Kbd as RjKbd, type ButtonVariant, useRovingRadio } from "./primitives";
+import { Button, IconButton as RjIconButton, Kbd as RjKbd, useRovingRadio } from "./primitives";
 import { cx } from "../lib/cx";
 
 export { cx } from "../lib/cx";
-
-type ButtonProps = ButtonHTMLAttributes<HTMLButtonElement> & { variant?: "primary" | "ghost" | "outline" | "danger"; size?: "sm" | "md" };
-
-/** The app's older names for the design system's button variants (design/components/Button). */
-const VARIANT: Record<NonNullable<ButtonProps["variant"]>, ButtonVariant> = { primary: "primary", outline: "secondary", ghost: "quiet", danger: "danger" };
-
-export function Button({ variant = "outline", size = "md", ...rest }: ButtonProps) {
-  return <RjButton variant={VARIANT[variant]} size={size} {...rest} />;
-}
 
 /** Icon-only button; `active` marks a toggled-on state (aria-pressed). */
 export function IconButton({ label, active, className, children, ...rest }: ButtonHTMLAttributes<HTMLButtonElement> & { label: string; active?: boolean }) {
@@ -104,7 +95,7 @@ export function Pagination({ page, pageSize, total, onPage }: { page: number; pa
       </p>
       {pages > 1 && (
         <div className="flex items-center gap-1">
-          <Button size="sm" variant="ghost" onClick={() => onPage(page - 1)} disabled={page === 1} aria-label="Previous page">
+          <Button size="sm" variant="quiet" onClick={() => onPage(page - 1)} disabled={page === 1} aria-label="Previous page">
             ‹ Prev
           </Button>
           <span className="tabular px-1 type-meta text-muted sm:hidden">
@@ -128,7 +119,7 @@ export function Pagination({ page, pageSize, total, onPage }: { page: number; pa
               </button>
             ),
           )}
-          <Button size="sm" variant="ghost" onClick={() => onPage(page + 1)} disabled={page === pages} aria-label="Next page">
+          <Button size="sm" variant="quiet" onClick={() => onPage(page + 1)} disabled={page === pages} aria-label="Next page">
             Next ›
           </Button>
         </div>

@@ -1,6 +1,7 @@
 import { TriangleAlert } from "lucide-react";
 import { useSyncExternalStore } from "react";
-import { Button, Card } from "../components/ui";
+import { Button } from "../components/primitives";
+import { Card } from "../components/ui";
 import { toast } from "../components/Toast";
 import { onSaved, onSaveFailed, type SaveCause } from "../lib/storage";
 import { saveTrackingNow } from "../lib/tracking";

@@ -4,7 +4,8 @@ import { useCallback, useState } from "react";
 import { keyOf, type CompanyRef } from "../../lib/companies";
 import type { CompanyRow } from "../../lib/setup";
 import { emptyVisit, recordAdd, recordRemove, undoLast, type Visit } from "../../lib/packVisit";
-import { Button, cx } from "../ui";
+import { Button } from "../primitives";
+import { cx } from "../ui";
 
 /** How the Starter packs add and remove, so each change lands in the tray (and Undo can walk it back). */
 export type PackActions = {

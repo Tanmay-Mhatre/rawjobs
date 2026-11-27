@@ -1,8 +1,8 @@
 import { Link2, Search, X } from "lucide-react";
 import type { ReactNode } from "react";
 import { roughCount } from "../../lib/format";
-import { IconButton } from "../primitives";
-import { Button, cx } from "../ui";
+import { Button, IconButton } from "../primitives";
+import { cx } from "../ui";
 
 type Props = {
   /** The page's one search: your own companies on My companies, the directory elsewhere. */

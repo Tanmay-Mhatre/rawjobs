@@ -5,7 +5,7 @@ import type { DataMeta } from "../../lib/data";
 import type { FeedRow, Filters, JobGroup, Sort } from "../../lib/filters";
 import { timeAgo } from "../../lib/format";
 import { settingsHash } from "../settings/registry";
-import { Button } from "../ui";
+import { Button } from "../primitives";
 import { sortsFor } from "./FilterSheet";
 import type { RadarList } from "./useRadarList";
 
@@ -94,7 +94,7 @@ export function RadarFeed({
               {strip.map((g) => p.card(g))}
               {yourGroups > strip.length && (
                 <li className="px-4 py-2">
-                  <Button variant="ghost" size="sm" onClick={() => p.setFilters({ mine: true })}>
+                  <Button variant="quiet" size="sm" onClick={() => p.setFilters({ mine: true })}>
                     See all {yourGroups} from my companies <ArrowRight className="rj-icon" aria-hidden />
                   </Button>
                 </li>
@@ -111,7 +111,7 @@ export function RadarFeed({
               p.card(r.group)
             ) : (
               <li key={`more:${r.key}`} className="px-4 py-2">
-                <Button variant="ghost" size="sm" onClick={() => p.list.openCompany(r.key)}>
+                <Button variant="quiet" size="sm" onClick={() => p.list.openCompany(r.key)}>
                   +{r.groups.length} more at {displayName(r.company)}
                 </Button>
               </li>

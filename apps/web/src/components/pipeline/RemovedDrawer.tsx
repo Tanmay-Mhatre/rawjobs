@@ -3,7 +3,8 @@ import { X } from "lucide-react";
 import { type KeyboardEvent, useEffect, useRef, useState } from "react";
 import { type Entry, type PipelineStatus, STATUS_LABEL } from "../../lib/userState";
 import { Dialog } from "../Dialog";
-import { Button, IconButton } from "../ui";
+import { Button } from "../primitives";
+import { IconButton } from "../ui";
 
 export type RemovedItem = { id: string; entry: Entry; stage: PipelineStatus; removedAt: string };
 
@@ -128,7 +129,7 @@ export function RemovedDrawer({
                         </Button>
                         <Button
                           size="sm"
-                          variant="ghost"
+                          variant="quiet"
                           data-focus={`${item.id}:delete`}
                           aria-label={`Delete ${s.title}`}
                           onClick={() => {

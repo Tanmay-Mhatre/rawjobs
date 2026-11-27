@@ -32,11 +32,11 @@ import { CHANNEL_ICON, Composer } from "./pipeline/Composer";
 import { taskPrefill } from "./pipeline/detail";
 import { type RemovedItem, RemovedDrawer } from "./pipeline/RemovedDrawer";
 import { PipelineInsights } from "./PipelineInsights";
-import { buttonClass, Chip, ChipGroup, Kbd, Menu } from "./primitives";
+import { Button, buttonClass, Chip, ChipGroup, Kbd, Menu } from "./primitives";
 import { useHourlyNow } from "./radar/hooks";
 import { toast } from "./Toast";
 import { AddJobDialog, CompareOffers, nextInterview, TrackedJobDialog } from "./TrackedJob";
-import { Button, Card, cx, IconButton } from "./ui";
+import { Card, cx, IconButton } from "./ui";
 
 type Props = {
   user: UserState;
@@ -611,7 +611,7 @@ function CloseDialog({ target, onClose, onPick }: { target: { entry: Entry } | n
                 {CLOSED_AS[how]}
               </Button>
             ))}
-            <Button size="sm" variant="ghost" onClick={onClose}>
+            <Button size="sm" variant="quiet" onClick={onClose}>
               Cancel
             </Button>
           </div>

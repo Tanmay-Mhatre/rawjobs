@@ -2,8 +2,8 @@ import { Handshake, type LucideIcon, Mail, MessageCircle, MessageSquare, Phone, 
 import { useId, useState } from "react";
 import { type Activity, activityAt, CAPS, CHANNEL_LABEL, CHANNELS, type Channel, type Contact, dayAfter, type Direction, FOLLOW_UP_DAYS, newId, today } from "../../lib/userState";
 import { DateField } from "../DateField";
-import { useRovingRadio } from "../primitives";
-import { Button, cx, Select } from "../ui";
+import { Button, useRovingRadio } from "../primitives";
+import { cx, Select } from "../ui";
 
 export const CHANNEL_ICON: Record<Channel, LucideIcon> = {
   email: Mail,
@@ -235,7 +235,7 @@ export function Composer({ contacts, initial, hasFollowUp, followUps = true, onL
         {followUps && !note && dir === "received" && hasFollowUp && <p className="type-small text-muted">Logging a reply moves the follow-up to a week after it.</p>}
         <span className="ml-auto flex gap-2">
           {onCancel && (
-            <Button variant="ghost" onClick={onCancel}>
+            <Button variant="quiet" onClick={onCancel}>
               Cancel
             </Button>
           )}

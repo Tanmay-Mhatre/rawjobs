@@ -3,7 +3,7 @@ import { type ReactNode, type Ref, useId, useRef, useState } from "react";
 import { PLAN_MAX, type WeeklyPlan } from "../lib/prefs";
 import { FUNNEL_MIN, type Funnel, pct, pipelineStats, STREAK_MIN, type WeekBar } from "../lib/pipelineStats";
 import type { UserState } from "../lib/userState";
-import { Button } from "./ui";
+import { Button } from "./primitives";
 
 const input = "h-8 w-16 rounded-md border border-control bg-raised px-2 type-small text-ink tabular";
 const plural = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`;

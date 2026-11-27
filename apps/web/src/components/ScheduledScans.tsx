@@ -4,9 +4,9 @@ import { removeSchedule, runScheduleNow, saveSchedule, scheduleStatus, type Sche
 import { formatDateTime, timeAgo } from "../lib/format";
 import { aboutTime, SCAN_ENDED, scopeLabel } from "../lib/scan";
 import { scanPlan, type ScanPlan, type ScanScope } from "../lib/setup";
-import { IconButton } from "./primitives";
+import { Button, IconButton } from "./primitives";
 import { toast } from "./Toast";
-import { Button, cx } from "./ui";
+import { cx } from "./ui";
 
 const NOTIFIED: Record<string, string> = { sent: "sent to Telegram", "nothing-new": "nothing new to send", off: "Telegram not set up" };
 
@@ -178,7 +178,7 @@ export function ScheduledScans() {
               </span>
             ))}
             {times.length < 2 && (
-              <Button size="sm" variant="ghost" onClick={() => setTimes([...times, times[0] === "20:00" ? "08:00" : "20:00"])}>
+              <Button size="sm" variant="quiet" onClick={() => setTimes([...times, times[0] === "20:00" ? "08:00" : "20:00"])}>
                 <Plus className="size-3.5" /> Twice a day
               </Button>
             )}
@@ -212,7 +212,7 @@ export function ScheduledScans() {
               <Button onClick={() => void run("run")} disabled={!!busy}>
                 {busy === "run" ? <LoaderCircle className="size-3.5 animate-spin" /> : <Play className="size-3.5" />} Scan now
               </Button>
-              <Button variant="ghost" onClick={() => void run("remove")} disabled={!!busy}>
+              <Button variant="quiet" onClick={() => void run("remove")} disabled={!!busy}>
                 <Power className="size-3.5" /> Turn off
               </Button>
             </>
@@ -222,7 +222,7 @@ export function ScheduledScans() {
           <div role={note.tone === "bad" ? "alert" : "status"} className="type-small">
             <p className={note.tone === "bad" ? "text-danger-text" : "text-success-text"}>{note.text}</p>
             {note.retry && (
-              <Button size="sm" variant="ghost" className="mt-1" onClick={() => void run(note.retry!)} disabled={!!busy}>
+              <Button size="sm" variant="quiet" className="mt-1" onClick={() => void run(note.retry!)} disabled={!!busy}>
                 <RefreshCw className="size-3.5" /> Try again
               </Button>
             )}

@@ -22,7 +22,8 @@ import { packActions, Tray, useVisit } from "./companies/Tray";
 import { TabList, TabPanel, useTabIds } from "./companies/Tabs";
 import { EmptyState } from "./EmptyState";
 import { toast } from "./Toast";
-import { Button, Card, IconButton } from "./ui";
+import { Button } from "./primitives";
+import { Card, IconButton } from "./ui";
 
 type Props = {
   /** A valid personal config exists (companies are saved into it). */

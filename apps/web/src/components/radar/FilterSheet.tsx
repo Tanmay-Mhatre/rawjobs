@@ -2,8 +2,8 @@ import { Check, X } from "lucide-react";
 import type { ReactNode } from "react";
 import type { Sort } from "../../lib/filters";
 import { Dialog } from "../Dialog";
-import { IconButton } from "../primitives";
-import { Button, cx } from "../ui";
+import { Button, IconButton } from "../primitives";
+import { cx } from "../ui";
 
 /** The sort choices, in the toolbar's select and the phone sheet. */
 export const SORTS: { value: Sort; label: string }[] = [
@@ -28,7 +28,7 @@ export function FilterSheet({ children, count, onClose, onClear }: { children: R
             Filters
           </h2>
           <div className="flex items-center gap-1">
-            <Button size="sm" variant="ghost" onClick={onClear}>
+            <Button size="sm" variant="quiet" onClick={onClear}>
               Clear all
             </Button>
             <IconButton label="Close" onClick={onClose}>

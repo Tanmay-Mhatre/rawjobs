@@ -26,8 +26,8 @@ import { settingsHash } from "./components/settings/registry";
 import { ShortcutList } from "./components/ShortcutList";
 import { Toaster, toast } from "./components/Toast";
 import { offerWhat } from "./lib/notForMe";
-import { Tooltip } from "./components/primitives";
-import { Button, Card, cx, IconButton } from "./components/ui";
+import { Button, buttonClass, Tooltip } from "./components/primitives";
+import { Card, cx, IconButton } from "./components/ui";
 import { keyOf } from "./lib/companies";
 import { canRunLocally, useData, useOtherJobs, type Job } from "./lib/data";
 import { newCtx } from "./lib/newSince";
@@ -341,7 +341,7 @@ export function App() {
               {/* A new version, downloaded and ready: one click updates (like the Claude desktop app's). */}
               {canRunLocally && <UpdatePill />}
               {inSetup ? (
-                <Button size="sm" variant="ghost" onClick={exitSetup}>
+                <Button size="sm" variant="quiet" onClick={exitSetup}>
                   <X className="size-4" /> Exit setup
                 </Button>
               ) : (
@@ -356,7 +356,7 @@ export function App() {
                     )}
                     {canRunLocally && !online && (
                       // biome-ignore lint/a11y/noNoninteractiveTabindex: focusable so keyboard users reach its explanation
-                      <span role="status" tabIndex={0} className="rj-btn rj-btn--quiet rj-btn--sm relative inline-flex gap-1 px-2 text-warning-text hover:text-warning-text">
+                      <span role="status" tabIndex={0} className={buttonClass("quiet", "sm", "relative inline-flex gap-1 px-2 text-warning-text hover:text-warning-text")}>
                         <WifiOff className="size-3.5" aria-hidden />
                         <span className="max-sm:sr-only">Offline</span>
                         <span className="sr-only">: your saved jobs still work. Scans and updates wait until you're back online.</span>
@@ -364,7 +364,7 @@ export function App() {
                       </span>
                     )}
                     {state.kind === "ready" && failing > 0 && (
-                      <button type="button" onClick={goFailing} className="rj-btn rj-btn--quiet rj-btn--sm relative hidden gap-1 px-2 text-warning-text hover:text-warning-text lg:inline-flex">
+                      <button type="button" onClick={goFailing} className={buttonClass("quiet", "sm", "relative hidden gap-1 px-2 text-warning-text hover:text-warning-text lg:inline-flex")}>
                         <TriangleAlert className="size-3.5" aria-hidden />
                         <span className="tabular">{failing}</span>
                         <span className="max-xl:sr-only">failing</span>

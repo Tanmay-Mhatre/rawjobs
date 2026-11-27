@@ -10,9 +10,9 @@ import { STEP, STEP_COUNT } from "../lib/setup";
 import { load, save } from "../lib/storage";
 import { useMedia } from "../lib/useMedia";
 import { PRIORITY, type Notice } from "../app/notices";
-import { IconButton } from "./primitives";
+import { Button, IconButton } from "./primitives";
 import { ScanProgress } from "./ScanProgress";
-import { Button, Card, cx } from "./ui";
+import { Card, cx } from "./ui";
 import { settingsHash } from "./settings/registry";
 
 /** Settings > Scheduled scans (Telegram alerts sit right below it). */
@@ -426,7 +426,7 @@ export function FailingBanner({ count, onOpen, onDismiss, className }: { count: 
         <span className="pl-6.5 font-medium text-warning-text underline underline-offset-2 sm:pl-0">Review failing companies</span>
       </button>
       {onDismiss && (
-        <Button size="sm" variant="ghost" className="max-sm:mb-2 max-sm:ml-10 self-start sm:self-auto" onClick={onDismiss}>
+        <Button size="sm" variant="quiet" className="max-sm:mb-2 max-sm:ml-10 self-start sm:self-auto" onClick={onDismiss}>
           Dismiss until next scan
         </Button>
       )}

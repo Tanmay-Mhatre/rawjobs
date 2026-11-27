@@ -30,8 +30,8 @@ import {
   type Seen,
 } from "../lib/myCompanies";
 import type { CompanyRow } from "../lib/setup";
-import { Chip, ChipGroup, IconLink } from "./primitives";
-import { Button, Card, cx, IconButton, Pagination, Select } from "./ui";
+import { Button, Chip, ChipGroup, IconLink } from "./primitives";
+import { Card, cx, IconButton, Pagination, Select } from "./ui";
 import { UpdateLink } from "./UpdateLink";
 
 type Row = {

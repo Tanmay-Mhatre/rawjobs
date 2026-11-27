@@ -5,7 +5,8 @@ import { openStartLink, type ServerHealth } from "../lib/update";
 import { reloadPage } from "../lib/reload";
 import { Dialog } from "./Dialog";
 import { toast } from "./Toast";
-import { Button, Card } from "./ui";
+import { Button } from "./primitives";
+import { Card } from "./ui";
 
 /** Starting takes up to 20 s (as `rawjobs open` waits); after that, it didn't come back. */
 const START_TIMEOUT_MS = 20_000;
@@ -157,7 +158,7 @@ function Details({ platform }: { platform: string | null }) {
         <div className="flex flex-wrap items-center gap-2">
           <span>If it doesn't start, its log says why:</span>
           <code className="min-w-0 break-all font-mono type-meta">{log}</code>
-          <Button size="sm" variant="ghost" onClick={() => void navigator.clipboard?.writeText(log).then(() => toast({ message: "Copied the log's location" }))}>
+          <Button size="sm" variant="quiet" onClick={() => void navigator.clipboard?.writeText(log).then(() => toast({ message: "Copied the log's location" }))}>
             <Copy className="size-3.5" /> Copy
           </Button>
         </div>

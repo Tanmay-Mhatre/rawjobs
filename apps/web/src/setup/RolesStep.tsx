@@ -3,9 +3,9 @@ import { allTitles, COMMON_EXCLUDES, ROLE_FAMILIES, SENIORITY, type RoleFamily }
 import { Check } from "lucide-react";
 import { useCallback, useState } from "react";
 import { Combobox, type ComboItem } from "../components/Combobox";
-import { Field as InputField } from "../components/primitives";
+import { Button, Field as InputField } from "../components/primitives";
 import { ToggleChips } from "../components/ToggleChips";
-import { Button, cx } from "../components/ui";
+import { cx } from "../components/ui";
 import type { Suggestions } from "../lib/suggest";
 import { ClearButton, Field, MoreOptions, RESUME_LABEL, Section, clearing, hasAll, type StepProps, union } from "./fields";
 
@@ -151,7 +151,7 @@ export function RolesStep({ draft, update, suggest }: StepProps) {
             <span className="flex-1 text-muted">Switched to {undo.to}: titles and exclusions were reset to its defaults.</span>
             <Button
               size="sm"
-              variant="ghost"
+              variant="quiet"
               onClick={() => {
                 update({ family: undo.family, include: undo.include, exclude: undo.exclude });
                 setUndo(null);
@@ -170,7 +170,7 @@ export function RolesStep({ draft, update, suggest }: StepProps) {
         action={
           <div className="flex shrink-0 gap-1">
             {fam && (
-              <Button size="sm" variant="ghost" onClick={() => update({ include: union(fam.titles, extras) })} disabled={hasAll(draft.include, fam.titles)}>
+              <Button size="sm" variant="quiet" onClick={() => update({ include: union(fam.titles, extras) })} disabled={hasAll(draft.include, fam.titles)}>
                 Select all
               </Button>
             )}

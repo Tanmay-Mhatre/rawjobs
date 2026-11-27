@@ -8,7 +8,8 @@ import { type CardJob, type LogInput, type LogResult, openBeside, sendLog } from
 import { useTheme } from "../../lib/theme";
 import { CAPS } from "../../lib/userState";
 import { Field } from "../primitives/Field";
-import { Button, cx } from "../ui";
+import { Button } from "../primitives";
+import { cx } from "../ui";
 import { NoteCounter } from "./MessageDrafts";
 
 const BLOCKED = "Your browser blocked the LinkedIn window. Allow pop-ups for RawJobs, or use the search links.";

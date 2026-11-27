@@ -9,7 +9,8 @@ import { canRunLocally } from "../lib/data";
 import { useDirectorySearch } from "../lib/directorySearch";
 import { DirectoryBar, updateDirectory } from "./DirectoryBar";
 import { AddButton } from "./CompanyButtons";
-import { Button, cx, Pagination, Select } from "./ui";
+import { Button } from "./primitives";
+import { cx, Pagination, Select } from "./ui";
 
 const BROWSE_PAGE = 25;
 

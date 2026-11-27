@@ -3,7 +3,8 @@ import { useState } from "react";
 import { formatDate } from "../../lib/format";
 import { deleteNetwork, REFRESH_AFTER_DAYS, useNetwork } from "../../lib/network";
 import { ConnectLinkedIn, WatchLine } from "../referral/ConnectLinkedIn";
-import { Button, Card } from "../ui";
+import { Button } from "../primitives";
+import { Card } from "../ui";
 import { ConfirmDialog } from "./ConfirmDialog";
 
 /** Settings → Data & privacy → LinkedIn connections: import, refresh and delete. */

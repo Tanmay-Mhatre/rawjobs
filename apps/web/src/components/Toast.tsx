@@ -1,6 +1,7 @@
 import { X } from "lucide-react";
 import { useEffect, useLayoutEffect, useState, useSyncExternalStore, type KeyboardEvent, type ReactNode } from "react";
-import { Button, cx } from "./ui";
+import { Button, buttonClass } from "./primitives";
+import { cx } from "./ui";
 
 /**
  * App-wide toasts (design/components/Toast): the past-tense verb plus the object ("Saved Head of
@@ -197,7 +198,7 @@ function PinRow({ item }: { item: PinItem }) {
       {!!item.actions?.length && (
         <div className="flex gap-2">
           {item.actions.map((a) => (
-            <Button key={a.label} size="sm" variant={a.primary ? "primary" : "ghost"} onClick={a.onClick}>
+            <Button key={a.label} size="sm" variant={a.primary ? "primary" : "quiet"} onClick={a.onClick}>
               {a.label}
             </Button>
           ))}
@@ -240,20 +241,20 @@ function ToastRow({ item }: { item: ToastItem }) {
       {/* Two or more actions go on their own row under the message, so it isn't squeezed on phones. */}
       <div className={stacked ? "order-last -ml-2 flex basis-full gap-1" : "contents"}>
         {actions.map((a) => (
-          <button
+          <Button
             key={a.label}
-            type="button"
-            className="rj-btn rj-btn--quiet rj-btn--sm"
+            variant="quiet"
+            size="sm"
             onClick={() => {
               a.onClick();
               dismissToast(item.id);
             }}
           >
             {a.label}
-          </button>
+          </Button>
         ))}
       </div>
-      <button type="button" aria-label="Dismiss" title="Dismiss (Esc)" className="rj-btn rj-btn--quiet rj-btn--icon rj-btn--sm" onClick={() => dismissToast(item.id)}>
+      <button type="button" aria-label="Dismiss" title="Dismiss (Esc)" className={buttonClass("quiet", "sm", "rj-btn--icon")} onClick={() => dismissToast(item.id)}>
         <X className="rj-icon" aria-hidden />
       </button>
     </div>

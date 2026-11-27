@@ -14,7 +14,8 @@ import { knownPeople } from "../pipeline/detail";
 import { usePeople } from "../pipeline/PeopleContext";
 import { KnownPicker } from "../pipeline/PeopleTab";
 import { toast } from "../Toast";
-import { Button, cx } from "../ui";
+import { Button } from "../primitives";
+import { cx } from "../ui";
 import { useBannerDismissed } from "./ConnectBanner";
 import { ConnectLinkedIn, WatchLine } from "./ConnectLinkedIn";
 import { FindFriends } from "./FindFriends";
@@ -327,7 +328,7 @@ function PeopleList({ people, loose, job, me, contacts }: { people: NetworkPerso
         <div>
           <Button
             size="sm"
-            variant="ghost"
+            variant="quiet"
             onClick={() => {
               focusNext.current = true;
               setAll(true);

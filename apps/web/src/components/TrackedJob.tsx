@@ -8,8 +8,8 @@ import { type Entry, type EntryPatch, type Interview, OFFER_FIELDS, type Offer, 
 import { DateField } from "./DateField";
 import { Dialog } from "./Dialog";
 import { JobTracking } from "./pipeline/JobTracking";
-import { buttonClass, ScoreBadge } from "./primitives";
-import { Button, Card, IconButton, Select } from "./ui";
+import { Button, buttonClass, ScoreBadge } from "./primitives";
+import { Card, IconButton, Select } from "./ui";
 
 const input = "h-8 min-w-0 rounded-md border border-line bg-raised px-2 type-small text-ink placeholder:text-muted";
 
@@ -42,7 +42,7 @@ export function OfferFields({ offer, onSave }: { offer: Offer; onSave: (offer: O
     onSave({ ...offer, [k]: v.trim() || undefined });
   };
   const toggle = (
-    <Button size="sm" variant="ghost" aria-expanded={shown} onClick={() => setShown((v) => !v)}>
+    <Button size="sm" variant="quiet" aria-expanded={shown} onClick={() => setShown((v) => !v)}>
       {shown ? <EyeOff className="rj-icon" aria-hidden /> : <Eye className="rj-icon" aria-hidden />}
       {shown ? "Hide" : "Show"}
     </Button>
@@ -201,7 +201,7 @@ function JobSummary({ job, entry, minScore, onApply, onOpenFull }: { job: Job; e
           </a>
         )}
         {onOpenFull && (
-          <Button size="sm" variant="ghost" onClick={onOpenFull}>
+          <Button size="sm" variant="quiet" onClick={onOpenFull}>
             Open full job <ArrowRight className="rj-icon" aria-hidden />
           </Button>
         )}
@@ -356,7 +356,7 @@ export function AddJobDialog({ open, onClose, onAdd }: { open: boolean; onClose:
             </Select>
           </label>
           <div className="mt-2 flex justify-end gap-2">
-            <Button type="button" variant="ghost" onClick={onClose}>
+            <Button type="button" variant="quiet" onClick={onClose}>
               Cancel
             </Button>
             <Button type="submit" variant="primary">

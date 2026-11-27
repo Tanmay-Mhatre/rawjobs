@@ -19,7 +19,8 @@ import { ScanPrefsPicker, scanHints, useScanPlan } from "./ScanButton";
 import { DailySummary } from "./DailySummary";
 import { ScheduledScans } from "./ScheduledScans";
 import { TelegramAlerts } from "./TelegramAlerts";
-import { Button, Card, cx, IconButton, Segmented, Toggle } from "./ui";
+import { Button } from "./primitives";
+import { Card, cx, IconButton, Segmented, Toggle } from "./ui";
 import { useUpdateStatus } from "../lib/update";
 import { DesktopShortcutSettings } from "./DesktopShortcut";
 import { AboutRawJobs, UpdatesSettings, UpdateTelegramSetting } from "./Updates";
@@ -592,7 +593,7 @@ export function Settings({
                   </details>
                 )}
                 {status.retry && !dirty && (
-                  <Button size="sm" variant="ghost" className="mt-1" onClick={() => void save(lastSave.current)} disabled={saving}>
+                  <Button size="sm" variant="quiet" className="mt-1" onClick={() => void save(lastSave.current)} disabled={saving}>
                     <RefreshCw className="size-3.5" /> Try again
                   </Button>
                 )}
@@ -601,7 +602,7 @@ export function Settings({
             {dirty && onDraftPage && (
               <div className="flex flex-wrap items-center gap-2">
                 <span className="mr-auto type-small text-muted">{blockers[0] ?? "You have unsaved changes."}</span>
-                <Button variant="ghost" onClick={revert} disabled={saving}>
+                <Button variant="quiet" onClick={revert} disabled={saving}>
                   Discard
                 </Button>
                 <Button onClick={() => void save(false)} disabled={saving || blockers.length > 0}>
@@ -901,7 +902,7 @@ function HideRules({ rules, onRemoveRule }: { rules: readonly HideRule[]; onRemo
           <li key={ruleKey(r)} className="flex items-center justify-between gap-2 px-3 py-1.5 type-small">
             <span className="min-w-0">{ruleLabel(r)}</span>
             {onRemoveRule && (
-              <Button size="sm" variant="ghost" onClick={() => onRemoveRule(r)} aria-label={`Remove the rule hiding ${offerWhat({ kind: "rule", rule: r })}`}>
+              <Button size="sm" variant="quiet" onClick={() => onRemoveRule(r)} aria-label={`Remove the rule hiding ${offerWhat({ kind: "rule", rule: r })}`}>
                 Remove
               </Button>
             )}
@@ -948,7 +949,7 @@ function Section({
           {collapsible && (
             <Button
               size="sm"
-              variant={expanded ? "ghost" : "outline"}
+              variant={expanded ? "quiet" : "secondary"}
               aria-expanded={expanded}
               aria-controls={`body-${id}`}
               aria-label={`${expanded ? "Done editing" : "Edit"} ${title.toLowerCase()}`}
@@ -1038,7 +1039,7 @@ function TrackingData({ user, prefs, onImport }: { user: UserState; prefs: Prefs
             in both. Replace swaps yours for the file's, views and rules included.
           </p>
           <div className="mt-5 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
-            <Button variant="ghost" onClick={() => setPending(null)}>
+            <Button variant="quiet" onClick={() => setPending(null)}>
               Cancel
             </Button>
             <Button

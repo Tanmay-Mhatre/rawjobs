@@ -2,8 +2,8 @@ import { parseAiAnswer, type AiProfile, type ParsedAnswer } from "@rawjobs/core/
 import { ArrowRight, Check, ClipboardCopy, ExternalLink, FileText, Files, LoaderCircle, SkipForward, Sparkles, TriangleAlert, Upload, Wand2 } from "lucide-react";
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { Dialog } from "../components/Dialog";
-import { Kbd } from "../components/primitives";
-import { Button, Card, cx } from "../components/ui";
+import { Button, Kbd } from "../components/primitives";
+import { Card, cx } from "../components/ui";
 import { copyText } from "../lib/clipboard";
 import { canRunLocally } from "../lib/data";
 import { extractResumeText } from "../lib/extract";
@@ -590,7 +590,7 @@ function RemoveResume({ onRemove }: { onRemove: () => Promise<SaveResult> }) {
 
   return (
     <>
-      <Button size="sm" variant="ghost" onClick={() => setAsking(true)}>
+      <Button size="sm" variant="quiet" onClick={() => setAsking(true)}>
         Remove
       </Button>
       <Dialog open={asking} onClose={() => !working && setAsking(false)} labelledBy="remove-resume-title" initialFocus="[data-autofocus]">
@@ -605,7 +605,7 @@ function RemoveResume({ onRemove }: { onRemove: () => Promise<SaveResult> }) {
             </p>
           )}
           <div className="mt-5 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
-            <Button variant="ghost" onClick={() => setAsking(false)} disabled={working} data-autofocus>
+            <Button variant="quiet" onClick={() => setAsking(false)} disabled={working} data-autofocus>
               Cancel
             </Button>
             <Button variant="danger" onClick={() => void confirm()} disabled={working}>

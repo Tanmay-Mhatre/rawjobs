@@ -1,7 +1,7 @@
 import { Check, ChevronDown, Search } from "lucide-react";
 import { useId, useState, type ReactNode } from "react";
 import type { FacetOption } from "../../lib/filters";
-import { Popover, usePopover } from "../primitives";
+import { Button, Popover, usePopover } from "../primitives";
 import { cx } from "../ui";
 
 type Props = {
@@ -69,9 +69,9 @@ export function FacetMenu({ label, options, selected, onChange, single, searchab
           {footer}
           {active && (
             <div className="mt-1 border-t border-line pt-1 text-right">
-              <button type="button" className="rj-btn rj-btn--quiet rj-btn--sm" onClick={() => onChange([])}>
+              <Button variant="quiet" size="sm" onClick={() => onChange([])}>
                 Clear
-              </button>
+              </Button>
             </div>
           )}
         </Popover>

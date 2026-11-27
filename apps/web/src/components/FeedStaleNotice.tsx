@@ -2,7 +2,7 @@ import { TriangleAlert } from "lucide-react";
 import { PRIORITY, type Notice } from "../app/notices";
 import { aboutRange } from "../lib/scan";
 import { useScanSelector } from "../lib/scanStore";
-import { Button } from "./ui";
+import { Button } from "./primitives";
 
 /** "4 days old"; "missing" without a feed. */
 const age = (days: number | null | undefined) => (days === null || days === undefined ? null : `${Math.max(1, Math.floor(days))} day${Math.floor(days) === 1 ? "" : "s"} old`);

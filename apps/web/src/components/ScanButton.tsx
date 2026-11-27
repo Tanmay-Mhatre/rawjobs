@@ -21,9 +21,9 @@ import {
   type Step,
 } from "../lib/scan";
 import { scanPlan, type ScanPlan, type ScanScope } from "../lib/setup";
-import { IconButton as RjIconButton, Menu, Popover, Tooltip } from "./primitives";
+import { Button, buttonClass, IconButton as RjIconButton, Menu, Popover, Tooltip } from "./primitives";
 import { ScanBars } from "./ScanBars";
-import { Button, cx } from "./ui";
+import { cx } from "./ui";
 
 /** "About 3 min." for a menu or Settings hint. */
 const about = (seconds: number) => {
@@ -382,7 +382,7 @@ export function BackgroundPill({ scan, bg, onPause, onResume }: { scan: ScanStat
   );
   return (
     <div {...rootProps} className="relative">
-      <button type="button" {...triggerProps} aria-controls="background-details" className="rj-btn rj-btn--quiet rj-btn--sm gap-1.5 px-2 type-meta font-medium text-muted hover:text-ink">
+      <button type="button" {...triggerProps} aria-controls="background-details" className={buttonClass("quiet", "sm", "gap-1.5 px-2 type-meta font-medium text-muted hover:text-ink")}>
         {paused ? <Pause className="rj-icon" aria-hidden /> : <ProgressRing value={value} />}
         {/* "Checking the rest" is long: below 1280px the ring and percent show it ("Pausing…" and "Paused"
             stay). The word is hidden only from sight, so the name stays the text plus ", show details". */}

@@ -5,7 +5,8 @@ import { aiPrompt, DRAFT_KINDS, DRAFT_LABEL, type DraftInputs, type DraftKind, d
 import { CAPS } from "../../lib/userState";
 import { Dialog } from "../Dialog";
 import { Tabs } from "../primitives/Tabs";
-import { Button, Card, cx, IconButton } from "../ui";
+import { Button } from "../primitives";
+import { Card, cx, IconButton } from "../ui";
 
 /**
  * Drafts for one person: a connection note, a referral ask and a follow-up, each editable. All three
@@ -76,11 +77,11 @@ export function MessageDrafts({ name, inputs, onClose, onMessaged }: { name: str
           </div>
 
           <div className="mt-4 flex flex-wrap items-center gap-2">
-            <Button variant={said?.copied ? "outline" : "primary"} onClick={() => void copy(text, "Copied. Paste it into LinkedIn and send it from there.", true)}>
+            <Button variant={said?.copied ? "secondary" : "primary"} onClick={() => void copy(text, "Copied. Paste it into LinkedIn and send it from there.", true)}>
               <Copy className="size-4" aria-hidden /> Copy
             </Button>
             {onMessaged && (
-              <Button variant={said?.copied ? "primary" : "outline"} onClick={() => onMessaged(text)}>
+              <Button variant={said?.copied ? "primary" : "secondary"} onClick={() => onMessaged(text)}>
                 Mark as messaged
               </Button>
             )}
@@ -90,7 +91,7 @@ export function MessageDrafts({ name, inputs, onClose, onMessaged }: { name: str
           </p>
 
           <div className="mt-3 border-t border-hairline pt-3">
-            <Button size="sm" variant="ghost" onClick={() => void copy(aiPrompt(kind, inputs), "Copied the prompt.", false)}>
+            <Button size="sm" variant="quiet" onClick={() => void copy(aiPrompt(kind, inputs), "Copied the prompt.", false)}>
               Copy a prompt for your own AI
             </Button>
             <p className="mt-1 type-meta text-muted">Paste it into any AI you use. RawJobs doesn't send it anywhere.</p>
