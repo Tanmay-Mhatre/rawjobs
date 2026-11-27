@@ -55,7 +55,7 @@
   font: var(--text-small, 400 13px/18px var(--font-sans)); font-weight: 400; white-space: nowrap; pointer-events: none;
 }
 .rj-tip--above { top: auto; bottom: calc(100% + var(--space-2)); }
-.rj-btn:last-child > .rj-tip { left: auto; right: 0; transform: none; }
+.rj-btn:last-child > .rj-tip, .rj-tip--end { left: auto; right: 0; transform: none; }
 .rj-btn:hover > .rj-tip { display: inline-flex; animation: rj-tip-in var(--duration-instant) var(--ease-standard) 400ms both; }
 .rj-btn:focus-visible > .rj-tip { display: inline-flex; animation: none; }
 @keyframes rj-tip-in { from { opacity: 0; } to { opacity: 1; } }

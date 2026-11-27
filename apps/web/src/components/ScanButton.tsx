@@ -121,7 +121,7 @@ export function ScanButton({
           ) : (
             label
           )}
-          <Tooltip label={`${label}${lastScan ? ` · last scan ${lastScan}` : ""}`} shortcut="R" />
+          <Tooltip label={`${label}${lastScan ? ` · last scan ${lastScan}` : ""}`} shortcut="R" align="end" />
         </Button>
         <Menu
           label="Scan options"
