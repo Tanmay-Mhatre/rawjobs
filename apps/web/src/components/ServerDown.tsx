@@ -2,6 +2,7 @@ import { appPlace, desktopScene, logPath, SCENE_CSS, sleepScene, WINDOW_CSS } fr
 import { Copy, Power, RotateCcw } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { openStartLink, type ServerHealth } from "../lib/update";
+import { reloadPage } from "../lib/reload";
 import { Dialog } from "./Dialog";
 import { toast } from "./Toast";
 import { Button, Card } from "./ui";
@@ -38,7 +39,7 @@ export function ServerDownWindow({ health }: { health: ServerHealth }) {
     clearTimeout(timer.current);
     setPhase("back");
     setFast(false);
-    const t = setTimeout(() => location.reload(), BACK_MS);
+    const t = setTimeout(() => reloadPage(), BACK_MS);
     return () => clearTimeout(t);
   }, [down, setFast]);
   useEffect(() => () => clearTimeout(timer.current), []);
