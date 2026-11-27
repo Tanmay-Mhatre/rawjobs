@@ -3,7 +3,7 @@ import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/re
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-vi.mock("../src/components/Toast", () => ({ toast: vi.fn() }));
+vi.mock("../src/components/Toast", () => ({ toast: vi.fn(), ToastHost: () => null }));
 import { resetPasted } from "../src/components/referral/FindFriends";
 import { TalkToSomeone } from "../src/components/referral/TalkToSomeone";
 import { toast } from "../src/components/Toast";

@@ -5,7 +5,7 @@ import { toast } from "../src/components/Toast";
 import { useScan } from "../src/lib/scan";
 import { resetScanStore, useScanState } from "../src/lib/scanStore";
 
-vi.mock("../src/components/Toast", () => ({ toast: vi.fn() }));
+vi.mock("../src/components/Toast", () => ({ toast: vi.fn(), ToastHost: () => null }));
 
 /** GET /api/run answers with this scan: its headers, then its events, one line each. */
 function serve(run: { origin?: string; scope?: string; events: object[] } | null) {

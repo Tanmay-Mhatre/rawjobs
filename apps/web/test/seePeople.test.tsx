@@ -3,7 +3,7 @@ import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testi
 import { Window as HappyWindow } from "happy-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-vi.mock("../src/components/Toast", () => ({ toast: vi.fn() }));
+vi.mock("../src/components/Toast", () => ({ toast: vi.fn(), ToastHost: () => null }));
 import { parseHash } from "../src/app/route";
 import { CardPage, OutreachCard } from "../src/components/referral/OutreachCard";
 import { PipHost } from "../src/components/referral/PipHost";

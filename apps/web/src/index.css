@@ -420,6 +420,17 @@ textarea:not(:focus) {
   }
 }
 
+/* Toasts (components/Toast): above the phone nav, and above the Companies tray while it's there
+   (it sets --toast-lift to its height). In a dialog too: the region is fixed, so it ignores the backdrop. */
+.rj-toast-region {
+  bottom: calc(5rem + var(--toast-lift, 0px));
+}
+@media (min-width: 48rem) {
+  .rj-toast-region {
+    bottom: calc(1.5rem + var(--toast-lift, 0px));
+  }
+}
+
 .sr-only-focusable:not(:focus) {
   position: absolute;
   width: 1px;

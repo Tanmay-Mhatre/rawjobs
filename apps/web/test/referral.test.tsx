@@ -319,7 +319,7 @@ describe("Downloads watch", () => {
     expect(dialog.textContent).toContain("RawJobs looks only for LinkedIn's file name");
     await userEvent.click(within(dialog).getByRole("link", { name: /Open LinkedIn's data page/ }));
     expect(fetch.mock.calls.filter(([u, init]) => u === "/api/network/watch" && init?.method === "POST")).toHaveLength(1);
-    expect((await within(dialog).findByRole("status")).textContent).toBe("Watching Downloads for Basic_LinkedInDataExport_….zip");
+    expect(await within(dialog).findByText("Watching Downloads for Basic_LinkedInDataExport_….zip")).toBeTruthy();
     // The drop zone is still there, and the box is gone once watching.
     expect(within(dialog).getByRole("button", { name: /Choose the ZIP file|Choose Connections\.csv/ })).toBeTruthy();
     expect(within(dialog).queryByRole("checkbox", { name: /Pick up the file/ })).toBeNull();

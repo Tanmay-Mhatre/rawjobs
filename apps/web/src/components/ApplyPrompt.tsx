@@ -1,15 +1,21 @@
 import { CircleCheck } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import type { Job } from "../lib/data";
 import { companyName } from "../lib/format";
-import { Button } from "./ui";
+import { pin } from "./Toast";
 
 /**
  * After you open a job's apply page, ask on your return whether you applied, so the Pipeline
- * stays true without typing anything.
+ * stays true without typing anything. A pinned item in the toast column (above any toast, in the open
+ * dialog when there is one): announced politely, never steals focus, its buttons reachable with Tab.
  */
 export function ApplyPrompt({ job, onAnswer }: { job: Job | null; onAnswer: (applied: boolean) => void }) {
   const [back, setBack] = useState(false);
+  const answer = useRef(onAnswer);
+  // Kept after each render (not during it), for the buttons in the pinned item.
+  useLayoutEffect(() => {
+    answer.current = onAnswer;
+  });
 
   useEffect(() => {
     setBack(false);
@@ -25,24 +31,22 @@ export function ApplyPrompt({ job, onAnswer }: { job: Job | null; onAnswer: (app
     };
   }, [job]);
 
-  if (!job || !back) return null;
-  return (
-    // A non-modal prompt: announced politely, never steals focus; its buttons are reachable with Tab.
-    <div className="pointer-events-none fixed inset-x-0 bottom-20 z-toast flex justify-center px-4 md:bottom-6" role="status" aria-label="Did you apply?">
-      <div className="pointer-events-auto flex max-w-xl flex-wrap items-center gap-3 rounded-md border border-line bg-raised p-3 pl-4 shadow-l3">
-        <CircleCheck className="size-5 shrink-0 text-muted" aria-hidden="true" />
-        <p className="min-w-0 flex-1 type-small">
+  useEffect(() => {
+    if (!job || !back) return;
+    pin("apply", {
+      icon: <CircleCheck className="size-5 shrink-0 text-muted" aria-hidden="true" />,
+      message: (
+        <>
           Did you apply to <b>{job.title}</b> at <b>{companyName(job.company)}</b>?
-        </p>
-        <div className="flex gap-2">
-          <Button size="sm" variant="primary" onClick={() => onAnswer(true)}>
-            Yes, mark applied
-          </Button>
-          <Button size="sm" variant="ghost" onClick={() => onAnswer(false)}>
-            Not yet
-          </Button>
-        </div>
-      </div>
-    </div>
-  );
+        </>
+      ),
+      actions: [
+        { label: "Yes, mark applied", primary: true, onClick: () => answer.current(true) },
+        { label: "Not yet", onClick: () => answer.current(false) },
+      ],
+    });
+    return () => pin("apply", null);
+  }, [job, back]);
+
+  return null;
 }
