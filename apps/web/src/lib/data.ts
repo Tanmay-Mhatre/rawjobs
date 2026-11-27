@@ -1,6 +1,7 @@
 import { viewSummary, type ActivityView, type HiringSummary } from "@rawjobs/core/activity";
 import { employmentTypeOfTitle } from "@rawjobs/core/catalog/employment";
 import { citiesIn } from "@rawjobs/core/catalog/places";
+import { getJson } from "./api";
 import { attachFeedJobs } from "./identity";
 import { fetchWithin } from "./net";
 import { toast } from "../components/Toast";
@@ -28,7 +29,17 @@ export type DataState =
       indexGeneratedAt?: string;
     };
 
-async function getJson<T>(path: string): Promise<T | null> {
+/** The data files a scan writes next to the dashboard (data/), and what each holds. */
+type DataFiles = {
+  "./jobs.json": DashboardJobsFile | JobsFile;
+  "./meta.json": DataMeta;
+  "./discover.json": DiscoverFile;
+  "./jobs-other.json": DashboardJobsFile;
+  "./descriptions.json": Record<string, string>;
+  "./activity.json": ActivityView;
+};
+
+async function getFile<P extends keyof DataFiles>(path: P): Promise<DataFiles[P] | null> {
   // Data files can be several MB; on a busy laptop that's still seconds, not this long.
   const res = await fetchWithin(path, { cache: "no-store" }, 30_000);
   if (res.status === 404) return null;
@@ -36,7 +47,8 @@ async function getJson<T>(path: string): Promise<T | null> {
   const type = res.headers.get("content-type") ?? "";
   // Vite's dev server answers unknown paths with index.html; treat that as "not there yet".
   if (type.includes("text/html")) return null;
-  return (await res.json()) as T;
+  const file: DataFiles[P] = await res.json();
+  return file;
 }
 
 /** Files written before the dashboard split held every job, with descriptions, in jobs.json. */
@@ -68,10 +80,10 @@ export function useData() {
   const reload = useCallback(async (): Promise<DataMeta | null> => {
     try {
       const [jobsFile, meta, discover] = await Promise.all([
-        getJson<DashboardJobsFile | JobsFile>("./jobs.json"),
-        getJson<DataMeta>("./meta.json"),
+        getFile("./jobs.json"),
+        getFile("./meta.json"),
         // Written by scans since the jobs-first Radar; older data has none.
-        getJson<DiscoverFile>("./discover.json").catch(() => null),
+        getFile("./discover.json").catch(() => null),
       ]);
       otherJobs = undefined;
       descriptions = undefined;
@@ -122,7 +134,7 @@ let dataGeneration = 0;
 export function loadOtherJobs(): Promise<Job[]> {
   otherJobs ??= legacy
     ? Promise.resolve(legacy.other)
-    : getJson<DashboardJobsFile>("./jobs-other.json")
+    : getFile("./jobs-other.json")
         .then((f) => attachFeedJobs((f?.jobs ?? []).map(upgrade)))
         .catch(() => {
           // Not remembered as empty: the next time they're needed, they're fetched again.
@@ -156,7 +168,7 @@ let descriptions: Promise<Record<string, string>> | undefined;
 function loadDescriptions(): Promise<Record<string, string>> {
   descriptions ??= legacy
     ? Promise.resolve(legacy.descriptions)
-    : getJson<Record<string, string>>("./descriptions.json")
+    : getFile("./descriptions.json")
         .then((d) => d ?? {})
         .catch(() => {
           // Not remembered as empty: opening the next job tries again.
@@ -187,7 +199,7 @@ let activityGeneration = -1;
 function loadActivity(): Promise<ActivityView | null> {
   if (activityGeneration !== dataGeneration) {
     activityGeneration = dataGeneration;
-    activity = getJson<ActivityView>("./activity.json").catch(() => null);
+    activity = getFile("./activity.json").catch(() => null);
   }
   return activity!;
 }
@@ -224,10 +236,7 @@ export function useIndustryCounts(): Record<string, number> | null {
   useEffect(() => {
     if (!canRunLocally) return;
     let live = true;
-    fetch("/api/directory", { cache: "no-store" })
-      .then((r) => (r.ok ? (r.json() as Promise<{ industries?: Record<string, number> | null }>) : null))
-      .then((s) => live && s?.industries && setCounts(s.industries))
-      .catch(() => {});
+    void getJson("GET /api/directory", { cache: "no-store" }).then((r) => live && r.ok && r.data.industries && setCounts(r.data.industries));
     return () => {
       live = false;
     };
@@ -245,10 +254,7 @@ export function useDirectorySize(rev = 0): number | null {
   useEffect(() => {
     if (!canRunLocally) return;
     let live = true;
-    fetch("/api/directory", { cache: "no-store" })
-      .then((r) => (r.ok ? (r.json() as Promise<{ local?: { companies: number } }>) : null))
-      .then((s) => live && s?.local?.companies && setN(s.local.companies))
-      .catch(() => {});
+    void getJson("GET /api/directory", { cache: "no-store" }).then((r) => live && r.ok && r.data.local?.companies && setN(r.data.local.companies));
     return () => {
       live = false;
     };

@@ -13,7 +13,7 @@ beforeEach(() => {
   health = { scanning: false, background: false, dataVersion: "A" };
   vi.stubGlobal(
     "fetch",
-    vi.fn(async () => ({ json: async () => ({ ok: true, ...health }) })),
+    vi.fn(async () => ({ ok: true, status: 200, json: async () => ({ ok: true, ...health }) })),
   );
 });
 afterEach(() => {

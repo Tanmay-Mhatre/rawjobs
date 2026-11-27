@@ -1,3 +1,5 @@
+import { getJson } from "./api";
+
 /** A careers board as the directory finds it again: hiring system, board name, and (when needed) shard, site and EU region. */
 export type MoveBoard = { ats: string; slug: string; region?: string; shard?: string; site?: string };
 
@@ -22,16 +24,10 @@ const boardOnly = (b: MoveBoard): MoveBoard => ({
  * is there for a test or a log, and a server that's down or a board it won't take is just `queued: false`.
  */
 export async function shareMove(name: string, from: MoveBoard, to: MoveBoard): Promise<ShareMoveResult> {
-  try {
-    const res = await fetch("/api/directory/moves", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ name, from: boardOnly(from), to: boardOnly(to) }),
-    });
-    const body = (await res.json().catch(() => null)) as { queued?: boolean; reason?: string; errors?: string } | null;
-    if (res.ok && body?.queued === true) return { queued: true };
-    return { queued: false, reason: body?.reason ?? body?.errors ?? `HTTP ${res.status}` };
-  } catch (err) {
-    return { queued: false, reason: err instanceof Error ? err.message : String(err) };
-  }
+  const r = await getJson("POST /api/directory/moves", {
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ name, from: boardOnly(from), to: boardOnly(to) }),
+  });
+  if (r.ok && r.data.queued) return { queued: true };
+  return { queued: false, reason: r.ok ? ("reason" in r.data && r.data.reason) || `HTTP ${r.status}` : r.error };
 }

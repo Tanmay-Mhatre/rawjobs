@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
+import { getJson } from "./api";
 import { canRunLocally } from "./data";
 import { load, save } from "./storage";
 
@@ -19,13 +20,8 @@ export function useResume() {
       setResume({ text: stored?.text ?? "", updatedAt: stored?.updatedAt, loaded: true });
       return;
     }
-    try {
-      const res = await fetch("/api/setup/resume", { cache: "no-store" });
-      const body = (await res.json()) as { text: string | null; updatedAt?: string };
-      setResume({ text: body.text ?? "", updatedAt: body.updatedAt, loaded: true });
-    } catch {
-      setResume({ text: "", loaded: true });
-    }
+    const r = await getJson("GET /api/setup/resume", { cache: "no-store" });
+    setResume(r.ok ? { text: r.data.text ?? "", updatedAt: r.data.updatedAt, loaded: true } : { text: "", loaded: true });
   }, []);
 
   useEffect(() => {
@@ -39,9 +35,9 @@ export function useResume() {
       setResume({ text, updatedAt, loaded: true });
       return { ok: true };
     }
-    const res = await fetch("/api/setup/resume", { method: "POST", body: JSON.stringify({ text }) });
-    const body = (await res.json()) as { ok: boolean; error?: string; errors?: string };
-    if (!body.ok) return { ok: false, error: body.error ?? body.errors ?? "Couldn't save the resume." };
+    const r = await getJson("POST /api/setup/resume", { body: JSON.stringify({ text }) });
+    if (!r.ok) return { ok: false, error: r.error };
+    if (!r.data.ok) return { ok: false, error: r.data.error ?? r.data.errors ?? "Couldn't save the resume." };
     setResume({ text: text.trim(), updatedAt, loaded: true });
     return { ok: true };
   }, []);
@@ -49,13 +45,9 @@ export function useResume() {
   /** Delete the saved resume (this computer, or this browser when hosted). */
   const removeResume = useCallback(async (): Promise<{ ok: true } | { ok: false; error: string }> => {
     if (canRunLocally) {
-      try {
-        const res = await fetch("/api/setup/resume", { method: "DELETE" });
-        const body = (await res.json()) as { ok: boolean; errors?: string };
-        if (!body.ok) return { ok: false, error: body.errors ?? "Couldn't remove the resume." };
-      } catch (err) {
-        return { ok: false, error: (err as Error).message };
-      }
+      const r = await getJson("DELETE /api/setup/resume");
+      if (!r.ok) return { ok: false, error: r.error };
+      if (!r.data.ok) return { ok: false, error: r.data.errors ?? "Couldn't remove the resume." };
     } else save(LOCAL_KEY, null);
     setResume({ text: "", loaded: true });
     return { ok: true };

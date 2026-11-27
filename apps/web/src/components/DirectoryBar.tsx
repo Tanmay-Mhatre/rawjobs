@@ -1,5 +1,6 @@
 import { CloudDownload, Database, LoaderCircle } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
+import { getJson } from "../lib/api";
 import { canRunLocally } from "../lib/data";
 import { roughCount, timeAgo } from "../lib/format";
 import { Button, cx } from "./ui";
@@ -25,14 +26,9 @@ export type DirectoryUpdate = { ok: boolean; updated: boolean; text: string };
 
 /** Download the latest shared directory (local app only). Never throws. */
 export async function updateDirectory(): Promise<DirectoryUpdate> {
-  try {
-    const res = await fetch("/api/directory/update", { method: "POST" });
-    const body = (await res.json()) as { updated?: boolean; message?: string; errors?: string };
-    if (body.errors || !res.ok) return { ok: false, updated: false, text: "Couldn't update the directory. Check your internet connection and try again." };
-    return { ok: true, updated: !!body.updated, text: body.updated ? "Directory updated." : "Directory up to date." };
-  } catch {
-    return { ok: false, updated: false, text: "Couldn't update the directory. Check your internet connection and try again." };
-  }
+  const r = await getJson("POST /api/directory/update");
+  if (!r.ok || r.data.errors) return { ok: false, updated: false, text: "Couldn't update the directory. Check your internet connection and try again." };
+  return { ok: true, updated: !!r.data.updated, text: r.data.updated ? "Directory updated." : "Directory up to date." };
 }
 
 /**
@@ -47,12 +43,9 @@ export function DirectoryBar({ onUpdated, companies }: { onUpdated: () => void; 
 
   const load = useCallback(async () => {
     if (!canRunLocally) return;
-    try {
-      const res = await fetch("/api/directory", { cache: "no-store" });
-      if (res.ok) setStatus((await res.json()) as Status);
-    } catch {
-      // The bar just stays hidden.
-    }
+    // No answer: the bar just stays hidden.
+    const r = await getJson("GET /api/directory", { cache: "no-store" });
+    if (r.ok) setStatus(r.data);
   }, []);
   useEffect(() => {
     void load();

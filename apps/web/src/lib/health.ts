@@ -1,5 +1,6 @@
 import type { Health } from "@rawjobs/core/protocol";
 import { useSyncExternalStore } from "react";
+import { getJson, isHealth } from "./api";
 import { canRunLocally } from "./data";
 import { updatingTo } from "./update";
 
@@ -73,13 +74,10 @@ async function poll(): Promise<void> {
   clearTimeout(timer);
   const gen = generation;
   let next: HealthState;
-  try {
-    const res = await fetch("/api/health", { cache: "no-store", signal: AbortSignal.timeout(3000) });
-    const h = (await res.json()) as Health;
-    next = h.ok ? { health: h, down: false, since: null } : { health: state.health, down: true, since: state.since ?? Date.now() };
-  } catch {
-    next = { health: state.health, down: true, since: state.since ?? Date.now() };
-  }
+  // No answer, an error, or an answer that isn't health (another version's shape): it's down.
+  const r = await getJson("GET /api/health", { cache: "no-store", signal: AbortSignal.timeout(3000) });
+  const h = r.ok && isHealth(r.data) ? r.data : null;
+  next = h?.ok ? { health: h, down: false, since: null } : { health: state.health, down: true, since: state.since ?? Date.now() };
   if (gen !== generation) return;
   inFlight = false;
   const was = state.down ? "down" : JSON.stringify(state.health);

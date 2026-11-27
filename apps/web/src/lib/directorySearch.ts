@@ -1,8 +1,10 @@
 import { type CompanyIndex, companyIndexAsync } from "@rawjobs/core/company-search";
 import { type BrowseAnswer, type BrowseRequest, countCompanies, type DirCompany, pageOf, searchDirectory } from "@rawjobs/core/directory-search";
-import { useEffect, useMemo, useRef, useState, useLayoutEffect } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import type { ApiRoutes } from "@rawjobs/core/protocol";
+import { getJson } from "./api";
 import { canRunLocally } from "./data";
-import { ACTION_TIMEOUT_MS, fetchWithin } from "./net";
+import { ACTION_TIMEOUT_MS } from "./net";
 
 /**
  * Companies → Browse all, a page at a time. The installed app asks its server (POST /api/directory/search),
@@ -24,7 +26,13 @@ let hosted: { rev: number; load: Promise<DirCompany[] | null>; index?: Promise<C
 
 function hostedDirectory(rev: number): Promise<DirCompany[] | null> {
   if (hosted?.rev === rev) return hosted.load;
-  const get = (path: string) => fetch(path, { cache: "no-store" }).then((r) => (r.ok ? (r.json() as Promise<{ companies: DirCompany[] }>) : null));
+  // catalog/*.json, files the hosted copy serves: { companies }.
+  const get = (path: string) =>
+    fetch(path, { cache: "no-store" }).then(async (r) => {
+      if (!r.ok) return null;
+      const file: { companies: DirCompany[] } = await r.json();
+      return file;
+    });
   const load = Promise.all([get("./catalog/directory.json"), get("./catalog/additions.json").catch(() => null)]).then(([dir, adds]) => {
     if (!dir) return null;
     const known = new Set(dir.companies.map((c) => c.key));
@@ -51,20 +59,20 @@ async function hostedSearch(r: BrowseRequest, rev: number): Promise<BrowseAnswer
 
 // ---------- asking ----------
 
-async function post<T>(op: "search" | "names" | "warm", body: unknown, signal?: AbortSignal): Promise<T> {
-  const res = await fetchWithin(`/api/directory/${op}`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body), signal }, ACTION_TIMEOUT_MS * 2);
-  if (!res.ok) throw new Error(`The directory search answered ${res.status}.`);
-  return (await res.json()) as T;
+async function post<R extends `POST /api/directory/${"search" | "names" | "warm"}`>(route: R, body: unknown, signal?: AbortSignal): Promise<ApiRoutes[R]> {
+  const r = await getJson(route, { headers: { "content-type": "application/json" }, body: JSON.stringify(body), signal, timeoutMs: ACTION_TIMEOUT_MS * 2 });
+  if (!r.ok) throw new Error(r.status ? `The directory search answered ${r.status}.` : r.error);
+  return r.data;
 }
 
 /** One page of Browse all (or { missing: true } when the directory isn't downloaded). */
 export function searchCompanies(r: BrowseRequest, opts: { rev?: number; signal?: AbortSignal } = {}): Promise<BrowseAnswer> {
-  return canRunLocally ? post<BrowseAnswer>("search", r, opts.signal) : hostedSearch(r, opts.rev ?? 0);
+  return canRunLocally ? post("POST /api/directory/search", r, opts.signal) : hostedSearch(r, opts.rev ?? 0);
 }
 
 /** Read the directory ahead of Browse all (the installed app's search process); nothing on a hosted copy. */
 export function warmDirectory(): void {
-  if (canRunLocally) post("warm", {}).catch(() => {});
+  if (canRunLocally) post("POST /api/directory/warm", {}).catch(() => {});
 }
 
 type SearchState = { answer: BrowseAnswer | null; error: string | null; loading: boolean; slow: boolean };
@@ -131,7 +139,7 @@ export function useDirectoryNames(keys: readonly string[], rev = 0): ReadonlyMap
     if (!keys.length) return;
     let live = true;
     const ask = canRunLocally
-      ? post<{ names: Record<string, string> }>("names", { keys }).then((r) => new Map(Object.entries(r.names ?? {})))
+      ? post("POST /api/directory/names", { keys }).then((r) => new Map(Object.entries(r.names ?? {})))
       : hostedDirectory(rev).then((all) => {
           const wanted = new Set(keys);
           return new Map((all ?? []).filter((c) => wanted.has(c.key)).map((c) => [c.key, c.name] as const));
