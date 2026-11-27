@@ -37,18 +37,18 @@ const read = (p) => readFileSync(p, "utf8");
 
 // ---------- hiring systems and job boards, from the app's own code ----------
 // Read from packages/core (ATS_TYPES, JOB_BOARDS) and named as the dashboard names them
-// (packages/core/src/directory-search.ts, ATS_LABEL), so a new connector shows up here with no site edit.
+// (packages/core/src/directory-boards.ts, ATS_LABEL), so a new connector shows up here with no site edit.
 const listIn = (src, name) => {
   const m = src.match(new RegExp(`export const ${name} = \\[([\\s\\S]*?)\\]`));
   if (!m) throw new Error(`${name} not found in packages/core/src/schema.ts`);
   return [...m[1].matchAll(/"([a-z0-9]+)"/g)].map((x) => x[1]);
 };
 const schemaSrc = read(join(ROOT, "packages/core/src/schema.ts"));
-const labelBlock = read(join(ROOT, "packages/core/src/directory-search.ts")).match(/export const ATS_LABEL[^{]*\{([\s\S]*?)\n\};/);
-if (!labelBlock) throw new Error("ATS_LABEL not found in packages/core/src/directory-search.ts");
+const labelBlock = read(join(ROOT, "packages/core/src/directory-boards.ts")).match(/export const ATS_LABEL[^{]*\{([\s\S]*?)\n\};/);
+if (!labelBlock) throw new Error("ATS_LABEL not found in packages/core/src/directory-boards.ts");
 const LABEL = Object.fromEntries([...labelBlock[1].matchAll(/^\s*(\w+): "([^"]+)"/gm)].map((m) => [m[1], m[2]]));
 const label = (id) => {
-  if (!LABEL[id]) throw new Error(`no ATS_LABEL for "${id}" in packages/core/src/directory-search.ts`);
+  if (!LABEL[id]) throw new Error(`no ATS_LABEL for "${id}" in packages/core/src/directory-boards.ts`);
   return LABEL[id];
 };
 const SYSTEMS = listIn(schemaSrc, "ATS_TYPES").map(label);
