@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useEffectEvent, useLayoutEffect, useRef, useState } from "react";
 
 /** The time freshness is worked out at, moved on every hour: often enough to stay right, never while you read. */
 export function useHourlyNow() {
@@ -27,11 +27,23 @@ export function useIsWide() {
  * over props and state that change on every render).
  */
 export function useLatestKeydown(handler: (e: KeyboardEvent) => void) {
-  const ref = useRef(handler);
-  ref.current = handler;
+  const onKey = useEffectEvent(handler);
   useEffect(() => {
-    const onKey = (e: KeyboardEvent) => ref.current(e);
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
+    const listener = (e: KeyboardEvent) => onKey(e);
+    window.addEventListener("keydown", listener);
+    return () => window.removeEventListener("keydown", listener);
   }, []);
+}
+
+/**
+ * A function that stays the same for the component's life and calls the latest `fn`: for handlers passed
+ * to memo children (rows, the details panel), so new closures don't make them render again. The latest
+ * `fn` is kept after each render (not during it), so call it from events, not while rendering.
+ */
+export function useStableHandler<A extends unknown[], R>(fn: (...args: A) => R): (...args: A) => R {
+  const latest = useRef(fn);
+  useLayoutEffect(() => {
+    latest.current = fn;
+  });
+  return useCallback((...args: A) => latest.current(...args), []);
 }
