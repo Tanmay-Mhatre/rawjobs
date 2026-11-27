@@ -210,7 +210,7 @@ export function TelegramAlerts({
       <Dialog open={confirmForget} onClose={() => setConfirmForget(false)} labelledBy="tg-forget-title" initialFocus="[data-autofocus]">
         <Card className="p-5 shadow-l3 sm:p-6">
           <div className="flex items-start gap-3">
-            <h2 id="tg-forget-title" className="min-w-0 flex-1 type-subheading font-semibold">
+            <h2 /* design-lint-ignore: weight moves into the type style in 6I */ id="tg-forget-title" className="min-w-0 flex-1 type-subheading font-semibold">
               {step === 3 ? "Disconnect Telegram?" : "Use another bot?"}
             </h2>
             <IconButton label="Close" className="-mr-2 -mt-1" onClick={() => setConfirmForget(false)}>

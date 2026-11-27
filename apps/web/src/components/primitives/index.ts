@@ -12,3 +12,4 @@ export { ScoreBreakdown, scoreParts, type ScorePart } from "./ScoreBreakdown";
 export { SourceTag } from "./SourceTag";
 export { BOARD_STATE_LABEL, Status, StatusGlyph, type BoardState, type GlyphShape } from "./Status";
 export { Tabs, type TabItem } from "./Tabs";
+export { useRovingRadio } from "./useRovingRadio";

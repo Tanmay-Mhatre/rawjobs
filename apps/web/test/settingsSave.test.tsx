@@ -1,9 +1,9 @@
 // @vitest-environment happy-dom
-import { act, cleanup, render, screen, waitFor } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, renderHook, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import type { ComponentProps } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { emptyDraft, type Draft } from "../src/lib/setup";
+import { draftToConfig, emptyDraft, type Draft, type SetupStatus } from "../src/lib/setup";
 
 const saveConfig = vi.fn(async (_config: unknown) => ({ ok: true as const }));
 vi.mock("../src/lib/setup", async (orig) => ({ ...(await orig<typeof import("../src/lib/setup")>()), saveConfig: (c: unknown) => saveConfig(c) }));
@@ -17,6 +17,8 @@ vi.mock("../src/lib/update", () => ({ useUpdateStatus: () => ({ status: null, se
 vi.mock("../src/lib/data", async (orig) => ({ ...(await orig<typeof import("../src/lib/data")>()), canRunLocally: true, useDirectorySize: () => 51000 }));
 
 const { Settings } = await import("../src/components/Settings");
+const { SETTINGS_DRAFT_KEY, useSetupDraft } = await import("../src/app/useSetupDraft");
+const { dismissToast, toast, Toaster } = await import("../src/components/Toast");
 
 const saved: Draft = { ...emptyDraft(), include: ["product manager"], remote: true, minScore: 70 };
 
@@ -110,5 +112,76 @@ describe("Settings › Notifications", () => {
     renderSettings({ resumeText });
     await go("#settings/profile");
     expect(screen.getByRole("button", { name: "Use 7", hidden: true })).toBeTruthy();
+  });
+});
+
+describe("unsaved Profile and Matching edits", () => {
+  const status = (d: Draft): SetupStatus => ({ configPath: "rawjobs.config.local.yaml", isPersonal: true, valid: true, config: draftToConfig(d), hasData: true }) as SetupStatus;
+  const mount = (d: Draft) => {
+    render(<Toaster />);
+    return renderHook((s: SetupStatus) => useSetupDraft(s, undefined), { initialProps: status(d) });
+  };
+  const kept = () => JSON.parse(localStorage.getItem(SETTINGS_DRAFT_KEY) ?? "null") as { base: Draft; draft: Draft } | null;
+  /** Edit, then let the 500 ms write happen. */
+  const edit = async (h: ReturnType<typeof mount>, patch: Partial<Draft>) => {
+    act(() => h.result.current.update(patch));
+    await waitFor(() => expect(kept()).not.toBeNull());
+  };
+
+  beforeEach(() => localStorage.clear());
+  afterEach(() => {
+    act(() => dismissToast(toast({ message: "" })));
+  });
+
+  it("edit → remount with same storage → draft restored, dirty, toast shown", async () => {
+    const first = mount(saved);
+    await edit(first, { include: ["product manager", "designer"] });
+    first.unmount();
+    cleanup();
+    const again = mount(saved);
+    expect(again.result.current.draft.include).toEqual(["product manager", "designer"]);
+    expect(again.result.current.dirty).toBe(true);
+    expect(screen.getByText("Your unsaved changes to Profile and Matching are back.")).toBeTruthy();
+  });
+
+  it("saved elsewhere meanwhile → rebased: the newer save under the kept edit", async () => {
+    const first = mount(saved);
+    await edit(first, { include: ["product manager", "designer"] });
+    first.unmount();
+    cleanup();
+    // The Companies page (or another tab) saved a new score threshold while this tab was away.
+    const again = mount({ ...saved, minScore: 80 });
+    expect(again.result.current.draft.include).toEqual(["product manager", "designer"]);
+    expect(again.result.current.draft.minScore).toBe(80);
+  });
+
+  it("Discard clears key", async () => {
+    const first = mount(saved);
+    await edit(first, { include: ["product manager", "designer"] });
+    first.unmount();
+    cleanup();
+    const again = mount(saved);
+    fireEvent.click(screen.getByRole("button", { name: "Discard" }));
+    expect(again.result.current.dirty).toBe(false);
+    expect(again.result.current.draft.include).toEqual(["product manager"]);
+    expect(kept()).toBeNull();
+    expect(screen.getByText("Discarded your unsaved changes")).toBeTruthy();
+  });
+
+  it("beforeunload listener only while dirty", async () => {
+    const add = vi.spyOn(window, "addEventListener");
+    const remove = vi.spyOn(window, "removeEventListener");
+    const h = mount(saved);
+    const asks = (spy: typeof add) => spy.mock.calls.filter(([type]) => type === "beforeunload").length;
+    expect(asks(add)).toBe(0);
+    act(() => h.result.current.update({ include: ["product manager", "designer"] }));
+    expect(asks(add)).toBe(1);
+    const event = new Event("beforeunload", { cancelable: true });
+    window.dispatchEvent(event);
+    expect(event.defaultPrevented).toBe(true);
+    act(() => h.result.current.update({ include: ["product manager"] }));
+    expect(asks(remove)).toBe(1);
+    add.mockRestore();
+    remove.mockRestore();
   });
 });

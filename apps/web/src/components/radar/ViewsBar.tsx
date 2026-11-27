@@ -82,7 +82,7 @@ export function ViewsBar(props: {
             className={cx("rj-chip tabular", on && "border-[var(--chip-on-bg)] bg-[var(--chip-on-bg)] text-[var(--chip-on-fg)]")}
           >
             {c.label}
-            <span className={cx("font-normal", on ? "opacity-80" : "text-muted")}>{props.counts[c.id].toLocaleString()}</span>
+            <span /* design-lint-ignore: muted state, reviewed in 6B */ className={cx("font-normal", on ? "opacity-80" : "text-muted")}>{props.counts[c.id].toLocaleString()}</span>
             {on && <X className="size-3.5 shrink-0" aria-hidden />}
           </button>
         );

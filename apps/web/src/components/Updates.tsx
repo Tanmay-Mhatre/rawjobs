@@ -1,6 +1,7 @@
 import { Copy, ExternalLink, Info, LoaderCircle, RefreshCw, ShieldCheck, Star, Undo2 } from "lucide-react";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { formatDate, timeAgo } from "../lib/format";
+import { reloadPage } from "../lib/reload";
 import {
   announceUpdateStatus,
   checkForUpdate,
@@ -127,7 +128,8 @@ export function ServerNotices({ onRadar = false, star }: { onRadar?: boolean; st
       <div role="status" className="mb-3 flex items-center gap-2 rounded-md bg-inset/60 px-3 py-2 type-small">
         <LoaderCircle className="size-4 shrink-0 animate-spin text-muted" aria-hidden />
         <span>
-          <b>Reconnecting to RawJobs…</b> <span className="text-muted">This takes a few seconds after an update. The page reloads by itself.</span>
+          <b>Reconnecting to RawJobs…</b>{" "}
+          <span className="text-muted">{updating ? "This takes a few seconds after an update. The page reloads by itself." : "Your changes are kept in this browser and save when it's back."}</span>
         </span>
       </div>
     );
@@ -163,7 +165,7 @@ export function ServerNotices({ onRadar = false, star }: { onRadar?: boolean; st
     <section role="status" aria-labelledby="went-back-title" className="mb-3 flex items-start gap-4 rounded-md border border-line bg-raised p-4">
       <Anchor kind="warn" />
       <div className="min-w-0 flex-1">
-        <h2 id="went-back-title" className="type-subheading font-semibold text-balance">
+        <h2 /* design-lint-ignore: weight moves into the type style in 6I */ id="went-back-title" className="type-subheading font-semibold text-balance">
           The update to {last.to} didn't start
         </h2>
         <p className="mt-1 flex items-center gap-1.5 type-small text-muted">
@@ -216,7 +218,7 @@ function UpdatingCover({ from, to }: { from: string; to: string }) {
         <Points items={[[ShieldCheck, "Your data is backed up first"]]} />
         {slow && (
           <div className="mt-5 flex justify-end">
-            <Button variant="primary" data-autofocus onClick={() => location.reload()}>
+            <Button variant="primary" data-autofocus onClick={() => reloadPage()}>
               <RefreshCw className="size-4" aria-hidden /> Reload page
             </Button>
           </div>

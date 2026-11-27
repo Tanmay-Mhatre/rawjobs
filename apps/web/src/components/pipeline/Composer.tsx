@@ -1,7 +1,8 @@
 import { Handshake, type LucideIcon, Mail, MessageCircle, MessageSquare, Phone, StickyNote, Users } from "lucide-react";
-import { type KeyboardEvent, useId, useRef, useState } from "react";
+import { useId, useState } from "react";
 import { type Activity, activityAt, CAPS, CHANNEL_LABEL, CHANNELS, type Channel, type Contact, dayAfter, type Direction, FOLLOW_UP_DAYS, newId, today } from "../../lib/userState";
 import { DateField } from "../DateField";
+import { useRovingRadio } from "../primitives";
 import { Button, cx, Select } from "../ui";
 
 export const CHANNEL_ICON: Record<Channel, LucideIcon> = {
@@ -63,30 +64,22 @@ export type ComposerProps = {
 
 /** A radio group of buttons with arrow keys (design: Sent / Received). */
 function Radios<T extends string>({ label, value, options, onChange }: { label: string; value: T; options: { value: T; label: string; icon?: LucideIcon }[]; onChange: (v: T) => void }) {
-  const refs = useRef<(HTMLButtonElement | null)[]>([]);
-  const onKey = (ev: KeyboardEvent<HTMLButtonElement>, i: number) => {
-    const step = ev.key === "ArrowRight" || ev.key === "ArrowDown" ? 1 : ev.key === "ArrowLeft" || ev.key === "ArrowUp" ? -1 : 0;
-    if (!step) return;
-    ev.preventDefault();
-    const next = (i + step + options.length) % options.length;
-    onChange(options[next]!.value);
-    refs.current[next]?.focus();
-  };
+  const { itemProps } = useRovingRadio(
+    options.map((o) => o.value),
+    value,
+    onChange,
+  );
   return (
     <div role="radiogroup" aria-label={label} className="flex flex-wrap gap-1">
       {options.map((o, i) => (
         // biome-ignore lint/a11y/useSemanticElements: an ARIA role on purpose: native radios can't look like these buttons
         <button
           key={o.value}
-          ref={(el) => {
-            refs.current[i] = el;
-          }}
+          {...itemProps(i)}
           type="button"
           role="radio"
           aria-checked={o.value === value}
-          tabIndex={o.value === value ? 0 : -1}
           onClick={() => onChange(o.value)}
-          onKeyDown={(ev) => onKey(ev, i)}
           className={cx(
             "inline-flex h-8 items-center gap-1.5 rounded-md border px-2.5 type-label transition-colors",
             o.value === value ? "border-ink bg-inset text-ink" : "border-line text-muted hover:text-ink",

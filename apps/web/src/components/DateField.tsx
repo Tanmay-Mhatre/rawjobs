@@ -273,7 +273,7 @@ export function DateField({
                     "h-8 rounded-sm tabular type-small transition-colors",
                     selected ? "bg-ink font-semibold text-canvas" : ok ? "hover:bg-hover" : "cursor-default",
                     !selected && (!inMonth || !ok) && "text-muted",
-                    !ok && "opacity-40",
+                    !ok && "opacity-40", // design-lint-ignore: muted state, reviewed in 6B
                     d === today && !selected && "ring-1 ring-control ring-inset",
                   )}
                 >

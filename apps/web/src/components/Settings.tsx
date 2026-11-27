@@ -263,7 +263,14 @@ export function Settings({
     setSaving(true);
     try {
       const res = await saveConfig(draftToConfig(draft));
-      if (!res.ok) return setStatus({ tone: "bad", text: "Couldn't save your settings. Check the sections above, then try again.", detail: res.errors, retry: true });
+      if (!res.ok) {
+        // Only the server's own check points at the sections; offline (saveConfig never throws) keeps its old copy.
+        const text =
+          res.cause === "offline"
+            ? "Couldn't save your settings. Make sure RawJobs is still running on this computer, then try again."
+            : "Couldn't save your settings. Check the sections above, then try again.";
+        return setStatus({ tone: "bad", text, detail: res.errors, retry: true });
+      }
       await onSaved();
       setStatus({ tone: "ok", text: thenScan ? "Saved. Scanning with your new settings…" : "Saved. Changes apply from the next scan." });
       if (thenScan) onScan();
@@ -566,7 +573,7 @@ export function Settings({
           <p className="mt-6 rounded-md border border-line bg-raised p-3 type-small text-muted">This online copy doesn't save changes. To keep your setup, run RawJobs on your computer.</p>
         )}
         {canRunLocally && dirty && !onDraftPage && (
-          <div className="sticky bottom-16 z-10 mt-6 flex flex-wrap items-center gap-2 rounded-md border border-line bg-raised/95 p-3 shadow-l2 backdrop-blur md:bottom-4">
+          <div className="sticky bottom-16 z-sticky mt-6 flex flex-wrap items-center gap-2 rounded-md border border-line bg-raised/95 p-3 shadow-l2 backdrop-blur md:bottom-4">
             <span className="mr-auto type-small text-muted">You have unsaved changes on {dirtyPage === "matching" ? "Matching" : "Profile"}.</span>
             <Button size="sm" onClick={() => (location.hash = settingsHash(dirtyPage))}>
               Review and save <ArrowRight className="size-3.5" />
@@ -574,7 +581,7 @@ export function Settings({
           </div>
         )}
         {canRunLocally && ((dirty && onDraftPage) || status) && (
-          <div className="sticky bottom-16 z-10 mt-6 rounded-md border border-line bg-raised/95 p-3 shadow-l2 backdrop-blur md:bottom-4">
+          <div className="sticky bottom-16 z-sticky mt-6 rounded-md border border-line bg-raised/95 p-3 shadow-l2 backdrop-blur md:bottom-4">
             {status && (
               <div role={status.tone === "bad" ? "alert" : "status"} className="mb-2 type-small">
                 <p className={status.tone === "ok" ? "text-success-text" : "text-danger-text"}>{status.text}</p>
@@ -1019,7 +1026,7 @@ function TrackingData({ user, prefs, onImport }: { user: UserState; prefs: Prefs
       <Dialog open={!!pending} onClose={() => setPending(null)} labelledBy="import-title" initialFocus="[data-autofocus]">
         <Card className="p-5 shadow-l3 sm:p-6">
           <div className="flex items-start gap-3">
-            <h2 id="import-title" className="min-w-0 flex-1 type-subheading font-semibold">
+            <h2 /* design-lint-ignore: weight moves into the type style in 6I */ id="import-title" className="min-w-0 flex-1 type-subheading font-semibold">
               Merge or replace your tracked jobs?
             </h2>
             <IconButton label="Close" className="-mr-2 -mt-1" onClick={() => setPending(null)}>

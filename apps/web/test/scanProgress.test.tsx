@@ -2,7 +2,7 @@
 import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { ScanBars } from "../src/components/ScanBars";
-import { BackgroundPill, ScanStatus } from "../src/components/ScanButton";
+import { BackgroundPill, ScanButton, ScanStatus } from "../src/components/ScanButton";
 import { ScanProgress } from "../src/components/ScanProgress";
 import { shortCount } from "../src/lib/format";
 import { applyScanEvent, progressRows, splitProgress, withLive, type ScanState } from "../src/lib/scan";
@@ -227,5 +227,40 @@ describe("Starting and the background check", () => {
     expect(screen.getByText("12 new matches on your Radar")).toBeTruthy();
     expect(screen.getByText(/Listing the companies Scan now skipped/)).toBeTruthy();
     expect(screen.getByRole("button", { name: /Pause/ })).toBeTruthy();
+  });
+});
+
+describe("Scan button label", () => {
+  const idle: ScanState = { ...IDLE, phase: "idle" };
+  const renderButton = (scope: "mine" | "yours") => {
+    localStorage.setItem("rawjobs.scanScope", JSON.stringify(scope));
+    // No scan plan here: the hints fall back to their plain words.
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => new Response("null", { status: 404 })),
+    );
+    const onStart = vi.fn();
+    render(<ScanButton scan={idle} onStart={onStart} onStop={() => {}} onResume={() => {}} onSettings={() => {}} />);
+    return onStart;
+  };
+  afterEach(() => localStorage.clear());
+
+  it('scope yours → button name "Scan my companies", and it scans only yours', () => {
+    const onStart = renderButton("yours");
+    fireEvent.click(screen.getByRole("button", { name: "Scan my companies" }));
+    expect(onStart).toHaveBeenCalledWith("yours");
+    expect(screen.queryByRole("button", { name: "Scan now", exact: true })).toBeNull();
+  });
+
+  it("scope mine keeps Scan now", () => {
+    renderButton("mine");
+    expect(screen.getByRole("button", { name: "Scan now", exact: true })).toBeTruthy();
+  });
+
+  it("menu shows Default on matching item", () => {
+    renderButton("yours");
+    fireEvent.click(screen.getByRole("button", { name: "More scan options" }));
+    expect(screen.getByRole("menuitem", { name: /Only my companies/ }).textContent).toContain("Default · ");
+    expect(screen.getByRole("menuitem", { name: /^Scan now/ }).textContent).not.toContain("Default");
   });
 });

@@ -31,7 +31,7 @@ function Tile({ label, value, goal, children }: { label: string; value: number; 
   return (
     <div className="grid content-start gap-1 rounded-md border border-line p-3">
       <dt className="type-meta text-muted">{label}</dt>
-      <dd className="tabular type-subheading font-semibold">
+      <dd /* design-lint-ignore: weight moves into the type style in 6I */ className="tabular type-subheading font-semibold">
         {value}
         {goal ? <span className="type-small font-normal text-muted"> of {goal}</span> : null}
       </dd>

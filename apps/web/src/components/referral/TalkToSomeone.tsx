@@ -262,7 +262,7 @@ function MoreWaysIn({ links }: { links: SearchLink[] }) {
   return (
     <details className="group/fold">
       <summary className="inline-flex min-h-8 cursor-pointer list-none items-center gap-1.5 type-label [&::-webkit-details-marker]:hidden">
-        <ChevronRight className="size-4 text-muted transition-transform duration-150 group-open/fold:rotate-90" aria-hidden />
+        <ChevronRight className="size-4 text-muted transition-transform duration-quick group-open/fold:rotate-90" aria-hidden />
         More ways in
       </summary>
       <ul className="mt-1 space-y-1 type-small">
@@ -392,7 +392,7 @@ function PersonRow({ person, score, loose, job, contacts }: Ranked & { loose: bo
         {score.why && <p className="type-small">{score.why}.</p>}
         <details className="group/more">
           <summary className="inline-flex min-h-8 cursor-pointer list-none items-center gap-1 type-meta text-muted hover:text-ink [&::-webkit-details-marker]:hidden" aria-label={`More about ${name}`}>
-            <ChevronRight className="size-3.5 transition-transform duration-150 group-open/more:rotate-90" aria-hidden />
+            <ChevronRight className="size-3.5 transition-transform duration-quick group-open/more:rotate-90" aria-hidden />
             More
           </summary>
           <div className="space-y-2 pb-1 pl-5">

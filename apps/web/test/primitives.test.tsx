@@ -5,6 +5,7 @@ import { useState } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { Button, Chip, ChipGroup, Field, IconButton, Kbd, Menu, ScoreBadge, scoreBandOf, ScoreBreakdown, scoreParts, SearchField, SourceTag, Status, Tabs } from "../src/components/primitives";
 import { dismissToast, toast, Toaster } from "../src/components/Toast";
+import { Segmented } from "../src/components/ui";
 
 afterEach(cleanup);
 
@@ -397,5 +398,87 @@ describe("Toast", () => {
     expect(screen.getByRole("status").querySelector(".rj-toast")).toBeNull();
     dismissToast(id);
     vi.useRealTimers();
+  });
+});
+
+describe("useRovingRadio (via Segmented)", () => {
+  function Theme({ initial = "dark" }: { initial?: string }) {
+    const [value, setValue] = useState(initial);
+    return (
+      <>
+        <button type="button">Before</button>
+        <Segmented
+          label="Theme"
+          value={value}
+          onChange={setValue}
+          options={[
+            { value: "light", label: "Light" },
+            { value: "dark", label: "Dark" },
+            { value: "system", label: "System" },
+          ]}
+        />
+        <button type="button">After</button>
+      </>
+    );
+  }
+  const radio = (name: string) => screen.getByRole("radio", { name });
+  const checked = () => screen.getAllByRole("radio").find((r) => r.getAttribute("aria-checked") === "true");
+
+  it("Tab lands on the checked radio, and Tab again leaves the group", async () => {
+    const user = userEvent.setup();
+    render(<Theme />);
+    await user.click(screen.getByRole("button", { name: "Before" }));
+    await user.tab();
+    expect(document.activeElement).toBe(radio("Dark"));
+    await user.tab();
+    expect(document.activeElement).toBe(screen.getByRole("button", { name: "After" }));
+  });
+
+  it("ArrowRight checks the next radio and wraps from the last to the first", async () => {
+    const user = userEvent.setup();
+    render(<Theme />);
+    radio("Dark").focus();
+    await user.keyboard("{ArrowRight}");
+    expect(checked()).toBe(radio("System"));
+    expect(document.activeElement).toBe(radio("System"));
+    await user.keyboard("{ArrowRight}");
+    expect(checked()).toBe(radio("Light"));
+    expect(document.activeElement).toBe(radio("Light"));
+  });
+
+  it("ArrowLeft wraps from the first radio to the last", async () => {
+    const user = userEvent.setup();
+    render(<Theme initial="light" />);
+    radio("Light").focus();
+    await user.keyboard("{ArrowLeft}");
+    expect(checked()).toBe(radio("System"));
+    expect(document.activeElement).toBe(radio("System"));
+  });
+
+  it("Home and End check the first and the last radio", async () => {
+    const user = userEvent.setup();
+    render(<Theme />);
+    radio("Dark").focus();
+    await user.keyboard("{End}");
+    expect(checked()).toBe(radio("System"));
+    expect(document.activeElement).toBe(radio("System"));
+    await user.keyboard("{Home}");
+    expect(checked()).toBe(radio("Light"));
+    expect(document.activeElement).toBe(radio("Light"));
+  });
+
+  it("only one radio has tabindex=0, and it follows the checked one", async () => {
+    const user = userEvent.setup();
+    render(<Theme />);
+    const stops = () => screen.getAllByRole("radio").filter((r) => r.getAttribute("tabindex") === "0");
+    expect(stops()).toEqual([radio("Dark")]);
+    radio("Dark").focus();
+    await user.keyboard("{ArrowLeft}");
+    expect(stops()).toEqual([radio("Light")]);
+  });
+
+  it("makes the first radio the Tab stop when none is checked", () => {
+    render(<Theme initial="none" />);
+    expect(screen.getAllByRole("radio").filter((r) => r.getAttribute("tabindex") === "0")).toEqual([radio("Light")]);
   });
 });

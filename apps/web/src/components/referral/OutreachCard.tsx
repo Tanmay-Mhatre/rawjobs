@@ -55,7 +55,7 @@ export function OutreachCard({ job, win, onLog }: { job: CardJob; win: Window; o
   return (
     <div className="space-y-4 p-4">
       <header>
-        <h1 className="type-subheading font-semibold">{job.title || "This job"}</h1>
+        <h1 /* design-lint-ignore: weight moves into the type style in 6I */ className="type-subheading font-semibold">{job.title || "This job"}</h1>
         <p className="type-small text-muted">{[job.company, job.place].filter(Boolean).join(" · ")}</p>
       </header>
 

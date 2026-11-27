@@ -1,6 +1,6 @@
 import { INDUSTRY_BY_ID } from "@rawjobs/core/catalog/industries";
 import { Undo2 } from "lucide-react";
-import { useState } from "react";
+import { useCallback, useState } from "react";
 import { keyOf, type CompanyRef } from "../../lib/companies";
 import type { CompanyRow } from "../../lib/setup";
 import { emptyVisit, recordAdd, recordRemove, undoLast, type Visit } from "../../lib/packVisit";
@@ -77,13 +77,22 @@ export function packActions(
  * then the one before. The companies themselves are on the page, so the bar doesn't list them.
  */
 export function Tray({ visit, actions }: { visit: Visit; actions: PackActions & { undo: () => void } }) {
+  // Toasts sit above the bar while it's there (index.css .rj-toast-region), so they never cover its Undo.
+  const lift = useCallback((el: HTMLElement | null) => {
+    if (!el) return;
+    document.documentElement.style.setProperty("--toast-lift", `${el.offsetHeight}px`);
+    return () => {
+      document.documentElement.style.removeProperty("--toast-lift");
+    };
+  }, []);
   // Once something changed the bar stays, so it never disappears from under the Undo just pressed.
   if (!visit.touched) return null;
   const last = visit.hist.at(-1);
   return (
-    <section aria-label="Last change" className="sticky bottom-18 z-20 rounded-md border border-line bg-overlay shadow-l3 md:bottom-4">
+    <section ref={lift} aria-label="Last change" className="sticky bottom-18 z-sticky rounded-md border border-line bg-overlay shadow-l3 md:bottom-4">
       <div className="flex items-center gap-4 py-2 pr-2 pl-4">
         <span className={cx("min-w-0 flex-1 truncate type-small", !last && "text-muted")}>{last ? last.text : "Nothing left to undo"}</span>
+        {/* design-lint-ignore-next-line: disabled state, reviewed in 6B */}
         <Button size="sm" aria-disabled={!last} title={last ? `Undo: ${last.text}` : "Nothing to undo"} className="aria-disabled:opacity-50" onClick={() => last && actions.undo()}>
           <Undo2 className="size-3.5" /> Undo
         </Button>

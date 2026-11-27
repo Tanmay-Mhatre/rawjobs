@@ -612,7 +612,7 @@ function Outside({ items, lens, cards }: { items: CompanySuggestion[]; lens: "hi
   return (
     <details className="group/fold space-y-3 border-t border-hairline pt-4">
       <summary className="inline-flex min-h-8 cursor-pointer list-none items-center gap-1.5 type-label [&::-webkit-details-marker]:hidden">
-        <ChevronRight className="size-4 text-muted transition-transform duration-150 group-open/fold:rotate-90" aria-hidden />
+        <ChevronRight className="size-4 text-muted transition-transform duration-quick group-open/fold:rotate-90" aria-hidden />
         Outside your industries <span className="tabular font-normal text-muted">{items.length}</span>
       </summary>
       <p className="type-small text-muted">Not in an industry you picked, so Add top {TOP} leaves them out.</p>
@@ -980,7 +980,7 @@ function PackCard({
       {done > 0 && (
         <div className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-2">
           <span className="h-1 overflow-hidden bg-active" aria-hidden>
-            <span className="block h-full origin-left bg-ink transition-transform duration-200 ease-enter" style={{ transform: `scaleX(${done / total})` }} />
+            <span className="block h-full origin-left bg-ink transition-transform duration-base ease-enter" style={{ transform: `scaleX(${done / total})` }} />
           </span>
           {kind === "done" ? (
             <span className="inline-flex items-center gap-1 whitespace-nowrap type-meta text-muted">

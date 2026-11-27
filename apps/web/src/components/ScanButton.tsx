@@ -102,13 +102,26 @@ export function ScanButton({
     );
   }
   const hints = scanHints(plan);
+  // The button says what it runs (Settings > Scans picks it); the menu marks that item Default.
+  const yoursOnly = prefs.scope === "yours";
+  const label = yoursOnly ? "Scan my companies" : "Scan now";
+  const hint = (scope: ScanScope) => (prefs.scope === scope ? `Default · ${hints[scope]}` : hints[scope]);
   return (
     <div className="flex items-center gap-1">
       {scan.bg && (scan.phase === "background" || (scan.phase === "done" && scan.bg.summary?.stopped)) && <BackgroundPill scan={scan} bg={scan.bg} onPause={onStop} onResume={onResume} />}
       <div className="inline-flex">
-        <Button size="sm" className="relative rounded-r-0" onClick={() => onStart(prefs.scope)} aria-keyshortcuts="R">
-          <RefreshCw className="size-3.5" /> Scan now
-          <Tooltip label={`${prefs.scope === "yours" ? "Scan only my companies" : "Scan now"}${lastScan ? ` · last scan ${lastScan}` : ""}`} shortcut="R" />
+        {/* Phones show the short "Scan mine"; the name stays the full label, which it starts like. */}
+        <Button size="sm" className="relative rounded-r-0" onClick={() => onStart(prefs.scope)} aria-keyshortcuts="R" aria-label={yoursOnly ? label : undefined}>
+          <RefreshCw className="size-3.5" />{" "}
+          {yoursOnly ? (
+            <>
+              <span className="max-sm:hidden">{label}</span>
+              <span className="sm:hidden">Scan mine</span>
+            </>
+          ) : (
+            label
+          )}
+          <Tooltip label={`${label}${lastScan ? ` · last scan ${lastScan}` : ""}`} shortcut="R" />
         </Button>
         <Menu
           label="Scan options"
@@ -118,10 +131,10 @@ export function ScanButton({
             </button>
           )}
           items={[
-            { id: "mine", label: "Scan now", hint: hints.mine, icon: <RefreshCw className="rj-icon" aria-hidden />, onSelect: () => onStart("mine") },
-            { id: "yours", label: "Only my companies", hint: hints.yours, icon: <Star className="rj-icon" aria-hidden />, onSelect: () => onStart("yours") },
+            { id: "mine", label: "Scan now", hint: hint("mine"), icon: <RefreshCw className="rj-icon" aria-hidden />, onSelect: () => onStart("mine") },
+            { id: "yours", label: "Only my companies", hint: hint("yours"), icon: <Star className="rj-icon" aria-hidden />, onSelect: () => onStart("yours") },
             { separator: true, id: "s1" },
-            { id: "all", label: "Check every company now", hint: hints.all, icon: <Layers className="rj-icon" aria-hidden />, onSelect: () => onStart("all") },
+            { id: "all", label: "Check every company now", hint: hint("all"), icon: <Layers className="rj-icon" aria-hidden />, onSelect: () => onStart("all") },
             { separator: true, id: "s2" },
             { id: "settings", label: "Scan settings", icon: <SettingsIcon className="rj-icon" aria-hidden />, onSelect: onSettings },
           ]}
@@ -148,7 +161,7 @@ function ProgressRing({ value }: { value: number | null }) {
         strokeWidth="2.5"
         strokeDasharray={c}
         strokeDashoffset={c * (1 - value)}
-        className="transition-[stroke-dashoffset] duration-300"
+        className="transition-[stroke-dashoffset] duration-slow"
       />
     </svg>
   );
@@ -327,7 +340,7 @@ export function ScanStatus({ scan, onStop, notify, notifyLine }: { scan: ScanSta
       {open && (
         <div
           id="scan-details"
-          className="absolute right-0 top-full z-40 mt-2 whitespace-normal flex max-h-[min(36rem,calc(100dvh-6rem))] w-[24rem] max-w-[calc(100vw-2rem)] flex-col rounded-md border border-line bg-raised p-4 shadow-l3 max-sm:fixed max-sm:inset-x-4 max-sm:top-16 max-sm:w-auto max-sm:max-w-none"
+          className="absolute right-0 top-full z-menu mt-2 whitespace-normal flex max-h-[min(36rem,calc(100dvh-6rem))] w-[24rem] max-w-[calc(100vw-2rem)] flex-col rounded-md border border-line bg-raised p-4 shadow-l3 max-sm:fixed max-sm:inset-x-4 max-sm:top-16 max-sm:w-auto max-sm:max-w-none"
         >
           {steps ? (
             <>
@@ -398,7 +411,7 @@ export function BackgroundPill({ scan, bg, onPause, onResume }: { scan: ScanStat
       {open && (
         <div
           id="background-details"
-          className="absolute right-0 top-full z-40 mt-2 whitespace-normal w-[24rem] max-w-[calc(100vw-2rem)] rounded-md border border-line bg-raised p-4 shadow-l3 max-sm:fixed max-sm:inset-x-4 max-sm:top-16 max-sm:w-auto max-sm:max-w-none"
+          className="absolute right-0 top-full z-menu mt-2 whitespace-normal w-[24rem] max-w-[calc(100vw-2rem)] rounded-md border border-line bg-raised p-4 shadow-l3 max-sm:fixed max-sm:inset-x-4 max-sm:top-16 max-sm:w-auto max-sm:max-w-none"
         >
           {paused ? (
             <>

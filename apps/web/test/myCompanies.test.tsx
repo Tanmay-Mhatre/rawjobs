@@ -1,5 +1,5 @@
 // @vitest-environment happy-dom
-import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("../src/lib/setup", async (orig) => ({
@@ -9,11 +9,19 @@ vi.mock("../src/lib/setup", async (orig) => ({
   ),
 }));
 import { MyCompanies } from "../src/components/Companies";
+import { JobDetail } from "../src/components/JobDetail";
+import { dismissToast, toast, Toaster } from "../src/components/Toast";
+import type { CompanySave } from "../src/app/useCompanyActions";
+import type { Profile } from "../src/lib/data";
+import { makeJob } from "./helpers";
 import type { CompanyHealth, DataMeta } from "../src/lib/data";
 import { barsOf, barsSummary, filterCounts, needsAttention, pageOf, problemOf, quietOf, type Seen } from "../src/lib/myCompanies";
 import type { CompanyRow } from "../src/lib/setup";
 
-afterEach(cleanup);
+afterEach(() => {
+  act(() => dismissToast(toast({ message: "" })));
+  cleanup();
+});
 
 const DAY = 86_400_000;
 const row = (name: string, slug: string, patch: Partial<CompanyRow> = {}): CompanyRow => ({ id: slug, input: `greenhouse: ${slug}`, state: "saved", name, ats: "greenhouse", slug, ...patch });
@@ -340,5 +348,53 @@ describe("quiet banner", () => {
     expect(screen.getByRole("status").textContent).toMatch(/Removed 1 quiet company/);
     fireEvent.click(screen.getByRole("button", { name: /Undo/ }));
     expect(onRestore).toHaveBeenCalledWith([rows[0]]);
+  });
+});
+
+describe("Add and remove from the job's menu", () => {
+  const profile = { titles: { include: [], exclude: [] }, locations: { include: [], remote_ok: [], remote_exclude: [], workplace: [] }, industries: [], keywords: {} } as unknown as Profile;
+  const job = makeJob({ id: "greenhouse:acme:7", company: "Acme" });
+  const renderDetail = (trackJob: (on: boolean) => Promise<CompanySave>, yours = false) =>
+    render(
+      <>
+        <Toaster />
+        <JobDetail job={job} profile={profile} onUpdate={() => {}} onClose={() => {}} yours={yours} onTrack={trackJob} />
+      </>,
+    );
+  const add = () => {
+    fireEvent.click(screen.getByRole("button", { name: "More job actions" }));
+    fireEvent.click(screen.getByRole("menuitem", { name: /Add company to My companies/ }));
+  };
+
+  it("adding a company shows Added … with Undo; Undo calls trackJob(job, false)", async () => {
+    const trackJob = vi.fn(async (_on: boolean): Promise<CompanySave> => ({ ok: true }));
+    renderDetail(trackJob);
+    add();
+    expect(await screen.findByText("Added Acme to My companies")).toBeTruthy();
+    expect(trackJob).toHaveBeenLastCalledWith(true);
+    fireEvent.click(screen.getByRole("button", { name: "Undo" }));
+    expect(trackJob).toHaveBeenLastCalledWith(false);
+    expect(await screen.findByText("Removed Acme from My companies")).toBeTruthy();
+  });
+
+  it("fetch rejects → blameless copy + Try again; no raw text in the DOM", async () => {
+    const trackJob = vi.fn(async (_on: boolean): Promise<CompanySave> => ({ ok: false, cause: "offline", errors: "TypeError: Failed to fetch" }));
+    renderDetail(trackJob);
+    add();
+    expect(await screen.findByText("Couldn't update My companies. Check that RawJobs is running, then try again.")).toBeTruthy();
+    expect(document.body.textContent).not.toContain("Failed to fetch");
+    expect(screen.queryByRole("button", { name: "Copy details" })).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Try again" }));
+    expect(trackJob).toHaveBeenCalledTimes(2);
+    expect(trackJob).toHaveBeenLastCalledWith(true);
+  });
+
+  it("a server failure offers Copy details as well, still without the raw text", async () => {
+    const trackJob = vi.fn(async (_on: boolean): Promise<CompanySave> => ({ ok: false, cause: "server", errors: "HTTP 500" }));
+    renderDetail(trackJob);
+    add();
+    expect(await screen.findByText("Couldn't update My companies. Try again, or copy the details if it keeps happening.")).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Copy details" })).toBeTruthy();
+    expect(document.body.textContent).not.toContain("HTTP 500");
   });
 });

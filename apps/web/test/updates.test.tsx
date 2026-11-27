@@ -199,4 +199,17 @@ describe("ServerNotices", () => {
     render(<ServerNotices />);
     expect(await screen.findByText("Reconnecting to RawJobs…")).toBeTruthy();
   });
+
+  it("doesn't blame an update for reconnecting when none is running: your changes are kept", async () => {
+    api(base, false);
+    render(<ServerNotices />);
+    expect(await screen.findByText("Your changes are kept in this browser and save when it's back.")).toBeTruthy();
+    expect(screen.queryByText(/after an update/)).toBeNull();
+  });
+
+  it("says the page reloads by itself when an update is restarting it", async () => {
+    api({ ...base, state: "updating" }, false);
+    render(<ServerNotices />);
+    expect(await screen.findByText("This takes a few seconds after an update. The page reloads by itself.")).toBeTruthy();
+  });
 });

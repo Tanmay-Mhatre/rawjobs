@@ -314,11 +314,11 @@ export function App() {
             e.preventDefault();
             document.getElementById("main")?.focus();
           }}
-          className="sr-only-focusable fixed left-3 top-3 z-[70] rounded-md bg-raised px-3 py-2 type-label shadow-l3"
+          className="sr-only-focusable fixed left-3 top-3 z-toast rounded-md bg-raised px-3 py-2 type-label shadow-l3"
         >
           Skip to content
         </a>
-        <header className="sticky top-0 z-30 border-b border-line bg-raised/85 backdrop-blur">
+        <header className="sticky top-0 z-sticky border-b border-line bg-raised/85 backdrop-blur">
           <div className={cx("mx-auto flex h-14 items-center gap-3 px-4", tab === "pipeline" ? "max-w-[100rem]" : "max-w-6xl")}>
             {/* biome-ignore lint/a11y/useValidAnchor: a real link (its href works without script); onClick only adds in-page focus or routing */}
             <a href="#radar" onClick={() => go({ tab: "radar" })} className="flex shrink-0 items-center rounded-sm" aria-label="RawJobs, go to Radar">
@@ -531,6 +531,7 @@ export function App() {
                       onApply={onApply}
                       minScore={meta?.profile.min_score}
                       onPatch={(id, entry, patch) => user.update({ id, ...entry.snapshot, ...pick(jobsById.get(id)) }, patch)}
+                      onRestore={user.restore}
                       weeklyPlan={prefs.prefs.weeklyPlan}
                       onWeeklyPlan={prefs.setWeeklyPlan}
                       onAdd={(j, status) => user.update({ id: `manual:${Date.now().toString(36)}`, ...j, location: "", score: 0 }, { status })}
@@ -618,7 +619,7 @@ export function App() {
         </main>
 
         {!inSetup && (
-          <nav className="fixed inset-x-0 bottom-0 z-30 grid grid-cols-4 border-t border-line bg-raised/95 backdrop-blur md:hidden" aria-label="Sections">
+          <nav className="fixed inset-x-0 bottom-0 z-sticky grid grid-cols-4 border-t border-line bg-raised/95 backdrop-blur md:hidden" aria-label="Sections">
             {TABS.map((t) => (
               <button
                 key={t.id}
@@ -718,7 +719,7 @@ function ErrorState({ message, onRetry }: { message: string; onRetry: () => void
   return (
     <Card className="mx-auto max-w-lg p-8 text-center">
       <div role="alert">
-        <h2 className="type-subheading font-semibold">Couldn't load your jobs</h2>
+        <h2 /* design-lint-ignore: weight moves into the type style in 6I */ className="type-subheading font-semibold">Couldn't load your jobs</h2>
         <p className="mt-1 type-small text-muted">The job data didn't load. This is usually a brief hiccup: try again. If it keeps happening, run a new scan.</p>
       </div>
       <Button variant="primary" className="mt-4" onClick={onRetry}>

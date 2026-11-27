@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { applyPatch, dayAfter, type Entry, goneQuiet, hadOffer, mergeStates, quickStatus, stageSince, statusLabel } from "../src/lib/userState";
+import { applyPatch, dayAfter, type Entry, goneQuiet, hadOffer, lastStage, mergeStates, normalizeState, quickStatus, removedEntries, stageSince, statusLabel } from "../src/lib/userState";
 
 const job = { id: "greenhouse:acme:1", title: "Head of Product", company: "Acme", url: "https://acme.example/1", location: "Dubai", score: 83 };
 const entry = (status: Entry["status"], updatedAt: string): Entry => ({ status, updatedAt, snapshot: { ...job } });
@@ -105,5 +105,37 @@ describe("offers", () => {
     expect(hadOffer(closed)).toBe(true);
     expect(hadOffer({ ...entry("rejected", "2026-10-20T00:00:00Z"), history: [{ status: "offer", at: "2026-10-18T00:00:00Z" }] })).toBe(true);
     expect(hadOffer(entry("applied", "2026-10-15T00:00:00Z"))).toBe(false);
+  });
+});
+
+describe("removed from the Pipeline", () => {
+  it("keep retains a statusless entry that has stage history", () => {
+    const removed = applyPatch(entry("applied", "2026-10-10T09:00:00.000Z"), job, { status: undefined }, "2026-10-20T10:00:00.000Z");
+    expect(removed).not.toBeNull();
+    expect(removed!.status).toBeUndefined();
+    expect(removed!.history).toEqual([
+      { status: "applied", at: "2026-10-10T09:00:00.000Z" },
+      { status: null, at: "2026-10-20T10:00:00.000Z" },
+    ]);
+    expect(lastStage(removed!)).toEqual({ status: "applied", at: "2026-10-10T09:00:00.000Z" });
+    // Reading it back (from disk or another tab) keeps it too.
+    expect(normalizeState({ a: removed })).toHaveProperty("a");
+    // Only ever Not interested: nothing to put back, so it goes.
+    expect(applyPatch(entry("dismissed", "2026-10-10T09:00:00.000Z"), job, { status: undefined }, "2026-10-20T10:00:00.000Z")).toBeNull();
+  });
+
+  it("removedEntries lists only entries once on the Pipeline, newest removal first", () => {
+    const off = (at: string, status: Entry["status"] = "saved") => applyPatch(entry(status, "2026-10-01T09:00:00.000Z"), job, { status: undefined }, at)!;
+    const state = {
+      older: off("2026-10-05T09:00:00.000Z", "interviewing"),
+      newer: off("2026-10-08T09:00:00.000Z"),
+      onBoard: entry("applied", "2026-10-01T09:00:00.000Z"),
+      dismissed: entry("dismissed", "2026-10-01T09:00:00.000Z"),
+      noteOnly: { updatedAt: "2026-10-01T09:00:00.000Z", note: "Ask Sam", snapshot: { ...job } },
+    };
+    expect(removedEntries(state).map((r) => [r.id, r.stage, r.removedAt])).toEqual([
+      ["newer", "saved", "2026-10-08T09:00:00.000Z"],
+      ["older", "interviewing", "2026-10-05T09:00:00.000Z"],
+    ]);
   });
 });

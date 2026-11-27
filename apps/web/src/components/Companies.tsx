@@ -573,7 +573,7 @@ function NameCell({ x }: { x: Row }) {
   );
 }
 
-const linkClass = "inline-flex min-h-6 items-center gap-1 type-label text-ink underline underline-offset-2 hover:text-muted disabled:opacity-50";
+const linkClass = "inline-flex min-h-6 items-center gap-1 type-label text-ink underline underline-offset-2 hover:text-muted disabled:opacity-50"; // design-lint-ignore: muted state, reviewed in 6B
 
 /** Words only when something is wrong, each with what to do; a quiet company says so quietly. Healthy rows: nothing. */
 function Status({
