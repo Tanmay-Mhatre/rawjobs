@@ -2,7 +2,7 @@ import { useEffect, useLayoutEffect, useRef } from "react";
 import { getJson, trackingRead } from "./api";
 import { canRunLocally } from "./data";
 import { healthState, subscribeHealth } from "./health";
-import { load, onSave, saveFailed } from "./storage";
+import { load, onSave, saveFailed, saveWorked } from "./storage";
 
 /**
  * Your tracking (statuses, notes), Radar preferences, appearance (theme, contrast, density, age limit)
@@ -142,12 +142,16 @@ async function put(changes: Changes, values: Values, keepalive: boolean): Promis
   const body = JSON.stringify(Object.fromEntries(names.map((n) => [n, values[n]])));
   try {
     const res = await fetch("/api/tracking", { method: "PUT", body, keepalive: keepalive && body.length <= KEEPALIVE_MAX });
-    if (!res.ok) throw new Error(String(res.status));
+    if (!res.ok) {
+      saveFailed("server");
+      return { kind: "failed" };
+    }
   } catch {
-    saveFailed();
+    saveFailed("offline");
     return { kind: "failed" };
   }
   for (const n of names) if (parts[n]?.synced) parts[n].synced = { ...values[n] };
+  saveWorked("server");
   return { kind: "ok" };
 }
 
@@ -170,7 +174,8 @@ async function send(changes: Changes, values: Values, keepalive: boolean): Promi
   }
   if (!r.ok) {
     if (r.status === 409 && isConflict(r.body)) return { kind: "conflict", body: r.body };
-    saveFailed();
+    // Status 0: the request never got an answer (offline, or the local API restarting).
+    saveFailed(r.status === 0 ? "offline" : "server");
     return { kind: "failed" };
   }
   const answer = r.data;
@@ -184,6 +189,7 @@ async function send(changes: Changes, values: Values, keepalive: boolean): Promi
   if (typeof answer.rev === "number" && answer.rev === sentFrom.rev + 1 && (sentFrom.epoch === "" || answer.epoch === sentFrom.epoch) && base === sentFrom)
     base = { epoch: answer.epoch, rev: answer.rev };
   else behind = true;
+  saveWorked("server");
   return { kind: "ok" };
 }
 
@@ -235,7 +241,7 @@ async function flush(keepalive = false): Promise<void> {
       values = rebase(sent.body, values);
     }
     // Still changed elsewhere after every try: what's here stays, and the next change tries again.
-    saveFailed();
+    saveFailed("conflict");
   } finally {
     inFlight = null;
     if (again) {
@@ -401,6 +407,12 @@ export async function restoreFromDisk(timeoutMs = 1000): Promise<void> {
   parts.browser ??= { get: browserCopy, set: restoreBrowser };
   const read = loadOnce().then((r) => r && take("browser", r, true));
   await Promise.race([read, new Promise((done) => setTimeout(done, timeoutMs))]);
+}
+
+/** Send what's waiting now (the save problem notice's Try again). With nothing left to send, the problem is settled too. */
+export async function saveTrackingNow(): Promise<void> {
+  await flush();
+  if (!hasPending()) saveWorked("server");
 }
 
 /** Tests: forget the page's first read, what's in step and anything waiting to be saved. */

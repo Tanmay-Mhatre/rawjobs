@@ -5,7 +5,7 @@ import type { Job } from "./data";
 import type { Reason } from "./notForMe";
 import type { Prefs } from "./prefs";
 import { linkedInUrl } from "./contactLinks";
-import { load, save, saveFailed } from "./storage";
+import { load, save, saveFailed, saveWorked } from "./storage";
 import { useSavedOnDisk } from "./tracking";
 
 // The stages and day helpers are shared with the CLI's daily summary (@rawjobs/core/next-steps).
@@ -583,7 +583,8 @@ function writeState() {
   if (unsaved === undefined) return;
   const s = unsaved;
   unsaved = undefined;
-  if (!save(KEY, s)) saveFailed();
+  if (save(KEY, s)) saveWorked("browser");
+  else saveFailed("browser");
 }
 function saveSoon(s: UserState) {
   unsaved = s;

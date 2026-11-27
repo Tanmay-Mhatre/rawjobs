@@ -3,9 +3,11 @@ import { act, cleanup, renderHook, waitFor } from "@testing-library/react";
 import { useState } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { __resetHealthForTests } from "../src/lib/health";
-import { onSaveFailed, save } from "../src/lib/storage";
+import { resetSaveProblem, useSaveFailedNotice } from "../src/app/saveFailedNotice";
+import { usePrefs } from "../src/lib/prefs";
+import { onSaveFailed, type SaveCause, save } from "../src/lib/storage";
 import { setThemeChoice, useSavedAppearance } from "../src/lib/theme";
-import { resetTrackingSync, restoreFromDisk, useSavedOnDisk } from "../src/lib/tracking";
+import { resetTrackingSync, restoreFromDisk, saveTrackingNow, useSavedOnDisk } from "../src/lib/tracking";
 import { trackingServer } from "./trackingServer";
 
 function useTracked(initial: Record<string, string>) {
@@ -19,16 +21,24 @@ const flushSaves = () =>
     await vi.advanceTimersByTimeAsync(500);
   });
 const reads = (api: { calls: { method: string }[] }) => api.calls.filter((c) => c.method === "GET").length;
+const stops: (() => void)[] = [];
+/** Hear each cause a failed save gives. */
+function failures() {
+  const failed = vi.fn<(cause: SaveCause) => void>();
+  stops.push(onSaveFailed(failed));
+  return failed;
+}
 
 beforeEach(() => {
   resetTrackingSync();
+  resetSaveProblem();
   localStorage.clear();
   vi.useFakeTimers({ shouldAdvanceTime: true });
 });
 afterEach(() => {
   cleanup();
   __resetHealthForTests();
-  onSaveFailed(undefined);
+  for (const stop of stops.splice(0)) stop();
   vi.useRealTimers();
   vi.unstubAllGlobals();
 });
@@ -97,8 +107,7 @@ describe("useSavedOnDisk", () => {
   });
 
   it("409 retries at most 3 times", async () => {
-    const failed = vi.fn();
-    onSaveFailed(failed);
+    const failed = failures();
     const patches = vi.fn();
     vi.stubGlobal(
       "fetch",
@@ -120,8 +129,71 @@ describe("useSavedOnDisk", () => {
     await flushSaves();
     expect(patches).toHaveBeenCalledTimes(4);
     expect(failed).toHaveBeenCalledTimes(1);
+    expect(failed).toHaveBeenCalledWith("conflict");
     // Without a merge for the part, this window's change is kept.
     expect(result.current.value).toEqual({ j1: "mine" });
+  });
+
+  it("fetch rejects → cause offline", async () => {
+    const failed = failures();
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (url: string, init?: RequestInit) => {
+        if (url === "/api/health") return new Response(JSON.stringify({ ok: true }));
+        if (init?.method === "PATCH") throw new TypeError("Failed to fetch");
+        return new Response(JSON.stringify({ tracking: { state: { j1: "saved" } }, rev: 0, epoch: "e1" }));
+      }),
+    );
+    const { result } = renderHook(() => ({ tracked: useTracked({}), notice: useSaveFailedNotice(() => {}) }));
+    await waitFor(() => expect(result.current.tracked.value).toEqual({ j1: "saved" }));
+    act(() => result.current.tracked.setValue({ j1: "applied" }));
+    await flushSaves();
+    expect(failed.mock.calls).toEqual([["offline"]]);
+    // The Reconnecting notice covers it: no save notice of its own.
+    expect(result.current.notice).toBeNull();
+  });
+
+  it("400 → cause server", async () => {
+    const failed = failures();
+    trackingServer({ state: { j1: "saved" } }, { status: (m) => (m === "PATCH" ? 400 : undefined) });
+    const { result } = renderHook(() => ({ tracked: useTracked({}), notice: useSaveFailedNotice(() => {}) }));
+    await waitFor(() => expect(result.current.tracked.value).toEqual({ j1: "saved" }));
+    act(() => result.current.tracked.setValue({ j1: "applied" }));
+    await flushSaves();
+    expect(failed.mock.calls).toEqual([["server"]]);
+    expect(result.current.notice?.id).toBe("save-failed-server");
+  });
+
+  it("storage quota → cause browser", async () => {
+    const failed = failures();
+    trackingServer({ prefs: {} });
+    vi.spyOn(Storage.prototype, "setItem").mockImplementation(() => {
+      throw new DOMException("The quota has been exceeded.", "QuotaExceededError");
+    });
+    try {
+      const { result } = renderHook(() => ({ prefs: usePrefs(), notice: useSaveFailedNotice(() => {}) }));
+      await waitFor(() => expect(failed).toHaveBeenCalledWith("browser"));
+      expect(result.current.notice?.id).toBe("save-failed-browser");
+    } finally {
+      vi.mocked(Storage.prototype.setItem).mockRestore();
+    }
+  });
+
+  it("successful save clears the notice", async () => {
+    let patchStatus: number | undefined = 400;
+    const api = trackingServer({ state: { j1: "saved" } }, { status: (m) => (m === "PATCH" ? patchStatus : undefined) });
+    const { result } = renderHook(() => ({ tracked: useTracked({}), notice: useSaveFailedNotice(() => {}) }));
+    await waitFor(() => expect(result.current.tracked.value).toEqual({ j1: "saved" }));
+    act(() => result.current.tracked.setValue({ j1: "applied" }));
+    await flushSaves();
+    expect(result.current.notice?.id).toBe("save-failed-server");
+    // Try again, with the server answering again: the change is sent and the notice goes.
+    patchStatus = undefined;
+    await act(async () => {
+      await saveTrackingNow();
+    });
+    expect(api.file()).toEqual({ state: { j1: "applied" } });
+    expect(result.current.notice).toBeNull();
   });
 
   it("falls back to PUT when PATCH is not supported", async () => {
