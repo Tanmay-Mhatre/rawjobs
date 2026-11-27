@@ -1,7 +1,7 @@
+import { ZOHO_HOST } from "./keys";
 import { firstPathSegment, type DetectedCompany } from "./types";
 
-/** Zoho Recruit's data centres: .com (US), .eu, .in, .com.au, .jp, .ca, .sa, .uk, .com.cn. */
-export const ZOHO_HOST = /\.zohorecruit\.(com|eu|in|com\.au|jp|ca|sa|uk|com\.cn)$/;
+export { ZOHO_HOST } from "./keys";
 
 /**
  * Careers URLs of the hiring systems whose connectors share this detection (everything beyond
