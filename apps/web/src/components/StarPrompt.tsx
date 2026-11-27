@@ -53,7 +53,7 @@ export function StarPrompt({ state, runs }: StarInput) {
           </span>
           <div className="min-w-0 flex-1 space-y-3">
             <div className="space-y-2">
-              <h2 id="star-title" className="type-subheading font-semibold text-balance">
+              <h2 /* design-lint-ignore: weight moves into the type style in 6I */ id="star-title" className="type-subheading font-semibold text-balance">
                 Is RawJobs helping your search?
               </h2>
               <p id="star-body" className="type-small text-ink">

@@ -294,7 +294,7 @@ export function Pipeline({ user, jobsById, onOpen, onApply, minScore, onPatch, o
           <Card className="grid gap-3 p-5 shadow-l3 sm:p-6">
             <div className="flex items-start gap-3">
               <div className="min-w-0 flex-1">
-                <h2 id="log-task-title" className="type-subheading font-semibold">
+                <h2 /* design-lint-ignore: weight moves into the type style in 6I */ id="log-task-title" className="type-subheading font-semibold">
                   {logging.kind === "thank-you" ? "Log thank-you" : logging.kind === "reply" ? "Log reply" : "Log follow-up"}
                 </h2>
                 <p className="truncate type-small text-muted">
@@ -529,7 +529,7 @@ function CloseDialog({ target, onClose, onPick }: { target: { entry: Entry } | n
       {target && (
         <Card className="grid gap-3 p-5 shadow-l3 sm:p-6">
           <div>
-            <h2 id="close-job-title" className="type-subheading font-semibold">
+            <h2 /* design-lint-ignore: weight moves into the type style in 6I */ id="close-job-title" className="type-subheading font-semibold">
               How did it end?
             </h2>
             <p className="truncate type-small text-muted">

@@ -117,7 +117,7 @@ function GroupedPlaces({ terms, onChange, label, remote }: { terms: string[]; on
                   onChange(terms.filter((t) => !g.terms.includes(t)));
                   if (open === g.key) setOpen(null);
                 }}
-                className="flex h-full items-center rounded-r-md px-1.5 opacity-70 hover:opacity-100"
+                /* design-lint-ignore: icon-only button, the icon may be dimmed */ className="flex h-full items-center rounded-r-md px-1.5 opacity-70 hover:opacity-100"
               >
                 <X className="size-3.5" />
               </button>

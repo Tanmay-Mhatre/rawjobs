@@ -121,7 +121,7 @@ function SaveStatus({ state, retry, onScan, scanning }: { state: SaveState; retr
       {state.kind === "saved" && (
         <button
           type="button"
-          className="inline-flex min-h-6 items-center gap-1 font-medium text-ink underline underline-offset-2 hover:text-muted disabled:opacity-50"
+          /* design-lint-ignore: muted state, reviewed in 6B */ className="inline-flex min-h-6 items-center gap-1 font-medium text-ink underline underline-offset-2 hover:text-muted disabled:opacity-50"
           onClick={onScan}
           disabled={scanning}
         >

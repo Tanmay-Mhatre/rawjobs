@@ -52,6 +52,7 @@ export function Segmented<T extends string | number>({ value, options, onChange,
 
 export function Toggle({ checked, onChange, disabled, children }: { checked: boolean; onChange: (v: boolean) => void; disabled?: boolean; children: ReactNode }) {
   return (
+    // design-lint-ignore-next-line: disabled state, reviewed in 6B
     <label className={cx("inline-flex select-none items-center gap-2 type-small text-muted", disabled ? "cursor-not-allowed opacity-50" : "cursor-pointer hover:text-ink")}>
       <input type="checkbox" checked={checked} disabled={disabled} onChange={(e) => onChange(e.target.checked)} className="size-4 accent-ink" />
       {children}

@@ -298,6 +298,7 @@ function FixButton({ fix }: { fix: FitFix }) {
     toast({ message: error ?? `${fix.done} Scores update on the next scan.` });
   };
   return (
+    // design-lint-ignore-next-line: disabled state, reviewed in 6B
     <button type="button" onClick={apply} disabled={saving} className="ml-auto shrink-0 font-medium text-ink underline underline-offset-2 hover:text-muted disabled:opacity-60">
       {saving ? "Saving…" : fix.label}
     </button>

@@ -39,6 +39,28 @@ describe("design lint", () => {
   it("leaves URLs, hash routes and opted-out lines alone", () => {
     expect(rules(`href="#add" href="#/radar" "https://x.test/#abc"`)).toEqual([]);
     expect(rules(`fill="#151412" // design-lint-ignore: logo asset`)).toEqual([]);
+    expect(rules(`{/* design-lint-ignore-next-line: disabled */}\n<b className="opacity-50" />\n<i className="opacity-50" />`)).toEqual(["opacity-text"]);
+  });
+
+  it("keeps z-index and durations on the tokens", () => {
+    expect(rules(`className="sticky top-0 z-30"`)).toEqual(["z-raw"]);
+    expect(rules(`className="fixed z-[70]"`)).toEqual(["z-raw"]);
+    expect(rules(`className="transition duration-150"`)).toEqual(["duration-raw"]);
+    expect(rules(`className="transition-[opacity] duration-[250ms]"`)).toEqual(["duration-raw"]);
+    expect(rules(`className="sticky z-sticky md:z-menu transition duration-quick duration-base ease-enter"`)).toEqual([]);
+  });
+
+  it("lets the type style set the weight", () => {
+    expect(rules(`<h2 className="type-subheading font-semibold">`)).toEqual(["weight-override"]);
+    expect(rules(`<h1 className="type-heading tracking-tight font-medium">`)).toEqual(["weight-override"]);
+    expect(rules(`<h2 className="type-title">`)).toEqual([]);
+    expect(rules(`<p className="type-label font-medium">`)).toEqual([]);
+  });
+
+  it("flags opacity used to mute text, but not 0, 90 or 100", () => {
+    expect(rules(`className={cx("rj-row", muted && "opacity-60")}`)).toEqual(["opacity-text"]);
+    expect(rules(`className="disabled:opacity-40"`)).toEqual(["opacity-text"]);
+    expect(rules(`className="opacity-0 group-hover:opacity-100 opacity-90"`)).toEqual([]);
   });
 
   it("checks the marketing site's plain CSS for accent, durations and px type", () => {
