@@ -293,14 +293,15 @@ function LastChecked({ last, lastAt, now, stalled }: { last?: string; lastAt?: n
  * come from, or per hiring system; matches so far, the Telegram message). Then the Telegram bell and
  * Stop (what's done is kept, and the next scan of the same type carries on).
  */
-export function ScanStatus({ scan, onStop, notify, notifyLine }: { scan: ScanState; onStop: () => void; notify?: (openDetails: () => void) => ReactNode; notifyLine?: string }) {
+export function ScanStatus({ scan, onStop, notify, notifyLine }: { scan: ScanState & { found?: number }; onStop: () => void; notify?: (openDetails: () => void) => ReactNode; notifyLine?: string }) {
   const { open, setOpen, rootProps, triggerProps } = useHoverDetails();
   const done = Math.min(scan.done, scan.total);
   const value = scan.syncing || !scan.total ? null : done / scan.total;
   const percent = value === null ? null : Math.floor(value * 100);
   const sources = sourceRows(scan);
   const bars = sources ? null : progressRows(scan);
-  const found = Object.values(scan.results).reduce((n, h) => n + (h.ok ? h.matches : 0), 0);
+  // The scan store keeps the sum as companies finish (`found`); a plain state is summed here.
+  const found = scan.found ?? Object.values(scan.results).reduce((n, h) => n + (h.ok ? h.matches : 0), 0);
   const label = scan.stopping ? "Stopping…" : scan.syncing ? "Updating…" : scan.origin === "scheduled" ? "Scheduled scan" : "Scanning";
   const now = useNow(!!open);
   const steps = scan.total ? null : startingSteps(scan, now);
