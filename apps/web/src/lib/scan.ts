@@ -1,8 +1,9 @@
-import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore } from "react";
 import type { CompanyHealth, Job } from "./data";
 import { toast } from "../components/Toast";
 import { refreshHealth } from "./health";
 import { followScan, notifyWhenDone, runScan, stopScan, type RunEvent, type ScanOrigin, type ScanScope, type ScanSource } from "./setup";
+import { dispatchScanEvent, getScan, IDLE, updateScan } from "./scanStore";
 import { load, save } from "./storage";
 
 export type ScanState = {
@@ -112,7 +113,6 @@ export function measuredRate(p: Pace | undefined, done: number, at: number): num
   return (done - first.done) / ((at - first.at) / 1000);
 }
 
-const IDLE: ScanState = { phase: "idle", companies: [], total: 0, done: 0, resumed: 0, results: {}, live: [] };
 const newBackground = (): Background => ({ total: 0, done: 0, resumed: 0, found: 0, failed: 0, startedAt: Date.now() });
 const running = (scope?: ScanScope, origin: ScanOrigin = "page"): ScanState => ({ ...IDLE, phase: "running", scope, origin, startedAt: Date.now() });
 
@@ -137,7 +137,8 @@ export function scanProgressOf(s: ScanState): ScanProgress | null {
   return null;
 }
 
-function publishProgress(s: ScanState) {
+/** Called by the scan store whenever it tells its readers. */
+export function publishProgress(s: ScanState) {
   const next = scanProgressOf(s);
   const same = next && progressNow ? Object.keys(next).every((k) => next[k as keyof ScanProgress] === progressNow![k as keyof ScanProgress]) : next === progressNow;
   if (same) return;
@@ -318,23 +319,25 @@ export function splitProgress<R extends { done: number; total: number; feed?: tr
   return { shown: open.slice(0, limit), rest: open.slice(limit), done: rows.filter(finished), inPlace: false };
 }
 
-/** One scan at a time, shared by the header button, the wizard and Radar cards. */
+/**
+ * One scan at a time, shared by the header button, the wizard and Radar cards: starts, follows and stops
+ * scans. What it shows lives in the scan store (lib/scanStore): read it with useScanState() or a selector.
+ */
 export function useScan(onFinished: () => void | Promise<void>) {
-  const [scan, setScan] = useState<ScanState>(IDLE);
-  useEffect(() => publishProgress(scan), [scan]);
+  const setScan = updateScan;
   const busy = useRef(false);
   const finished = useRef(onFinished);
-  finished.current = onFinished;
+  useLayoutEffect(() => {
+    finished.current = onFinished;
+  });
 
   /** The stream being shown: a new scan replaces a background check's, whose last events are then ignored. */
   const generation = useRef(0);
-  const phase = useRef<ScanState["phase"]>("idle");
   /** A scan to start once the running one has stopped ("Only my companies" on the stale-feed notice). */
   const next = useRef<ScanScope | null>(null);
   const startRef = useRef<(scope: ScanScope) => Promise<void>>(async () => {});
   /** Who started the scan being shown: a scheduled or terminal scan says how it went when it ends. */
   const origin = useRef<ScanOrigin>("page");
-  phase.current = scan.phase;
   /**
    * Show a scan's events as they arrive, then refresh the page's data when it ends. `following`: a scan
    * already running, replayed from its start: its "Scan done" toast was already shown.
@@ -354,7 +357,7 @@ export function useScan(onFinished: () => void | Promise<void>) {
       followed = await stream((e) => {
         if (!current()) return;
         if (e.type === "error") failed = e.message;
-        else setScan((s) => applyScanEvent(s, e));
+        else dispatchScanEvent(e);
         if (e.type === "done" && e.stage !== "background") {
           quickDone = true;
           quickStopped = !!e.stopped;
@@ -414,11 +417,11 @@ export function useScan(onFinished: () => void | Promise<void>) {
   const start = useCallback(
     async (scope: ScanScope = lastScope(), opts: { fresh?: boolean } = {}) => {
       // A background check gives way to a new scan (the server stops it; it carries on after).
-      if (busy.current && phase.current !== "background") return;
+      if (busy.current && getScan().phase !== "background") return;
       busy.current = true;
       origin.current = "page";
       save(SCOPE_KEY, scope);
-      setScan(running(scope));
+      setScan(() => running(scope));
       refreshHealth();
       await watch((onEvent) => runScan(onEvent, { scope, fresh: opts.fresh }));
     },
@@ -436,14 +439,16 @@ export function useScan(onFinished: () => void | Promise<void>) {
       (onEvent) =>
         followScan((scope, by) => {
           origin.current = by;
-          setScan(running(scope, by));
+          setScan(() => running(scope, by));
         }, onEvent),
       true,
     );
   }, [watch]);
   useEffect(follow, [follow]);
 
-  startRef.current = start;
+  useLayoutEffect(() => {
+    startRef.current = start;
+  });
 
   const stop = useCallback(async () => {
     if (!busy.current) return;
@@ -480,8 +485,8 @@ export function useScan(onFinished: () => void | Promise<void>) {
     [start, stop],
   );
 
-  const reset = useCallback(() => setScan(IDLE), []);
-  return { scan, start, stop, restart, notify, reset, resume, follow };
+  const reset = useCallback(() => setScan(() => IDLE), []);
+  return { start, stop, restart, notify, reset, resume, follow };
 }
 
 /** "about 2 min", "about 1.9 h", "about 14 h", "about 10 days". */

@@ -2,38 +2,23 @@
 import { act, cleanup, renderHook, waitFor } from "@testing-library/react";
 import { useState } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { save } from "../src/lib/storage";
+import { __resetHealthForTests } from "../src/lib/health";
+import { onSaveFailed, save } from "../src/lib/storage";
 import { setThemeChoice, useSavedAppearance } from "../src/lib/theme";
 import { resetTrackingSync, restoreFromDisk, useSavedOnDisk } from "../src/lib/tracking";
-
-type Call = { method: string; body?: unknown };
-
-/** A stand-in for the local API's /api/tracking, holding what's "on disk". */
-function fakeApi(onDisk: Record<string, unknown> | null) {
-  const calls: Call[] = [];
-  let file = onDisk;
-  vi.stubGlobal(
-    "fetch",
-    vi.fn(async (_url: string, init?: RequestInit) => {
-      const method = init?.method ?? "GET";
-      if (method === "PUT") {
-        const body = JSON.parse(String(init!.body)) as Record<string, unknown>;
-        calls.push({ method, body });
-        file = { ...file, ...body };
-        return new Response(JSON.stringify({ ok: true }));
-      }
-      calls.push({ method });
-      return new Response(JSON.stringify({ tracking: file }));
-    }),
-  );
-  return { calls, file: () => file };
-}
+import { trackingServer } from "./trackingServer";
 
 function useTracked(initial: Record<string, string>) {
   const [value, setValue] = useState(initial);
   useSavedOnDisk("state", value, setValue);
   return { value, setValue };
 }
+
+const flushSaves = () =>
+  act(async () => {
+    await vi.advanceTimersByTimeAsync(500);
+  });
+const reads = (api: { calls: { method: string }[] }) => api.calls.filter((c) => c.method === "GET").length;
 
 beforeEach(() => {
   resetTrackingSync();
@@ -42,40 +27,139 @@ beforeEach(() => {
 });
 afterEach(() => {
   cleanup();
+  __resetHealthForTests();
+  onSaveFailed(undefined);
   vi.useRealTimers();
   vi.unstubAllGlobals();
 });
 
 describe("useSavedOnDisk", () => {
   it("uploads this browser's copy when nothing is saved on disk yet", async () => {
-    const api = fakeApi(null);
+    const api = trackingServer(null);
     renderHook(() => useTracked({ j1: "saved" }));
-    await act(async () => {
-      await vi.advanceTimersByTimeAsync(500);
-    });
+    await waitFor(() => expect(reads(api)).toBe(1));
+    await flushSaves();
     expect(api.file()).toEqual({ state: { j1: "saved" } });
   });
 
   it("shows what's on disk, without saving it straight back", async () => {
-    const api = fakeApi({ state: { j2: "applied" } });
+    const api = trackingServer({ state: { j2: "applied" } });
     const { result } = renderHook(() => useTracked({ j1: "saved" }));
     await waitFor(() => expect(result.current.value).toEqual({ j2: "applied" }));
-    await act(async () => {
-      await vi.advanceTimersByTimeAsync(500);
-    });
-    expect(api.calls.filter((c) => c.method === "PUT")).toEqual([]);
+    await flushSaves();
+    expect(api.saves()).toEqual([]);
   });
 
   it("saves each change after a moment, together", async () => {
-    const api = fakeApi({ state: {} });
+    const api = trackingServer({ state: {} });
     const { result } = renderHook(() => useTracked({}));
-    await waitFor(() => expect(api.calls.length).toBe(1));
+    await waitFor(() => expect(reads(api)).toBe(1));
     act(() => result.current.setValue({ j1: "saved" }));
     act(() => result.current.setValue({ j1: "applied" }));
+    await flushSaves();
+    expect(api.saves()).toEqual([{ method: "PATCH", ifMatch: '"e1:0"', body: { changes: { state: { set: { j1: "applied" }, del: [] } } } }]);
+  });
+
+  it("PATCH body holds only the changed entry", async () => {
+    const api = trackingServer({ state: { j1: "saved", j2: "saved", j3: "applied" } });
+    const { result } = renderHook(() => useTracked({}));
+    await waitFor(() => expect(result.current.value).toHaveProperty("j3"));
+    act(() => result.current.setValue(({ j3: _, ...rest }) => ({ ...rest, j2: "interviewing" })));
+    await flushSaves();
+    expect(api.saves().map((c) => c.body)).toEqual([{ changes: { state: { set: { j2: "interviewing" }, del: ["j3"] } } }]);
+  });
+
+  it("two windows editing different jobs both survive", async () => {
+    const api = trackingServer({ state: { a: "saved", b: "saved" } });
+    const { result } = renderHook(() => useTracked({}));
+    await waitFor(() => expect(result.current.value).toEqual({ a: "saved", b: "saved" }));
+    // The other window moves b; this one, which hasn't seen that yet, moves a.
+    api.edit("state", "b", "interviewing");
+    act(() => result.current.setValue((v) => ({ ...v, a: "applied" })));
+    await flushSaves();
+    expect(api.file()).toEqual({ state: { a: "applied", b: "interviewing" } });
+    // ...and this window picks up the other's change.
+    await waitFor(() => expect(result.current.value).toEqual({ a: "applied", b: "interviewing" }));
+  });
+
+  it("undo after a remote edit to another job is kept", async () => {
+    const api = trackingServer({ state: { a: "saved" } });
+    const { result } = renderHook(() => useTracked({}));
+    await waitFor(() => expect(result.current.value).toEqual({ a: "saved" }));
+    act(() => result.current.setValue((v) => ({ ...v, b: "not-for-me" })));
+    await flushSaves();
+    api.edit("state", "c", "applied");
+    // Undo: b goes away again.
+    act(() => result.current.setValue(({ b: _, ...rest }) => rest));
+    await flushSaves();
+    expect(api.file()).toEqual({ state: { a: "saved", c: "applied" } });
+    await waitFor(() => expect(result.current.value).toEqual({ a: "saved", c: "applied" }));
+  });
+
+  it("409 retries at most 3 times", async () => {
+    const failed = vi.fn();
+    onSaveFailed(failed);
+    const patches = vi.fn();
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (url: string, init?: RequestInit) => {
+        if (url === "/api/health") return new Response(JSON.stringify({ ok: true }));
+        if (init?.method === "PATCH") {
+          patches();
+          // Another window keeps saving the same job first.
+          const n = patches.mock.calls.length;
+          return new Response(JSON.stringify({ ok: false, rev: n, epoch: "e1", tracking: { state: { j1: `theirs-${n}` } }, conflicts: [{ part: "state", key: "j1" }] }), { status: 409 });
+        }
+        return new Response(JSON.stringify({ tracking: { state: { j1: "saved" } }, rev: 0, epoch: "e1" }));
+      }),
+    );
+    const { result } = renderHook(() => useTracked({}));
+    await waitFor(() => expect(result.current.value).toEqual({ j1: "saved" }));
+    act(() => result.current.setValue({ j1: "mine" }));
+    await flushSaves();
+    await flushSaves();
+    expect(patches).toHaveBeenCalledTimes(4);
+    expect(failed).toHaveBeenCalledTimes(1);
+    // Without a merge for the part, this window's change is kept.
+    expect(result.current.value).toEqual({ j1: "mine" });
+  });
+
+  it("falls back to PUT when PATCH is not supported", async () => {
+    // An older server (after a rollback): no revisions, no PATCH.
+    const api = trackingServer({ state: { j1: "saved" } }, { patch: false });
+    const { result } = renderHook(() => useTracked({}));
+    await waitFor(() => expect(result.current.value).toEqual({ j1: "saved" }));
+    act(() => result.current.setValue({ j1: "applied", j2: "saved" }));
+    await flushSaves();
+    expect(api.saves()).toEqual([{ method: "PUT", body: { state: { j1: "applied", j2: "saved" } } }]);
+  });
+
+  it("falls back to PUT when the server turns PATCH down", async () => {
+    let patchStatus = 405;
+    const api = trackingServer({ state: { j1: "saved" } }, { status: (m) => (m === "PATCH" ? patchStatus : undefined) });
+    const { result } = renderHook(() => useTracked({}));
+    await waitFor(() => expect(result.current.value).toEqual({ j1: "saved" }));
+    act(() => result.current.setValue({ j1: "applied" }));
+    await flushSaves();
+    expect(api.saves().map((c) => c.method)).toEqual(["PATCH", "PUT"]);
+    patchStatus = 0;
+    act(() => result.current.setValue({ j1: "offer" }));
+    await flushSaves();
+    expect(api.saves().map((c) => c.method)).toEqual(["PATCH", "PUT", "PUT"]);
+    expect(api.file()).toEqual({ state: { j1: "offer" } });
+  });
+
+  it("trackingRev newer → pulls remote", async () => {
+    const api = trackingServer({ state: { a: "saved" } });
+    const { result } = renderHook(() => useTracked({}));
+    await waitFor(() => expect(result.current.value).toEqual({ a: "saved" }));
+    api.edit("state", "b", "applied");
+    // The next health poll shows the new revision.
     await act(async () => {
-      await vi.advanceTimersByTimeAsync(500);
+      await vi.advanceTimersByTimeAsync(6000);
     });
-    expect(api.calls.filter((c) => c.method === "PUT")).toEqual([{ method: "PUT", body: { state: { j1: "applied" } } }]);
+    await waitFor(() => expect(result.current.value).toEqual({ a: "saved", b: "applied" }));
+    expect(api.saves()).toEqual([]);
   });
 
   it("saves nothing when the local API can't be reached, so an old copy never overwrites the file", async () => {
@@ -88,21 +172,25 @@ describe("useSavedOnDisk", () => {
       await vi.advanceTimersByTimeAsync(10);
     });
     act(() => result.current.setValue({ j1: "applied" }));
+    await flushSaves();
+    expect(vi.mocked(fetch).mock.calls.filter(([, init]) => init?.method === "PUT" || init?.method === "PATCH")).toEqual([]);
+  });
+
+  it("doesn't upload over a file the server couldn't read (503)", async () => {
+    const api = trackingServer({ state: { j1: "saved" } }, { status: (m) => (m === "GET" ? 503 : undefined) });
+    const { result } = renderHook(() => useTracked({ j1: "old" }));
     await act(async () => {
-      await vi.advanceTimersByTimeAsync(500);
+      await vi.advanceTimersByTimeAsync(10);
     });
-    expect(vi.mocked(fetch).mock.calls.filter(([, init]) => init?.method === "PUT")).toEqual([]);
+    act(() => result.current.setValue({ j1: "applied" }));
+    await flushSaves();
+    expect(api.saves()).toEqual([]);
   });
 });
 
 describe("useSavedAppearance", () => {
-  const flushSaves = () =>
-    act(async () => {
-      await vi.advanceTimersByTimeAsync(500);
-    });
-
   it("brings back the theme saved in your RawJobs folder, at a new address with nothing in this browser", async () => {
-    fakeApi({ appearance: { theme: "dark", density: "compact", maxAge: 180 } });
+    trackingServer({ appearance: { theme: "dark", density: "compact", maxAge: 180 } });
     renderHook(() => useSavedAppearance());
     await waitFor(() => expect(document.documentElement.dataset.theme).toMatch(/^dark/));
     expect(localStorage.getItem("rawjobs.theme")).toBe("dark");
@@ -112,16 +200,17 @@ describe("useSavedAppearance", () => {
 
   it("uploads this browser's choices when the file has none yet", async () => {
     localStorage.setItem("rawjobs.theme", "light");
-    const api = fakeApi({ state: {} });
+    const api = trackingServer({ state: {} });
     renderHook(() => useSavedAppearance());
+    await waitFor(() => expect(reads(api)).toBe(1));
     await flushSaves();
     expect(api.file()).toMatchObject({ appearance: { theme: "light" } });
   });
 
   it("saves a theme picked in Settings, and System as no choice", async () => {
-    const api = fakeApi({ appearance: {} });
+    const api = trackingServer({ appearance: {} });
     renderHook(() => useSavedAppearance());
-    await waitFor(() => expect(api.calls.length).toBe(1));
+    await waitFor(() => expect(reads(api)).toBe(1));
     act(() => setThemeChoice("dark"));
     await flushSaves();
     expect(api.file()).toMatchObject({ appearance: { theme: "dark" } });
@@ -132,13 +221,12 @@ describe("useSavedAppearance", () => {
 });
 
 describe("restoreFromDisk", () => {
-  const flushSaves = () => vi.advanceTimersByTimeAsync(500);
-  const puts = (api: { calls: Call[] }) => api.calls.filter((c) => c.method === "PUT");
+  const settle = () => vi.advanceTimersByTimeAsync(500);
 
   it("puts what your RawJobs folder remembers in this browser, before the page draws", async () => {
     localStorage.setItem("rawjobs.checklist.dismissed", "true");
     localStorage.setItem("rawjobs.companiesTab", '"mine"');
-    fakeApi({ browser: { "rawjobs.radar.seen": { latest: "2026-10-13T06:00:00Z" }, "rawjobs.scanScope": "all" } });
+    trackingServer({ browser: { "rawjobs.radar.seen": { latest: "2026-10-13T06:00:00Z" }, "rawjobs.scanScope": "all" } });
     await restoreFromDisk();
     expect(JSON.parse(localStorage.getItem("rawjobs.radar.seen")!)).toEqual({ latest: "2026-10-13T06:00:00Z" });
     expect(localStorage.getItem("rawjobs.scanScope")).toBe('"all"');
@@ -150,23 +238,34 @@ describe("restoreFromDisk", () => {
   it("uploads this browser's copy when the file has none yet", async () => {
     localStorage.setItem("rawjobs.scanAsk", "false");
     localStorage.setItem("rawjobs.whyOpen", "true");
-    const api = fakeApi({ state: {} });
+    const api = trackingServer({ state: {} });
     await restoreFromDisk();
-    await flushSaves();
+    await settle();
     expect(api.file()).toMatchObject({ browser: { "rawjobs.scanAsk": false } });
     expect((api.file() as { browser: object }).browser).not.toHaveProperty("rawjobs.whyOpen");
   });
 
   it("saves a change to a kept key, and nothing for the others", async () => {
-    const api = fakeApi({ browser: {} });
+    const api = trackingServer({ browser: {} });
     await restoreFromDisk();
     save("rawjobs.companiesTab", "mine");
-    await flushSaves();
-    expect(puts(api)).toEqual([]);
+    await settle();
+    expect(api.saves()).toEqual([]);
     save("rawjobs.notThisOne", ["acme"]);
     save("rawjobs.welcomeSeen", true);
-    await flushSaves();
-    expect(puts(api)).toEqual([{ method: "PUT", body: { browser: { "rawjobs.notThisOne": ["acme"], "rawjobs.welcomeSeen": true } } }]);
+    await settle();
+    expect(api.saves().map((c) => c.body)).toEqual([{ changes: { browser: { set: { "rawjobs.notThisOne": ["acme"], "rawjobs.welcomeSeen": true }, del: [] } } }]);
+  });
+
+  it("unchanged browser copy is not uploaded", async () => {
+    const api = trackingServer({ browser: { "rawjobs.scanScope": "all", "rawjobs.radar.v2": { sort: "new" } } });
+    await restoreFromDisk();
+    // A filter set and set back, or saved again as it was.
+    save("rawjobs.scanScope", "mine");
+    save("rawjobs.scanScope", "all");
+    save("rawjobs.radar.v2", { sort: "new" });
+    await settle();
+    expect(api.saves()).toEqual([]);
   });
 
   it("saves nothing while the local API can't be reached, so an old copy never overwrites the file", async () => {
@@ -176,8 +275,8 @@ describe("restoreFromDisk", () => {
     );
     await restoreFromDisk();
     save("rawjobs.scanScope", "all");
-    await flushSaves();
-    expect(vi.mocked(fetch).mock.calls.filter(([, init]) => init?.method === "PUT")).toEqual([]);
+    await settle();
+    expect(vi.mocked(fetch).mock.calls.filter(([, init]) => init?.method === "PUT" || init?.method === "PATCH")).toEqual([]);
   });
 
   it("doesn't hold the page up for a slow server", async () => {

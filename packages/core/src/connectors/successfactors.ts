@@ -1,7 +1,10 @@
 import type { CompanyRef, NormalizedJob } from "../schema";
 import { htmlToText, inferWorkplace } from "../text";
 import { detectAs, isoDate, xmlBlocks, xmlOne } from "./parse";
+import { isCareerSiteHost } from "./keys";
 import { jobId, SEARCH_MAX_POSTINGS, type Connector, type Ctx } from "./types";
+
+export { isCareerSiteHost } from "./keys";
 
 /** One <Job> of SAP SuccessFactors' public listing feed (career?…&resultType=XML), descriptions included. */
 export type SuccessFactorsJob = {
@@ -15,12 +18,7 @@ export type SuccessFactorsJob = {
   posted?: string;
 };
 
-/**
- * SuccessFactors career sites ("RMK": jobs.acme.com, acme.jobs2web.com, acme.jobs.hr.cloud.sap) are
- * keyed by their host. Their search pages list 25 jobs a row each: title, location, date, department.
- */
-const HOST = /^[a-z0-9-]+(\.[a-z0-9-]+)+$/i;
-export const isCareerSiteHost = (ref: { slug: string; shard?: string }) => !ref.shard && ref.slug.includes(".") && HOST.test(ref.slug);
+/** Career sites (RMK, see isCareerSiteHost) list 25 jobs a page: title, location, date, department. */
 /** Big employers list thousands of jobs; beyond this we stop paging. */
 const MAX_POSTINGS = 2000;
 

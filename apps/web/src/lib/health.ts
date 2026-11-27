@@ -9,6 +9,8 @@ export type Health = {
   scanning?: boolean;
   background?: boolean;
   dataVersion?: string | null;
+  /** tracking.json's revision: another window saved when it moves (tracking.ts). */
+  trackingRev?: number;
   update?: { version: string } | null;
   startLink?: boolean;
   /** The server crashed several times just now, so it started without its background work for a while. */

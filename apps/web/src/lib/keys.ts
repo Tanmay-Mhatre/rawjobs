@@ -19,11 +19,12 @@ export const GO_TO_MS = 1000;
 /**
  * Listens for "g" then r, p, c or s. It listens in the capture phase and stops the letter there, so
  * "g s" goes to Settings without also saving the job the Radar has selected, and "g r" doesn't scan.
- * `canGo` is asked at each key press (false under a dialog or during setup).
+ * `canGo` is asked at each key press (false under a dialog or during setup). `onArm` runs when "g" is
+ * pressed, so the app can start loading the sections before the letter comes.
  */
-export function useGoToKeys(onGo: (section: GoToSection) => void, canGo: () => boolean): void {
-  const latest = useRef({ onGo, canGo });
-  latest.current = { onGo, canGo };
+export function useGoToKeys(onGo: (section: GoToSection) => void, canGo: () => boolean, onArm?: () => void): void {
+  const latest = useRef({ onGo, canGo, onArm });
+  latest.current = { onGo, canGo, onArm };
   useEffect(() => {
     let armedAt = -Infinity;
     const onKey = (e: KeyboardEvent) => {
@@ -35,7 +36,10 @@ export function useGoToKeys(onGo: (section: GoToSection) => void, canGo: () => b
         e.preventDefault();
         e.stopImmediatePropagation();
         latest.current.onGo(section);
-      } else if (e.key === "g") armedAt = Date.now();
+      } else if (e.key === "g") {
+        armedAt = Date.now();
+        latest.current.onArm?.();
+      }
     };
     window.addEventListener("keydown", onKey, true);
     return () => window.removeEventListener("keydown", onKey, true);

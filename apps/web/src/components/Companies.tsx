@@ -3,7 +3,7 @@ import { safeUrl } from "@rawjobs/core/text";
 import { Clock, ExternalLink, EyeOff, RefreshCw, Undo2, X } from "lucide-react";
 import { Fragment, useEffect, useId, useMemo, useRef, useState, type ReactNode } from "react";
 import type { BoardMove } from "@rawjobs/core/schema";
-import { careersUrl } from "@rawjobs/core/detect";
+import { careersUrl } from "@rawjobs/core/company-key";
 import { failedHealth, notReached } from "@rawjobs/core/health";
 import { keyOf, type CompanyRef } from "../lib/companies";
 import { nameRank } from "../lib/companySearch";

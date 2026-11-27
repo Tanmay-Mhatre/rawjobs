@@ -383,7 +383,7 @@ console.log(JSON.stringify({ type: "done", scope: args[args.indexOf("--scope") +
 
   it("runs the CLI in your RawJobs folder", async () => {
     const { port, home } = await start();
-    expect(realpathSync(JSON.parse((await call(port, "GET", "/api/setup/resume")).text).cwd)).toBe(realpathSync(home));
+    expect(realpathSync(JSON.parse((await call(port, "DELETE", "/api/setup/resume")).text).cwd)).toBe(realpathSync(home));
   });
 
   it("saves your tracking in profile/tracking.json and reads it back", async () => {
@@ -521,7 +521,6 @@ console.log(JSON.stringify({ type: "done", scope: args[args.indexOf("--scope") +
     const routes: [method: string, path: string, args: string[], body?: string][] = [
       ["POST", "/api/setup/config", ["setup", "save"], '{"profile":{}}'],
       ["POST", "/api/setup/reset", ["setup", "reset"]],
-      ["GET", "/api/setup/resume", ["setup", "resume"]],
       ["POST", "/api/setup/resume", ["setup", "resume", "save"], "# Resume"],
       ["DELETE", "/api/setup/resume", ["setup", "resume", "delete"]],
       ["POST", "/api/setup/check", ["setup", "check", "--data", dataDir], '{"urls":["https://jobs.lever.co/acme"]}'],
@@ -578,6 +577,11 @@ console.log(JSON.stringify({ type: "done", scope: args[args.indexOf("--scope") +
     };
     expect(await get("/api/setup")).toEqual(await cli(() => cmdSetup(["status", "--data", dataDir])));
     expect(await get("/api/alerts/telegram")).toEqual(await cli(() => cmdAlerts(["telegram", "status"])));
+    expect(await get("/api/setup/resume")).toEqual(await cli(() => cmdSetup(["resume"])));
+    mkdirSync(join(home, "profile"), { recursive: true });
+    writeFileSync(join(home, "profile/resume.md"), "# Resume\n");
+    expect(await get("/api/setup/resume")).toEqual(await cli(() => cmdSetup(["resume"])));
+    expect(await get("/api/setup/resume")).toMatchObject({ text: "# Resume\n" });
   });
 
   it("keeps read-only answers a while, and forgets them after a save", async () => {
@@ -605,6 +609,37 @@ console.log(JSON.stringify({ type: "done", scope: args[args.indexOf("--scope") +
     expect(after.status).toBe(500);
     expect(JSON.parse(after.text)).toMatchObject({ ok: false });
     expect((await call(port, "GET", "/api/scan/plan")).status).toBe(500);
+  });
+
+  it("keeps the daily summary's status until it's changed", async () => {
+    const { port, home } = await start();
+    const first = await call(port, "GET", "/api/daily-summary");
+    expect(JSON.parse(first.text)).toMatchObject({ args: ["today", "status", "--data", expect.any(String)] });
+    writeFileSync(join(home, "../fake-cli.mjs"), "process.exit(1);");
+    expect((await call(port, "GET", "/api/daily-summary")).text).toBe(first.text);
+    expect((await call(port, "DELETE", "/api/daily-summary")).status).toBe(500);
+    expect((await call(port, "GET", "/api/daily-summary")).status).toBe(500);
+  });
+
+  it("runs at most 3 short CLI commands at once, the rest in turn", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "rawjobs-slots-"));
+    const log = join(dir, "calls.log");
+    const fake = join(dir, "slow-cli.mjs");
+    writeFileSync(
+      fake,
+      `import { appendFileSync } from "node:fs";\nappendFileSync(${JSON.stringify(log)}, "+\\n");\nsetTimeout(() => { appendFileSync(${JSON.stringify(log)}, "-\\n"); console.log("{}"); }, 300);`,
+    );
+    const api = createApi({ home: dir, dataDir: dir, cli: { command: process.execPath, args: [fake] }, version: "9.9.9" });
+    const runs = await Promise.all(Array.from({ length: 7 }, () => api.cli(["x"])));
+    expect(runs.every((r) => r.code === 0)).toBe(true);
+    let now = 0;
+    let most = 0;
+    for (const step of readFileSync(log, "utf8").trim().split("\n")) {
+      now += step === "+" ? 1 : -1;
+      most = Math.max(most, now);
+    }
+    expect(most).toBe(3);
+    expect(now).toBe(0);
   });
 
   it("says how many companies a suggestion request checks, without running the CLI, and again once the index changes", async () => {
@@ -679,8 +714,23 @@ console.log(JSON.stringify({ type: "done", scope: args[args.indexOf("--scope") +
     writeFileSync(fake, `import { appendFileSync } from "node:fs";\nappendFileSync(${JSON.stringify(log)}, process.argv.slice(2, 4).join(" ") + "\\n");\nconsole.log("{}");`);
     const api = createApi({ home: dir, dataDir: dir, cli: { command: process.execPath, args: [fake] }, version: "9.9.9" });
     api.startBackground();
-    await until(() => existsSync(log) && readFileSync(log, "utf8").split("\n").length > 2);
-    expect(readFileSync(log, "utf8").trim().split("\n")).toEqual(["directory update", "companies suggest"]);
+    const calls = () => (existsSync(log) ? readFileSync(log, "utf8").trim().split("\n") : []);
+    await until(() => calls().length >= 2 && existsSync(join(dir, "cache/suggestions/warm.json")));
+    expect(calls()).toEqual(["directory update", "companies suggest"]);
+
+    // Started again with the same index, directory, resume and config: no second ranking.
+    const again = createApi({ home: dir, dataDir: dir, cli: { command: process.execPath, args: [fake] }, version: "9.9.9" });
+    again.startBackground();
+    await until(() => calls().length >= 3);
+    await new Promise((r) => setTimeout(r, 300));
+    expect(calls()).toEqual(["directory update", "companies suggest", "directory update"]);
+
+    // A new resume is a new ranking.
+    mkdirSync(join(dir, "profile"));
+    writeFileSync(join(dir, "profile/resume.md"), "# Resume\n");
+    createApi({ home: dir, dataDir: dir, cli: { command: process.execPath, args: [fake] }, version: "9.9.9" }).startBackground();
+    await until(() => calls().length >= 5);
+    expect(calls().slice(3)).toEqual(["directory update", "companies suggest"]);
   });
 
   it("on shutdown, asks the running scan to stop and waits for it", async () => {

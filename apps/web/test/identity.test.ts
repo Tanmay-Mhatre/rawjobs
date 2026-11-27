@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { Job } from "../src/lib/data";
 import { foldCompanies, groupJobs, roleCount } from "../src/lib/filters";
-import { attachFeedJobs, identityOf } from "../src/lib/identity";
+import { attachFeedJobs, identityOf, roleOf } from "../src/lib/identity";
 import { makeJob } from "./helpers";
 
 const at = (ats: string, slug: string, o: Partial<Job> = {}) =>
@@ -75,5 +75,23 @@ describe("company identity", () => {
     const a = makeJob({ id: "greenhouse:acme:1", company: "Acme", title: "PM" });
     const b = makeJob({ id: "greenhouse:acme:2", company: "Acme", title: "PM", location: "London" });
     expect(groupJobs([a, b])).toHaveLength(1);
+  });
+});
+
+describe("roleOf", () => {
+  it("returns the cached key for the same job object, and works it out afresh for a new one", () => {
+    const job = makeJob({ title: "Product Manager" });
+    let reads = 0;
+    const counted = Object.defineProperty({ ...job }, "title", {
+      get: () => {
+        reads++;
+        return job.title;
+      },
+    });
+    const key = roleOf(counted);
+    expect(roleOf(counted)).toBe(key);
+    expect(reads).toBe(1);
+    // attachFeedJobs() sets identity on a copy, so a copy gets its own key.
+    expect(roleOf({ ...counted, identity: "greenhouse:other" })).toBe(`greenhouse:other|${key.split("|").slice(1).join("|")}`);
   });
 });

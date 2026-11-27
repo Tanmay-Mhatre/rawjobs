@@ -26,7 +26,7 @@ import { hrmdirect } from "./hrmdirect";
 import { softgarden } from "./softgarden";
 import { cornerstone } from "./cornerstone";
 import { keka } from "./keka";
-import { taleobe, taleoBeUrl } from "./taleobe";
+import { taleobe } from "./taleobe";
 import { jobscore } from "./jobscore";
 import { avature } from "./avature";
 import { pageup } from "./pageup";
@@ -54,9 +54,9 @@ import { pinpoint } from "./pinpoint";
 import { recruitee } from "./recruitee";
 import { rippling } from "./rippling";
 import { smartrecruiters } from "./smartrecruiters";
-import { isCareerSiteHost, successfactors } from "./successfactors";
+import { successfactors } from "./successfactors";
 import { taleo } from "./taleo";
-import { teamtailor, teamtailorBase } from "./teamtailor";
+import { teamtailor } from "./teamtailor";
 import { arbeitnow } from "./arbeitnow";
 import { hackernews } from "./hackernews";
 import { himalayas } from "./himalayas";
@@ -68,7 +68,7 @@ import { remotive } from "./remotive";
 import type { Connector, DetectedCompany } from "./types";
 import { workable } from "./workable";
 import { workday } from "./workday";
-import { zoho, zohoHost } from "./zoho";
+import { zoho } from "./zoho";
 
 /** One connector per hiring system in ATS_TYPES. */
 // biome-ignore lint/suspicious/noExplicitAny: each connector has its own raw posting type; the registry only routes to them
@@ -197,142 +197,7 @@ export function guessName(slug: string): string {
     .replace(/\b\w/g, (ch) => ch.toUpperCase());
 }
 
-/** The public careers page for a board (the same address the company directory uses), or "" when it can't be rebuilt from the slug. */
-export function careersUrl(c: DetectedCompany): string {
-  switch (c.ats) {
-    case "greenhouse":
-      return `https://job-boards${c.region === "eu" ? ".eu" : ""}.greenhouse.io/${c.slug}`;
-    case "lever":
-      return `https://jobs${c.region === "eu" ? ".eu" : ""}.lever.co/${c.slug}`;
-    case "ashby":
-      return `https://jobs.ashbyhq.com/${c.slug}`;
-    case "smartrecruiters":
-      return `https://careers.smartrecruiters.com/${c.slug}`;
-    case "workday":
-      return `https://${c.slug}.${c.shard}.myworkdayjobs.com/${c.site ?? ""}`;
-    case "workable":
-      return `https://apply.workable.com/${c.slug}`;
-    case "teamtailor":
-      return `${teamtailorBase(c.slug)}/jobs`;
-    case "comeet":
-      return c.site ? `https://www.comeet.com/jobs/${c.site}/${c.slug}` : "";
-    case "recruitee":
-      return `https://${c.slug}.recruitee.com`;
-    case "bamboohr":
-      return `https://${c.slug}.bamboohr.com/careers`;
-    case "breezy":
-      return `https://${c.slug}.breezy.hr`;
-    case "pinpoint":
-      return `https://${c.slug}.pinpointhq.com`;
-    case "jobvite":
-      return `https://jobs.jobvite.com/${c.slug}`;
-    case "rippling":
-      return `https://ats.rippling.com/${c.slug}/jobs`;
-    case "personio":
-      return `https://${c.slug}.jobs.personio.com`;
-    case "jazzhr":
-      return `https://${c.slug}.applytojob.com/apply`;
-    case "zoho":
-      return `${zohoHost(c)}/jobs/${c.site ?? "Careers"}`;
-    case "hibob":
-      return `https://${c.slug}.careers.hibob.com`;
-    case "freshteam":
-      return `https://${c.slug}.freshteam.com/jobs`;
-    case "join":
-      return `https://join.com/companies/${c.slug}`;
-    case "icims":
-      return `https://${c.slug}.icims.com/jobs`;
-    case "taleo":
-      return c.site ? `https://${c.slug}.taleo.net/careersection/${c.site}/jobsearch.ftl` : "";
-    case "oracle":
-      return c.shard ? `https://${c.slug}.fa.${c.shard}.oraclecloud.com/hcmUI/CandidateExperience/en/sites/${c.site ?? "CX_1"}` : "";
-    case "successfactors":
-      if (isCareerSiteHost(c)) return `https://${c.slug.toLowerCase()}/search/`;
-      return c.shard ? `https://${c.shard}/career?company=${encodeURIComponent(c.slug)}` : "";
-    case "paylocity":
-      return `https://recruiting.paylocity.com/Recruiting/Jobs/All/${c.slug}`;
-    case "paycom":
-      return `https://www.paycomonline.net/v4/ats/web.php/portal/${c.slug}/career-page`;
-    case "hireology":
-      return `https://careers.hireology.com/${c.slug}`;
-    case "ukg":
-      return c.shard && c.site ? `https://${c.shard}/${c.slug}/JobBoard/${c.site}` : "";
-    case "eightfold":
-      return `https://${c.slug}/careers`;
-    case "phenom":
-      return `https://${c.slug}`;
-    case "careerplug":
-      return `https://${c.slug}.careerplug.com/jobs`;
-    case "dayforce":
-      return c.site ? `https://jobs.dayforcehcm.com/${c.shard ?? "en-US"}/${c.slug}/${c.site}` : "";
-    case "adp":
-      return c.site ? `https://workforcenow.adp.com/mascsr/default/mdf/recruitment/recruitment.html?cid=${c.slug}&ccId=${c.site}` : "";
-    case "applicantpro":
-      return `https://${c.slug}.${c.shard === "isolvedhire.com" ? "isolvedhire.com" : "applicantpro.com"}/jobs/`;
-    case "paycor":
-      return `https://recruitingbypaycor.com/career/CareerHome.action?clientId=${c.slug}`;
-    case "hiringthing":
-      return `https://${c.slug}/`;
-    case "manatal":
-      return `https://www.careers-page.com/${c.slug}`;
-    case "trakstar":
-      return `https://${c.slug}.hire.trakstar.com/`;
-    case "factorial":
-      return `https://${c.slug}/`;
-    case "gem":
-      return `https://jobs.gem.com/${c.slug}`;
-    case "hrmdirect":
-      return `https://${c.slug}.hrmdirect.com/employment/`;
-    case "softgarden":
-      return `https://${c.slug}.career.softgarden.de/`;
-    case "cornerstone":
-      return `https://${c.slug}.csod.com/ux/ats/careersite/1/home?c=${c.slug}`;
-    case "keka":
-      return `https://${c.slug}.keka.com/careers`;
-    case "taleobe":
-      return taleoBeUrl(c);
-    case "jobscore":
-      return `https://careers.jobscore.com/careers/${c.slug}`;
-    case "avature":
-      return `https://${c.slug}.avature.net/${c.site || "careers"}/SearchJobs/`;
-    case "pageup":
-      return `https://careers.pageuppeople.com/${c.slug}/${c.site || "cw/en"}/listing/`;
-    case "radancy":
-      return `https://${c.slug}/`;
-    case "oleeo":
-      return `https://${c.slug}.tal.net/vx/lang-en-GB/candidate/jobboard/vacancy/${c.site || "1"}/adv/`;
-    case "jobtrain":
-      return `https://${c.slug}/`;
-    case "varbi":
-      return `https://${c.slug}.varbi.com/`;
-    case "jobylon":
-      return `https://emp.jobylon.com/companies/${c.slug}/`;
-    case "homerun":
-      return `https://${c.slug}.homerun.co/`;
-    case "emply":
-      return `https://${c.slug}.career.emply.com/`;
-    case "bullhorn":
-      return c.site ? `https://${c.site}/` : "";
-    case "hrmos":
-      return `https://hrmos.co/pages/${c.slug}/jobs`;
-    case "herp":
-      return `https://herp.careers/v1/${c.slug}`;
-    case "engage":
-      return `https://en-gage.net/${c.slug}/`;
-    default:
-      return "";
-  }
-}
-
-/**
- * Company directory key: "ats:slug", or "workday:tenant|shard|site", or "taleo:host|section" (a
- * Taleo pod hosts many companies, told apart by section). Lowercase.
- */
-export function companyKey(c: { ats: string; slug: string; shard?: string; site?: string }): string {
-  if (c.ats === "workday") return `workday:${c.slug}|${c.shard}|${c.site}`.toLowerCase();
-  if (c.ats === "taleo" && c.site) return `taleo:${c.slug}|${c.site}`.toLowerCase();
-  return `${c.ats}:${c.slug}`.toLowerCase();
-}
+export { careersUrl, companyKey, SUPPORTED_ATS } from "./keys";
 
 export type { Connector, Ctx, DetectedCompany } from "./types";
 export { companyOfJobId, currentJobId, jobCompanyKey } from "./types";
