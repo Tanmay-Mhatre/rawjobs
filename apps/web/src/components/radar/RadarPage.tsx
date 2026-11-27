@@ -1,7 +1,7 @@
 import { displayName } from "@rawjobs/core/display-name";
 import { fitFeatures, learnedNudge, learnOrder } from "@rawjobs/core/learn";
 import { ArrowRight, ArrowUpDown, SlidersHorizontal, UserRound, X } from "lucide-react";
-import { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from "react";
+import { memo, useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from "react";
 import { useOtherJobs, type DataMeta, type Job, type Profile } from "../../lib/data";
 import {
   activeChips,
@@ -94,7 +94,11 @@ const PAGE = 40;
 /** Your companies' freshest roles shown above the list in Best match. */
 const STRIP = 3;
 
-export function RadarPage(p: Props) {
+/**
+ * The Radar. memo: App re-renders for reasons of its own (a dialog, the header), and its props for the Radar
+ * stay the same function and data across those, so the Radar skips them.
+ */
+export const RadarPage = memo(function RadarPage(p: Props) {
   const profile = p.profile ?? p.meta.profile;
   const profileKey = JSON.stringify([profile.locations, profile.industries]);
   // The Radar starts filtered to your places, said out loud in the profile bar, with "Show everywhere" to drop it
@@ -842,4 +846,4 @@ export function RadarPage(p: Props) {
       )}
     </div>
   );
-}
+});

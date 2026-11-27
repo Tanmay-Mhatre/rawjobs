@@ -30,7 +30,8 @@ import { canRunLocally, useData, useOtherJobs, type Job } from "./lib/data";
 import { newCtx } from "./lib/newSince";
 import { useHourlyNow } from "./components/radar/hooks";
 import { usePrefs } from "./lib/prefs";
-import { scanPrefs, useScan, withLive } from "./lib/scan";
+import { scanPrefs, useScan } from "./lib/scan";
+import { ScanView, useLiveJobs, useScanPhase } from "./lib/scanStore";
 import { useBackgroundScan } from "./lib/backgroundScan";
 import { announceBackgroundScan } from "./app/announceBackgroundScan";
 import { useResume } from "./lib/resume";
@@ -108,14 +109,17 @@ export function App() {
   const afterScan = useCallback(async () => {
     await Promise.all([reload(), setup.refresh()]);
   }, [reload, setup.refresh]);
-  const { scan, start: startScan, stop: stopScan, restart: restartScan, notify: notifyScan, resume: resumeBackground, follow: followScan } = useScan(afterScan);
+  const { start: startScan, stop: stopScan, restart: restartScan, notify: notifyScan, resume: resumeBackground, follow: followScan } = useScan(afterScan);
+  // Only the phase here: the parts that show a scan's progress read it themselves (ScanView), so App and the
+  // Radar don't re-render on every company it checks.
+  const scanPhase = useScanPhase();
   const afterBackgroundScan = useCallback(async () => {
     const [m] = await Promise.all([reload(), setup.refresh()]);
     return m;
   }, [reload, setup.refresh]);
   /** A "Scan now" click: runs what Settings > Scans says (the scan, or only your companies), straight away. */
   const requestScan = useCallback(() => void startScan(scanPrefs().scope), [startScan]);
-  const scanning = scan.phase === "running";
+  const scanning = scanPhase === "running";
   /** A scheduled scan: shown in the header while it runs; its results replace the ones on screen when it ends. */
   const background = useBackgroundScan({
     loaded: state.kind === "ready" ? state.meta.generatedAt : state.kind === "empty" ? null : undefined,
@@ -128,11 +132,11 @@ export function App() {
     if (background.running) followScan();
   }, [background.running, followScan]);
   /** A scan this page can't show (an older CLI writes no progress): the header just says one is running. */
-  const otherScan = background.running && scan.phase !== "running" && scan.phase !== "background";
+  const otherScan = background.running && scanPhase !== "running" && scanPhase !== "background";
 
-  const { tg, notifyFailed, notifyNow, refreshTg } = useScanNotify(scan, notifyScan);
+  const { tg, notifyFailed, notifyNow, refreshTg } = useScanNotify(notifyScan);
   /** Setup just saved and started the first scan: say how it went when it ends. */
-  const announceScan = useScanAnnouncement(scan);
+  const announceScan = useScanAnnouncement();
 
   /** Radar "Save to my profile": its place and industry picks become your profile, then a rescan. */
   const saveProfileFromRadar = useCallback(
@@ -208,11 +212,12 @@ export function App() {
     go({ tab: "radar" });
   }, [go]);
   const goCompanies = useCallback(() => go({ tab: "companies" }), [go]);
+  const goSettings = useCallback(() => go({ tab: "settings" }), [go]);
   /** Where a "set up" CTA should take the user right now. */
   const toSetup = useCallback(() => goStep(setupState === "invalid" ? 0 : progress.started ? progress.nextStep : STEP.resume), [goStep, setupState, progress]);
 
   // A running scan's matches show up as each company finishes; the saved files replace them when it ends.
-  const jobs = useMemo(() => withLive(state.kind === "ready" ? state.jobs : NO_JOBS, scan.live), [state, scan.live]);
+  const jobs = useLiveJobs(state.kind === "ready" ? state.jobs : NO_JOBS);
   const jobsById = useMemo(() => new Map(jobs.map((j) => [j.id, j])), [jobs]);
   const openJob = openId ? jobsById.get(openId) : undefined;
   // Not interested, with an optional reason: X (row button or key) asks why in a toast; the drawer asks inline.
@@ -345,7 +350,7 @@ export function App() {
                   {/* Everything about scanning sits together, next to the Scan button: when it last ran, what failed, what's running. */}
                   <div className="flex items-center gap-1">
                     {/* While a scan runs its status replaces the time; below 1280px the time moves into the Scan button's tooltip. */}
-                    {lastRun && scan.phase !== "running" && scan.phase !== "background" && (
+                    {lastRun && scanPhase !== "running" && scanPhase !== "background" && (
                       <span className="mr-1 hidden type-meta text-muted xl:inline" title={lastRun.startedAt}>
                         Last scan {timeAgo(lastRun.startedAt)}
                       </span>
@@ -374,19 +379,23 @@ export function App() {
                       </Button>
                     )}
                     {canRunLocally && setupState === "configured" && (
-                      <ScanButton
-                        scan={scan}
-                        background={otherScan}
-                        onStart={(scope) => void startScan(scope)}
-                        onSettings={() => {
-                          location.hash = settingsHash("scans");
-                        }}
-                        onStop={() => void stopScan()}
-                        onResume={() => void resumeBackground()}
-                        notifyLine={notifyLine(tg, scan, notifyFailed)}
-                        notify={(openDetails) => <NotifyBell tg={tg} scan={scan} failed={notifyFailed} onDetails={openDetails} onSaved={() => setup.refresh()} onConnected={notifyNow} />}
-                        lastScan={lastRun && timeAgo(lastRun.startedAt)}
-                      />
+                      <ScanView>
+                        {(scan) => (
+                          <ScanButton
+                            scan={scan}
+                            background={otherScan}
+                            onStart={(scope) => void startScan(scope)}
+                            onSettings={() => {
+                              location.hash = settingsHash("scans");
+                            }}
+                            onStop={() => void stopScan()}
+                            onResume={() => void resumeBackground()}
+                            notifyLine={notifyLine(tg, scan, notifyFailed)}
+                            notify={(openDetails) => <NotifyBell tg={tg} scan={scan} failed={notifyFailed} onDetails={openDetails} onSaved={() => setup.refresh()} onConnected={notifyNow} />}
+                            lastScan={lastRun && timeAgo(lastRun.startedAt)}
+                          />
+                        )}
+                      </ScanView>
                     )}
                   </div>
                   <span className="hidden sm:contents">
@@ -420,7 +429,7 @@ export function App() {
             // Once the scans are read (not mid-scan): the star question dates your first use from them.
             star={state.kind !== "loading" && !scanning && !otherScan ? { state: user.state, runs: meta?.runs ?? [] } : undefined}
           />
-          {!inSetup && tab === "radar" && <FeedStaleNotice scan={scan} onOnlyMine={() => void restartScan("yours")} />}
+          {!inSetup && tab === "radar" && <ScanView>{(scan) => <FeedStaleNotice scan={scan} onOnlyMine={() => void restartScan("yours")} />}</ScanView>}
           {!inSetup && tab === "radar" && <ReminderNotice />}
           {!inSetup && tab === "radar" && canRunLocally && setupState === "configured" && <ScheduledScanNotice scanning={scanning} onScan={requestScan} />}
           {setup.failed && status === undefined && !inSetup && <SetupCheckFailed onRetry={() => void setup.refresh()} />}
@@ -473,14 +482,14 @@ export function App() {
                 )}
                 {state.kind === "error" && <ErrorState message={state.message} onRetry={() => void reload()} />}
                 {/* A scan in progress shows in the header (Scan now becomes its status); a Telegram message that failed shows here. */}
-                <NotifyFailed scan={scan} />
+                <ScanView>{(scan) => <NotifyFailed scan={scan} />}</ScanView>
 
                 {tab === "radar" && (
                   <>
                     {notSetUp && <SetupHero items={items} started={progress.started} nextStep={progress.nextStep} onStep={goStep} onCompanies={goCompanies} />}
                     {setupState === "invalid" && <ConfigProblemCard errors={status?.errors} onFix={() => goStep(0)} />}
                     {setupState === "configured" && personal && <SetupChecklist items={items} onStep={goStep} onScan={requestScan} onCompanies={goCompanies} />}
-                    {setupState === "configured" && personal && state.kind === "empty" && <FirstScanCard scan={scan} onScan={requestScan} />}
+                    {setupState === "configured" && personal && state.kind === "empty" && <ScanView>{(scan) => <FirstScanCard scan={scan} onScan={requestScan} />}</ScanView>}
                     {canRunLocally && setupState === "configured" && personal && lastRun && <TelegramBanner tg={tg} onConnected={refreshTg} />}
                     {/* Laptops show this as a chip next to "Last scan" in the header, so the jobs start higher. */}
                     {state.kind === "ready" && failing > 0 && <FailingBanner className="lg:hidden" count={failing} onOpen={goFailing} />}
@@ -494,7 +503,7 @@ export function App() {
                         onOpenOverlay={onOpen}
                         overlayOpen={!!openJob}
                         onStatus={onStatus}
-                        onUpdate={(job, patch) => user.update(job, patch)}
+                        onUpdate={user.update}
                         onApply={onApply}
                         onSaveView={prefs.saveView}
                         onRenameView={prefs.renameView}
@@ -508,7 +517,7 @@ export function App() {
                         onTrack={canSave ? trackJob : undefined}
                         onCheck={canSave ? checkJob : undefined}
                         profile={status?.config?.profile}
-                        onEditProfile={() => go({ tab: "settings" })}
+                        onEditProfile={goSettings}
                         onSaveProfile={canRunLocally && personal && setupState === "configured" ? saveProfileFromRadar : undefined}
                       />
                     )}
