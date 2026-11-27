@@ -299,14 +299,14 @@ describe("the daily summary's scheduled task", () => {
     const home = mkdtempSync(join(tmpdir(), "rj-home-"));
     const dataDir = mkdtempSync(join(tmpdir(), "rj-daily-"));
     const { exec } = record();
-    installDailySummary({ repoRoot: "/repo", dataDir, exec, platform: "darwin", home }, { time: "07:30" });
+    installDailySummary({ repoRoot: "/repo", workDir: home, dataDir, exec, platform: "darwin", home }, { time: "07:30" });
     const plist = readFileSync(join(home, "Library/LaunchAgents/com.rawjobs.daily-summary.plist"), "utf8");
     expect(plist).toContain("<key>Hour</key><integer>7</integer><key>Minute</key><integer>30</integer>");
     expect(plist).toContain("<string>today</string>\n    <string>--notify</string>\n    <string>--scheduled</string>");
     expect(plist).toContain("daily-summary.log");
-    expect(dailySummaryStatus({ repoRoot: "/repo", dataDir, exec, platform: "darwin", home })).toMatchObject({ installed: true, settings: { time: "07:30" } });
+    expect(dailySummaryStatus({ repoRoot: "/repo", workDir: home, dataDir, exec, platform: "darwin", home })).toMatchObject({ installed: true, settings: { time: "07:30" } });
 
-    installDailySummary({ repoRoot: "/repo", dataDir, exec, platform: "linux", home }, { time: "09:00" });
+    installDailySummary({ repoRoot: "/repo", workDir: home, dataDir, exec, platform: "linux", home }, { time: "09:00" });
     const timer = readFileSync(join(home, ".config/systemd/user/rawjobs-daily-summary.timer"), "utf8");
     expect(timer).toContain("Description=RawJobs daily summary");
     expect(timer).toContain("OnCalendar=*-*-* 09:00:00\nPersistent=true");
@@ -317,7 +317,7 @@ describe("the daily summary's scheduled task", () => {
     const home = mkdtempSync(join(tmpdir(), "rj-home-"));
     const dataDir = mkdtempSync(join(tmpdir(), "rj-daily-"));
     const { exec } = record();
-    const ctx = { repoRoot: "/repo", dataDir, exec, platform: "darwin" as const, home };
+    const ctx = { repoRoot: "/repo", workDir: home, dataDir, exec, platform: "darwin" as const, home };
     installSchedule(ctx, { times: ["08:00"], scope: "mine" });
     installDailySummary(ctx, { time: "09:00" });
     removeDailySummary(ctx);
