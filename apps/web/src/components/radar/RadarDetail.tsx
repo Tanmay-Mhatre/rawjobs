@@ -1,4 +1,5 @@
 import { useMemo } from "react";
+import type { CompanySave } from "../../app/useCompanyActions";
 import type { Job, Profile } from "../../lib/data";
 import { type Ctx, hasNewTag, sortJobs } from "../../lib/filters";
 import { identityOf, roleOf } from "../../lib/identity";
@@ -32,7 +33,7 @@ export function RadarDetail(p: {
   onUpdate: (job: Job, patch: EntryPatch) => void;
   onApply: (job: Job) => void;
   onHideCompany: (company: string, hidden: boolean) => void;
-  onTrack?: (job: Job, on: boolean) => Promise<string | null>;
+  onTrack?: (job: Job, on: boolean) => Promise<CompanySave>;
   onCheck?: (job: Job) => Promise<string | null>;
 }) {
   const { selected } = p;
@@ -56,7 +57,9 @@ export function RadarDetail(p: {
   const onDetailHide = useStableHandler((h: boolean) => {
     if (selected) hideCompany(selected.company, h);
   });
-  const onDetailTrack = useStableHandler((on: boolean) => (selected && p.onTrack ? p.onTrack(selected, on) : Promise.resolve(null)));
+  // Bound to this job, not the latest one: the toast's Undo may run after another job is selected.
+  const { onTrack } = p;
+  const onDetailTrack = useMemo(() => (onTrack && selected ? (on: boolean) => onTrack(selected, on) : undefined), [onTrack, selected]);
   const onDetailCheck = useStableHandler(() => (selected && p.onCheck ? p.onCheck(selected) : Promise.resolve(null)));
   const onDetailApply = useStableHandler(p.onApply);
   const onDetailPrev = useStableHandler(() => p.move(-1));
@@ -88,7 +91,7 @@ export function RadarDetail(p: {
             moreFromCompany={moreFromCompany}
             yours={p.isYours(selected)}
             indexGeneratedAt={p.indexGeneratedAt}
-            onTrack={p.onTrack && onDetailTrack}
+            onTrack={onDetailTrack}
             onCheck={p.onCheck && selected.estimated ? onDetailCheck : undefined}
             companyHidden={p.hidden.has(selected.company)}
             onUpdate={onDetailUpdate}

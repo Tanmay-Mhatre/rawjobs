@@ -1,5 +1,5 @@
-import { describe, expect, it, vi } from "vitest";
-import { draftFromConfig, draftToConfig, emptyDraft, rebaseDraft, setupProgress, STEP, stepBlocker, type Draft } from "../src/lib/setup";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { causeOf, draftFromConfig, draftToConfig, emptyDraft, rebaseDraft, saveConfig, setupProgress, STEP, stepBlocker, type Draft } from "../src/lib/setup";
 
 const base: Draft = { ...emptyDraft(), include: ["product manager"], places: ["dubai"] };
 const row = (slug: string) => ({ id: slug, input: `https://jobs.lever.co/${slug}`, state: "saved" as const, name: slug, ats: "lever" as const, slug });
@@ -82,5 +82,31 @@ describe("hosted mode (no local server)", () => {
       ],
     });
     expect(d.companies.map((c) => c.state)).toEqual(["saved", "soon"]);
+  });
+});
+
+describe("saveConfig", () => {
+  const config = draftToConfig(base);
+  const answer = (impl: () => Promise<Response>) => vi.stubGlobal("fetch", vi.fn(impl));
+  afterEach(() => vi.unstubAllGlobals());
+
+  it("returns cause offline on network error, never throwing", async () => {
+    answer(async () => {
+      throw new TypeError("Failed to fetch");
+    });
+    const res = await saveConfig(config);
+    expect(res).toMatchObject({ ok: false, cause: "offline", errors: "Failed to fetch" });
+  });
+
+  it("returns cause server on a non-JSON 500", async () => {
+    answer(async () => new Response("<html>Internal error</html>", { status: 500 }));
+    expect(await saveConfig(config)).toMatchObject({ ok: false, cause: "server", errors: "HTTP 500" });
+  });
+
+  it("passes the server's own refusal through, which counts as invalid", async () => {
+    answer(async () => new Response(JSON.stringify({ ok: false, errors: "titles: required", issues: [{ path: "titles", message: "required" }] })));
+    const res = await saveConfig(config);
+    expect(res).toEqual({ ok: false, errors: "titles: required", issues: [{ path: "titles", message: "required" }] });
+    if (!res.ok) expect(causeOf(res)).toBe("invalid");
   });
 });

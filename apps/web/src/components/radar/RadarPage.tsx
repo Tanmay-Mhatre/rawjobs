@@ -1,4 +1,5 @@
 import { memo, useMemo, useRef, useState } from "react";
+import type { CompanySave } from "../../app/useCompanyActions";
 import type { DataMeta, Job, Profile } from "../../lib/data";
 import { hasNewTag, profileFilters, type Filters, type JobGroup, type Sort } from "../../lib/filters";
 import { ignoreShortcut } from "../../lib/keys";
@@ -44,8 +45,8 @@ type Props = {
   /** When the directory index behind the estimated jobs was built. */
   indexGeneratedAt?: string;
   onCompanies: () => void;
-  /** Add (or remove) a job's company to your companies (local app only). Resolves to an error, or null. */
-  onTrack?: (job: Job, on: boolean) => Promise<string | null>;
+  /** Add (or remove) a job's company to your companies (local app only). Resolves to how the save went. */
+  onTrack?: (job: Job, on: boolean) => Promise<CompanySave>;
   /** Check a directory job's company live now (local app only). Resolves to an error, or null. */
   onCheck?: (job: Job) => Promise<string | null>;
   /** Your saved profile now (Settings); falls back to the one from the last scan. */

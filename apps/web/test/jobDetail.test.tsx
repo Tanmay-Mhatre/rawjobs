@@ -143,7 +143,7 @@ describe("JobDetail", () => {
   it("keeps Not interested, Hide company and Add company in the More menu, with a labelled Save beside Apply", () => {
     const onUpdate = vi.fn();
     const onHideCompany = vi.fn();
-    render(<JobDetail job={job()} profile={profile} onUpdate={onUpdate} onClose={() => {}} onTrack={async () => null} onHideCompany={onHideCompany} />);
+    render(<JobDetail job={job()} profile={profile} onUpdate={onUpdate} onClose={() => {}} onTrack={async () => ({ ok: true })} onHideCompany={onHideCompany} />);
     expect(screen.getByRole("button", { name: /^Save/ }).textContent).toContain("Save");
     fireEvent.click(screen.getByRole("button", { name: "More job actions" }));
     expect(screen.getByRole("menuitem", { name: /Add company to My companies/ })).toBeTruthy();

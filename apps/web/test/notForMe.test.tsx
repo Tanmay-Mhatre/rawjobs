@@ -1,14 +1,16 @@
 // @vitest-environment happy-dom
-import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, renderHook, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { useCompanyActions } from "../src/app/useCompanyActions";
 import { NotForMeProvider, useNotForMeApi } from "../src/components/NotForMe";
 import { RadarPage } from "../src/components/radar/RadarPage";
-import { Toaster } from "../src/components/Toast";
+import { dismissToast, toast, Toaster } from "../src/components/Toast";
 import type { DataMeta, Job, Profile } from "../src/lib/data";
 import { applyFilters, DEFAULT_FILTERS, type Ctx } from "../src/lib/filters";
 import { hiddenByRules, offerFor, ruleHides, type HideRule } from "../src/lib/notForMe";
 import { addRule, usePrefs, withDefaults } from "../src/lib/prefs";
+import { emptyDraft } from "../src/lib/setup";
 import { useUserState, type UserState } from "../src/lib/userState";
 import { makeJob } from "./helpers";
 
@@ -239,5 +241,38 @@ describe("Radar keys", () => {
     act(() => void fireEvent.keyDown(window, { key: "x" }));
     expect(onStatus).toHaveBeenCalledOnce();
     expect(onStatus.mock.calls[0]![1]).toBe("dismissed");
+  });
+});
+
+describe("hiding a company whose save fails", () => {
+  afterEach(() => {
+    act(() => dismissToast(toast({ message: "" })));
+    vi.unstubAllGlobals();
+  });
+
+  it('hide with failing save shows "Hid X here, but scans will still check it", and Try again saves again', async () => {
+    const fetch = vi.fn(async () => {
+      throw new TypeError("Failed to fetch");
+    });
+    vi.stubGlobal("fetch", fetch);
+    const setCompanyHidden = vi.fn();
+    const jobs = [job({ company: "Acme" })];
+    render(<Toaster />);
+    const { result } = renderHook(() =>
+      useCompanyActions({ saved: emptyDraft(), canSave: true, configCompanies: [], scannedCompanies: undefined, jobs, setCompanyHidden, refreshSetup: async () => {}, reload: async () => {} }),
+    );
+    let res: Awaited<ReturnType<typeof result.current.hideCompany>> | undefined;
+    await act(async () => {
+      res = await result.current.hideCompany("Acme", true);
+    });
+    // Hidden here all the same; only the config the scans read didn't change.
+    expect(setCompanyHidden).toHaveBeenCalledWith("Acme", true);
+    expect(res).toMatchObject({ ok: false, cause: "offline" });
+    expect(screen.getByText("Hid Acme here, but scans will still check it. Try again to stop them.")).toBeTruthy();
+    expect(document.body.textContent).not.toContain("Failed to fetch");
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "Try again" }));
+    });
+    await vi.waitFor(() => expect(fetch).toHaveBeenCalledTimes(2));
   });
 });
