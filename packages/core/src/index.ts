@@ -35,6 +35,7 @@ export * from "./discover";
 export * from "./scan";
 export * from "./lock";
 export * from "./live";
+export { limiter } from "./limit";
 export * from "./migrate";
 export * from "./resume-parse";
 export * from "./catalog/roles";
