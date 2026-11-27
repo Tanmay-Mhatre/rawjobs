@@ -154,6 +154,18 @@ h3 {
 .rj-feed {
   container-type: inline-size;
 }
+/* Rows scrolled far out of view skip layout and paint. They stay in the page, so find-in-page, screen
+   readers and J/K's scrollIntoView still reach them; the browser remembers each row's last height.
+   "auto" also clips a row's paint to its box, so a row you point at or tab into drops it: the Save and
+   Not interested tooltips hang below the row. */
+.rj-row {
+  content-visibility: auto;
+  contain-intrinsic-size: auto 72px;
+}
+.rj-row:hover,
+.rj-row:focus-within {
+  content-visibility: visible;
+}
 @container (max-width: 560px) {
   .rj-row {
     align-items: start;

@@ -33,6 +33,7 @@ import { ignoreShortcut } from "../../lib/keys";
 import { load, save } from "../../lib/storage";
 import { knownCounter, useNetworkSummary } from "../../lib/network";
 import type { EntryPatch, Status, UserState } from "../../lib/userState";
+import { ErrorBoundary } from "../ErrorBoundary";
 import { JobDetail } from "../JobDetail";
 import { toast } from "../Toast";
 import { Chip, SearchField } from "../primitives";
@@ -43,7 +44,7 @@ import { JobCard } from "./JobCard";
 import { ageLimit, MoreMenu, MoreToggles } from "./MoreFilters";
 import { ProfileBar } from "./ProfileBar";
 import { type ChipId, chipKeys, toggleChip, ViewsBar } from "./ViewsBar";
-import { useHourlyNow, useIsWide, useLatestKeydown } from "./hooks";
+import { useHourlyNow, useIsWide, useLatestKeydown, useStableHandler } from "./hooks";
 import { useClosedSinceToast } from "./useClosedSinceToast";
 import { useRadarFilters } from "./useRadarFilters";
 import { settingsHash } from "../settings/registry";
@@ -259,12 +260,13 @@ export function RadarPage(p: Props) {
     return () => io.disconnect();
   }, [wide, rows.length, limit, setLimit]);
 
+  const { onOpenOverlay, overlayOpen } = p;
   const select = useCallback(
     (job: Job) => {
       setSelectedId(job.id);
-      if (!wide) p.onOpenOverlay(job);
+      if (!wide) onOpenOverlay(job);
     },
-    [wide, p],
+    [wide, onOpenOverlay],
   );
   /**
    * J/K move focus between rows (design/components/Feed): after the selection changes and the row is
@@ -288,11 +290,11 @@ export function RadarPage(p: Props) {
       const row = rows.findIndex((r) => r.kind === "group" && r.group === g);
       if (row >= limit) setLimit(() => row + PAGE);
       setSelectedId(g.lead.id);
-      if (!wide && p.overlayOpen) p.onOpenOverlay(g.lead);
+      if (!wide && overlayOpen) onOpenOverlay(g.lead);
       // Focus moves once the new row is rendered and marked current (the effect below).
       focusPending.current = g.key;
     },
-    [navGroups, rows, index, limit, setLimit, wide, p],
+    [navGroups, rows, index, limit, setLimit, wide, overlayOpen, onOpenOverlay],
   );
 
   // ----- keyboard: j/k move, s/a/x status, Enter opens (phones), "/" search, 1-3 quick filters -----
@@ -373,21 +375,38 @@ export function RadarPage(p: Props) {
   const facet = (key: FacetKey) => counts?.[key] ?? [];
   const relax = useMemo(() => (groups.length === 0 ? suggestRelax(pool, listFilters, ctx) : []), [groups.length, pool, listFilters, ctx]);
 
+  // Rows and the details panel are memo components: their handlers stay the same function across renders.
+  const onCardSelect = useStableHandler(select);
+  const onCardStatus = useStableHandler(p.onStatus);
+  const registerRow = useCallback((key: string, el: HTMLLIElement | null) => {
+    if (el) rowRefs.current.set(key, el);
+    else rowRefs.current.delete(key);
+  }, []);
+  const onDetailUpdate = useStableHandler((patch: EntryPatch) => {
+    if (selected) p.onUpdate(selected, patch);
+  });
+  const onDetailHide = useStableHandler((h: boolean) => {
+    if (selected) hideCompany(selected.company, h);
+  });
+  const onDetailTrack = useStableHandler((on: boolean) => (selected && p.onTrack ? p.onTrack(selected, on) : Promise.resolve(null)));
+  const onDetailCheck = useStableHandler(() => (selected && p.onCheck ? p.onCheck(selected) : Promise.resolve(null)));
+  const onDetailApply = useStableHandler(p.onApply);
+  const onDetailOpenJob = useCallback((j: Job) => setSelectedId(j.id), []);
+  const onDetailPrev = useStableHandler(() => move(-1));
+  const onDetailNext = useStableHandler(() => move(1));
+
   /** One role's row, in the strip or the list: each role shows once, and J/K moves focus to it. */
   const card = (g: JobGroup) => (
     <JobCard
       key={g.key}
-      ref={(el) => {
-        if (el) rowRefs.current.set(g.key, el);
-        else rowRefs.current.delete(g.key);
-      }}
+      register={registerRow}
       group={g}
       entry={p.user[g.lead.id]}
       min={min}
       isNew={hasNewTag(g.lead, ctx)}
       selected={!!selectedGroup && g.key === selectedGroup.key && (wide || p.overlayOpen)}
-      onSelect={() => select(g.lead)}
-      onStatus={(st) => p.onStatus(g.lead, st)}
+      onSelect={onCardSelect}
+      onStatus={onCardStatus}
       yours={p.isYours(g.lead)}
       known={knownAt?.(g.lead)}
     />
@@ -416,15 +435,15 @@ export function RadarPage(p: Props) {
     moreFromCompany,
     yours: p.isYours(selected),
     indexGeneratedAt: p.indexGeneratedAt,
-    onTrack: p.onTrack && ((on: boolean) => p.onTrack!(selected, on)),
-    onCheck: p.onCheck && selected.estimated ? () => p.onCheck!(selected) : undefined,
+    onTrack: p.onTrack && onDetailTrack,
+    onCheck: p.onCheck && selected.estimated ? onDetailCheck : undefined,
     companyHidden: hidden.has(selected.company),
-    onUpdate: (patch: EntryPatch) => p.onUpdate(selected, patch),
-    onApply: p.onApply,
-    onHideCompany: (h: boolean) => hideCompany(selected.company, h),
-    onOpenJob: (j: Job) => setSelectedId(j.id),
-    onPrev: index > 0 ? () => move(-1) : undefined,
-    onNext: index < navGroups.length - 1 ? () => move(1) : undefined,
+    onUpdate: onDetailUpdate,
+    onApply: onDetailApply,
+    onHideCompany: onDetailHide,
+    onOpenJob: onDetailOpenJob,
+    onPrev: index > 0 ? onDetailPrev : undefined,
+    onNext: index < navGroups.length - 1 ? onDetailNext : undefined,
   };
 
   // Have the place or industry filters moved away from your profile?
@@ -739,7 +758,14 @@ export function RadarPage(p: Props) {
           </section>
           {wide && (
             <Card className="hidden overflow-hidden lg:block lg:h-full lg:min-h-0">
-              {detailProps ? <JobDetail {...detailProps} /> : <p className="p-6 type-small text-muted">Pick a job to see the details.</p>}
+              {/* A crash in the details keeps the list; picking another job starts it afresh. */}
+              {detailProps ? (
+                <ErrorBoundary key={selected?.id} where="this job">
+                  <JobDetail {...detailProps} />
+                </ErrorBoundary>
+              ) : (
+                <p className="p-6 type-small text-muted">Pick a job to see the details.</p>
+              )}
             </Card>
           )}
         </div>

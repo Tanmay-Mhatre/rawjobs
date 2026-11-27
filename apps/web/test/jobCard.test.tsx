@@ -1,6 +1,7 @@
 // @vitest-environment happy-dom
 import { cleanup, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import type { ComponentProps } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { JobCard } from "../src/components/radar/JobCard";
 import type { Job } from "../src/lib/data";
@@ -24,7 +25,7 @@ const job = (over: Partial<Job> = {}): Job =>
     ...over,
   });
 
-function renderRow(over: Partial<Parameters<typeof JobCard>[0]> = {}) {
+function renderRow(over: Partial<ComponentProps<typeof JobCard>> = {}) {
   const lead = job();
   const props = { group: { key: lead.group, lead, jobs: [lead] }, min: 65, isNew: true, selected: false, onSelect: vi.fn(), onStatus: vi.fn(), yours: true, ...over };
   return {
@@ -64,8 +65,17 @@ describe("feed row (design/components/Feed)", () => {
     expect(save.getAttribute("aria-pressed")).toBe("true");
     expect(save.querySelector(".rj-tip")?.textContent).toBe("SaveS");
     await userEvent.click(screen.getByRole("button", { name: "Not interested" }));
-    expect(props.onStatus).toHaveBeenCalledWith("dismissed");
+    // The row's lead job, so the list can pass one handler to every row.
+    expect(props.onStatus).toHaveBeenCalledWith(props.group.lead, "dismissed");
     expect(screen.getAllByRole("button")).toHaveLength(3); // the title, Save, Not interested
+  });
+
+  it("registers its element under the group key, and lets go of it when it unmounts", () => {
+    const register = vi.fn();
+    const { props, unmount } = renderRow({ register });
+    expect(register).toHaveBeenCalledExactlyOnceWith(props.group.key, expect.any(HTMLLIElement));
+    unmount();
+    expect(register).toHaveBeenLastCalledWith(props.group.key, null);
   });
 
   it("tags a job that may be stale once, with the reasons in its tooltip; a single repost stays Reposted", () => {
@@ -114,7 +124,7 @@ describe("feed row (design/components/Feed)", () => {
   it("the title is the button that opens the job", async () => {
     const { props } = renderRow();
     await userEvent.click(screen.getByRole("button", { name: "Head of Product, Exchange" }));
-    expect(props.onSelect).toHaveBeenCalledOnce();
+    expect(props.onSelect).toHaveBeenCalledExactlyOnceWith(props.group.lead);
   });
 });
 
