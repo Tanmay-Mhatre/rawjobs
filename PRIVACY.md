@@ -165,7 +165,16 @@ your own AI" only copies text for you to paste wherever you choose.
 
 ### No telemetry
 The app has no analytics, no crash reporting and no usage tracking. The web dashboard loads no
-outside scripts or fonts.
+outside scripts or fonts. Crashes are only written to `logs/crashes.json` on your computer.
+
+### Diagnostics file
+Settings → Data & privacy → Diagnostics (or `rawjobs doctor --zip`) saves a zip in your RawJobs
+folder's `logs/`. It holds RawJobs' own logs, its scheduled-run list and settings files, and a list of
+your data files by name and size. Your name, user and computer names, folders, tokens and keys, chat
+ids, emails, phone numbers, LinkedIn profiles, IP addresses, web addresses' queries and the companies
+in your config are taken out of it. It never contains your resume, profile, tracking, LinkedIn
+connections, config, jobs or job history. Nothing is uploaded: you decide whether to attach it to a
+GitHub issue.
 
 ## This website
 

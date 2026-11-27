@@ -228,6 +228,13 @@ console.log(JSON.stringify({ type: "done", scope: args[args.indexOf("--scope") +
     });
   }
 
+  it("saves a diagnostics file through rawjobs doctor --zip", async () => {
+    const { port, dataDir } = await start();
+    const r = await call(port, "POST", "/api/doctor");
+    expect(r.status).toBe(200);
+    expect(JSON.parse(r.text).args).toEqual(["doctor", "--json", "--zip", "--data", dataDir]);
+  });
+
   it("answers health with the version", async () => {
     const { port, home } = await start();
     const r = await call(port, "GET", "/api/health");
