@@ -1,7 +1,6 @@
 import { ArrowRight, Keyboard, RefreshCw, TriangleAlert, WifiOff, X } from "lucide-react";
-import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { failedHealth } from "@rawjobs/core/health";
-import { CompaniesTab } from "./components/CompaniesTab";
 import { Dialog } from "./components/Dialog";
 import { SetupBanner } from "./components/EmptyState";
 import { checklistItems, ConfigProblemCard, FailingBanner, FirstScanCard, NoMatches, SetupChecklist, SetupHero } from "./components/Guidance";
@@ -10,7 +9,6 @@ import { JobDrawer } from "./components/JobDrawer";
 import { type NotForMeApi, NotForMeProvider, useNotForMeApi } from "./components/NotForMe";
 import { type PeopleApi, PeopleProvider } from "./components/pipeline/PeopleContext";
 import { PipHost } from "./components/referral/PipHost";
-import { Pipeline } from "./components/Pipeline";
 import { FeedSkeleton } from "./components/radar/FeedSkeleton";
 import { RadarPage } from "./components/radar/RadarPage";
 import { NotifyBell, NotifyFailed, notifyLine } from "./components/NotifyWhenDone";
@@ -21,7 +19,6 @@ import { FeedStaleNotice } from "./components/FeedStaleNotice";
 import { ScheduledScanNotice } from "./components/ScheduledScanNotice";
 import { TelegramBanner } from "./components/TelegramBanner";
 import { ReminderNotice } from "./components/referral/ReminderNotice";
-import { Settings } from "./components/Settings";
 import { settingsHash } from "./components/settings/registry";
 import { ShortcutList } from "./components/ShortcutList";
 import { Toaster, toast } from "./components/Toast";
@@ -53,12 +50,26 @@ import { type CardJob, type LogInput, type LogResult, logPersonPatch } from "./l
 import { type JobLike, quickStatus, STATUS_LABEL, type Status, useUserState } from "./lib/userState";
 import wordmarkInk from "./design/logos/rawjobs-wordmark-ink.svg";
 import wordmarkPaper from "./design/logos/rawjobs-wordmark-paper.svg";
-import { Wizard } from "./setup/Wizard";
 import { TABS, type Tab, useHashRoute } from "./app/route";
 import { useCompanyActions } from "./app/useCompanyActions";
 import { useScanAnnouncement } from "./app/useScanAnnouncement";
 import { useScanNotify } from "./app/useScanNotify";
 import { DRAFT_KEY, useSetupDraft, WELCOME_SEEN_KEY } from "./app/useSetupDraft";
+
+// Pages other than the Radar load when first opened; pointing at or focusing their tab, or pressing "g",
+// starts the download early. The Radar is the landing page, so it stays in the first load.
+const loadPipeline = () => import("./components/Pipeline");
+const loadCompanies = () => import("./components/CompaniesTab");
+const loadSettings = () => import("./components/Settings");
+const Pipeline = lazy(() => loadPipeline().then((m) => ({ default: m.Pipeline })));
+const CompaniesTab = lazy(() => loadCompanies().then((m) => ({ default: m.CompaniesTab })));
+const Settings = lazy(() => loadSettings().then((m) => ({ default: m.Settings })));
+const Wizard = lazy(() => import("./setup/Wizard").then((m) => ({ default: m.Wizard })));
+const PAGE_LOADERS: Partial<Record<Tab, () => Promise<unknown>>> = { pipeline: loadPipeline, companies: loadCompanies, settings: loadSettings };
+/** Starts downloading a page's code. A failed download is retried when the page opens, which shows its error card. */
+function prefetchPage(tab: Tab) {
+  PAGE_LOADERS[tab]?.().catch(() => {});
+}
 
 const NO_JOBS: Job[] = [];
 
@@ -257,6 +268,9 @@ export function App() {
   useGoToKeys(
     (section) => go({ tab: section }),
     () => onPage && !document.querySelector("dialog[open]"),
+    () => {
+      for (const t of TABS) prefetchPage(t.id);
+    },
   );
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -415,39 +429,41 @@ export function App() {
             {(status === undefined && !setup.failed) || state.kind === "loading" ? (
               <FeedSkeleton />
             ) : inSetup ? (
-              <Wizard
-                step={wizardStep}
-                goStep={goStep}
-                draft={draft}
-                draftLoaded={draftLoaded}
-                update={update}
-                existing={personal}
-                configErrors={status?.valid === false ? status.errors : undefined}
-                startScan={startScan}
-                onSaved={async () => {
-                  await setup.refresh();
-                  save(DRAFT_KEY, null);
-                  save(WELCOME_SEEN_KEY, true);
-                }}
-                onFinish={() => {
-                  announceScan.current = true;
-                  go({ tab: "radar" });
-                }}
-                onExit={exitSetup}
-                progress={progress}
-                resumeText={resume.text}
-                saveResume={saveResume}
-                removeResume={removeResume}
-                onStart={() => {
-                  save(WELCOME_SEEN_KEY, true);
-                  goStep(!personal && progress.started ? progress.nextStep : STEP.resume);
-                }}
-                onStartOver={() => {
-                  save(WELCOME_SEEN_KEY, true);
-                  setDraft(emptyDraft());
-                  goStep(STEP.resume);
-                }}
-              />
+              <Suspense fallback={<FeedSkeleton />}>
+                <Wizard
+                  step={wizardStep}
+                  goStep={goStep}
+                  draft={draft}
+                  draftLoaded={draftLoaded}
+                  update={update}
+                  existing={personal}
+                  configErrors={status?.valid === false ? status.errors : undefined}
+                  startScan={startScan}
+                  onSaved={async () => {
+                    await setup.refresh();
+                    save(DRAFT_KEY, null);
+                    save(WELCOME_SEEN_KEY, true);
+                  }}
+                  onFinish={() => {
+                    announceScan.current = true;
+                    go({ tab: "radar" });
+                  }}
+                  onExit={exitSetup}
+                  progress={progress}
+                  resumeText={resume.text}
+                  saveResume={saveResume}
+                  removeResume={removeResume}
+                  onStart={() => {
+                    save(WELCOME_SEEN_KEY, true);
+                    goStep(!personal && progress.started ? progress.nextStep : STEP.resume);
+                  }}
+                  onStartOver={() => {
+                    save(WELCOME_SEEN_KEY, true);
+                    setDraft(emptyDraft());
+                    goStep(STEP.resume);
+                  }}
+                />
+              </Suspense>
             ) : (
               <div className={cx("flex flex-col gap-4", radarFits && "lg:min-h-0 lg:flex-1 lg:gap-3", boardFills && "flex-1")}>
                 {viewLabel && (
@@ -498,95 +514,98 @@ export function App() {
                     )}
                   </>
                 )}
-                {tab === "pipeline" && (
-                  <Pipeline
-                    user={user.state}
-                    jobsById={jobsById}
-                    onOpen={onOpen}
-                    onApply={onApply}
-                    minScore={meta?.profile.min_score}
-                    onPatch={(id, entry, patch) => user.update({ id, ...entry.snapshot, ...pick(jobsById.get(id)) }, patch)}
-                    weeklyPlan={prefs.prefs.weeklyPlan}
-                    onWeeklyPlan={prefs.setWeeklyPlan}
-                    onAdd={(j, status) => user.update({ id: `manual:${Date.now().toString(36)}`, ...j, location: "", score: 0 }, { status })}
-                    onSetup={notSetUp ? toSetup : undefined}
-                    goRadar={() => go({ tab: "radar" })}
-                  />
-                )}
-                {tab === "companies" && (
-                  <CompaniesTab
-                    configured={setupState === "configured" && personal}
-                    meta={meta}
-                    jobs={jobs}
-                    hiddenNames={prefs.prefs.hiddenCompanies}
-                    onUnhideName={(name) => prefs.setCompanyHidden(name, false)}
-                    draft={draft}
-                    loaded={draftLoaded}
-                    saved={saved}
-                    update={update}
-                    onSaved={async () => {
-                      await setup.refresh();
-                    }}
-                    onScan={() => {
-                      go({ tab: "radar" });
-                      requestScan();
-                    }}
-                    scanning={scanning}
-                    toSetup={toSetup}
-                  />
-                )}
-                {tab === "settings" && notSetUp && (
-                  <SetupBanner
-                    action={
-                      <Button variant="primary" size="sm" onClick={toSetup}>
-                        {progress.started ? "Continue setup" : "Start setup"} <ArrowRight className="size-3.5" />
-                      </Button>
-                    }
-                  >
-                    <b>You haven't finished setup.</b> <span className="text-muted">The guided setup is the quickest way, or fill in the sections below.</span>
-                  </SetupBanner>
-                )}
-                {tab === "settings" && setupState === "invalid" && <ConfigProblemCard errors={status?.errors} onFix={() => goStep(0)} />}
-                {tab === "settings" && (
-                  <Settings
-                    toCompanies={goCompanies}
-                    draft={draft}
-                    update={update}
-                    revert={() => setDraft(saved)}
-                    dirty={dirty}
-                    saved={saved}
-                    setupSaved={canSave}
-                    canScan={canRunLocally && setupState === "configured"}
-                    onSaved={async () => {
-                      await setup.refresh();
-                      save(DRAFT_KEY, null);
-                    }}
-                    onScan={() => {
-                      go({ tab: "radar" });
-                      requestScan();
-                    }}
-                    onCheckEvery={() => {
-                      go({ tab: "radar" });
-                      void startScan("all");
-                    }}
-                    scanning={scanning}
-                    user={user.state}
-                    prefs={prefs.prefs}
-                    onImport={(state, p) => {
-                      user.replaceAll(state);
-                      if (p) prefs.replacePrefs(p);
-                    }}
-                    onRemoveRule={(rule) => {
-                      prefs.setRule(rule, false);
-                      toast({ message: <>Showing {offerWhat({ kind: "rule", rule })} again.</>, actionLabel: "Undo", onAction: () => prefs.setRule(rule, true) });
-                    }}
-                    suggest={suggest}
-                    resumeText={resume.text}
-                    saveResume={saveResume}
-                    removeResume={removeResume}
-                    onStartOver={canRunLocally && personal ? startOver : undefined}
-                  />
-                )}
+                {/* The other pages load on first visit; the skeleton shows meanwhile. */}
+                <Suspense fallback={<FeedSkeleton />}>
+                  {tab === "pipeline" && (
+                    <Pipeline
+                      user={user.state}
+                      jobsById={jobsById}
+                      onOpen={onOpen}
+                      onApply={onApply}
+                      minScore={meta?.profile.min_score}
+                      onPatch={(id, entry, patch) => user.update({ id, ...entry.snapshot, ...pick(jobsById.get(id)) }, patch)}
+                      weeklyPlan={prefs.prefs.weeklyPlan}
+                      onWeeklyPlan={prefs.setWeeklyPlan}
+                      onAdd={(j, status) => user.update({ id: `manual:${Date.now().toString(36)}`, ...j, location: "", score: 0 }, { status })}
+                      onSetup={notSetUp ? toSetup : undefined}
+                      goRadar={() => go({ tab: "radar" })}
+                    />
+                  )}
+                  {tab === "companies" && (
+                    <CompaniesTab
+                      configured={setupState === "configured" && personal}
+                      meta={meta}
+                      jobs={jobs}
+                      hiddenNames={prefs.prefs.hiddenCompanies}
+                      onUnhideName={(name) => prefs.setCompanyHidden(name, false)}
+                      draft={draft}
+                      loaded={draftLoaded}
+                      saved={saved}
+                      update={update}
+                      onSaved={async () => {
+                        await setup.refresh();
+                      }}
+                      onScan={() => {
+                        go({ tab: "radar" });
+                        requestScan();
+                      }}
+                      scanning={scanning}
+                      toSetup={toSetup}
+                    />
+                  )}
+                  {tab === "settings" && notSetUp && (
+                    <SetupBanner
+                      action={
+                        <Button variant="primary" size="sm" onClick={toSetup}>
+                          {progress.started ? "Continue setup" : "Start setup"} <ArrowRight className="size-3.5" />
+                        </Button>
+                      }
+                    >
+                      <b>You haven't finished setup.</b> <span className="text-muted">The guided setup is the quickest way, or fill in the sections below.</span>
+                    </SetupBanner>
+                  )}
+                  {tab === "settings" && setupState === "invalid" && <ConfigProblemCard errors={status?.errors} onFix={() => goStep(0)} />}
+                  {tab === "settings" && (
+                    <Settings
+                      toCompanies={goCompanies}
+                      draft={draft}
+                      update={update}
+                      revert={() => setDraft(saved)}
+                      dirty={dirty}
+                      saved={saved}
+                      setupSaved={canSave}
+                      canScan={canRunLocally && setupState === "configured"}
+                      onSaved={async () => {
+                        await setup.refresh();
+                        save(DRAFT_KEY, null);
+                      }}
+                      onScan={() => {
+                        go({ tab: "radar" });
+                        requestScan();
+                      }}
+                      onCheckEvery={() => {
+                        go({ tab: "radar" });
+                        void startScan("all");
+                      }}
+                      scanning={scanning}
+                      user={user.state}
+                      prefs={prefs.prefs}
+                      onImport={(state, p) => {
+                        user.replaceAll(state);
+                        if (p) prefs.replacePrefs(p);
+                      }}
+                      onRemoveRule={(rule) => {
+                        prefs.setRule(rule, false);
+                        toast({ message: <>Showing {offerWhat({ kind: "rule", rule })} again.</>, actionLabel: "Undo", onAction: () => prefs.setRule(rule, true) });
+                      }}
+                      suggest={suggest}
+                      resumeText={resume.text}
+                      saveResume={saveResume}
+                      removeResume={removeResume}
+                      onStartOver={canRunLocally && personal ? startOver : undefined}
+                    />
+                  )}
+                </Suspense>
               </div>
             )}
           </ErrorBoundary>
@@ -599,6 +618,8 @@ export function App() {
                 key={t.id}
                 type="button"
                 onClick={() => go({ tab: t.id })}
+                onPointerEnter={() => prefetchPage(t.id)}
+                onFocus={() => prefetchPage(t.id)}
                 className={cx(
                   "relative flex min-h-14 flex-col items-center justify-center gap-0.5 py-1.5 type-label",
                   // Selected: ink, with the same 2px ink indicator the tabs use (never the accent).
@@ -633,16 +654,20 @@ export function App() {
           />
         )}
 
-        <ApplyPrompt
-          job={applying}
-          onAnswer={(applied) => {
-            // Never moves a job back: one already Interviewing stays there.
-            if (applied && applying && quickStatus(user.statusOf(applying.id), "applied") === "applied") user.update(applying, { status: "applied" });
-            setApplying(null);
-          }}
-        />
+        <ErrorBoundary where="the apply question">
+          <ApplyPrompt
+            job={applying}
+            onAnswer={(applied) => {
+              // Never moves a job back: one already Interviewing stays there.
+              if (applied && applying && quickStatus(user.statusOf(applying.id), "applied") === "applied") user.update(applying, { status: "applied" });
+              setApplying(null);
+            }}
+          />
+        </ErrorBoundary>
 
-        <ShortcutHelp open={showKeys} onClose={() => setShowKeys(false)} canScan={canRunLocally && setupState === "configured"} />
+        <ErrorBoundary where="the shortcuts list">
+          <ShortcutHelp open={showKeys} onClose={() => setShowKeys(false)} canScan={canRunLocally && setupState === "configured"} />
+        </ErrorBoundary>
         <Toaster />
       </div>
     </Providers>
@@ -656,6 +681,8 @@ function TabLink({ tab, active, onClick }: { tab: (typeof TABS)[number]; active:
     <button
       type="button"
       onClick={onClick}
+      onPointerEnter={() => prefetchPage(tab.id)}
+      onFocus={() => prefetchPage(tab.id)}
       aria-current={active ? "page" : undefined}
       className={cx("inline-flex h-8 items-center gap-1.5 rounded-md px-2.5 type-label transition-colors", active ? "bg-inset text-ink" : "text-muted hover:text-ink")}
     >
