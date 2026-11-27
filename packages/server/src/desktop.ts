@@ -134,9 +134,16 @@ function powershellAsync(script: string): Promise<PowerShellResult> {
 export function watchEventLoop(log: (line: string) => void = console.log): () => void {
   const h = monitorEventLoopDelay({ resolution: 50 });
   h.enable();
+  // A computer that slept looks like a server stuck for as long as it slept. Told apart by the
+  // processor time used meanwhile: a stuck server used it, a sleeping computer didn't.
+  let last = { at: Date.now(), cpu: process.cpuUsage() };
   const timer = setInterval(() => {
     const maxMs = h.max / 1e6;
-    if (maxMs > 5000) log(`The server was busy for ${(maxMs / 1000).toFixed(1)} s (memory in use: ${Math.round(process.memoryUsage().heapUsed / 1e6)} MB).`);
+    const at = Date.now();
+    const cpu = process.cpuUsage(last.cpu);
+    const asleep = at - last.at > 60_000 && (cpu.user + cpu.system) / 1000 < 0.2 * (at - last.at);
+    last = { at, cpu: process.cpuUsage() };
+    if (maxMs > 5000 && !asleep) log(`The server was busy for ${(maxMs / 1000).toFixed(1)} s (memory in use: ${Math.round(process.memoryUsage().heapUsed / 1e6)} MB).`);
     h.reset();
   }, 30_000);
   timer.unref();

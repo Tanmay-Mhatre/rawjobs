@@ -11,6 +11,13 @@ const NOTIFIED: Record<string, string> = { sent: "sent to Telegram", "nothing-ne
 
 const SKIPPED = "Another scan was already running.";
 
+/** A stopped run's note by why it stopped: the next scan carries on either way. */
+const STOPPED: Record<string, string> = {
+  deadline: "stopped at its time limit, the next scan carries on",
+  scheduler: "stopped when the computer's scheduler ended it, the next scan carries on",
+  stop: "stopped early",
+};
+
 /** Why a run failed, in plain words, from its raw error. The raw error stays under "Technical details". */
 const REASONS: [RegExp, string][] = [
   [
@@ -18,6 +25,7 @@ const REASONS: [RegExp, string][] = [
     "Another program, often antivirus or a backup app, was using RawJobs' files when the scan tried to save. Your earlier results are safe. It tries again at the next scheduled time, or press Scan now.",
   ],
   [/\bENOSPC\b/, "Your disk is full. Free up some space, then press Scan now."],
+  [/^Ran far past its time limit/, "It ran far past its time limit, so RawJobs stopped it. What it checked is saved; the next scan carries on from there."],
   [/^Stopped before the end/, "It ran past its time limit, or the computer went to sleep or shut down. What it checked is saved; the next scan carries on from there."],
   [/\b(ENOTFOUND|ETIMEDOUT|ECONNRESET|EAI_AGAIN|ENETUNREACH)\b|fetch failed/, "No internet connection during the scan. It tries again at the next scheduled time."],
 ];
@@ -35,7 +43,7 @@ export function runLine(r: ScheduledRun): string {
   }
   const parts = [`${r.matches ?? 0} matches, ${r.newMatches ?? 0} new`];
   if (r.notified) parts.push(NOTIFIED[r.notified] ?? r.notified);
-  if (r.stopped) parts.push("stopped early");
+  if (r.stopped) parts.push(STOPPED[r.stopReason ?? "stop"] ?? "stopped early");
   if (r.catchUp) parts.push("caught up on a missed time");
   return parts.join(" · ");
 }

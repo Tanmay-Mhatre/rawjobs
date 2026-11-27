@@ -101,6 +101,11 @@ async function main(argv: string[]): Promise<number> {
   }
 }
 
+// Output nobody can read any more (a scheduled scan whose console wrapper the scheduler ended, or a
+// server that went away) is dropped: without this, the next write's EPIPE would end the process
+// wherever it was, a save included. A scan stops through its own checks instead (stopSignal).
+for (const stream of [process.stdout, process.stderr]) stream.on("error", () => {});
+
 main(process.argv.slice(2)).then(
   (code) => process.exit(code),
   (err) => {

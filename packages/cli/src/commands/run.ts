@@ -1,4 +1,4 @@
-import { existsSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, rmSync, writeFileSync, writeSync } from "node:fs";
 import { constants, setPriority } from "node:os";
 import { dirname, resolve } from "node:path";
 import { parseArgs } from "node:util";
@@ -37,6 +37,7 @@ import {
   type MergeResult,
   type RunResult,
   type ScheduledRun,
+  type StopReason,
   resumable,
   SCAN_SCOPES,
   type ScanScope,
@@ -68,6 +69,10 @@ export type RunValues = {
   "no-background"?: boolean;
   /** Only the background check, carrying on a paused one (the dashboard's Resume now). */
   "background-only"?: boolean;
+  /** Stop (and save) after this many minutes of wall-clock time, or at this ISO time. */
+  deadline?: string;
+  /** Run by the computer's scheduler. */
+  scheduled?: boolean;
 };
 
 export const parseScope = (v: string | undefined): ScanScope => {
@@ -75,19 +80,74 @@ export const parseScope = (v: string | undefined): ScanScope => {
   throw new Error(`--scope must be "mine" (your companies, past matches and the job feed's picks), "yours" (only your companies) or "all" (every company in the directory), not "${v}".`);
 };
 
-/** Stop a scan from outside: Ctrl+C here, or the dashboard's Stop button (it creates this file). */
+/** The dashboard's Stop button creates this file (as does the server, for a scan far past its time limit). */
 export const stopFile = (dataDir: string) => resolve(dataDir, "scan-stop");
 /** "Tell me on Telegram when this scan is done": the dashboard creates this file during a scan. */
 export const notifyFile = (dataDir: string) => resolve(dataDir, "scan-notify");
-export function stopSignal(dataDir: string): () => boolean {
+/** When this process started: a deadline counts from here, so the directory sync is inside it. */
+const STARTED_AT = Date.now();
+
+/** `--deadline`: minutes from the start, or an ISO time. Undefined when not given. */
+export function parseDeadline(v: string | undefined, startedAt = STARTED_AT): number | undefined {
+  if (v === undefined) return undefined;
+  const at = /^\d+(\.\d+)?$/.test(v) ? startedAt + Number(v) * 60_000 : Date.parse(v);
+  if (!Number.isFinite(at) || Number(v) === 0) throw new Error(`--deadline must be a number of minutes or a time like 2026-11-27T06:00:00Z, not "${v}".`);
+  return at;
+}
+
+/** Whether the scan should stop now, and (once it should) why. */
+export type StopCheck = (() => boolean) & { reason: () => StopReason | undefined };
+
+/** How often a scheduled scan on Windows checks its scheduler's console wrapper is still there. */
+const CONSOLE_CHECK_MS = 15_000;
+
+/**
+ * Whether this process's console still answers: an empty write to stderr. Once the console's host
+ * (conhost) is gone the write fails with EPIPE; it writes nothing, so nothing shows or is logged.
+ */
+function consoleAnswers(): boolean {
+  try {
+    writeSync(2, "");
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Stop a scan from outside: Ctrl+C or a stop signal here, the dashboard's Stop button (it creates
+ * the stop file), its deadline passing (wall-clock time, so time asleep counts), or, with
+ * `watchConsole` (a scheduled scan on Windows), its scheduler ending the console it runs in: Task
+ * Scheduler's time limit ends `conhost --headless` (and nothing it started), so without this the
+ * scan would carry on, holding the scan lock, for as long as it takes.
+ */
+export function stopSignal(dataDir: string, o: { deadlineAt?: number; watchConsole?: boolean; now?: () => number } = {}): StopCheck {
   rmSync(stopFile(dataDir), { force: true });
   rmSync(notifyFile(dataDir), { force: true });
-  let interrupted = false;
-  process.once("SIGINT", () => {
-    interrupted = true;
-    console.error("\nStopping… (progress is saved; run again to resume)");
-  });
-  return () => interrupted || existsSync(stopFile(dataDir));
+  const now = o.now ?? Date.now;
+  let reason: StopReason | undefined;
+  const stopWith = (r: StopReason, message: string) => {
+    if (reason) return;
+    reason = r;
+    console.error(`\n${message} (progress is saved; the next scan carries on)`);
+  };
+  for (const signal of ["SIGINT", "SIGTERM", ...(process.platform === "win32" ? (["SIGBREAK"] as const) : [])] as const) process.once(signal, () => stopWith("stop", "Stopping…"));
+  // Only a console that answers now can be lost later (one started without a console never is).
+  if (o.watchConsole && consoleAnswers()) {
+    const timer = setInterval(() => {
+      if (!consoleAnswers()) {
+        stopWith("scheduler", "The computer's scheduler ended this scan's task: stopping.");
+        clearInterval(timer);
+      }
+    }, CONSOLE_CHECK_MS);
+    timer.unref();
+  }
+  const check = () => {
+    if (!reason && o.deadlineAt !== undefined && now() >= o.deadlineAt) stopWith("deadline", "This scan reached its time limit: stopping.");
+    if (!reason && existsSync(stopFile(dataDir))) reason = "stop";
+    return reason !== undefined;
+  };
+  return Object.assign(check, { reason: () => reason });
 }
 
 /**
@@ -131,7 +191,7 @@ export function sessionOptions(values: RunValues, dataDir: string, scope: ScanSc
     dryRun: values["dry-run"],
     resume: !values.fresh,
     feed: !values.full,
-    stopped: stopSignal(dataDir),
+    stopped: stopSignal(dataDir, { deadlineAt: parseDeadline(values.deadline), watchConsole: !!values.scheduled && process.platform === "win32" }),
   };
 }
 
@@ -191,6 +251,8 @@ export async function cmdRun(args: string[]): Promise<number> {
       "no-background": { type: "boolean", default: false },
       /** Only the background check, carrying on a paused one (with --progress ndjson). */
       "background-only": { type: "boolean", default: false },
+      /** Stop (progress saved) after this many minutes, or at this ISO time; the scheduler passes one. */
+      deadline: { type: "string" },
     },
   });
   if (values.plan) return printPlan(values);
@@ -343,6 +405,7 @@ export async function cmdRun(args: string[]): Promise<number> {
         live({ type: "notified", result: await notifyFinished(availableJobs(merged.jobs).length, stopped, scope) });
       }
       let newMatches = fresh;
+      let bgStopped = false;
       if (wantsBackground(config, values, scope, { stopped, fallback })) {
         live({ type: "background" });
         const { onCompanyResult: _, ...bgHooks } = progress.hooks("background");
@@ -351,12 +414,14 @@ export async function cmdRun(args: string[]): Promise<number> {
         progress.doneEvent(bg, "background");
         const found = bg.result.jobs.filter((j) => !j.why.gate && bg.merged.newIds.has(j.id)).length;
         newMatches += found;
+        bgStopped = bg.stopped;
         console.log(
           `\nBackground check: ${bg.checks.length.toLocaleString()} more companies, ${found} new match${found === 1 ? "" : "es"}${bg.stopped ? " (stopped; the next one carries on where it stopped)" : ""}.`,
         );
         if (values.notify && found) await notifyScan(newOnly(config), dataDir, !!bg.alertQueued);
       }
-      log({ ok: true, matches: matches.length, newMatches, notified, stopped });
+      const stopReason = session.stopped.reason();
+      log({ ok: true, matches: matches.length, newMatches, notified, stopped: stopped || bgStopped, ...(stopReason ? { stopReason } : {}) });
       return 0;
     });
   } catch (err) {
