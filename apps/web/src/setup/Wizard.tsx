@@ -3,8 +3,9 @@ import { configToYaml } from "@rawjobs/core/yaml-writer";
 import { ArrowLeft, ArrowRight, ChevronDown, CircleAlert, Download, FileText } from "lucide-react";
 import { useEffect, useMemo, useRef, useState, type ReactNode, type RefObject } from "react";
 import { Button, Card, cx } from "../components/ui";
+import { copyDetails } from "../lib/copyDetails";
 import { canRunLocally } from "../lib/data";
-import { draftToConfig, officePlaces, saveBlockers, saveConfig, STEP, STEP_COUNT, stepBlocker, STEPS, type Draft, type SetupProgress } from "../lib/setup";
+import { causeOf, draftToConfig, officePlaces, saveBlockers, saveConfig, STEP, STEP_COUNT, stepBlocker, STEPS, type Draft, type SaveCause, type SetupProgress } from "../lib/setup";
 import { buildSuggestions } from "../lib/suggest";
 import { ResumeStep } from "./ResumeStep";
 import { HeadingLevel, IndustriesStep, industryLabel, LocationsStep, placeLabel, RolesStep, THRESHOLDS, ThresholdPicker } from "./steps";
@@ -39,6 +40,13 @@ const COPY: Record<number, { title: string; intro: string }> = {
   [STEP.locations]: { title: "Where do you want to work?", intro: "Jobs in other places are hidden." },
   [STEP.industries]: { title: "Which industries interest you?", intro: "Optional. Companies in these industries are scanned and suggested." },
   [STEP.review]: { title: "Review and save", intro: "Save to start finding your jobs." },
+};
+
+/** The Wizard's save error, by cause: only the server's own check points at the steps. */
+const SAVE_ERROR: Record<SaveCause, string> = {
+  invalid: "Couldn't save your setup. Check the steps above, then try again.",
+  offline: "Couldn't reach RawJobs to save your setup. Your answers are kept in this browser. Check that RawJobs is running, then try again.",
+  server: "RawJobs couldn't save your setup. Your answers are kept in this browser. Try again, or copy the details if it keeps happening.",
 };
 
 export function Wizard(props: Props) {
@@ -244,7 +252,7 @@ function some(names: string[], max = 4): ReactNode {
   );
 }
 
-function Review({
+export function Review({
   draft,
   update,
   goStep,
@@ -264,7 +272,8 @@ function Review({
   footer: (primary: ReactNode) => ReactNode;
 }) {
   const [saving, setSaving] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  /** The last save's failure: why (it picks the copy) and the raw text, for Technical details. */
+  const [error, setError] = useState<{ cause: SaveCause; text: string } | null>(null);
   const blockers = saveBlockers(draft);
   const places = groupPlaces(officePlaces(draft)).map((g) => placeLabel(g.name));
   const remote = groupPlaces(draft.remoteOk).map((g) => (g.name === "remote" ? "anywhere" : placeLabel(g.name)));
@@ -278,7 +287,7 @@ function Review({
     try {
       const res = await saveConfig(draftToConfig(draft));
       if (!res.ok) {
-        setError(res.errors);
+        setError({ cause: causeOf(res), text: res.errors });
         setSaving(false);
         return;
       }
@@ -287,7 +296,8 @@ function Review({
       void startScan();
       onFinish();
     } catch (err) {
-      setError((err as Error).message);
+      // saveConfig never throws, so this is a bug past the save (onSaved): treated like a server failure.
+      setError({ cause: "server", text: (err as Error).message });
       setSaving(false);
     }
   };
@@ -400,10 +410,22 @@ function Review({
 
       {error && (
         <div role="alert" className="rounded-md bg-danger-subtle/50 p-3 type-small text-danger-text">
-          <p className="font-medium">Couldn't save your setup. Check the steps above, then try again.</p>
+          <p className="font-medium">{SAVE_ERROR[error.cause]}</p>
+          {error.cause !== "invalid" && (
+            <div className="mt-2 flex flex-wrap gap-2">
+              <Button size="sm" onClick={() => void saveAndScan()} disabled={saving}>
+                Try again
+              </Button>
+              {error.cause === "server" && (
+                <Button size="sm" variant="ghost" onClick={() => void copyDetails({ action: "Save your setup", cause: error.cause, errors: error.text })}>
+                  Copy details
+                </Button>
+              )}
+            </div>
+          )}
           <details className="mt-1">
             <summary className="cursor-pointer type-meta font-medium">Technical details</summary>
-            <pre className="mt-1 whitespace-pre-wrap font-mono type-meta">{error}</pre>
+            <pre className="mt-1 whitespace-pre-wrap font-mono type-meta">{error.text}</pre>
           </details>
         </div>
       )}

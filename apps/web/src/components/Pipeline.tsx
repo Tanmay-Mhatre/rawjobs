@@ -11,6 +11,7 @@ import {
   CLOSED_AS,
   CLOSED_AS_COMMON,
   type ClosedAs,
+  dayAfter,
   type Entry,
   type EntryPatch,
   PIPELINE,
@@ -19,6 +20,7 @@ import {
   type Status,
   stageSince,
   hadOffer,
+  removedEntries,
   statusLabel,
   today,
   type UserState,
@@ -28,9 +30,11 @@ import { EmptyState } from "./EmptyState";
 import { TaskActions } from "./pipeline/ActivityTab";
 import { CHANNEL_ICON, Composer } from "./pipeline/Composer";
 import { taskPrefill } from "./pipeline/detail";
+import { type RemovedItem, RemovedDrawer } from "./pipeline/RemovedDrawer";
 import { PipelineInsights } from "./PipelineInsights";
 import { buttonClass, Chip, ChipGroup, Kbd, Menu } from "./primitives";
 import { useHourlyNow } from "./radar/hooks";
+import { toast } from "./Toast";
 import { AddJobDialog, CompareOffers, nextInterview, TrackedJobDialog } from "./TrackedJob";
 import { Button, Card, cx, IconButton } from "./ui";
 
@@ -45,6 +49,8 @@ type Props = {
   minScore?: number;
   /** Change one card: a move (status undefined takes it off the board; its note, if any, stays), a follow-up date… */
   onPatch: (id: string, entry: Entry, patch: EntryPatch) => void;
+  /** Write one job's entry back exactly as it was (Undo), or null to delete it for good. */
+  onRestore: (id: string, entry: Entry | null) => void;
   /** Track a job RawJobs didn't find. */
   onAdd: (job: { title: string; company: string; url: string }, status: Status) => void;
   weeklyPlan?: WeeklyPlan;
@@ -138,7 +144,7 @@ export function closedHint(items: Item[]): string {
   return [...counts].map(([label, n]) => `${n} ${label}`).join(", ");
 }
 
-export function Pipeline({ user, jobsById, onOpen, onApply, minScore, onPatch, onAdd, weeklyPlan, onWeeklyPlan, onSetup, goRadar, now: fixedNow }: Props) {
+export function Pipeline({ user, jobsById, onOpen, onApply, minScore, onPatch, onRestore, onAdd, weeklyPlan, onWeeklyPlan, onSetup, goRadar, now: fixedNow }: Props) {
   const hourly = useHourlyNow();
   const nowMs = fixedNow?.getTime() ?? hourly;
   const now = useMemo(() => new Date(nowMs), [nowMs]);
@@ -158,9 +164,12 @@ export function Pipeline({ user, jobsById, onOpen, onApply, minScore, onPatch, o
     .filter(([, e]) => e.offer && e.status !== "dismissed")
     .map(([id, entry]) => ({ id, entry }));
   const addDialog = <AddJobDialog open={adding} onClose={() => setAdding(false)} onAdd={onAdd} />;
-  /** Every move goes through here: Closed asks how it ended first. */
+  const [showRemoved, setShowRemoved] = useState(false);
+  const removed = useMemo(() => removedEntries(user), [user]);
+  /** Every move goes through here: Closed asks how it ended first, and no stage takes it off the board. */
   const onMove = (id: string, entry: Entry, status: Status | undefined) => {
-    if (status === "rejected" && entry.status !== "rejected") setClosing({ id, entry });
+    if (status === undefined) removeFromPipeline(id, entry);
+    else if (status === "rejected" && entry.status !== "rejected") setClosing({ id, entry });
     else onPatch(id, entry, { status });
   };
   const [dragOver, setDragOver] = useState<PipelineStatus | null>(null);
@@ -168,22 +177,78 @@ export function Pipeline({ user, jobsById, onOpen, onApply, minScore, onPatch, o
   const [mobileCol, setMobileCol] = useState<PipelineStatus | null>(null);
   /** What the last keyboard move or log did, for screen readers (design/components/Pipeline: a polite live region). */
   const [announce, setAnnounce] = useState("");
-  /** The card just moved with [ or ]: it re-renders in its new column, then gets focus back. */
+  /**
+   * The card just moved with [ or ]: it re-renders in its new column, then gets focus back. After a
+   * remove it's the next card instead ("#<id>": its column's heading, or the Removed link when the board is empty).
+   */
   const refocus = useRef<string | null>(null);
   const boardRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
     const id = refocus.current;
     if (!id) return;
     refocus.current = null;
+    if (id.startsWith("#")) return void (document.getElementById(id.slice(1)) ?? document.getElementById("pipeline-removed-link"))?.focus();
     const card = [...(boardRef.current?.querySelectorAll<HTMLElement>("[data-card-id]") ?? [])].find((el) => el.dataset.cardId === id);
     card?.querySelector<HTMLElement>("[data-card-title]")?.focus();
   });
+  /**
+   * Take a job off the board (the card's menu or the Stage select in its dialog). Its history stays,
+   * so Undo puts it back exactly as it was, and it's listed under Removed. `fromDialog` leaves focus there.
+   */
+  const removeFromPipeline = (id: string, entry: Entry, fromDialog = false) => {
+    if (!fromDialog) {
+      const card = [...(boardRef.current?.querySelectorAll<HTMLElement>("[data-card-id]") ?? [])].find((el) => el.dataset.cardId === id);
+      const next = (card?.nextElementSibling ?? card?.previousElementSibling) as HTMLElement | null;
+      refocus.current = next?.dataset.cardId ?? `#col-${entry.status}`;
+    }
+    onPatch(id, entry, { status: undefined });
+    const stage = entry.status as PipelineStatus;
+    toast({
+      message: (
+        <>
+          Removed <b>{entry.snapshot.title}</b> from the Pipeline
+        </>
+      ),
+      actionLabel: "Undo",
+      onAction: () => {
+        onRestore(id, entry);
+        if (!fromDialog) refocus.current = id;
+        setMobileCol(stage);
+        setAnnounce(`Back on the Pipeline in ${STATUS_LABEL[stage]}.`);
+      },
+    });
+  };
+  /** Put back from Removed: its last stage, dated when it got there, so days in the stage stay true. */
+  const putBack = ({ id, entry, stage }: RemovedItem) => {
+    const at = entry.history?.findLast((h) => h.status === stage)?.at;
+    onPatch(id, entry, { status: stage, ...(at ? { since: dayAfter(at, 0) } : {}) });
+    setMobileCol(stage);
+    toast({ message: `Put ${entry.snapshot.title} back in ${STATUS_LABEL[stage]}` });
+  };
+  const removedLink = removed.length > 0 && (
+    <button type="button" id="pipeline-removed-link" className="type-small font-medium text-muted underline hover:text-ink" onClick={() => setShowRemoved(true)}>
+      Removed ({removed.length})
+    </button>
+  );
+  const removedDrawer = (
+    <RemovedDrawer
+      open={showRemoved}
+      items={removed}
+      onClose={() => setShowRemoved(false)}
+      onPutBack={putBack}
+      onDelete={({ id, entry }) => {
+        onRestore(id, null);
+        toast({ message: `Deleted ${entry.snapshot.title}` });
+      }}
+    />
+  );
   const entries = Object.entries(user).filter(([, e]) => e.status && e.status !== "dismissed");
 
   if (entries.length === 0) {
     return (
       <>
         {addDialog}
+        {removedDrawer}
         <EmptyState
           title="Track your applications here"
           actions={
@@ -210,6 +275,7 @@ export function Pipeline({ user, jobsById, onOpen, onApply, minScore, onPatch, o
             </>
           )}
         </EmptyState>
+        {removedLink && <div className="mt-3 flex justify-center">{removedLink}</div>}
       </>
     );
   }
@@ -262,6 +328,7 @@ export function Pipeline({ user, jobsById, onOpen, onApply, minScore, onPatch, o
     // Grows to the bottom of the page, and the columns with it.
     <div ref={boardRef} className="flex flex-1 flex-col pb-2">
       {addDialog}
+      {removedDrawer}
       <TrackedJobDialog
         id={editing}
         entry={editing ? user[editing] : undefined}
@@ -275,6 +342,7 @@ export function Pipeline({ user, jobsById, onOpen, onApply, minScore, onPatch, o
         onClose={() => setEditing(null)}
         // A new title, company or link goes in through the entry's snapshot, which the patch is applied to.
         onUpdate={(patch, job) => editing && user[editing] && onPatch(editing, job ? { ...user[editing], snapshot: { ...user[editing].snapshot, ...job } } : user[editing], patch)}
+        onRemove={() => editing && user[editing] && removeFromPipeline(editing, user[editing], true)}
       />
       {comparing && <CompareOffers offers={offers} onClose={() => setComparing(false)} />}
       <CloseDialog
@@ -371,7 +439,7 @@ export function Pipeline({ user, jobsById, onOpen, onApply, minScore, onPatch, o
                   dragOver === col ? "border-ink bg-active" : "border-line",
                 )}
               >
-                <h2 id={`col-${col}`} className="flex items-center justify-between px-1.5 py-1 type-small font-semibold">
+                <h2 id={`col-${col}`} tabIndex={-1} className="flex items-center justify-between px-1.5 py-1 type-small font-semibold">
                   {STATUS_LABEL[col]} <span className="tabular type-meta font-medium text-muted">{items.length}</span>
                 </h2>
                 {closed && items.length > 0 && <p className="px-1.5 type-meta text-muted">{closedHint(items)}</p>}
@@ -400,6 +468,7 @@ export function Pipeline({ user, jobsById, onOpen, onApply, minScore, onPatch, o
           })}
         </div>
       </div>
+      {removedLink && <div className="mt-3 flex justify-end">{removedLink}</div>}
     </div>
   );
 }
@@ -511,7 +580,7 @@ function BoardCard({
             items={[
               ...PIPELINE.filter((p) => p !== e.status).map((p) => ({ id: p, label: STATUS_LABEL[p], onSelect: () => onMove(p) })),
               { separator: true as const, id: "sep" },
-              { id: "remove", label: "Remove from the board", danger: true, onSelect: () => onMove(undefined) },
+              { id: "remove", label: "Remove from Pipeline", danger: true, onSelect: () => onMove(undefined) },
             ]}
           />
         </span>

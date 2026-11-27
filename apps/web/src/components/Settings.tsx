@@ -263,7 +263,14 @@ export function Settings({
     setSaving(true);
     try {
       const res = await saveConfig(draftToConfig(draft));
-      if (!res.ok) return setStatus({ tone: "bad", text: "Couldn't save your settings. Check the sections above, then try again.", detail: res.errors, retry: true });
+      if (!res.ok) {
+        // Only the server's own check points at the sections; offline (saveConfig never throws) keeps its old copy.
+        const text =
+          res.cause === "offline"
+            ? "Couldn't save your settings. Make sure RawJobs is still running on this computer, then try again."
+            : "Couldn't save your settings. Check the sections above, then try again.";
+        return setStatus({ tone: "bad", text, detail: res.errors, retry: true });
+      }
       await onSaved();
       setStatus({ tone: "ok", text: thenScan ? "Saved. Scanning with your new settings…" : "Saved. Changes apply from the next scan." });
       if (thenScan) onScan();

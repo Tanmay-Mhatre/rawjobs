@@ -91,6 +91,8 @@ type Screen = {
   viewportOnly?: boolean;
   /** What GET /api/health answers, given the ms since the page first asked; without it, health isn't answered. */
   health?: (ms: number) => Record<string, unknown>;
+  /** API answers on top of the scenario's: return undefined to fall through. */
+  mock?: (path: string, method: string) => unknown;
   /** A scan's progress lines, streamed by POST /api/run one by one; the stream stays open unless it ends with { type: "__close" }. */
   scan?: Record<string, unknown>[];
 };
@@ -154,6 +156,42 @@ function scanScript(events: Record<string, unknown>[]) {
 }
 
 const strong = demo.STRONG_JOB.title;
+
+/** On laptops the notices never squeeze the jobs: the feed keeps at least 60% of the window's height. */
+async function feedKeepsRoom(page: Page) {
+  if ((page.viewportSize()?.width ?? 0) < 1024) return;
+  const share = await page.evaluate<number>(`document.querySelector('section[aria-label="Jobs for you"]').getBoundingClientRect().height / innerHeight`);
+  if (share < 0.6) throw new Error(`the feed is ${Math.round(share * 100)}% of the window's height (under 60%)`);
+}
+
+/** Many notices at once: a scheduled scan that didn't finish, a Telegram message that failed, the LinkedIn reminder, the setup checklist (and failing companies on phones). */
+const MANY_NOTICES: Pick<Screen, "scenario" | "hash" | "ready" | "mock" | "scan" | "health"> = {
+  scenario: "demo",
+  health: () => ({ ok: true, background: false, dataVersion: demo.META.generatedAt }),
+  hash: "#radar",
+  ready: strong,
+  mock: (path, m) => {
+    if (path === "/api/schedule" && m === "GET") {
+      const [last, ...rest] = demo.SCHEDULE_STATUS.runs;
+      const failed = { ...last!, ok: false, matches: 0, newMatches: 0, notified: undefined, error: "timed out after 45 min" };
+      return { ...demo.SCHEDULE_STATUS, lastRun: failed, runs: [failed, ...rest] };
+    }
+    if (path === "/api/network" && m === "GET") return { status: { connected: false, watch: null }, me: null, watchable: true, reminder: { at: demo.NOW.toISOString(), due: true } };
+    return undefined;
+  },
+  scan: [QUICK_START, QUICK_DONE, { type: "notified", result: "failed: Telegram answered 401 Unauthorized" }, { type: "__close" }],
+};
+const scanForNotices = async (page: Page) => {
+  // The header's (the scheduled-scan notice has its own Scan now).
+  await page.getByRole("button", { name: "Scan now", exact: true }).first().click();
+  await page
+    .getByText("Couldn't send the Telegram message.")
+    .or(page.getByRole("button", { name: /more notices?$/ }))
+    .first()
+    .waitFor();
+  // Off the button, so its tooltip doesn't show.
+  await page.mouse.move(5, 700);
+};
 const DRAFT_KEY = "rawjobs.setupDraft.v1";
 const WELCOME_KEY = "rawjobs.welcomeSeen";
 
@@ -166,6 +204,31 @@ const GROWTH = "Senior Product Manager, Growth";
 /** The demo tracking state with one contact added to the tracked job titled `title`. */
 const withContact = (title: string, contact: Record<string, unknown>) =>
   Object.fromEntries(Object.entries(demo.USER_STATE).map(([id, e]) => [id, e.snapshot.title === title ? { ...e, contacts: [contact] } : e]));
+
+/** The demo tracking state with two jobs taken off the Pipeline (one tracked by hand), for the Removed drawer. */
+const withRemoved = () => {
+  const off = (e: (typeof demo.USER_STATE)[string], removedDaysAgo: number) => {
+    const { status, ...rest } = e;
+    return {
+      ...rest,
+      history: [
+        { status, at: e.updatedAt },
+        { status: null, at: new Date(demo.NOW.getTime() - removedDaysAgo * 86_400_000).toISOString() },
+      ],
+    };
+  };
+  const state = Object.fromEntries(Object.entries(demo.USER_STATE).map(([id, e]) => [id, e.snapshot.title === "Product Manager, Developer Platform" ? off(e, 1) : e]));
+  const manual = {
+    status: "applied",
+    updatedAt: new Date(demo.NOW.getTime() - 20 * 86_400_000).toISOString(),
+    snapshot: { title: "Product Lead, Payments", company: "Kestrel Pay", url: "", location: "", score: 0 },
+  };
+  return { ...state, "manual:demo1": off(manual, 4) };
+};
+const openRemoved = async (page: Page) => {
+  await page.getByRole("button", { name: /^Removed \(/ }).click();
+  await page.getByRole("dialog", { name: "Removed from the Pipeline" }).waitFor();
+};
 
 const SCREENS: Screen[] = [
   { id: "radar", what: "Radar, All view (default)", scenario: "demo", hash: "#radar", ready: strong },
@@ -197,7 +260,7 @@ const SCREENS: Screen[] = [
     widths: [1280, 1100],
     act: async (page) => {
       const m = await page.evaluate<{ scroll: number; feedTop: number; applyBottom: number; height: number }>(`(() => {
-        const apply = [...document.querySelectorAll("a, button")].find((e) => /^(Apply on|Open careers page)/.test(e.textContent.trim()) && e.offsetParent);
+        const apply = [...document.querySelectorAll("a, button")].find((e) => /^(Apply (on|at)|Open careers page)/.test(e.textContent.trim()) && e.offsetParent);
         return {
           scroll: document.scrollingElement.scrollHeight - innerHeight,
           feedTop: Math.round(document.querySelector('section[aria-label="Jobs for you"]').getBoundingClientRect().top),
@@ -211,6 +274,27 @@ const SCREENS: Screen[] = [
         m.applyBottom > m.height && `Apply ends at ${m.applyBottom}px, below the ${m.height}px window`,
       ].filter(Boolean);
       if (problems.length) throw new Error(problems.join("; "));
+      await feedKeepsRoom(page);
+    },
+  },
+  {
+    ...MANY_NOTICES,
+    id: "radar-many-notices",
+    what: 'Radar with many notices: the most important one shows, the rest wait behind "n more notices"; the feed keeps 60% of a laptop window',
+    widths: [1280, 375],
+    act: async (page) => {
+      await scanForNotices(page);
+      await feedKeepsRoom(page);
+    },
+  },
+  {
+    ...MANY_NOTICES,
+    id: "radar-many-notices-open",
+    what: 'Radar with many notices, "n more notices" opened: the others listed inline below the first',
+    widths: [1280, 375],
+    act: async (page) => {
+      await scanForNotices(page);
+      await page.getByRole("button", { name: /more notices?$/ }).click();
     },
   },
   {
@@ -307,6 +391,47 @@ const SCREENS: Screen[] = [
     },
   },
   { id: "pipeline", what: "Pipeline", scenario: "demo", hash: "#pipeline", ready: strong },
+  {
+    id: "pipeline-remove-toast",
+    viewportOnly: true,
+    what: "A card removed from the Pipeline with its menu: the toast names the job and offers Undo; Removed (1) shows at the board's foot",
+    scenario: "demo",
+    hash: "#pipeline",
+    ready: strong,
+    act: async (page) => {
+      await page
+        .getByRole("button", { name: /^Move .* to$/ })
+        .filter({ visible: true })
+        .first()
+        .click();
+      await page.getByRole("menuitem", { name: "Remove from Pipeline" }).click();
+      await page.getByRole("button", { name: "Undo" }).waitFor();
+    },
+  },
+  {
+    id: "pipeline-removed",
+    viewportOnly: true,
+    what: "Pipeline's Removed drawer: jobs taken off the board, newest first, each with Put back and Delete",
+    scenario: "demo",
+    hash: "#pipeline",
+    ready: strong,
+    storage: { "rawjobs.state.v1": withRemoved() },
+    act: openRemoved,
+  },
+  {
+    id: "pipeline-removed-confirm",
+    viewportOnly: true,
+    what: "Removed drawer, Delete pressed: the row asks inline (Delete for good, Keep it focused), no second modal",
+    scenario: "demo",
+    hash: "#pipeline",
+    ready: strong,
+    storage: { "rawjobs.state.v1": withRemoved() },
+    act: async (page) => {
+      await openRemoved(page);
+      await page.getByRole("button", { name: "Delete Product Lead, Payments" }).click();
+      await page.getByRole("button", { name: "Keep it" }).waitFor();
+    },
+  },
   {
     id: "toast-in-dialog",
     viewportOnly: true,
@@ -470,6 +595,7 @@ const SCREENS: Screen[] = [
   {
     id: "scan-stale-feed",
     viewportOnly: true,
+    health: () => ({ ok: true, background: false, dataVersion: demo.META.generatedAt }),
     what: "Scan now with a 4-day-old job feed: the amber notice says it checks every company (about 60 to 70 min) and offers Only my companies",
     scenario: "demo",
     hash: "#radar",
@@ -538,13 +664,15 @@ const json = (route: Route, body: unknown, status = 200) => route.fulfill({ stat
 /** Requests the mock didn't know (so missing fixtures show up in the log). */
 const unmocked = new Set<string>();
 
-function api(scenario: Scenario, health?: Screen["health"]) {
+function api(scenario: Scenario, health?: Screen["health"], mock?: Screen["mock"]) {
   let firstAsked: number | undefined;
   return async (route: Route) => {
     const req = route.request();
     const path = new URL(req.url()).pathname;
     const m = req.method();
     const configured = scenario !== "fresh";
+    const mocked = mock?.(path, m);
+    if (mocked !== undefined) return json(route, mocked);
     if (path === "/api/health" && m === "GET" && health) return json(route, health(Date.now() - (firstAsked ??= Date.now())));
     if (path === "/api/setup" && m === "GET") return json(route, configured ? { ...demo.SETUP_STATUS, hasData: scenario === "demo" } : demo.SETUP_STATUS_FRESH);
     if (path === "/api/setup/config" && m === "POST") return json(route, { ok: true, path: demo.SETUP_STATUS.configPath });
@@ -666,7 +794,7 @@ async function capture(browser: Browser, baseUrl: string, screen: Screen, theme:
       (url) => !url.href.startsWith(baseUrl),
       (route) => route.abort(),
     );
-    await page.route(/\/api\//, api(screen.scenario, screen.health));
+    await page.route(/\/api\//, api(screen.scenario, screen.health, screen.mock));
     if (screen.scenario !== "demo") await page.route(DATA_FILES, (route) => route.fulfill({ status: 404, body: "" }));
     await page.addInitScript(initScript(storageFor(screen, theme)));
     if (screen.scan) await page.addInitScript(scanScript(screen.scan));

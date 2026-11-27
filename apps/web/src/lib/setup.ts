@@ -2,10 +2,20 @@ import { useCallback, useEffect, useState } from "react";
 import { ROLE_FAMILIES } from "@rawjobs/core/catalog/roles";
 import { careersUrl, companyKey, SUPPORTED_ATS } from "@rawjobs/core/company-key";
 import type { AiProfile } from "@rawjobs/core/resume-parse";
-import type { CompanyCheck, RunEvent, SaveResult, ScanPlan, ScanOrigin, ScanScope, ScanSource, SetupStatus } from "@rawjobs/core/protocol";
+import type { CompanyCheck, RunEvent, SaveResult as ServerSaveResult, ScanPlan, ScanOrigin, ScanScope, ScanSource, SetupStatus } from "@rawjobs/core/protocol";
 import type { AtsType, Config } from "@rawjobs/core/schema";
 
-export type { CompanyCheck, RunEvent, SaveResult, ScanPlan, ScanOrigin, ScanScope, ScanSource, SetupStatus };
+export type { CompanyCheck, RunEvent, ScanPlan, ScanOrigin, ScanScope, ScanSource, SetupStatus };
+/**
+ * Why a save failed. invalid: the server checked the setup and refused it (its `errors` and `issues`
+ * say why) · server: the server failed or answered something that isn't JSON · offline: it couldn't
+ * be reached.
+ */
+export type SaveCause = "invalid" | "server" | "offline";
+/** The server's answer, or what went wrong getting one. A failure with no `cause` is "invalid". */
+export type SaveResult = { ok: true; path: string } | (Extract<ServerSaveResult, { ok: false }> & { cause?: SaveCause });
+/** A failed save's cause: absent means the server's own validation refused it. */
+export const causeOf = (r: Extract<SaveResult, { ok: false }>): SaveCause => r.cause ?? "invalid";
 import { getJson, isRunEvent } from "./api";
 import { canRunLocally } from "./data";
 import { READ_TIMEOUT_MS } from "./net";
@@ -33,11 +43,11 @@ export function useSetupStatus() {
   return { status, refresh, failed };
 }
 
+/** Save the setup. Never throws: a failure comes back with its `cause` (see SaveCause). */
 export async function saveConfig(config: Config): Promise<SaveResult> {
   const r = await getJson("POST /api/setup/config", { body: JSON.stringify(config) });
   if (r.ok) return r.data;
-  if (r.status === 0) throw new Error(r.error);
-  return { ok: false, errors: r.error, issues: [] };
+  return { ok: false, errors: r.error, issues: [], cause: r.status === 0 ? "offline" : "server" };
 }
 
 /** Start setup over: the config is moved to a backup file; resume and Telegram alerts stay. */

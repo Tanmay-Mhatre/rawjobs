@@ -1,6 +1,6 @@
 import { X } from "lucide-react";
 import { useEffect, useLayoutEffect, useState, useSyncExternalStore, type KeyboardEvent, type ReactNode } from "react";
-import { Button } from "./ui";
+import { Button, cx } from "./ui";
 
 /**
  * App-wide toasts (design/components/Toast): the past-tense verb plus the object ("Saved Head of
@@ -217,10 +217,11 @@ function ToastRow({ item }: { item: ToastItem }) {
   }, [paused, item.id]);
 
   const actions = actionsOf(item);
+  const stacked = actions.length > 1;
   return (
     // biome-ignore lint/a11y/noStaticElementInteractions: hover, focus or drop handling around real controls; nothing here is only reachable by mouse
     <div
-      className={item.surface === "popover" ? "rj-menu pointer-events-auto flex w-full max-w-md items-start gap-2 p-3 type-small text-ink" : "rj-toast pointer-events-auto"}
+      className={item.surface === "popover" ? "rj-menu pointer-events-auto flex w-full max-w-md items-start gap-2 p-3 type-small text-ink" : cx("rj-toast pointer-events-auto", stacked && "flex-wrap")}
       data-state={item.closing ? "closing" : undefined}
       onAnimationEnd={() => item.closing && removeToast(item.id)}
       onMouseEnter={() => setPaused(true)}
@@ -236,19 +237,22 @@ function ToastRow({ item }: { item: ToastItem }) {
       }}
     >
       <div className="min-w-0 flex-1">{item.message}</div>
-      {actions.map((a) => (
-        <button
-          key={a.label}
-          type="button"
-          className="rj-btn rj-btn--quiet rj-btn--sm"
-          onClick={() => {
-            a.onClick();
-            dismissToast(item.id);
-          }}
-        >
-          {a.label}
-        </button>
-      ))}
+      {/* Two or more actions go on their own row under the message, so it isn't squeezed on phones. */}
+      <div className={stacked ? "order-last -ml-2 flex basis-full gap-1" : "contents"}>
+        {actions.map((a) => (
+          <button
+            key={a.label}
+            type="button"
+            className="rj-btn rj-btn--quiet rj-btn--sm"
+            onClick={() => {
+              a.onClick();
+              dismissToast(item.id);
+            }}
+          >
+            {a.label}
+          </button>
+        ))}
+      </div>
       <button type="button" aria-label="Dismiss" title="Dismiss (Esc)" className="rj-btn rj-btn--quiet rj-btn--icon rj-btn--sm" onClick={() => dismissToast(item.id)}>
         <X className="rj-icon" aria-hidden />
       </button>
