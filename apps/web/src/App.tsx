@@ -3,7 +3,7 @@ import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState, type
 import { failedHealth } from "@rawjobs/core/health";
 import { Dialog } from "./components/Dialog";
 import { SetupBanner } from "./components/EmptyState";
-import { checklistItems, ConfigProblemCard, FailingBanner, FirstScanCard, NoMatches, SetupChecklist, SetupHero } from "./components/Guidance";
+import { checklistItems, ConfigProblemCard, FirstScanCard, NoMatches, SetupHero, useFailingNotice, useSetupChecklistNotice } from "./components/Guidance";
 import { ApplyPrompt } from "./components/ApplyPrompt";
 import { JobDrawer } from "./components/JobDrawer";
 import { type NotForMeApi, NotForMeProvider, useNotForMeApi } from "./components/NotForMe";
@@ -11,14 +11,17 @@ import { type PeopleApi, PeopleProvider } from "./components/pipeline/PeopleCont
 import { PipHost } from "./components/referral/PipHost";
 import { FeedSkeleton } from "./components/radar/FeedSkeleton";
 import { RadarPage } from "./components/radar/RadarPage";
-import { NotifyBell, NotifyFailed, notifyLine } from "./components/NotifyWhenDone";
-import { ServerNotices } from "./components/Updates";
+import { NotifyBell, notifyLine, useNotifyFailedNotice } from "./components/NotifyWhenDone";
+import { NoticeSlot } from "./components/NoticeSlot";
+import { PRIORITY } from "./app/notices";
+import type { TelegramStatus } from "./lib/automation";
+import { ServerNotices, useBlockingWindow, useReconnectingNotice, useUpdateFailedNotice } from "./components/Updates";
 import { UpdatePill } from "./components/WhatsNew";
 import { ScanButton } from "./components/ScanButton";
-import { FeedStaleNotice } from "./components/FeedStaleNotice";
-import { ScheduledScanNotice } from "./components/ScheduledScanNotice";
-import { TelegramBanner } from "./components/TelegramBanner";
-import { ReminderNotice } from "./components/referral/ReminderNotice";
+import { useFeedStaleNotice } from "./components/FeedStaleNotice";
+import { useScheduledScanNotice } from "./components/ScheduledScanNotice";
+import { useTelegramNotice } from "./components/TelegramBanner";
+import { useReminderNotice } from "./components/referral/ReminderNotice";
 import { settingsHash } from "./components/settings/registry";
 import { ShortcutList } from "./components/ShortcutList";
 import { Toaster, toast } from "./components/Toast";
@@ -423,14 +426,32 @@ export function App() {
           )}
         >
           <ServerNotices
+            dialogsOnly
             onRadar={!inSetup && tab === "radar" && !openId && !showKeys && status !== undefined}
             // Once the scans are read (not mid-scan): the star question dates your first use from them.
             star={state.kind !== "loading" && !scanning && !otherScan ? { state: user.state, runs: meta?.runs ?? [] } : undefined}
           />
-          {!inSetup && tab === "radar" && <ScanView>{(scan) => <FeedStaleNotice scan={scan} onOnlyMine={() => void restartScan("yours")} />}</ScanView>}
-          {!inSetup && tab === "radar" && <ReminderNotice />}
-          {!inSetup && tab === "radar" && canRunLocally && setupState === "configured" && <ScheduledScanNotice scanning={scanning} onScan={requestScan} />}
-          {setup.failed && status === undefined && !inSetup && <SetupCheckFailed onRetry={() => void setup.refresh()} />}
+          {!inSetup && (
+            <PageNotices
+              radar={tab === "radar"}
+              setupFailed={setup.failed && status === undefined}
+              onRetrySetup={() => void setup.refresh()}
+              onOnlyMine={() => void restartScan("yours")}
+              scheduled={canRunLocally && setupState === "configured"}
+              scanning={scanning}
+              onScan={requestScan}
+              failing={state.kind === "ready" ? failing : 0}
+              runId={lastRun?.startedAt}
+              onFailing={goFailing}
+              checklist={setupState === "configured" && personal && state.kind !== "loading"}
+              items={items}
+              onStep={goStep}
+              onCompanies={goCompanies}
+              telegram={canRunLocally && setupState === "configured" && personal && !!lastRun && state.kind !== "loading"}
+              tg={tg}
+              onTgConnected={refreshTg}
+            />
+          )}
           {/* A page that breaks shows its own error card; the header, and the other pages, keep working. */}
           <ErrorBoundary key={tab} where="this page">
             {(status === undefined && !setup.failed) || state.kind === "loading" ? (
@@ -479,18 +500,12 @@ export function App() {
                   </h1>
                 )}
                 {state.kind === "error" && <ErrorState message={state.message} onRetry={() => void reload()} />}
-                {/* A scan in progress shows in the header (Scan now becomes its status); a Telegram message that failed shows here. */}
-                <ScanView>{(scan) => <NotifyFailed scan={scan} />}</ScanView>
 
                 {tab === "radar" && (
                   <>
                     {notSetUp && <SetupHero items={items} started={progress.started} nextStep={progress.nextStep} onStep={goStep} onCompanies={goCompanies} />}
                     {setupState === "invalid" && <ConfigProblemCard errors={status?.errors} onFix={() => goStep(0)} />}
-                    {setupState === "configured" && personal && <SetupChecklist items={items} onStep={goStep} onScan={requestScan} onCompanies={goCompanies} />}
                     {setupState === "configured" && personal && state.kind === "empty" && <ScanView>{(scan) => <FirstScanCard scan={scan} onScan={requestScan} />}</ScanView>}
-                    {canRunLocally && setupState === "configured" && personal && lastRun && <TelegramBanner tg={tg} onConnected={refreshTg} />}
-                    {/* Laptops show this as a chip next to "Last scan" in the header, so the jobs start higher. */}
-                    {state.kind === "ready" && failing > 0 && <FailingBanner className="lg:hidden" count={failing} onOpen={goFailing} />}
                     {state.kind === "ready" && lastRun && matched === 0 && <NoMatches jobs={otherJobs ? [...jobs, ...otherJobs] : jobs} onStep={goStep} onCompanies={goCompanies} />}
                     {state.kind === "ready" && (matched > 0 || !lastRun) && (
                       <RadarPage
@@ -699,10 +714,49 @@ function TabLink({ tab, active, onClick }: { tab: (typeof TABS)[number]; active:
   );
 }
 
+/**
+ * Every notice above the page, in one NoticeSlot: the most important shows, the rest wait behind
+ * "n more notices". Its own component, so the scan's progress (FeedStale, NotifyFailed read it)
+ * doesn't re-render App. To add a notice, write a hook that returns `Notice | null` and list it here.
+ */
+function PageNotices(p: {
+  radar: boolean;
+  setupFailed: boolean;
+  onRetrySetup: () => void;
+  onOnlyMine: () => void;
+  scheduled: boolean;
+  scanning: boolean;
+  onScan: () => void;
+  failing: number;
+  runId: string | undefined;
+  onFailing: () => void;
+  checklist: boolean;
+  items: ReturnType<typeof checklistItems>;
+  onStep: (n: number) => void;
+  onCompanies: () => void;
+  telegram: boolean;
+  tg: TelegramStatus | null | undefined;
+  onTgConnected: () => Promise<void>;
+}) {
+  const notices = [
+    useReconnectingNotice(),
+    p.setupFailed ? { id: "setup-failed", priority: PRIORITY.pageFailed, tone: "warn" as const, render: () => <SetupCheckFailed onRetry={p.onRetrySetup} /> } : null,
+    useFeedStaleNotice({ enabled: p.radar, onOnlyMine: p.onOnlyMine }),
+    useUpdateFailedNotice(),
+    useScheduledScanNotice({ enabled: p.radar && p.scheduled, scanning: p.scanning, onScan: p.onScan }),
+    useNotifyFailedNotice(),
+    useFailingNotice({ enabled: p.radar, count: p.failing, runId: p.runId, onOpen: p.onFailing }),
+    useReminderNotice(p.radar),
+    useSetupChecklistNotice({ enabled: p.radar && p.checklist, items: p.items, onStep: p.onStep, onScan: p.onScan, onCompanies: p.onCompanies }),
+    useTelegramNotice({ enabled: p.radar && p.telegram, tg: p.tg, onConnected: p.onTgConnected }),
+  ];
+  return <NoticeSlot notices={notices} paused={useBlockingWindow()} />;
+}
+
 /** The setup check (/api/setup) didn't answer: your jobs still show; this says why setup and scans wait. */
 function SetupCheckFailed({ onRetry }: { onRetry: () => void }) {
   return (
-    <div role="status" className="mb-4 flex flex-col gap-3 rounded-md border border-warning/40 bg-warning-subtle p-3 type-small sm:flex-row sm:items-start">
+    <div className="flex flex-col gap-3 rounded-md border border-warning/40 bg-warning-subtle p-3 type-small sm:flex-row sm:items-start">
       <TriangleAlert className="mt-0.5 size-4 shrink-0 text-warning-text max-sm:hidden" aria-hidden />
       <p className="min-w-0 flex-1">
         <b className="font-semibold">RawJobs is slow to answer.</b> Your jobs are shown; Scan now comes back once it answers.

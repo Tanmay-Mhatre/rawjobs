@@ -1,5 +1,6 @@
 import { Copy, ExternalLink, Info, LoaderCircle, RefreshCw, ShieldCheck, Star, Undo2 } from "lucide-react";
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { useEffect, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
+import { PRIORITY, type Notice } from "../app/notices";
 import { formatDate, timeAgo } from "../lib/format";
 import { reloadPage } from "../lib/reload";
 import {
@@ -84,7 +85,7 @@ const STOPPED_WHILE_UPDATING_MS = 60_000;
  * top of another window or after an update that didn't work. Last, on the Radar when it's due, the
  * "Star on GitHub" question (StarPrompt), on copies run from the source code too.
  */
-export function ServerNotices({ onRadar = false, star }: { onRadar?: boolean; star?: StarInput }) {
+export function ServerNotices({ onRadar = false, star, dialogsOnly = false }: { onRadar?: boolean; star?: StarInput; dialogsOnly?: boolean }) {
   const health = useServerHealth();
   const { down, since } = health;
   // Away for longer than an update's restart: it was stopped. From then on the "isn't running"
@@ -117,23 +118,29 @@ export function ServerNotices({ onRadar = false, star }: { onRadar?: boolean; st
     return () => clearInterval(t);
   }, [status?.state, refresh]);
 
-  // Away for much longer than a restart (even an update's): it was stopped, so say how to start it.
-  if (stopped) return <ServerDownWindow health={health} />;
   // An update this page started: "Updating to 0.6.1" from the click until the page reloads as it.
   const started = updatingTo();
   // (A required update shows its own Updating state until the server goes away.)
-  if (started && (down || (status?.state === "updating" && !status.available?.critical))) return <UpdatingCover from={started.from} to={started.to} />;
-  if (down) {
-    return (
-      <div role="status" className="mb-3 flex items-center gap-2 rounded-md bg-inset/60 px-3 py-2 type-small">
-        <LoaderCircle className="size-4 shrink-0 animate-spin text-muted" aria-hidden />
-        <span>
-          <b>Reconnecting to RawJobs…</b>{" "}
-          <span className="text-muted">{updating ? "This takes a few seconds after an update. The page reloads by itself." : "Your changes are kept in this browser and save when it's back."}</span>
-        </span>
+  const covering = !!started && (down || (status?.state === "updating" && !status.available?.critical));
+  const required = !!status?.installed && (!!status.available?.critical || !!status.tooOld);
+  const blocking = stopped || covering || required;
+  const last = status?.installed ? status.lastUpdate : undefined;
+  const failed = !blocking && !down && last && !last.ok ? last : null;
+  // With dialogsOnly the page's NoticeSlot shows Reconnecting and "didn't start" (useReconnectingNotice, useUpdateFailedNotice).
+  useEffect(() => {
+    if (dialogsOnly) setServerInline({ blocking, down: down && !blocking, updating, failed });
+  }, [dialogsOnly, blocking, down, updating, failed]);
+  useEffect(() => (dialogsOnly ? () => setServerInline(NO_INLINE) : undefined), [dialogsOnly]);
+
+  // Away for much longer than a restart (even an update's): it was stopped, so say how to start it.
+  if (stopped) return <ServerDownWindow health={health} />;
+  if (started && covering) return <UpdatingCover from={started.from} to={started.to} />;
+  if (down)
+    return dialogsOnly ? null : (
+      <div role="status" className="mb-3">
+        <Reconnecting updating={updating} />
       </div>
     );
-  }
   const starAsk = onRadar && star ? <StarPrompt state={star.state} runs={star.runs} /> : null;
   // Not until the update status is read: a required update comes first.
   if (!status) return null;
@@ -148,8 +155,6 @@ export function ServerNotices({ onRadar = false, star }: { onRadar?: boolean; st
     announceUpdateStatus();
     return s;
   };
-  const required = !!status.available?.critical || status.tooOld;
-  const last = status.lastUpdate;
 
   // One window at a time: a required update first, then What's new, then the shortcut popup, then the star question.
   if (required) return <RequiredUpdate status={status} update={update} busy={busy} />;
@@ -157,12 +162,70 @@ export function ServerNotices({ onRadar = false, star }: { onRadar?: boolean; st
   const intro = onRadar && last?.ok !== false && status.about?.shortcuts?.notice ? <DesktopShortcutNotice status={status} onSeen={(s) => s && setStatus(s)} /> : null;
   if (!last) return intro ?? starAsk;
 
+  if (dialogsOnly) return null;
   const seen = async () => {
     const s = await markUpdateSeen();
     if (s) setStatus(s);
   };
   return (
-    <section role="status" aria-labelledby="went-back-title" className="mb-3 flex items-start gap-4 rounded-md border border-line bg-raised p-4">
+    <div role="status" className="mb-3">
+      <UpdateWentBack last={last} onSeen={() => void seen()} />
+    </div>
+  );
+}
+
+/** ServerNotices' inline notices, for the page's NoticeSlot (with dialogsOnly), and whether a blocking window is up. */
+type ServerInline = { blocking: boolean; down: boolean; updating: boolean; failed: FailedUpdate | null };
+type FailedUpdate = NonNullable<UpdateStatus["lastUpdate"]>;
+const NO_INLINE: ServerInline = { blocking: false, down: false, updating: false, failed: null };
+let inline = NO_INLINE;
+const inlineSubs = new Set<() => void>();
+function setServerInline(next: ServerInline) {
+  if (JSON.stringify(next) === JSON.stringify(inline)) return;
+  inline = next;
+  for (const f of inlineSubs) f();
+}
+const useServerInline = () =>
+  useSyncExternalStore(
+    (f) => {
+      inlineSubs.add(f);
+      return () => inlineSubs.delete(f);
+    },
+    () => inline,
+  );
+
+/** A required update, "isn't running" or Updating is up: the NoticeSlot waits. */
+export const useBlockingWindow = () => useServerInline().blocking;
+
+/** The server is away (an update's restart, usually): the page can't save. */
+export function useReconnectingNotice(): Notice | null {
+  const { down, updating } = useServerInline();
+  return down ? { id: "reconnecting", priority: PRIORITY.reconnecting, tone: "info", render: () => <Reconnecting updating={updating} /> } : null;
+}
+
+/** An update that went back. Got it (or Try again) marks it seen, and every ServerNotices reads the status again. */
+export function useUpdateFailedNotice(): Notice | null {
+  const { failed } = useServerInline();
+  if (!failed) return null;
+  const seen = () => void markUpdateSeen().then(announceUpdateStatus);
+  return { id: `update-failed:${failed.to}`, priority: PRIORITY.updateFailed, tone: "warn", render: () => <UpdateWentBack last={failed} onSeen={seen} /> };
+}
+
+function Reconnecting({ updating }: { updating: boolean }) {
+  return (
+    <div className="flex items-center gap-2 rounded-md bg-inset/60 px-3 py-2 type-small">
+      <LoaderCircle className="size-4 shrink-0 animate-spin text-muted" aria-hidden />
+      <span>
+        <b>Reconnecting to RawJobs…</b>{" "}
+        <span className="text-muted">{updating ? "This takes a few seconds after an update. The page reloads by itself." : "Your changes are kept in this browser and save when it's back."}</span>
+      </span>
+    </div>
+  );
+}
+
+function UpdateWentBack({ last, onSeen }: { last: FailedUpdate; onSeen: () => void }) {
+  return (
+    <section aria-labelledby="went-back-title" className="flex items-start gap-4 rounded-md border border-line bg-raised p-4">
       <Anchor kind="warn" />
       <div className="min-w-0 flex-1">
         <h2 /* design-lint-ignore: weight moves into the type style in 6I */ id="went-back-title" className="type-subheading font-semibold text-balance">
@@ -182,10 +245,10 @@ export function ServerNotices({ onRadar = false, star }: { onRadar?: boolean; st
           ]}
         />
         <div className="mt-3 flex flex-wrap items-center gap-2">
-          <Button size="sm" onClick={() => void seen()}>
+          <Button size="sm" onClick={onSeen}>
             Got it
           </Button>
-          <a className={linkClass} href={`#${settingsHash("version")}`} onClick={() => void seen()}>
+          <a className={linkClass} href={`#${settingsHash("version")}`} onClick={onSeen}>
             Try {last.to} again
           </a>
           <a className={linkClass} href={ISSUES_URL} target="_blank" rel="noreferrer">
