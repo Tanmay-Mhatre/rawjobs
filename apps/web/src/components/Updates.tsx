@@ -2,6 +2,7 @@ import { Copy, ExternalLink, Info, LoaderCircle, RefreshCw, ShieldCheck, Star, U
 import { useEffect, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
 import { PRIORITY, type Notice } from "../app/notices";
 import { formatDate, timeAgo } from "../lib/format";
+import { reloadPage } from "../lib/reload";
 import {
   announceUpdateStatus,
   checkForUpdate,
@@ -127,8 +128,8 @@ export function ServerNotices({ onRadar = false, star, dialogsOnly = false }: { 
   const failed = !blocking && !down && last && !last.ok ? last : null;
   // With dialogsOnly the page's NoticeSlot shows Reconnecting and "didn't start" (useReconnectingNotice, useUpdateFailedNotice).
   useEffect(() => {
-    if (dialogsOnly) setServerInline({ blocking, down: down && !blocking, failed });
-  }, [dialogsOnly, blocking, down, failed]);
+    if (dialogsOnly) setServerInline({ blocking, down: down && !blocking, updating, failed });
+  }, [dialogsOnly, blocking, down, updating, failed]);
   useEffect(() => (dialogsOnly ? () => setServerInline(NO_INLINE) : undefined), [dialogsOnly]);
 
   // Away for much longer than a restart (even an update's): it was stopped, so say how to start it.
@@ -137,7 +138,7 @@ export function ServerNotices({ onRadar = false, star, dialogsOnly = false }: { 
   if (down)
     return dialogsOnly ? null : (
       <div role="status" className="mb-3">
-        <Reconnecting />
+        <Reconnecting updating={updating} />
       </div>
     );
   const starAsk = onRadar && star ? <StarPrompt state={star.state} runs={star.runs} /> : null;
@@ -174,9 +175,9 @@ export function ServerNotices({ onRadar = false, star, dialogsOnly = false }: { 
 }
 
 /** ServerNotices' inline notices, for the page's NoticeSlot (with dialogsOnly), and whether a blocking window is up. */
-type ServerInline = { blocking: boolean; down: boolean; failed: FailedUpdate | null };
+type ServerInline = { blocking: boolean; down: boolean; updating: boolean; failed: FailedUpdate | null };
 type FailedUpdate = NonNullable<UpdateStatus["lastUpdate"]>;
-const NO_INLINE: ServerInline = { blocking: false, down: false, failed: null };
+const NO_INLINE: ServerInline = { blocking: false, down: false, updating: false, failed: null };
 let inline = NO_INLINE;
 const inlineSubs = new Set<() => void>();
 function setServerInline(next: ServerInline) {
@@ -198,7 +199,8 @@ export const useBlockingWindow = () => useServerInline().blocking;
 
 /** The server is away (an update's restart, usually): the page can't save. */
 export function useReconnectingNotice(): Notice | null {
-  return useServerInline().down ? { id: "reconnecting", priority: PRIORITY.reconnecting, tone: "info", render: () => <Reconnecting /> } : null;
+  const { down, updating } = useServerInline();
+  return down ? { id: "reconnecting", priority: PRIORITY.reconnecting, tone: "info", render: () => <Reconnecting updating={updating} /> } : null;
 }
 
 /** An update that went back. Got it (or Try again) marks it seen, and every ServerNotices reads the status again. */
@@ -209,12 +211,13 @@ export function useUpdateFailedNotice(): Notice | null {
   return { id: `update-failed:${failed.to}`, priority: PRIORITY.updateFailed, tone: "warn", render: () => <UpdateWentBack last={failed} onSeen={seen} /> };
 }
 
-function Reconnecting() {
+function Reconnecting({ updating }: { updating: boolean }) {
   return (
     <div className="flex items-center gap-2 rounded-md bg-inset/60 px-3 py-2 type-small">
       <LoaderCircle className="size-4 shrink-0 animate-spin text-muted" aria-hidden />
       <span>
-        <b>Reconnecting to RawJobs…</b> <span className="text-muted">This takes a few seconds after an update. The page reloads by itself.</span>
+        <b>Reconnecting to RawJobs…</b>{" "}
+        <span className="text-muted">{updating ? "This takes a few seconds after an update. The page reloads by itself." : "Your changes are kept in this browser and save when it's back."}</span>
       </span>
     </div>
   );
@@ -278,7 +281,7 @@ function UpdatingCover({ from, to }: { from: string; to: string }) {
         <Points items={[[ShieldCheck, "Your data is backed up first"]]} />
         {slow && (
           <div className="mt-5 flex justify-end">
-            <Button variant="primary" data-autofocus onClick={() => location.reload()}>
+            <Button variant="primary" data-autofocus onClick={() => reloadPage()}>
               <RefreshCw className="size-4" aria-hidden /> Reload page
             </Button>
           </div>

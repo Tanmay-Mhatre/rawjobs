@@ -15,6 +15,7 @@ import { JobHeader } from "./job/JobHeader";
 import { NotCheckedYet } from "./job/NotCheckedYet";
 import { NotesField, YourProgress } from "./job/Progress";
 import { WhyItMatches } from "./job/WhyItMatches";
+import { companySaveFailedToast, type CompanySave } from "../app/useCompanyActions";
 import { useNotForMe } from "./NotForMe";
 import { toast } from "./Toast";
 import { ConnectBanner } from "./referral/ConnectBanner";
@@ -44,8 +45,8 @@ export type JobDetailProps = {
   isNew?: boolean;
   /** When the directory index behind an estimated job was built. */
   indexGeneratedAt?: string;
-  /** Add or remove the job's company from your companies. Resolves to an error, or null. */
-  onTrack?: (on: boolean) => Promise<string | null>;
+  /** Add or remove the job's company from your companies. Resolves to how the save went. */
+  onTrack?: (on: boolean) => Promise<CompanySave>;
   /** Check an estimated job's company live now. Resolves to an error, or null. */
   onCheck?: () => Promise<string | null>;
   /** Shown in the full-window reader (Expand): no Expand button, and F closes it. */
@@ -116,10 +117,13 @@ export const JobDetail = memo(function JobDetail(p: JobDetailProps) {
   const staleCtx = { descriptionLength: description ? description.trim().length : undefined };
   // The callout is for the role: one fresh posting of it and it's still live (the stale ones are marked in the list).
   const stale = isRoleStale(postings ?? [job], (j) => (j.id === job.id ? staleCtx : undefined)) ? staleReasons(job, staleCtx) : null;
-  // Add or remove the company from My companies; an error comes back as a toast.
-  const track = async () => {
-    const error = await p.onTrack?.(!p.yours);
-    if (error) toast({ message: error });
+  // Add or remove the company from My companies, then say so with Undo; a failure offers Try again.
+  const track = async (on: boolean) => {
+    if (!p.onTrack) return;
+    const res = await p.onTrack(on);
+    const name = companyName(job.company);
+    if (!res.ok) return companySaveFailedToast(res, () => void track(on));
+    toast({ message: on ? `Added ${name} to My companies` : `Removed ${name} from My companies`, actionLabel: "Undo", onAction: () => void track(!on) });
   };
   const setStatus = (next: Status | undefined) => {
     p.onUpdate({ status: next });
@@ -207,7 +211,7 @@ export const JobDetail = memo(function JobDetail(p: JobDetailProps) {
         onApply={p.onApply}
         onHideCompany={p.onHideCompany}
         companyHidden={p.companyHidden}
-        onTrack={p.onTrack && (() => void track())}
+        onTrack={p.onTrack && (() => void track(!p.yours))}
         yours={p.yours}
       />
 

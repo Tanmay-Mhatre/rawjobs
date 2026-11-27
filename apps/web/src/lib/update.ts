@@ -4,6 +4,7 @@ import { PORTS } from "@rawjobs/server/pages";
 import { getJson, isHealth } from "./api";
 import { canRunLocally } from "./data";
 import { healthState, refreshHealth, requestFast, subscribeHealth, useHealth } from "./health";
+import { reloadPage } from "./reload";
 
 export type { Changelog, UpdateStatus };
 
@@ -149,7 +150,7 @@ export function useServerHealth(): ServerHealth {
       if (!h) return;
       if (h.version) {
         first ??= h.version;
-        if (h.version !== first) location.reload();
+        if (h.version !== first) reloadPage();
       }
       const waiting = h.update?.version ?? null;
       if (hint !== undefined && waiting !== hint) announceUpdateStatus();

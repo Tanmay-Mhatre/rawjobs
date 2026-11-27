@@ -102,13 +102,26 @@ export function ScanButton({
     );
   }
   const hints = scanHints(plan);
+  // The button says what it runs (Settings > Scans picks it); the menu marks that item Default.
+  const yoursOnly = prefs.scope === "yours";
+  const label = yoursOnly ? "Scan my companies" : "Scan now";
+  const hint = (scope: ScanScope) => (prefs.scope === scope ? `Default · ${hints[scope]}` : hints[scope]);
   return (
     <div className="flex items-center gap-1">
       {scan.bg && (scan.phase === "background" || (scan.phase === "done" && scan.bg.summary?.stopped)) && <BackgroundPill scan={scan} bg={scan.bg} onPause={onStop} onResume={onResume} />}
       <div className="inline-flex">
-        <Button size="sm" className="relative rounded-r-0" onClick={() => onStart(prefs.scope)} aria-keyshortcuts="R">
-          <RefreshCw className="size-3.5" /> Scan now
-          <Tooltip label={`${prefs.scope === "yours" ? "Scan only my companies" : "Scan now"}${lastScan ? ` · last scan ${lastScan}` : ""}`} shortcut="R" />
+        {/* Phones show the short "Scan mine"; the name stays the full label, which it starts like. */}
+        <Button size="sm" className="relative rounded-r-0" onClick={() => onStart(prefs.scope)} aria-keyshortcuts="R" aria-label={yoursOnly ? label : undefined}>
+          <RefreshCw className="size-3.5" />{" "}
+          {yoursOnly ? (
+            <>
+              <span className="max-sm:hidden">{label}</span>
+              <span className="sm:hidden">Scan mine</span>
+            </>
+          ) : (
+            label
+          )}
+          <Tooltip label={`${label}${lastScan ? ` · last scan ${lastScan}` : ""}`} shortcut="R" />
         </Button>
         <Menu
           label="Scan options"
@@ -118,10 +131,10 @@ export function ScanButton({
             </button>
           )}
           items={[
-            { id: "mine", label: "Scan now", hint: hints.mine, icon: <RefreshCw className="rj-icon" aria-hidden />, onSelect: () => onStart("mine") },
-            { id: "yours", label: "Only my companies", hint: hints.yours, icon: <Star className="rj-icon" aria-hidden />, onSelect: () => onStart("yours") },
+            { id: "mine", label: "Scan now", hint: hint("mine"), icon: <RefreshCw className="rj-icon" aria-hidden />, onSelect: () => onStart("mine") },
+            { id: "yours", label: "Only my companies", hint: hint("yours"), icon: <Star className="rj-icon" aria-hidden />, onSelect: () => onStart("yours") },
             { separator: true, id: "s1" },
-            { id: "all", label: "Check every company now", hint: hints.all, icon: <Layers className="rj-icon" aria-hidden />, onSelect: () => onStart("all") },
+            { id: "all", label: "Check every company now", hint: hint("all"), icon: <Layers className="rj-icon" aria-hidden />, onSelect: () => onStart("all") },
             { separator: true, id: "s2" },
             { id: "settings", label: "Scan settings", icon: <SettingsIcon className="rj-icon" aria-hidden />, onSelect: onSettings },
           ]}
