@@ -1,34 +1,10 @@
-import type { ChangelogEntry, ReleaseChange } from "@rawjobs/core/release-notes";
+import type { Changelog, UpdateStatus } from "@rawjobs/core/protocol";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { PORTS } from "@rawjobs/server/pages";
 import { canRunLocally } from "./data";
 import { type Health, healthState, refreshHealth, requestFast, subscribeHealth, useHealth } from "./health";
 
-/** What GET /api/update says (packages/server/src/updater.ts). */
-export type UpdateStatus = {
-  installed: boolean;
-  current: string;
-  /** `telegram`: a Telegram message when an update is ready (missing on an older server: on). */
-  settings: { mode: "ask" | "off"; channel: "stable" | "beta"; telegram?: boolean };
-  lastCheck?: string;
-  /** A newer version. `critical`: a required update; `ready`: downloaded already, installs in seconds. */
-  available: { version: string; notes: string; changes?: ReleaseChange[]; critical: boolean; date: string; major: boolean; ready: boolean } | null;
-  /** The newest version, when it didn't start here before (the update went back): Settings offers to try again. */
-  skipped?: { version: string; date: string } | null;
-  tooOld: boolean;
-  state: "idle" | "checking" | "downloading" | "waiting" | "updating";
-  error?: string;
-  lastUpdate: { from: string; to: string; ok: boolean; at: string; error?: string; notes?: string; skipped?: boolean } | null;
-  /** Missing from an older server: Settings → About shows what it has. */
-  about?: {
-    since?: { at: string; by: "update" | "install" };
-    home: string;
-    node: string;
-    platform: string;
-    /** The RawJobs shortcuts on this computer (null: not an installed copy). */
-    shortcuts: { desktop: boolean; menu: boolean; desktopFolder: boolean; desktopError: string | null; notice: boolean } | null;
-  };
-};
+export type { Changelog, UpdateStatus };
 
 export const REPO_URL = "https://github.com/Tanmay-Mhatre/rawjobs";
 export const RELEASES_URL = "https://github.com/Tanmay-Mhatre/rawjobs/releases";
@@ -99,8 +75,6 @@ export const markShortcutNoticeSeen = () => call("/api/update/shortcut-seen", { 
 /** You came back to the dashboard: the server looks for a new version (at most every 15 minutes). */
 export const checkOnFocus = () => fetch("/api/update/focus", { method: "POST" }).catch(() => null);
 
-/** What GET /api/update/changelog says: this version's history (newest first), and the version waiting, if any. */
-export type Changelog = { current: string; entries: ChangelogEntry[]; upcoming: ChangelogEntry | null };
 export async function loadChangelog(): Promise<Changelog | null> {
   try {
     const res = await fetch("/api/update/changelog", { cache: "no-store" });

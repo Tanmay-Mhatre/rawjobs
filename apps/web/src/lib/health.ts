@@ -1,24 +1,9 @@
+import type { Health } from "@rawjobs/core/protocol";
 import { useSyncExternalStore } from "react";
 import { canRunLocally } from "./data";
 import { updatingTo } from "./update";
 
-/** What GET /api/health says (packages/server/src/api.ts). */
-export type Health = {
-  ok?: boolean;
-  version?: string;
-  scanning?: boolean;
-  background?: boolean;
-  dataVersion?: string | null;
-  /** tracking.json's revision: another window saved when it moves (tracking.ts). */
-  trackingRev?: number;
-  update?: { version: string } | null;
-  startLink?: boolean;
-  /** The server crashed several times just now, so it started without its background work for a while. */
-  safeMode?: boolean;
-  platform?: string;
-  home?: string;
-  pid?: number;
-};
+export type { Health };
 
 export type HealthState = {
   /** The last answer while it was up (kept while it's down: how to start it again). */
