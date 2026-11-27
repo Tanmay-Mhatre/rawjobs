@@ -50,6 +50,7 @@ import { settingsHash } from "../settings/registry";
 
 /** When Best match last started learning afresh (Reset); picks before it are left out. */
 const LEARN_SINCE_KEY = "rawjobs.learnSince";
+const NONE_OPEN: ReadonlySet<string> = new Set();
 
 type Props = {
   jobs: Job[];
@@ -177,8 +178,9 @@ export function RadarPage(p: Props) {
     toast({ message: "Best match order reset: it learns again from your next picks", actionLabel: "Undo", onAction: () => set(was) });
   };
 
-  const q = useDeferredValue(filters.q);
-  const listFilters = useMemo(() => (q === filters.q ? filters : { ...filters, q }), [filters, q]);
+  // The controls read `filters`; the list reads this deferred copy. `filters` is state, so the copy is stable and
+  // the list's work runs once per change, not once urgent and once deferred.
+  const listFilters = useDeferredValue(filters);
   const visible = useMemo(
     () => sortJobs(applyFilters(pool, listFilters, ctx), sort, { isYours: p.isYours, now, currency: profile.salary_floor?.currency, nudge, known: knownAt }),
     [pool, listFilters, ctx, sort, p.isYours, now, profile.salary_floor?.currency, nudge, knownAt],
@@ -186,9 +188,12 @@ export function RadarPage(p: Props) {
   const groups = useMemo(() => groupJobs(visible, now), [visible, now]);
   // One company can't fill the page ("+N more at …"), except in Newest (a plain date order) and when you've
   // picked companies yourself.
-  const [openCompanies, setOpenCompanies] = useState<ReadonlySet<string>>(() => new Set());
-  // biome-ignore lint/correctness/useExhaustiveDependencies: new filters or sort close the companies you opened
-  useEffect(() => setOpenCompanies(new Set()), [filters, sort]);
+  // New filters or sort close the companies you opened and start the list at its first page. Both are kept
+  // for the list they were set on, so the reset lands in the same render as the new list (no Effect).
+  const listKey = useMemo(() => ({ listFilters, sort }), [listFilters, sort]);
+  const [opened, setOpened] = useState<{ for: unknown; set: ReadonlySet<string> }>({ for: null, set: NONE_OPEN });
+  const openCompanies = opened.for === listKey ? opened.set : NONE_OPEN;
+  const openCompany = (key: string) => setOpened({ for: listKey, set: new Set([...openCompanies, key]) });
   const fold = sort !== "newest" && !filters.mine && !filters.companies.length;
   // Best match: your companies' freshest roles in a strip above the list, and not again in it.
   const strip = useMemo(
@@ -207,7 +212,6 @@ export function RadarPage(p: Props) {
   }, [fold, groups, strip, openCompanies]);
   /** The roles J/K steps through: the strip, then the list's rows, folded ones left out. */
   const navGroups = useMemo(() => [...strip, ...rows.flatMap((r) => (r.kind === "group" ? [r.group] : []))], [strip, rows]);
-  const counts = useMemo(() => facetCounts(pool, listFilters, ctx), [pool, listFilters, ctx]);
   const chips = useMemo(() => activeChips(filters, ctx, base), [filters, ctx, base]);
   // Postings past your age limit that the other filters would show: "Show older jobs (N)".
   const olderCount = useMemo(() => (listFilters.showOld ? 0 : roleCount(applyFilters(pool, { ...listFilters, showOld: true }, ctx)) - groups.length), [pool, listFilters, ctx, groups.length]);
@@ -221,24 +225,23 @@ export function RadarPage(p: Props) {
   // View counts are within your profile, like the views themselves.
   const open = useMemo(() => applyFilters(p.jobs, base, ctx), [p.jobs, base, ctx]);
   // Every count is roles, like the list's rows: one role posted in three cities counts once.
-  const newCount = roleCount(open.filter((j) => isNewJob(j, ctx)));
+  const newCount = useMemo(() => roleCount(open.filter((j) => isNewJob(j, ctx))), [open, ctx]);
   // A quick-filter chip counts what it shows with the other chips that are on: with Strong on, New says how many new strong jobs.
-  const chipOn: Record<ChipId, boolean> = { mine: !!filters.mine, new: filters.status === "new", strong: filters.match === "strong" };
-  const chipTest: Record<ChipId, (j: Job) => boolean> = { mine: p.isYours, new: (j) => isNewJob(j, ctx), strong: (j) => j.score >= min };
-  const chipIds = Object.keys(chipTest) as ChipId[];
-  const chipCounts = Object.fromEntries(chipIds.map((id) => [id, roleCount(open.filter((j) => chipTest[id](j) && chipIds.every((o) => o === id || !chipOn[o] || chipTest[o](j))))])) as Record<
-    ChipId,
-    number
-  >;
-  const yourGroups = groups.filter((g) => p.isYours(g.lead)).length;
+  const chipCounts = useMemo(() => {
+    const chipOn: Record<ChipId, boolean> = { mine: !!filters.mine, new: filters.status === "new", strong: filters.match === "strong" };
+    const chipTest: Record<ChipId, (j: Job) => boolean> = { mine: p.isYours, new: (j) => isNewJob(j, ctx), strong: (j) => j.score >= min };
+    const chipIds = Object.keys(chipTest) as ChipId[];
+    return Object.fromEntries(chipIds.map((id) => [id, roleCount(open.filter((j) => chipTest[id](j) && chipIds.every((o) => o === id || !chipOn[o] || chipTest[o](j))))])) as Record<ChipId, number>;
+  }, [open, ctx, filters.mine, filters.status, filters.match, p.isYours, min]);
+  const yourGroups = useMemo(() => groups.filter((g) => p.isYours(g.lead)).length, [groups, p.isYours]);
   // The newest job in the list, said in the head when the list isn't sorted by date.
   const newest = useMemo(() => (sort === "newest" ? undefined : visible.reduce<string | undefined>((m, j) => (!m || postedOrSeen(j) > m ? postedOrSeen(j) : m), undefined)), [sort, visible]);
   const noCompaniesYet = filters.mine && p.companyCount === 0;
 
   // ----- list paging and selection -----
-  const [limit, setLimit] = useState(PAGE);
-  // biome-ignore lint/correctness/useExhaustiveDependencies: new filters or sort start the list at its first page
-  useEffect(() => setLimit(PAGE), [filters, sort]);
+  const [paged, setPaged] = useState<{ for: unknown; n: number }>({ for: null, n: PAGE });
+  const limit = paged.for === listKey ? paged.n : PAGE;
+  const setLimit = useCallback((next: (n: number) => number) => setPaged((s) => ({ for: listKey, n: next(s.for === listKey ? s.n : PAGE) })), [listKey]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const selectedGroup = groups.find((g) => g.jobs.some((j) => j.id === selectedId)) ?? (wide ? navGroups[0] : undefined);
   const selected = selectedGroup?.jobs.find((j) => j.id === selectedId) ?? selectedGroup?.lead;
@@ -254,7 +257,7 @@ export function RadarPage(p: Props) {
     const io = new IntersectionObserver((e) => e[0]?.isIntersecting && setLimit((l) => l + PAGE), { root: wide ? listRef.current : null, rootMargin: "400px" });
     io.observe(el);
     return () => io.disconnect();
-  }, [wide, rows.length, limit]);
+  }, [wide, rows.length, limit, setLimit]);
 
   const select = useCallback(
     (job: Job) => {
@@ -283,13 +286,13 @@ export function RadarPage(p: Props) {
       const next = Math.max(0, Math.min(navGroups.length - 1, (index < 0 ? -1 : index) + d));
       const g = navGroups[next]!;
       const row = rows.findIndex((r) => r.kind === "group" && r.group === g);
-      if (row >= limit) setLimit(row + PAGE);
+      if (row >= limit) setLimit(() => row + PAGE);
       setSelectedId(g.lead.id);
       if (!wide && p.overlayOpen) p.onOpenOverlay(g.lead);
       // Focus moves once the new row is rendered and marked current (the effect below).
       focusPending.current = g.key;
     },
-    [navGroups, rows, index, limit, wide, p],
+    [navGroups, rows, index, limit, setLimit, wide, p],
   );
 
   // ----- keyboard: j/k move, s/a/x status, Enter opens (phones), "/" search, 1-3 quick filters -----
@@ -364,7 +367,10 @@ export function RadarPage(p: Props) {
   const [filtersOpen, setFiltersOpen] = useState(false);
   /** Seniority, industry, company and keywords: shown on request, so the first row holds the common ones. */
   const [moreFacets, setMoreFacets] = useState(false);
-  const facet = (key: FacetKey) => counts[key];
+  // Facet counts are the costliest pass, so they're worked out only while the filter row or sheet shows them.
+  const needFacets = wide ? filtersOpen : sheet;
+  const counts = useMemo(() => (needFacets ? facetCounts(pool, listFilters, ctx) : undefined), [needFacets, pool, listFilters, ctx]);
+  const facet = (key: FacetKey) => counts?.[key] ?? [];
   const relax = useMemo(() => (groups.length === 0 ? suggestRelax(pool, listFilters, ctx) : []), [groups.length, pool, listFilters, ctx]);
 
   /** One role's row, in the strip or the list: each role shows once, and J/K moves focus to it. */
@@ -389,6 +395,16 @@ export function RadarPage(p: Props) {
 
   // One list (design/components/Feed), paged; in Best match, your companies' strip above it.
   const shown = rows.slice(0, limit);
+  const moreFromCompany = useMemo(
+    () =>
+      selected
+        ? sortJobs(
+            p.jobs.filter((j) => identityOf(j) === identityOf(selected) && roleOf(j) !== roleOf(selected) && j.status === "open"),
+            "best",
+          ).slice(0, 5)
+        : [],
+    [p.jobs, selected],
+  );
 
   const detailProps = selected && {
     job: selected,
@@ -397,10 +413,7 @@ export function RadarPage(p: Props) {
     profile: p.meta.profile,
     postings: selectedGroup!.jobs,
     industries: industriesByCompany.get(selected.company),
-    moreFromCompany: sortJobs(
-      p.jobs.filter((j) => identityOf(j) === identityOf(selected) && roleOf(j) !== roleOf(selected) && j.status === "open"),
-      "best",
-    ).slice(0, 5),
+    moreFromCompany,
     yours: p.isYours(selected),
     indexGeneratedAt: p.indexGeneratedAt,
     onTrack: p.onTrack && ((on: boolean) => p.onTrack!(selected, on)),
@@ -709,7 +722,7 @@ export function RadarPage(p: Props) {
                     card(r.group)
                   ) : (
                     <li key={`more:${r.key}`} className="px-4 py-2">
-                      <Button variant="ghost" size="sm" onClick={() => setOpenCompanies((s) => new Set([...s, r.key]))}>
+                      <Button variant="ghost" size="sm" onClick={() => openCompany(r.key)}>
                         +{r.groups.length} more at {displayName(r.company)}
                       </Button>
                     </li>
