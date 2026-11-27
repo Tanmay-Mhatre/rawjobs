@@ -167,6 +167,31 @@ const GROWTH = "Senior Product Manager, Growth";
 const withContact = (title: string, contact: Record<string, unknown>) =>
   Object.fromEntries(Object.entries(demo.USER_STATE).map(([id, e]) => [id, e.snapshot.title === title ? { ...e, contacts: [contact] } : e]));
 
+/** The demo tracking state with two jobs taken off the Pipeline (one tracked by hand), for the Removed drawer. */
+const withRemoved = () => {
+  const off = (e: (typeof demo.USER_STATE)[string], removedDaysAgo: number) => {
+    const { status, ...rest } = e;
+    return {
+      ...rest,
+      history: [
+        { status, at: e.updatedAt },
+        { status: null, at: new Date(demo.NOW.getTime() - removedDaysAgo * 86_400_000).toISOString() },
+      ],
+    };
+  };
+  const state = Object.fromEntries(Object.entries(demo.USER_STATE).map(([id, e]) => [id, e.snapshot.title === "Product Manager, Developer Platform" ? off(e, 1) : e]));
+  const manual = {
+    status: "applied",
+    updatedAt: new Date(demo.NOW.getTime() - 20 * 86_400_000).toISOString(),
+    snapshot: { title: "Product Lead, Payments", company: "Kestrel Pay", url: "", location: "", score: 0 },
+  };
+  return { ...state, "manual:demo1": off(manual, 4) };
+};
+const openRemoved = async (page: Page) => {
+  await page.getByRole("button", { name: /^Removed \(/ }).click();
+  await page.getByRole("dialog", { name: "Removed from the Pipeline" }).waitFor();
+};
+
 const SCREENS: Screen[] = [
   { id: "radar", what: "Radar, All view (default)", scenario: "demo", hash: "#radar", ready: strong },
   {
@@ -307,6 +332,47 @@ const SCREENS: Screen[] = [
     },
   },
   { id: "pipeline", what: "Pipeline", scenario: "demo", hash: "#pipeline", ready: strong },
+  {
+    id: "pipeline-remove-toast",
+    viewportOnly: true,
+    what: "A card removed from the Pipeline with its menu: the toast names the job and offers Undo; Removed (1) shows at the board's foot",
+    scenario: "demo",
+    hash: "#pipeline",
+    ready: strong,
+    act: async (page) => {
+      await page
+        .getByRole("button", { name: /^Move .* to$/ })
+        .filter({ visible: true })
+        .first()
+        .click();
+      await page.getByRole("menuitem", { name: "Remove from Pipeline" }).click();
+      await page.getByRole("button", { name: "Undo" }).waitFor();
+    },
+  },
+  {
+    id: "pipeline-removed",
+    viewportOnly: true,
+    what: "Pipeline's Removed drawer: jobs taken off the board, newest first, each with Put back and Delete",
+    scenario: "demo",
+    hash: "#pipeline",
+    ready: strong,
+    storage: { "rawjobs.state.v1": withRemoved() },
+    act: openRemoved,
+  },
+  {
+    id: "pipeline-removed-confirm",
+    viewportOnly: true,
+    what: "Removed drawer, Delete pressed: the row asks inline (Delete for good, Keep it focused), no second modal",
+    scenario: "demo",
+    hash: "#pipeline",
+    ready: strong,
+    storage: { "rawjobs.state.v1": withRemoved() },
+    act: async (page) => {
+      await openRemoved(page);
+      await page.getByRole("button", { name: "Delete Product Lead, Payments" }).click();
+      await page.getByRole("button", { name: "Keep it" }).waitFor();
+    },
+  },
   {
     id: "toast-in-dialog",
     viewportOnly: true,

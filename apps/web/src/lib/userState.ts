@@ -1,5 +1,5 @@
 import { fitFeatures } from "@rawjobs/core/learn";
-import { dayAfter, FOLLOW_UP_DAYS, isActive, isDay, PIPELINE, QUIET_DAYS, STATUS_LABEL, type Status, stageSince, today } from "@rawjobs/core/next-steps";
+import { dayAfter, FOLLOW_UP_DAYS, isActive, isDay, PIPELINE, type PipelineStatus, QUIET_DAYS, STATUS_LABEL, type Status, stageSince, today } from "@rawjobs/core/next-steps";
 import { useCallback, useEffect, useMemo, useRef, useState, useLayoutEffect } from "react";
 import type { Job } from "./data";
 import type { Reason } from "./notForMe";
@@ -414,8 +414,31 @@ export function addActivity(entry: Entry | undefined, a: Activity, { followUpDay
   return patch;
 }
 
-/** An entry is kept while it holds anything of yours: a status, a note, a CV, touches or people. */
-const keep = (e: Pick<Entry, "status" | "note" | "cv" | "activities" | "contacts">) => !!(e.status || e.note || e.cv || e.activities?.length || e.contacts?.length);
+/**
+ * An entry is kept while it holds anything of yours: a status, a note, a CV, touches or people, or
+ * a stage history (it was on the Pipeline once), so a job you took off the board can be put back.
+ */
+const keep = (e: Pick<Entry, "status" | "note" | "cv" | "activities" | "contacts" | "history">) =>
+  !!(e.status || e.note || e.cv || e.activities?.length || e.contacts?.length || e.history?.some((h) => h.status && h.status !== "dismissed"));
+
+/** The last Pipeline stage a job was in and when it got there (from its history), for Put back. */
+export function lastStage(e: Pick<Entry, "history">): { status: PipelineStatus; at: string } | undefined {
+  const h = e.history?.findLast((x) => x.status && x.status !== "dismissed");
+  return h ? { status: h.status as PipelineStatus, at: h.at } : undefined;
+}
+
+/** When a job came off the Pipeline: the history entry that cleared its status. */
+const removedAt = (e: Entry) => e.history?.findLast((x) => x.status === null)?.at ?? e.updatedAt;
+
+/** Jobs that were on the Pipeline and are off it now (no status), newest removal first. */
+export function removedEntries(state: UserState): { id: string; entry: Entry; stage: PipelineStatus; removedAt: string }[] {
+  return Object.entries(state)
+    .flatMap(([id, entry]) => {
+      const last = !entry.status && lastStage(entry);
+      return last ? [{ id, entry, stage: last.status, removedAt: removedAt(entry) }] : [];
+    })
+    .sort((a, b) => b.removedAt.localeCompare(a.removedAt));
+}
 
 /** One job's entry after a change; null when nothing is left to keep. */
 export function applyPatch(prev: Entry | undefined, job: JobLike, patch: EntryPatch, now = new Date().toISOString()): Entry | null {
@@ -616,6 +639,9 @@ export function useUserState() {
 
   const replaceAll = useCallback((next: UserState) => setState(normalizeState(next)), []);
 
+  /** Put one job's entry back exactly as it was (Undo), or delete it for good with null. */
+  const restore = useCallback((id: string, entry: Entry | null) => setState((s) => withEntry(s, id, entry)), []);
+
   /**
    * Edit a person on every job they're on (same id). Only `contacts` changes: no `updatedAt` bump,
    * so stage ages and applied dates stay put. Removing a person is a patch on one job instead.
@@ -636,7 +662,7 @@ export function useUserState() {
     });
   }, []);
 
-  return useMemo(() => ({ state, update, toggleStatus, statusOf, replaceAll, updateContact }), [state, update, toggleStatus, statusOf, replaceAll, updateContact]);
+  return useMemo(() => ({ state, update, toggleStatus, statusOf, replaceAll, updateContact, restore }), [state, update, toggleStatus, statusOf, replaceAll, updateContact, restore]);
 }
 
 export function exportState(state: UserState, prefs?: Prefs): void {
