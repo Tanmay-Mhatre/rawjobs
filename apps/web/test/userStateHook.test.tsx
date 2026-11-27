@@ -2,8 +2,10 @@
 import { act, cleanup, renderHook, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { onSaveFailed, save, saveFailed } from "../src/lib/storage";
+import { __resetHealthForTests } from "../src/lib/health";
 import { resetTrackingSync } from "../src/lib/tracking";
 import { type Entry, useUserState } from "../src/lib/userState";
+import { trackingServer } from "./trackingServer";
 
 const snapshot = { title: "Head of Product", company: "Acme", url: "https://acme.example/1", location: "Dubai", score: 83 };
 const entry = (o: Partial<Entry>): Entry => ({ status: "applied", updatedAt: "2026-10-10T09:00:00.000Z", snapshot, ...o });
@@ -18,6 +20,8 @@ beforeEach(() => {
 });
 afterEach(() => {
   cleanup();
+  __resetHealthForTests();
+  vi.useRealTimers();
   vi.unstubAllGlobals();
   onSaveFailed(undefined);
 });
@@ -62,11 +66,51 @@ describe("save failures", () => {
   it("says when the local API refuses the save", async () => {
     const failed = vi.fn();
     onSaveFailed(failed);
-    vi.stubGlobal(
-      "fetch",
-      vi.fn(async (_url: string, init?: RequestInit) => (init?.method === "PUT" ? new Response(JSON.stringify({ ok: false }), { status: 400 }) : new Response(JSON.stringify({ tracking: null })))),
-    );
+    localStorage.setItem("rawjobs.state.v1", JSON.stringify({ a: entry({}) }));
+    trackingServer(null, { status: (m) => (m === "PATCH" ? 400 : undefined) });
     renderHook(() => useUserState());
     await waitFor(() => expect(failed).toHaveBeenCalledTimes(1));
+  });
+});
+
+describe("saving to your RawJobs folder", () => {
+  const job = { id: "a", ...snapshot };
+  const settle = () =>
+    act(async () => {
+      await vi.advanceTimersByTimeAsync(1000);
+    });
+  beforeEach(() => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+  });
+
+  it("one status change stringifies the state once", async () => {
+    trackingServer({ state: { a: entry({}), b: entry({ status: "saved" }) } });
+    const { result } = renderHook(() => useUserState());
+    await waitFor(() => expect(result.current.state).toHaveProperty("b"));
+    await settle();
+    const stringify = vi.spyOn(JSON, "stringify");
+    act(() => result.current.update(job, { status: "interviewing" }));
+    await settle();
+    const whole = stringify.mock.calls.filter(([v]) => v && typeof v === "object" && "a" in v && "b" in v);
+    stringify.mockRestore();
+    // The browser copy, once; the save to the file sends only the changed job.
+    expect(whole).toHaveLength(1);
+    expect(JSON.parse(localStorage.getItem("rawjobs.state.v1")!).a.status).toBe("interviewing");
+  });
+
+  it("same-job conflict merges activities via mergeStates", async () => {
+    const touch = (id: string, at: string) => ({ id, at, channel: "email" as const, dir: "sent" as const });
+    const api = trackingServer({ state: { a: entry({ activities: [touch("t1", "2026-10-10T09:00:00.000Z")] }) } });
+    const { result } = renderHook(() => useUserState());
+    await waitFor(() => expect(result.current.state.a?.activities).toHaveLength(1));
+    // Another window logs a touch on the same job...
+    api.edit("state", "a", entry({ updatedAt: "2026-10-11T09:00:00.000Z", activities: [touch("t1", "2026-10-10T09:00:00.000Z"), touch("t2", "2026-10-11T09:00:00.000Z")] }));
+    // ...while this one logs another.
+    act(() => result.current.update(job, { activities: [...result.current.state.a!.activities!, touch("t3", "2026-10-12T09:00:00.000Z")] }));
+    await settle();
+    const saved = (api.file() as { state: Record<string, Entry> }).state.a!;
+    expect(saved.activities!.map((t) => t.id).sort()).toEqual(["t1", "t2", "t3"]);
+    expect(api.saves().map((c) => c.method)).toEqual(["PATCH", "PATCH"]);
+    await waitFor(() => expect(result.current.state.a!.activities!.map((t) => t.id).sort()).toEqual(["t1", "t2", "t3"]));
   });
 });
