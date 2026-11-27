@@ -1,5 +1,5 @@
 import { spawnSync } from "node:child_process";
-import { existsSync, mkdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, renameSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import type { ScanScope } from "./scope";
@@ -154,9 +154,25 @@ export function scanLimits(scope: ScanScope): { deadlineMin: number; taskHours: 
   return scope === "all" ? { deadlineMin: 230, taskHours: 5 } : scope === "mine" ? { deadlineMin: 170, taskHours: 4 } : { deadlineMin: 50, taskHours: 2 };
 }
 
-/** The scan command the scheduler runs. */
+/** Where scheduled runs log: the RawJobs folder's logs/ (out of data/, so backups leave it out). */
+export const scheduleLogDir = (ctx: ScheduleContext) => join(workDir(ctx), "logs");
+
+/** The scan command the scheduler runs. Its output goes to logs/schedule.log (on Windows nothing else keeps it). */
 export function scanCommand(ctx: ScheduleContext, scope: ScanScope): string[] {
-  return [...launchCommand(ctx), "scan", "--scope", scope, "--notify", "--scheduled", "--data", resolve(ctx.dataDir), "--deadline", String(scanLimits(scope).deadlineMin)];
+  return [
+    ...launchCommand(ctx),
+    "scan",
+    "--scope",
+    scope,
+    "--notify",
+    "--scheduled",
+    "--data",
+    resolve(ctx.dataDir),
+    "--deadline",
+    String(scanLimits(scope).deadlineMin),
+    "--log",
+    join(scheduleLogDir(ctx), "schedule.log"),
+  ];
 }
 
 /** One entry in the operating system's scheduler: what it runs, when, and what it's called. */
@@ -170,7 +186,7 @@ type SchedulerJob = {
   description: string;
   /** The systemd units' description. */
   title: string;
-  /** macOS: the log file in the data folder. */
+  /** macOS: launchd's own log file in logs/ (what happens before RawJobs starts; RawJobs logs with --log). */
   log: string;
 };
 
@@ -181,7 +197,7 @@ const scanJob = (ctx: ScheduleContext, s: ScheduleSettings, names: SchedulerName
   hours: scanLimits(s.scope).taskHours,
   description: "RawJobs: sync the company directory, scan, and send new jobs to Telegram.",
   title: "RawJobs scan",
-  log: "schedule.log",
+  log: "launchd-scan.log",
 });
 
 // ---------- Windows: Task Scheduler ----------
@@ -247,7 +263,8 @@ function installMac(ctx: ScheduleContext, job: SchedulerJob): void {
       return `    <dict><key>Hour</key><integer>${h}</integer><key>Minute</key><integer>${m}</integer></dict>`;
     })
     .join("\n");
-  const log = xml(join(resolve(ctx.dataDir), job.log));
+  mkdirSync(scheduleLogDir(ctx), { recursive: true });
+  const log = xml(join(scheduleLogDir(ctx), job.log));
   const plist = `<?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
@@ -465,8 +482,11 @@ export function scheduledRunKind(times: readonly string[], runs: readonly Schedu
  * What the installed scheduler entries look like. Raise it when the command or the task settings
  * change, so installed schedules are written again once (refreshSchedules).
  * 2: scans stop themselves at a deadline (`--deadline`), longer backstop limits, ExitTimeOut/TimeoutStopSec.
+ * 3: runs log to logs/ with `--log` (Windows kept nothing; macOS logged to data/, unrotated).
  */
-export const SCHEDULER_FORMAT = 2;
+export const SCHEDULER_FORMAT = 3;
+/** Logs the scheduled runs wrote into data/ before format 3: moved to logs/ (out of every backup). */
+const OLD_DATA_LOGS = ["schedule.log", "daily-summary.log"];
 const FORMAT_FILE = "scheduler-format.json";
 
 /**
@@ -487,6 +507,16 @@ export function refreshSchedules(ctx: ScheduleContext): boolean {
   const platform = ctx.platform ?? process.platform;
   if (scan) installJob(ctx, platform, scanJob(ctx, scan, activeNames(ctx, platform).names), "Scheduled scans");
   if (daily) installJob(ctx, platform, dailyJob(ctx, daily), "Daily summaries");
+  for (const f of OLD_DATA_LOGS) {
+    const old = join(ctx.dataDir, f);
+    if (!existsSync(old)) continue;
+    try {
+      mkdirSync(scheduleLogDir(ctx), { recursive: true });
+      renameSync(old, join(scheduleLogDir(ctx), f.replace(/\.log$/, ".old.log")));
+    } catch {
+      // held open: left where it is (backups skip it anyway)
+    }
+  }
   mkdirSync(ctx.dataDir, { recursive: true });
   writeFileAtomic(file, JSON.stringify({ format: SCHEDULER_FORMAT }));
   return true;
@@ -584,7 +614,7 @@ export function validateDailySummary(s: Partial<DailySettings>): DailySettings {
 
 /** The command the scheduler runs each morning, with absolute paths like the scan's. */
 export function dailySummaryCommand(ctx: ScheduleContext): string[] {
-  return [...launchCommand(ctx), "today", "--notify", "--scheduled", "--data", resolve(ctx.dataDir)];
+  return [...launchCommand(ctx), "today", "--notify", "--scheduled", "--data", resolve(ctx.dataDir), "--log", join(scheduleLogDir(ctx), "daily-summary.log")];
 }
 
 /** The saved time, or undefined when there is none or the file can't be read (a broken file never crashes the CLI). */
@@ -604,7 +634,7 @@ const dailyJob = (ctx: ScheduleContext, s: DailySettings): SchedulerJob => ({
   hours: 1,
   description: "RawJobs: send what's due in your Pipeline today to Telegram.",
   title: "RawJobs daily summary",
-  log: "daily-summary.log",
+  log: "launchd-daily.log",
 });
 
 export function installDailySummary(ctx: ScheduleContext, input: Partial<DailySettings>): DailySettings {

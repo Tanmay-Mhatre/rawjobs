@@ -3,7 +3,8 @@ import { constants, setPriority } from "node:os";
 import { createServer, type Server } from "node:http";
 import { parseArgs } from "node:util";
 import { defaultDataDir, rawjobsHome } from "@rawjobs/core";
-import { APP_VERSION, BUNDLED, migrateData, scanLockHeld, WEB_DIR } from "@rawjobs/core";
+import { APP_VERSION, BUNDLED, collectReports, migrateData, recentCrashes, recordCrash, reportFatalErrors, SAFE_MODE_CRASHES, scanLockHeld, WEB_DIR } from "@rawjobs/core";
+import { join } from "node:path";
 import { watchMissedScans } from "./catch-up";
 import { createApi } from "./api";
 import { createUpdater } from "./updater";
@@ -13,6 +14,9 @@ import { ensureShortcuts, startLinkInstalled } from "./shortcuts";
 import { createHandler } from "./handler";
 
 const TRIES = 10;
+/** How long a server in safe mode (after crashing again and again) goes without its background work. */
+const SAFE_MODE_MS = 30 * 60_000;
+let safeMode = false;
 
 /**
  * The dashboard and its API, without the dev server (`rawjobs serve`, `pnpm start`). Runs until
@@ -21,7 +25,13 @@ const TRIES = 10;
  */
 export async function serve(args: string[]): Promise<number> {
   const { values } = parseArgs({ args, options: { port: { type: "string" }, open: { type: "boolean", default: false }, log: { type: "string" } } });
-  if (values.log) logTo(values.log);
+  const log = values.log ? logTo(values.log) : undefined;
+  // A crash ends the server (resuming after one isn't safe) and its supervisor starts it again: the
+  // stack goes to the log and logs/crashes.json first, which Node itself would only print to a
+  // console nobody sees. Fatal errors with no exception (out of memory) leave a report instead.
+  const logDir = join(rawjobsHome(), "logs");
+  process.on("uncaughtExceptionMonitor", (err, origin) => recordCrash(logDir, err, { origin, where: "server", version: APP_VERSION, log }));
+  reportFatalErrors(logDir);
   // The dashboard answers at normal priority, also when a copy installed before started it lower
   // (scans still lower their own).
   try {
@@ -98,7 +108,7 @@ export async function serve(args: string[]): Promise<number> {
   const updater = createUpdater({ home, isBusy: () => api.scanning() || scanLockHeld(dataDir), pauseBackground: () => api.pauseBackground(), exit: () => shutdown() });
   // The "RawJobs isn't running" window and page offer a Start button only when rawjobs://open works here.
   const startLink = () => BUNDLED && startLinkInstalled(home);
-  const api = createApi({ home, dataDir, updater, startLink });
+  const api = createApi({ home, dataDir, updater, startLink, safeMode: () => safeMode });
   const pages = { startLink, platform: process.platform };
   const server = createServer(createHandler({ api, roots: [WEB_DIR, dataDir], pages }));
   // A promise nobody awaited that failed (a background task, a timer): logged, not fatal. Node would
@@ -121,15 +131,30 @@ export async function serve(args: string[]): Promise<number> {
     return 1;
   }
 
-  api.startBackground();
+  // Crashed again and again just now: start without the background work (it runs at every start, so
+  // it may be what crashes), and add it once the server has stayed up a while.
+  collectReports(logDir, { where: "server", version: APP_VERSION });
+  const crashes = recentCrashes(logDir, "server");
+  safeMode = crashes >= SAFE_MODE_CRASHES;
+  const startWork = () => {
+    api.startBackground();
+    // A scheduled scan missed while the computer was off or asleep starts once it's back on and online.
+    // Installed copies only: a dev server must never start your real scheduled task.
+    if (BUNDLED) watchMissedScans({ dataDir, busy: () => api.scanning() || updater.updating(), cli: (args) => api.cli(args) });
+  };
+  if (safeMode) {
+    console.log(`RawJobs restarted after ${crashes} crashes in the last few minutes: starting in safe mode, without background work, for 30 minutes.`);
+    setTimeout(() => {
+      safeMode = false;
+      console.log("Safe mode is over: starting the background work.");
+      startWork();
+    }, SAFE_MODE_MS).unref();
+  } else startWork();
   updater.start();
   // Copies installed before there was a Desktop shortcut (or an icon) get them on this version's first start.
   if (BUNDLED) ensureShortcuts(home, process.env.RAWJOBS_LAUNCHER, APP_VERSION);
   // Copies installed before: the server task at normal priority, and no scheduled task waking the laptop.
   if (BUNDLED) void ensureAutostart(home, APP_VERSION);
-  // A scheduled scan missed while the computer was off or asleep starts once it's back on and online.
-  // Installed copies only: a dev server must never start your real scheduled task.
-  if (BUNDLED) watchMissedScans({ dataDir, busy: () => api.scanning() || updater.updating(), cli: (args) => api.cli(args) });
   watchEventLoop();
   // Where the shortcut (rawjobs open) finds the dashboard, also when 4317 was taken.
   writeServerState(port, home);

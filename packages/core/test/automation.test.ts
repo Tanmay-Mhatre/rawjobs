@@ -196,17 +196,20 @@ describe("schedule", () => {
     const home = mkdtempSync(join(tmpdir(), "jh-home-"));
     const dataDir = mkdtempSync(join(tmpdir(), "jh-sched-"));
     const exec = () => ({ status: 0, stdout: "", stderr: "" });
-    installSchedule({ repoRoot: "/repo", dataDir, exec, platform: "darwin", home }, { times: ["07:30"], scope: "mine" });
+    installSchedule({ repoRoot: "/repo", workDir: home, dataDir, exec, platform: "darwin", home }, { times: ["07:30"], scope: "mine" });
     const plist = readFileSync(join(home, "Library/LaunchAgents/com.rawjobs.scan.plist"), "utf8");
     expect(plist).toContain("<key>Hour</key><integer>7</integer><key>Minute</key><integer>30</integer>");
     expect(plist).toContain("<string>--notify</string>");
-    expect(scheduleStatus({ repoRoot: "/repo", dataDir, exec, platform: "darwin", home }).installed).toBe(true);
+    expect(scheduleStatus({ repoRoot: "/repo", workDir: home, dataDir, exec, platform: "darwin", home }).installed).toBe(true);
 
-    installSchedule({ repoRoot: "/repo", dataDir, exec, platform: "linux", home }, { times: ["07:30", "19:00"], scope: "mine" });
+    installSchedule({ repoRoot: "/repo", workDir: home, dataDir, exec, platform: "linux", home }, { times: ["07:30", "19:00"], scope: "mine" });
     const timer = readFileSync(join(home, ".config/systemd/user/rawjobs-scan.timer"), "utf8");
     expect(timer).toContain("OnCalendar=*-*-* 07:30:00\nOnCalendar=*-*-* 19:00:00\nPersistent=true");
     // Stopped gracefully (SIGTERM saves the scan's progress) with time to save, before the backstop's SIGKILL.
     expect(plist).toContain("<key>ExitTimeOut</key><integer>60</integer>");
+    // RawJobs logs the run itself (rotated, out of data/ so backups leave it out); launchd's file only catches what comes before.
+    expect(plist).toContain(`<string>--log</string>\n    <string>${join(home, "logs", "schedule.log")}</string>`);
+    expect(plist).toContain(`<key>StandardOutPath</key><string>${join(home, "logs", "launchd-scan.log")}</string>`);
     expect(plist).toContain("<string>--deadline</string>\n    <string>170</string>");
     const service = readFileSync(join(home, ".config/systemd/user/rawjobs-scan.service"), "utf8");
     expect(service).toContain("TimeoutStartSec=4h\nTimeoutStopSec=2min");
@@ -221,13 +224,14 @@ describe("schedule", () => {
       calls.push([cmd, ...args]);
       return { status: 0, stdout: "", stderr: "" };
     };
-    const ctx = { repoRoot: "/repo", dataDir, exec, platform: "linux" as const, home };
+    const ctx = { repoRoot: "/repo", workDir: home, dataDir, exec, platform: "linux" as const, home };
     // Nothing installed: nothing to write, and it's current from now on.
     expect(refreshSchedules(ctx)).toBe(true);
     expect(calls).toEqual([]);
     rmSync(join(dataDir, "scheduler-format.json"));
     writeFileSync(join(dataDir, "schedule.json"), JSON.stringify({ times: ["07:30"], scope: "mine" }));
     writeFileSync(join(dataDir, "daily-summary.json"), JSON.stringify({ time: "08:00" }));
+    writeFileSync(join(dataDir, "schedule.log"), "an older version's scan output");
     // A scan is running (a sleeping child holds the lock for it): later.
     const scan = spawn(process.execPath, ["-e", "setTimeout(() => {}, 60000)"]);
     try {
@@ -241,6 +245,9 @@ describe("schedule", () => {
     expect(refreshSchedules(ctx)).toBe(true);
     expect(readFileSync(join(home, ".config/systemd/user/rawjobs-scan.service"), "utf8")).toContain("--deadline 170");
     expect(existsSync(join(home, ".config/systemd/user/rawjobs-daily-summary.service"))).toBe(true);
+    // The log an older version kept in data/ moves to logs/.
+    expect(existsSync(join(dataDir, "schedule.log"))).toBe(false);
+    expect(readFileSync(join(home, "logs/schedule.old.log"), "utf8")).toBe("an older version's scan output");
     // Once: the next start writes nothing.
     const n = calls.length;
     expect(refreshSchedules(ctx)).toBe(true);
@@ -255,7 +262,7 @@ describe("schedule", () => {
       calls.push([cmd, ...args]);
       return { status: 0, stdout: "", stderr: "" };
     };
-    const ctx = { repoRoot: "/repo", dataDir, exec, platform: "darwin" as const, home };
+    const ctx = { repoRoot: "/repo", workDir: home, dataDir, exec, platform: "darwin" as const, home };
     const legacy = join(home, "Library/LaunchAgents/com.jobhunter.scan.plist");
     mkdirSync(join(home, "Library/LaunchAgents"), { recursive: true });
     writeFileSync(legacy, "<plist/>");
