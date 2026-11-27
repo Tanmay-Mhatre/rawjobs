@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { ROLE_FAMILIES } from "@rawjobs/core/catalog/roles";
-import { careersUrl, companyKey, connectors, detectCompany } from "@rawjobs/core/detect";
+import { careersUrl, companyKey, SUPPORTED_ATS } from "@rawjobs/core/company-key";
 import type { AiProfile } from "@rawjobs/core/resume-parse";
 import type { CompanyCheck, RunEvent, SaveResult, ScanPlan, ScanOrigin, ScanScope, ScanSource, SetupStatus } from "@rawjobs/core/protocol";
 import type { AtsType, Config } from "@rawjobs/core/schema";
@@ -54,6 +54,8 @@ export async function resetSetup(): Promise<{ ok: true; backup: string | null } 
 /** Live check through the local API; offline (hosted) falls back to URL detection only. */
 export async function checkCompanies(urls: string[]): Promise<CompanyCheck[]> {
   if (!canRunLocally) {
+    // Loaded on demand: URL detection pulls in every connector.
+    const { detectCompany } = await import("@rawjobs/core/detect");
     return urls.map((input): CompanyCheck => {
       const d = detectCompany(input);
       if (!d) return { input, status: "unknown", error: "Not a careers site RawJobs can read yet." };
@@ -266,7 +268,7 @@ export function draftFromConfig(input: unknown): Draft {
         id: rowId(),
         input: typeof co.careers_url === "string" ? co.careers_url : `${co.ats}: ${co.slug}`,
         // Saved companies on ATSs we can't fetch yet stay "coming soon".
-        state: connectors[co.ats as AtsType] ? "saved" : "soon",
+        state: SUPPORTED_ATS.has(co.ats as AtsType) ? "saved" : "soon",
         name: typeof co.name === "string" ? co.name : co.slug,
         ats: co.ats as AtsType,
         slug: co.slug,
