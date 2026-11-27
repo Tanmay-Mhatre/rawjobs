@@ -1,5 +1,6 @@
 import { TriangleAlert } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
+import { PRIORITY, type Notice } from "../app/notices";
 import { scheduleStatus, type ScheduleStatus } from "../lib/automation";
 import { SCAN_ENDED } from "../lib/scan";
 import { load, save } from "../lib/storage";
@@ -31,23 +32,33 @@ export function scheduledNotice(s: ScheduleStatus | null): { key: string; title:
  * to do: Scan now, the details in Settings, or Dismiss (that run isn't mentioned again). Also a
  * schedule the computer lost. Read again whenever a scan ends.
  */
-export function ScheduledScanNotice({ scanning, onScan }: { scanning: boolean; onScan: () => void }) {
+export function useScheduledScanNotice({ enabled, scanning, onScan }: { enabled: boolean; scanning: boolean; onScan: () => void }): Notice | null {
   const [status, setStatus] = useState<ScheduleStatus | null>(null);
   const [seen, setSeen] = useState(() => load<string | null>(SEEN_KEY, null));
   const refresh = useCallback(() => void scheduleStatus().then((s) => setStatus(s.ok === false ? null : s)), []);
   useEffect(() => {
+    if (!enabled) return;
     refresh();
     window.addEventListener(SCAN_ENDED, refresh);
     return () => window.removeEventListener(SCAN_ENDED, refresh);
-  }, [refresh]);
+  }, [enabled, refresh]);
   const notice = scheduledNotice(status);
-  if (!notice || scanning || seen === notice.key) return null;
+  if (!enabled || !notice || scanning || seen === notice.key) return null;
   const dismiss = () => {
     save(SEEN_KEY, notice.key);
     setSeen(notice.key);
   };
+  return {
+    id: `scheduled:${notice.key}`,
+    priority: notice.fix ? PRIORITY.scheduleBroken : PRIORITY.scheduledMissed,
+    tone: "warn",
+    render: () => <ScheduledScanNotice notice={notice} onScan={onScan} onDismiss={dismiss} />,
+  };
+}
+
+function ScheduledScanNotice({ notice, onScan, onDismiss }: { notice: NonNullable<ReturnType<typeof scheduledNotice>>; onScan: () => void; onDismiss: () => void }) {
   return (
-    <div role="status" className="mb-4 flex flex-col gap-3 rounded-md border border-warning/40 bg-warning-subtle p-3 type-small sm:flex-row sm:items-start">
+    <div className="flex flex-col gap-3 rounded-md border border-warning/40 bg-warning-subtle p-3 type-small sm:flex-row sm:items-start">
       <TriangleAlert className="mt-0.5 size-4 shrink-0 text-warning-text max-sm:hidden" aria-hidden />
       <p className="min-w-0 flex-1">
         <b className="font-semibold">{notice.title}</b> {notice.detail}
@@ -66,7 +77,7 @@ export function ScheduledScanNotice({ scanning, onScan }: { scanning: boolean; o
         >
           {notice.fix ? "Fix the schedule" : "Details"}
         </Button>
-        <Button size="sm" variant="ghost" onClick={dismiss}>
+        <Button size="sm" variant="ghost" onClick={onDismiss}>
           Dismiss
         </Button>
       </div>

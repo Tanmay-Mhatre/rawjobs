@@ -1,6 +1,7 @@
 import { Lock, Send, X } from "lucide-react";
 import { useEffect, useState } from "react";
 import { dailySummaryStatus, scheduleStatus, type TelegramStatus } from "../lib/automation";
+import { PRIORITY, type Notice } from "../app/notices";
 import { load, save } from "../lib/storage";
 import { TelegramSetupDialog, telegramReady } from "./NotifyWhenDone";
 import { settingsHash } from "./settings/registry";
@@ -29,22 +30,67 @@ const INITIAL: TelegramBannerState = { notNow: 0, until: 0 };
 /**
  * The Radar's case for Telegram, for people who haven't connected it: what it sends (new jobs, scans
  * finishing, updates, reminders) and that it's two steps. Connect opens the same setup as the scan bell.
- * On phones it starts folded to two lines, so the jobs stay in view.
+ * On phones it starts folded to two lines, so the jobs stay in view. A low notice: it waits for a calm visit.
  */
-export function TelegramBanner({ tg, onConnected }: { tg: TelegramStatus | null | undefined; onConnected: () => Promise<void> }) {
+export function useTelegramNotice({ enabled, tg, onConnected }: { enabled: boolean; tg: TelegramStatus | null | undefined; onConnected: () => Promise<void> }): Notice | null {
   const [state, setState] = useState<TelegramBannerState>(() => load(TELEGRAM_BANNER_KEY, INITIAL));
   const [setup, setSetup] = useState(false);
-  const [open, setOpen] = useState(false);
   const [justConnected, setJustConnected] = useState(false);
-  /** Reminders only go out with scheduled scans or the daily summary: true when both are off. */
-  const [noReminders, setNoReminders] = useState(false);
   const mode = telegramBannerMode(tg, state, Date.now());
 
+  useEffect(() => {
+    if (!justConnected) return;
+    const t = setTimeout(() => setJustConnected(false), CONNECTED_MS);
+    return () => clearTimeout(t);
+  }, [justConnected]);
+
+  const shows = enabled && (justConnected || !!mode);
+  if (!shows && !setup) return null;
   const update = (next: TelegramBannerState) => {
     setState(next);
     save(TELEGRAM_BANNER_KEY, next);
   };
+  return {
+    id: "telegram-promo",
+    priority: PRIORITY.telegramPromo,
+    tone: "info",
+    render: shows
+      ? () => <TelegramBanner mode={justConnected || !mode ? "connected" : mode} state={state} update={update} onSetup={() => setSetup(true)} onCloseConnected={() => setJustConnected(false)} />
+      : null,
+    dialog: (
+      <TelegramSetupDialog
+        open={setup}
+        onClose={() => setSetup(false)}
+        title="Get RawJobs on your phone"
+        intro="Two quick steps, once. Then RawJobs can message you when you're away from it."
+        footnote="Choose which messages you get in Settings › Notifications."
+        onChanged={onConnected}
+        onConnected={() => {
+          // Disconnecting later brings back the quiet line, not the full banner.
+          update({ notNow: Math.max(state.notNow, 2), until: 0 });
+          setJustConnected(true);
+        }}
+      />
+    ),
+  };
+}
 
+function TelegramBanner({
+  mode,
+  state,
+  update,
+  onSetup,
+  onCloseConnected,
+}: {
+  mode: "full" | "slim" | "connected";
+  state: TelegramBannerState;
+  update: (next: TelegramBannerState) => void;
+  onSetup: () => void;
+  onCloseConnected: () => void;
+}) {
+  const [open, setOpen] = useState(false);
+  /** Reminders only go out with scheduled scans or the daily summary: true when both are off. */
+  const [noReminders, setNoReminders] = useState(false);
   useEffect(() => {
     if (mode !== "full") return;
     let live = true;
@@ -57,36 +103,14 @@ export function TelegramBanner({ tg, onConnected }: { tg: TelegramStatus | null 
     };
   }, [mode]);
 
-  useEffect(() => {
-    if (!justConnected) return;
-    const t = setTimeout(() => setJustConnected(false), CONNECTED_MS);
-    return () => clearTimeout(t);
-  }, [justConnected]);
-
-  const dialog = (
-    <TelegramSetupDialog
-      open={setup}
-      onClose={() => setSetup(false)}
-      title="Get RawJobs on your phone"
-      intro="Two quick steps, once. Then RawJobs can message you when you're away from it."
-      footnote="Choose which messages you get in Settings › Notifications."
-      onChanged={onConnected}
-      onConnected={() => {
-        // Disconnecting later brings back the quiet line, not the full banner.
-        update({ notNow: Math.max(state.notNow, 2), until: 0 });
-        setJustConnected(true);
-      }}
-    />
-  );
-
-  if (justConnected)
+  if (mode === "connected")
     return (
-      <div role="status" className="mb-4 flex items-center gap-2.5 rounded-md border border-hairline bg-success-subtle px-4 py-2.5 type-small">
+      <div className="flex items-center gap-2.5 rounded-md border border-hairline bg-success-subtle px-4 py-2.5 type-small">
         <span aria-hidden className="size-2 shrink-0 bg-success" />
         <span className="min-w-0 flex-1">
           <b className="font-semibold">Connected.</b> A welcome message is waiting in Telegram.
         </span>
-        <IconButton label="Close" className="-my-1 -mr-2" onClick={() => setJustConnected(false)}>
+        <IconButton label="Close" className="-my-1 -mr-2" onClick={onCloseConnected}>
           <X className="size-4" />
         </IconButton>
       </div>
@@ -94,23 +118,20 @@ export function TelegramBanner({ tg, onConnected }: { tg: TelegramStatus | null 
 
   if (mode === "slim")
     return (
-      <div className="mb-3 flex items-center gap-2 type-small text-muted">
+      <div className="flex items-center gap-2 type-small text-muted">
         <Send aria-hidden className="size-3.5 shrink-0" />
         <span className="min-w-0">Get new jobs and reminders on your phone.</span>
-        <button type="button" className="min-h-6 shrink-0 font-medium text-ink underline underline-offset-2 hover:text-muted" onClick={() => setSetup(true)}>
+        <button type="button" className="min-h-6 shrink-0 font-medium text-ink underline underline-offset-2 hover:text-muted" onClick={onSetup}>
           Connect Telegram
         </button>
         <IconButton label="Don't show this again" className="-my-1 ml-auto" onClick={() => update({ ...state, closed: true })}>
           <X className="size-4" />
         </IconButton>
-        {dialog}
       </div>
     );
 
-  if (mode !== "full") return null;
-
   return (
-    <section aria-labelledby="tg-banner-title" className="mb-4 flex flex-col gap-3 rounded-md border border-hairline bg-raised p-4 sm:flex-row sm:items-start sm:gap-4 sm:p-5">
+    <section aria-labelledby="tg-banner-title" className="flex flex-col gap-3 rounded-md border border-hairline bg-raised p-4 sm:flex-row sm:items-start sm:gap-4 sm:p-5">
       <div className="flex min-w-0 flex-1 items-start gap-3 sm:gap-4">
         <span aria-hidden className="grid size-8 shrink-0 place-items-center rounded-md border border-hairline bg-inset text-ink sm:size-10">
           <Send className="size-4 sm:size-5" />
@@ -154,11 +175,10 @@ export function TelegramBanner({ tg, onConnected }: { tg: TelegramStatus | null 
         <Button variant="ghost" onClick={() => update({ notNow: state.notNow + 1, until: Date.now() + SNOOZE_MS })}>
           Not now
         </Button>
-        <Button variant="primary" className="max-sm:flex-1" onClick={() => setSetup(true)}>
+        <Button variant="primary" className="max-sm:flex-1" onClick={onSetup}>
           Connect Telegram
         </Button>
       </div>
-      {dialog}
     </section>
   );
 }
