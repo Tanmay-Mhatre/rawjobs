@@ -1,6 +1,6 @@
 import { fitFeatures } from "@rawjobs/core/learn";
 import { dayAfter, FOLLOW_UP_DAYS, isActive, isDay, PIPELINE, QUIET_DAYS, STATUS_LABEL, type Status, stageSince, today } from "@rawjobs/core/next-steps";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, useLayoutEffect } from "react";
 import type { Job } from "./data";
 import type { Reason } from "./notForMe";
 import type { Prefs } from "./prefs";
@@ -582,7 +582,10 @@ if (typeof document !== "undefined")
 export function useUserState() {
   const [state, setState] = useState<UserState>(() => normalizeState(load<unknown>(KEY, {})));
   const latest = useRef(state);
-  latest.current = state;
+  // Kept after each render (not during it), for handlers and effects that run later.
+  useLayoutEffect(() => {
+    latest.current = state;
+  });
 
   useEffect(() => saveSoon(state), [state]);
   useSavedOnDisk<UserState>("state", state, (v) => setState(normalizeState(v)), mergeEntry);

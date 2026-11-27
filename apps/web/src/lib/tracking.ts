@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useLayoutEffect } from "react";
 import { canRunLocally } from "./data";
 import { healthState, subscribeHealth } from "./health";
 import { load, onSave, saveFailed } from "./storage";
@@ -317,7 +317,10 @@ if (typeof document !== "undefined")
  */
 export function useSavedOnDisk<T>(part: TrackingPart, value: T, apply: (v: T) => void, merge?: (key: string, mine: unknown, theirs: unknown) => unknown) {
   const latest = useRef({ value, apply, merge });
-  latest.current = { value, apply, merge };
+  // Kept after each render (not during it), for handlers and effects that run later.
+  useLayoutEffect(() => {
+    latest.current = { value, apply, merge };
+  });
 
   useEffect(() => {
     if (!canRunLocally) return;

@@ -13,7 +13,11 @@ import type { RadarList } from "./useRadarList";
  * design/components/Feed: an L1 panel, a summary line, then one list, paged (in Best match, your companies'
  * strip first). Rows are drawn by the page (`card`), which keeps their handlers stable.
  */
-export function RadarFeed(p: {
+export function RadarFeed({
+  listRef,
+  sentinel,
+  ...p
+}: {
   list: RadarList;
   density: string;
   sort: Sort;
@@ -80,7 +84,7 @@ export function RadarFeed(p: {
           </button>
         )}
       </div>
-      <div ref={p.listRef} className="lg:min-h-0 lg:flex-1 lg:overflow-y-auto">
+      <div ref={listRef} className="lg:min-h-0 lg:flex-1 lg:overflow-y-auto">
         {strip.length > 0 && (
           <>
             <h2 className="rj-feed__section" id="feed-mine">
@@ -115,7 +119,7 @@ export function RadarFeed(p: {
           )}
           {p.hasMore && (
             // No spinner on the feed (design/components/Loading): the next page is already here, it just renders.
-            <li ref={p.sentinel} className="flex items-center gap-2 px-4 py-4 type-small text-muted">
+            <li ref={sentinel} className="flex items-center gap-2 px-4 py-4 type-small text-muted">
               Loading more…
             </li>
           )}

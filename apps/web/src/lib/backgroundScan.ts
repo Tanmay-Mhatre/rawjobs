@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, useLayoutEffect } from "react";
 import { canRunLocally, type DataMeta } from "./data";
 import { healthState, subscribeHealth } from "./health";
 
@@ -22,7 +22,10 @@ export function useBackgroundScan({
 }): { running: boolean } {
   const [running, setRunning] = useState(false);
   const latest = useRef({ loaded, paused, reload, onFinished });
-  latest.current = { loaded, paused, reload, onFinished };
+  // Kept after each render (not during it), for handlers and effects that run later.
+  useLayoutEffect(() => {
+    latest.current = { loaded, paused, reload, onFinished };
+  });
 
   useEffect(() => {
     if (!canRunLocally) return;

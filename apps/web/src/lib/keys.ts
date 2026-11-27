@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useLayoutEffect } from "react";
 
 /**
  * Single-key shortcuts (design/README.md, Interaction) stay out of the way: not while you type in a
@@ -24,7 +24,10 @@ export const GO_TO_MS = 1000;
  */
 export function useGoToKeys(onGo: (section: GoToSection) => void, canGo: () => boolean, onArm?: () => void): void {
   const latest = useRef({ onGo, canGo, onArm });
-  latest.current = { onGo, canGo, onArm };
+  // Kept after each render (not during it), for handlers and effects that run later.
+  useLayoutEffect(() => {
+    latest.current = { onGo, canGo, onArm };
+  });
   useEffect(() => {
     let armedAt = -Infinity;
     const onKey = (e: KeyboardEvent) => {

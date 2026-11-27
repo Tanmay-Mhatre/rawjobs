@@ -1,4 +1,4 @@
-import { useEffect, useRef, type ReactNode } from "react";
+import { useEffect, useRef, useLayoutEffect, type ReactNode } from "react";
 import { cx } from "./ui";
 
 /**
@@ -40,7 +40,10 @@ export function Dialog({
   const ref = useRef<HTMLDialogElement>(null);
   const opener = useRef<Element | null>(null);
   const close = useRef(onClose);
-  close.current = onClose;
+  // Kept after each render (not during it), for handlers and effects that run later.
+  useLayoutEffect(() => {
+    close.current = onClose;
+  });
 
   useEffect(() => {
     const d = ref.current;

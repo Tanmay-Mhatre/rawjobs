@@ -16,35 +16,36 @@ import { type ViewCounts, ViewsBar } from "./ViewsBar";
  * in view; the filters, active chips and your profile line open under it on request. Phones: search and Filters
  * (which opens the sheet), with the views under them.
  */
-export function RadarToolbar(
-  p: {
-    wide: boolean;
-    base: Filters;
-    filters: Filters;
-    sort: Sort;
-    setFilters: (patch: Partial<Filters>) => void;
-    setSort: (s: Sort) => void;
-    replace: (f: Filters, s: Sort) => void;
-    views: SavedView[];
-    chipCounts: ViewCounts;
-    firstScan: boolean;
-    onSaveView: (name: string) => SavedView;
-    onRenameView: (id: string, name: string) => void;
-    onDeleteView: (id: string) => void;
-    /** Undo a delete: put the view back at its old position. */
-    onRestoreView: (view: SavedView, index: number) => void;
-    searchRef: RefObject<HTMLInputElement | null>;
-    filtersOpen: boolean;
-    onToggleFilters: () => void;
-    onOpenSheet: () => void;
-    chips: { key: string; label: string; remove: Partial<Filters> }[];
-    /** Your profile line, shown in the filter row when it isn't above the toolbar. */
-    profileBar?: ReactNode;
-    counts: FacetCounts;
-    hiddenCompanies: number;
-    hideRules: number;
-  } & MoreFilterProps,
-) {
+export function RadarToolbar({
+  searchRef,
+  ...p
+}: {
+  wide: boolean;
+  base: Filters;
+  filters: Filters;
+  sort: Sort;
+  setFilters: (patch: Partial<Filters>) => void;
+  setSort: (s: Sort) => void;
+  replace: (f: Filters, s: Sort) => void;
+  views: SavedView[];
+  chipCounts: ViewCounts;
+  firstScan: boolean;
+  onSaveView: (name: string) => SavedView;
+  onRenameView: (id: string, name: string) => void;
+  onDeleteView: (id: string) => void;
+  /** Undo a delete: put the view back at its old position. */
+  onRestoreView: (view: SavedView, index: number) => void;
+  searchRef: RefObject<HTMLInputElement | null>;
+  filtersOpen: boolean;
+  onToggleFilters: () => void;
+  onOpenSheet: () => void;
+  chips: { key: string; label: string; remove: Partial<Filters> }[];
+  /** Your profile line, shown in the filter row when it isn't above the toolbar. */
+  profileBar?: ReactNode;
+  counts: FacetCounts;
+  hiddenCompanies: number;
+  hideRules: number;
+} & MoreFilterProps) {
   const { wide, filters, setFilters, sort, chips, olderCount } = p;
   /** Seniority, industry, company and keywords: shown on request, so the first row holds the common ones. */
   const [moreFacets, setMoreFacets] = useState(false);
@@ -78,7 +79,7 @@ export function RadarToolbar(
           onDelete={deleteView}
         />
         <SearchField
-          ref={p.searchRef}
+          ref={searchRef}
           label="Search jobs"
           className="order-1 min-w-0 flex-1 basis-40 lg:order-none lg:w-44 lg:flex-none lg:basis-auto xl:w-60"
           value={filters.q}

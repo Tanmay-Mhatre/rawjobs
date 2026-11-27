@@ -1,6 +1,6 @@
 import { companyLabel } from "@rawjobs/core/display-name";
 import { ArrowRight, Check, CircleAlert, LoaderCircle, Radar, RefreshCw, X } from "lucide-react";
-import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useId, useMemo, useRef, useState, useLayoutEffect } from "react";
 import { addCompanies, jobCompanyKey, keyOf, replaceCompany, wantsAttention, type CompanyRef } from "../lib/companies";
 import { nameRank } from "../lib/companySearch";
 import { useCompanySuggestions, useSuggestPoolSize, type SuggestState } from "../lib/companySuggest";
@@ -56,7 +56,10 @@ type SaveState = { kind: "idle" } | { kind: "saving" } | { kind: "saved" } | { k
 function useAutoSave(draft: Draft, saved: Draft, onSaved: () => Promise<void>, enabled: boolean) {
   const [state, setState] = useState<SaveState>({ kind: "idle" });
   const latest = useRef({ draft, saved, onSaved });
-  latest.current = { draft, saved, onSaved };
+  // Kept after each render (not during it), for handlers and effects that run later.
+  useLayoutEffect(() => {
+    latest.current = { draft, saved, onSaved };
+  });
   const busy = useRef(false);
   const again = useRef(false);
   const run = useCallback(async () => {
@@ -247,7 +250,10 @@ export function CompaniesTab({ configured, meta, jobs, draft, loaded, saved, upd
   const latest = useRef(draft);
   /** Suggested pages you turned down ("Not this one"), remembered on this computer. */
   const [dismissedMoves, setDismissedMoves] = useState<ReadonlySet<string>>(() => new Set(load<string[]>(DISMISSED_KEY, [])));
-  latest.current = draft;
+  // Kept after each render (not during it), for handlers and effects that run later.
+  useLayoutEffect(() => {
+    latest.current = draft;
+  });
   /** This visit's Starter pack changes, for the tray (session memory, nothing saved). */
   const visit = useVisit();
   /** Names of the companies you hid, for the Hidden list (it keeps only their keys). */

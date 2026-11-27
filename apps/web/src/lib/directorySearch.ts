@@ -1,6 +1,6 @@
 import { type CompanyIndex, companyIndexAsync } from "@rawjobs/core/company-search";
 import { type BrowseAnswer, type BrowseRequest, countCompanies, type DirCompany, pageOf, searchDirectory } from "@rawjobs/core/directory-search";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, useLayoutEffect } from "react";
 import { canRunLocally } from "./data";
 import { ACTION_TIMEOUT_MS, fetchWithin } from "./net";
 
@@ -78,7 +78,10 @@ type SearchState = { answer: BrowseAnswer | null; error: string | null; loading:
 export function useDirectorySearch(query: DirectoryQuery, opts: { watched: ReadonlySet<string>; fit?: ReadonlyMap<string, number>; rev?: number; enabled?: boolean }): SearchState {
   const { enabled = true, rev = 0 } = opts;
   const watched = useRef(opts.watched);
-  watched.current = opts.watched;
+  // Kept after each render (not during it), for handlers and effects that run later.
+  useLayoutEffect(() => {
+    watched.current = opts.watched;
+  });
   const fit = useMemo(() => Object.fromEntries(opts.fit ?? []), [opts.fit]);
   const [state, setState] = useState<SearchState>({ answer: null, error: null, loading: enabled, slow: false });
   const lastQ = useRef<string | null>(null);

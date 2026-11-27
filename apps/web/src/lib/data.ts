@@ -9,7 +9,7 @@ import type { DashboardJob, DashboardJobsFile, DataMeta, Job as FullJob, JobsFil
 
 /** data/discover.json (see core discover.ts); declared here so the browser bundle needs no Node code. */
 type DiscoverFile = { version: 1; generatedAt: string; indexGeneratedAt: string; jobs: DashboardJob[] };
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState, useLayoutEffect } from "react";
 
 export type { CompanyHealth, DataMeta, Profile, RunSummary } from "@rawjobs/core/schema";
 /** A job as the dashboard has it (no description; see useDescription). */
@@ -98,9 +98,15 @@ export function useData() {
     }
   }, []);
   const shown = useRef(state);
-  shown.current = state;
+  // Kept after each render (not during it), for handlers and effects that run later.
+  useLayoutEffect(() => {
+    shown.current = state;
+  });
   const reloadRef = useRef(reload);
-  reloadRef.current = reload;
+  // Kept after each render (not during it), for handlers and effects that run later.
+  useLayoutEffect(() => {
+    reloadRef.current = reload;
+  });
 
   useEffect(() => {
     void reload();

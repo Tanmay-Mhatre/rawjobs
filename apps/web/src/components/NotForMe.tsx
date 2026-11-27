@@ -1,4 +1,4 @@
-import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, useLayoutEffect, type ReactNode } from "react";
 import type { Job } from "../lib/data";
 import { companyName } from "../lib/format";
 import { hiddenByRules, offerCopy, offerFor, offerWhat, REASONS, ruleHides, ruleKey, type HideRule, type Offer, type Reason } from "../lib/notForMe";
@@ -45,7 +45,10 @@ export function useNotForMeApi(o: {
   const { user, update, prefs, setRule, hideCompany, jobs } = o;
   // The latest state, for apply's count (it runs from a click, after renders have moved on).
   const live = useRef({ user, prefs, jobs });
-  live.current = { user, prefs, jobs };
+  // Kept after each render (not during it), for handlers and effects that run later.
+  useLayoutEffect(() => {
+    live.current = { user, prefs, jobs };
+  });
 
   const entryOf = useCallback((id: string) => user[id], [user]);
   const setReason = useCallback((job: Job, reason: Reason | undefined) => update(job, { reason }), [update]);
