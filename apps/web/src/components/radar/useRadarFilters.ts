@@ -27,9 +27,17 @@ export function useRadarFilters(base: Filters, linkBase: Filters) {
     adopt.current = false;
     baseRef.current = base;
   }, [base]);
+  /** What was last written to storage, so typing in search (which isn't kept) doesn't write it again. */
+  const lastSaved = useRef("");
   // biome-ignore lint/correctness/useExhaustiveDependencies: linkBase changes only with the filters above
   useEffect(() => {
-    save(FILTER_KEY, { filters: { ...state.filters, q: "" }, sort: state.sort, custom: !sameFilters(state.filters, baseRef.current) });
+    // Each write also queues an upload of your tracking state, so write only when something kept changed.
+    const stored = { filters: { ...state.filters, q: "" }, sort: state.sort, custom: !sameFilters(state.filters, baseRef.current) };
+    const json = JSON.stringify(stored);
+    if (json !== lastSaved.current) {
+      lastSaved.current = json;
+      save(FILTER_KEY, stored);
+    }
     const q = toQuery(state.filters, state.sort, linkBase);
     const next = `#radar${q ? `?${q}` : ""}`;
     if (location.hash !== next && location.hash.split("?")[0] === "#radar") history.replaceState(null, "", next);
