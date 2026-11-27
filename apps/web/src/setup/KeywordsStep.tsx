@@ -1,7 +1,8 @@
 import { matchesTerm } from "@rawjobs/core/text";
 import { ROLE_FAMILIES } from "@rawjobs/core/catalog/roles";
 import { Plus, X } from "lucide-react";
-import { useMemo, useRef, useState, type KeyboardEvent } from "react";
+import { useMemo, useState } from "react";
+import { useRovingRadio } from "../components/primitives";
 import { ToggleChips } from "../components/ToggleChips";
 import { Button, cx } from "../components/ui";
 import { inferFamily } from "../lib/setup";
@@ -155,28 +156,22 @@ export function KeywordsStep({ draft, update, suggest, resumeText = "" }: StepPr
   );
 }
 
+const WEIGHTS = [1, 2, 3, 4, 5] as const;
+
 /** 1–5 importance as a radio group: arrow keys move, only the checked one is in the tab order. */
 function WeightControl({ keyword, weight, onChange }: { keyword: string; weight: number; onChange: (n: number) => void }) {
-  const ref = useRef<HTMLDivElement>(null);
-  const onKey = (e: KeyboardEvent) => {
-    const step = e.key === "ArrowRight" || e.key === "ArrowUp" ? 1 : e.key === "ArrowLeft" || e.key === "ArrowDown" ? -1 : 0;
-    if (!step) return;
-    e.preventDefault();
-    const next = Math.min(5, Math.max(1, weight + step));
-    onChange(next);
-    ref.current?.querySelectorAll<HTMLButtonElement>("[role=radio]")[next - 1]?.focus();
-  };
+  const { itemProps } = useRovingRadio<number>(WEIGHTS, weight, onChange);
   return (
-    <div ref={ref} role="radiogroup" aria-label={`Weight for ${keyword}`} onKeyDown={onKey} className="flex items-center gap-0.5">
-      {[1, 2, 3, 4, 5].map((i) => (
+    <div role="radiogroup" aria-label={`Weight for ${keyword}`} className="flex items-center gap-0.5">
+      {WEIGHTS.map((i) => (
         // biome-ignore lint/a11y/useSemanticElements: an ARIA role on purpose: the native element (fieldset, output, input, hr, ul) would change layout or behaviour here
         <button
           key={i}
+          {...itemProps(i - 1)}
           type="button"
           role="radio"
           aria-checked={i === weight}
           aria-label={`${i} of 5${i === 1 ? ", nice to have" : i === 5 ? ", core" : ""}`}
-          tabIndex={i === weight ? 0 : -1}
           onClick={() => onChange(i)}
           className={cx(
             "flex size-6 items-center justify-center rounded-md type-label tabular transition-colors",
