@@ -1,6 +1,18 @@
 import { resolve } from "node:path";
 import { parseArgs } from "node:util";
-import { defaultDataDir, rawjobsHome, CODE_ROOT, schedulerCommand, installSchedule, removeSchedule, repairScheduleTimes, runScheduleNow, scheduleStatus, type ScanScope } from "@rawjobs/core";
+import {
+  defaultDataDir,
+  rawjobsHome,
+  CODE_ROOT,
+  schedulerCommand,
+  installSchedule,
+  refreshSchedules,
+  removeSchedule,
+  repairScheduleTimes,
+  runScheduleNow,
+  scheduleStatus,
+  type ScanScope,
+} from "@rawjobs/core";
 import { readStdin } from "../util";
 import { parseScope } from "./run";
 
@@ -28,8 +40,10 @@ export async function cmdSchedule(args: string[]): Promise<number> {
     } else if (action === "remove") removeSchedule(ctx);
     else if (action === "run") runScheduleNow(ctx, values["catch-up"] ? "catch-up" : "run-now");
     else if (action === "repair") {
-      // The server runs this as it starts and after the computer wakes: tasks back on your local times.
-      out({ ok: true, fixed: repairScheduleTimes(ctx) });
+      // The server runs this as it starts (and on Windows after the computer wakes): tasks back on your local times.
+      // Schedules written by an older version first get today's command and limits.
+      const refreshed = refreshSchedules(ctx);
+      out({ ok: true, fixed: repairScheduleTimes(ctx), refreshed });
       return 0;
     } else if (action !== "status") {
       out({ ok: false, error: "Usage: rawjobs schedule <status|install|remove|run [--catch-up]|repair>" });

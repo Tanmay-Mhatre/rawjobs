@@ -5,7 +5,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { parseConfig } from "../../core/src/config";
 import { HttpClient } from "../../core/src/http";
 import { JOB_FEED_SCHEMA } from "../../core/src/job-feed";
-import { alertText, backgroundCheck, notifyScan, parseScope, progressEvents, wantsBackground, type RunValues } from "../src/commands/run";
+import { alertText, backgroundCheck, notifyScan, parseDeadline, parseScope, progressEvents, stopSignal, wantsBackground, type RunValues } from "../src/commands/run";
 
 const config = (yaml = "") =>
   parseConfig(`
@@ -120,5 +120,36 @@ describe("scan alerts written ahead (scheduled, terminal and page scans)", () =>
     vi.stubEnv("TELEGRAM_BOT_TOKEN", "");
     const merged = { jobs: [], newIds: new Set<string>(), closedIds: new Set<string>() } as unknown as Parameters<typeof alertText>[2];
     expect(alertText(config(), { jobs: [] } as unknown as Parameters<typeof alertText>[1], merged, "mine")).toBeUndefined();
+  });
+});
+
+describe("stopping a scan from outside", () => {
+  it("stops at its deadline on the wall clock, at the stop file, or on SIGTERM, and says why", () => {
+    const dir = mkdtempSync(join(tmpdir(), "jh-stop-"));
+    let t = 1_000;
+    const byDeadline = stopSignal(dir, { deadlineAt: 5_000, now: () => t });
+    expect(byDeadline()).toBe(false);
+    t = 5_000;
+    expect(byDeadline()).toBe(true);
+    expect(byDeadline.reason()).toBe("deadline");
+
+    const byFile = stopSignal(dir);
+    expect(byFile()).toBe(false);
+    writeFileSync(join(dir, "scan-stop"), "");
+    expect(byFile()).toBe(true);
+    expect(byFile.reason()).toBe("stop");
+
+    const bySignal = stopSignal(dir);
+    process.emit("SIGTERM");
+    expect(bySignal()).toBe(true);
+    expect(bySignal.reason()).toBe("stop");
+  });
+
+  it("reads --deadline as minutes from the start or a time, and refuses anything else", () => {
+    expect(parseDeadline(undefined)).toBeUndefined();
+    expect(parseDeadline("170", 0)).toBe(170 * 60_000);
+    expect(parseDeadline("2026-11-27T06:00:00Z")).toBe(Date.parse("2026-11-27T06:00:00Z"));
+    expect(() => parseDeadline("soon")).toThrow(/--deadline/);
+    expect(() => parseDeadline("0")).toThrow(/--deadline/);
   });
 });
