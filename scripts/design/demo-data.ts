@@ -107,6 +107,8 @@ type Spec = {
   id?: string;
   /** What the hiring system says (Lever's commitment, Ashby's employmentType…). */
   employment?: Job["employmentType"];
+  /** Gone from the latest scan: a muted "Closed" row, shown with "Include closed jobs". */
+  closed?: boolean;
 };
 
 const SCAN_AT = NOW.getTime() - 3 * HOUR;
@@ -206,6 +208,7 @@ const LIVE: Spec[] = [
     seen: 9,
     salary: { min: 90000, max: 105000, currency: "EUR", period: "year" },
     desc: DESC.billing,
+    closed: true,
   },
   { company: "Acme Ledger", title: "Product Manager, Internal Tools", location: "London, United Kingdom", workplace: "onsite", posted: 45, seen: 45, desc: DESC.internal },
   { company: "Acme Ledger", title: "Product Marketing Manager", location: "London, United Kingdom", workplace: "hybrid", posted: 3, seen: 3 },
@@ -262,8 +265,8 @@ function fullJob(s: Spec, n: number): Job {
     url: `${careers(c.slug)}/jobs/${atsId}-${slugify(s.title)}`,
     description: s.desc,
     firstSeen: iso(firstSeen),
-    lastSeen: iso(SCAN_AT),
-    status: "open",
+    lastSeen: iso(s.closed ? SCAN_AT - DAY : SCAN_AT),
+    status: s.closed ? "closed" : "open",
     score,
     why,
   };
@@ -360,7 +363,8 @@ export const STRONG_JOB = [...passing].sort((a, b) => b.score - a.score)[0]!;
 // ---------- your tracking (localStorage rawjobs.state.v1) ----------
 
 const byTitle = (title: string) => [...passing, ...estimated].find((j) => j.title === title)!;
-function entry(title: string, status: string, updatedDaysAgo: number, note?: string) {
+/** One tracked job: [id, entry] for USER_STATE. */
+export function entry(title: string, status: string, updatedDaysAgo: number, note?: string) {
   const j = byTitle(title);
   return [j.id, { status, ...(note ? { note } : {}), updatedAt: daysAgo(updatedDaysAgo), snapshot: { title: j.title, company: j.company, url: j.url, location: j.location, score: j.score } }] as const;
 }
