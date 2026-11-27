@@ -62,7 +62,16 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           export DATA_PUBLIC_KEY="$(grep -o 'DATA_PUBLIC_KEY = "[^"]*"' packages/core/src/data-signing.ts | cut -d'"' -f2)"
-          if node scripts/catalog/data-health.ts --report "$RUNNER_TEMP/report.md"; then echo "healthy=true" >> "$GITHUB_OUTPUT"; else echo "healthy=false" >> "$GITHUB_OUTPUT"; fi
+          healthy=true
+          node scripts/catalog/data-health.ts --report "$RUNNER_TEMP/report.md" || healthy=false
+          # The update beacon installed apps read to find new versions (BEACON_URL in
+          # packages/core/src/update.ts), written by the site deploy (site.yml).
+          beacon=https://www.rawjobs.workers.dev/v1/latest.json
+          if ! curl -fsS --retry 3 --retry-delay 10 --retry-all-errors "$beacon" | jq -e .stable.version; then
+            healthy=false
+            printf '\n**Update beacon:** %s is missing or names no stable version, so installed copies may not see new versions. Re-run the Site workflow.\n' "$beacon" >> "$RUNNER_TEMP/report.md"
+          fi
+          echo "healthy=$healthy" >> "$GITHUB_OUTPUT"
           cat "$RUNNER_TEMP/report.md" >> "$GITHUB_STEP_SUMMARY"
 
       - name: Open, update or close the issue

@@ -9,6 +9,8 @@
 #                                the old NAME and rename NAME.next to NAME. `gh release upload --clobber`
 #                                deletes before it uploads, so a failed upload left a manifest (or saved
 #                                state) missing until the next run; now it's missing for one API call at most.
+#   push_with_retry [CHECK...]   git push from the current directory, rebasing onto what another workflow
+#                                pushed meanwhile (needs no GH_TOKEN or DATA_REPO); see below.
 
 RETRIES="${RETRIES:-5}"
 RETRY_SECONDS="${RETRY_SECONDS:-20}"
@@ -56,4 +58,27 @@ swap_upload() {
     retry gh api -X PATCH "$url" -f name="$name" --silent || return 1
   done
   rm -rf "$tmp"
+}
+
+# The directory repo has more than one writer (the move approval workflow pushes moves.json in its
+# own concurrency group), so a plain `git push` can be refused as non-fast-forward. Rebase onto the
+# remote and push, 3 tries, 5 and 10 s apart. Any arguments are a check run after each rebase (the
+# merged result must still be valid): when it fails, nothing is pushed.
+push_with_retry() {
+  local try
+  for try in 1 2 3; do
+    if git pull --rebase --quiet; then
+      if [ "$#" -gt 0 ]; then "$@" || return 1; fi
+      git push && return 0
+    else
+      # A conflicting rebase stops halfway; undo it so the next try starts clean.
+      git rebase --abort 2> /dev/null || true
+    fi
+    if [ "$try" -lt 3 ]; then
+      echo "Push failed (try $try of 3); trying again in $((try * 5)) s." >&2
+      sleep $((try * 5))
+    fi
+  done
+  echo "Gave up pushing after 3 tries." >&2
+  return 1
 }
