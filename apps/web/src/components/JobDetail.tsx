@@ -4,7 +4,7 @@ import { copyText } from "../lib/clipboard";
 import { useDescription, useHiring, type Job, type Profile } from "../lib/data";
 import { companyName, jobTitle } from "../lib/format";
 import type { ClosedAs, Entry, EntryPatch, Status } from "../lib/userState";
-import { memo, useEffect, useRef, useState } from "react";
+import { memo, useEffect, useEffectEvent, useRef, useState } from "react";
 import { Dialog } from "./Dialog";
 import { hiringLine } from "./HiringActivity";
 import { AboutCompany } from "./job/AboutCompany";
@@ -89,11 +89,12 @@ export const JobDetail = memo(function JobDetail(p: JobDetailProps) {
     setCopied(true);
     setTimeout(() => setCopied(false), 1500);
   };
-  const copyRef = useRef(copyJd);
-  copyRef.current = copyJd;
-
-  const expandRef = useRef(() => (p.expanded ? p.onClose?.() : setExpanded(true)));
-  expandRef.current = () => (p.expanded ? p.onClose?.() : setExpanded(true));
+  // The shortcuts below call the latest handlers: a new job or `expanded` doesn't re-add the listener.
+  const onShortcut = useEffectEvent((key: "c" | "f") => {
+    if (key === "c") void copyJd();
+    else if (p.expanded) p.onClose?.();
+    else setExpanded(true);
+  });
 
   // C copies the description and F expands it (or closes the reader), like the hints on the buttons. Not while typing.
   useEffect(() => {
@@ -104,8 +105,7 @@ export const JobDetail = memo(function JobDetail(p: JobDetailProps) {
       // Not while some other dialog (Settings, the "Did you apply?" prompt) is on top of this job.
       const dialog = [...document.querySelectorAll("dialog[open]")].pop();
       if (dialog && !dialog.contains(rootRef.current)) return;
-      if (e.key === "f") expandRef.current();
-      else void copyRef.current();
+      onShortcut(e.key);
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
