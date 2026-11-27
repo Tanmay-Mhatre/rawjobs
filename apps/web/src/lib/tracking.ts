@@ -1,4 +1,5 @@
 import { useEffect, useRef } from "react";
+import { getJson, trackingRead } from "./api";
 import { canRunLocally } from "./data";
 import { healthState, subscribeHealth } from "./health";
 import { load, onSave, saveFailed } from "./storage";
@@ -37,15 +38,8 @@ const RETRIES = 3;
 
 /** What the file holds, or undefined when the local API couldn't be reached or couldn't read it (503). */
 async function fetchTracking(): Promise<Read | undefined> {
-  try {
-    const res = await fetch("/api/tracking", { cache: "no-store" });
-    if (!res.ok) return undefined;
-    const body = (await res.json()) as { tracking?: Remote | null; rev?: unknown; epoch?: unknown };
-    const base = typeof body.rev === "number" && typeof body.epoch === "string" ? { epoch: body.epoch, rev: body.rev } : null;
-    return { tracking: body.tracking ?? null, base };
-  } catch {
-    return undefined;
-  }
+  const r = await getJson("GET /api/tracking", { cache: "no-store" });
+  return (r.ok && trackingRead(r.data)) || undefined;
 }
 
 /** One read per page load, shared by every part. */
@@ -75,6 +69,13 @@ let again = false;
 /** A save went through, but another window had saved in between: read the file once it's done. */
 let behind = false;
 let pulling = false;
+
+/** A 409's body: the file's revision and copy, from a server of any version. */
+function isConflict(x: unknown): x is Conflict {
+  if (!x || typeof x !== "object") return false;
+  const c = x as Record<string, unknown>;
+  return typeof c.rev === "number" && typeof c.epoch === "string" && (c.tracking == null || typeof c.tracking === "object") && (c.conflicts === undefined || Array.isArray(c.conflicts));
+}
 
 const asObj = (v: unknown): Obj => (v && typeof v === "object" && !Array.isArray(v) ? (v as Obj) : {});
 const tag = (b: Base) => `"${b.epoch}:${b.rev}"`;
@@ -158,28 +159,21 @@ async function send(changes: Changes, values: Values, keepalive: boolean): Promi
   if (legacy) return put(changes, values, keepalive);
   const sentFrom = base;
   const body = JSON.stringify({ changes });
-  let res: Response;
-  try {
-    res = await fetch("/api/tracking", {
-      method: "PATCH",
-      headers: { "content-type": "application/json", "if-match": tag(sentFrom) },
-      body,
-      keepalive: keepalive && body.length <= KEEPALIVE_MAX,
-    });
-  } catch {
-    saveFailed();
-    return { kind: "failed" };
-  }
-  if (res.status === 404 || res.status === 405) {
+  const r = await getJson("PATCH /api/tracking", {
+    headers: { "content-type": "application/json", "if-match": tag(sentFrom) },
+    body,
+    keepalive: keepalive && body.length <= KEEPALIVE_MAX,
+  });
+  if (r.status === 404 || r.status === 405) {
     legacy = true;
     return put(changes, values, keepalive);
   }
-  const answer = (await res.json().catch(() => null)) as (Conflict & { ok?: boolean }) | null;
-  if (res.status === 409 && answer) return { kind: "conflict", body: answer };
-  if (!res.ok) {
+  if (!r.ok) {
+    if (r.status === 409 && isConflict(r.body)) return { kind: "conflict", body: r.body };
     saveFailed();
     return { kind: "failed" };
   }
+  const answer = r.data;
   for (const [name, { set, del }] of Object.entries(changes) as [TrackingPart, Change][]) {
     const synced = parts[name]?.synced;
     if (!synced) continue;
@@ -187,7 +181,7 @@ async function send(changes: Changes, values: Values, keepalive: boolean): Promi
     for (const k of del) delete synced[k];
   }
   // The next revision after the one this page had: nothing else was saved in between.
-  if (answer && typeof answer.rev === "number" && answer.rev === sentFrom.rev + 1 && (sentFrom.epoch === "" || answer.epoch === sentFrom.epoch) && base === sentFrom)
+  if (typeof answer.rev === "number" && answer.rev === sentFrom.rev + 1 && (sentFrom.epoch === "" || answer.epoch === sentFrom.epoch) && base === sentFrom)
     base = { epoch: answer.epoch, rev: answer.rev };
   else behind = true;
   return { kind: "ok" };

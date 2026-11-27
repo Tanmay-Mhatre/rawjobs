@@ -5,13 +5,14 @@
  * are posted, so your messages and the rest of the export never leave the file.
  */
 import { networkKey } from "@rawjobs/core/network/company";
-import type { NetworkInfo } from "@rawjobs/core/protocol";
+import type { ApiRoutes, NetworkInfo } from "@rawjobs/core/protocol";
 import { type ExportFiles, exportFilesFromEntries, isAllowedEntry } from "@rawjobs/core/network/linkedin-export";
 import type { NetworkMe, NetworkPeople, NetworkPersonRow, NetworkStatus, ReminderState, WatchState } from "@rawjobs/core/network/types";
 import { readZipEntries, ZipError } from "@rawjobs/core/network/zip";
 import { blobZipSource, canInflateRaw, inflateRawStream } from "@rawjobs/core/network/zip-browser";
 import { useEffect, useSyncExternalStore } from "react";
 import { toast } from "../components/Toast";
+import { getJson } from "./api";
 import { canRunLocally } from "./data";
 
 export type { NetworkMe, NetworkPeople, NetworkPersonRow, NetworkStatus, ReminderState, WatchState };
@@ -58,10 +59,11 @@ const subscribe = (l: () => void) => {
   };
 };
 
-async function getJson<T>(url: string): Promise<T> {
-  const r = await fetch(url, { cache: "no-store" });
-  if (!r.ok) throw new Error(String(r.status));
-  return (await r.json()) as T;
+/** A read: its answer, or a rejection when there's none. */
+async function read<R extends "GET /api/network" | "GET /api/network/people" | "GET /api/network/summary">(route: R, path?: string): Promise<ApiRoutes[R]> {
+  const r = await getJson(route, path ? { path, cache: "no-store" } : { cache: "no-store" });
+  if (!r.ok) throw new Error(r.status ? String(r.status) : r.error);
+  return r.data;
 }
 
 function loadInfo() {
@@ -69,7 +71,7 @@ function loadInfo() {
   const g = gen;
   info = { state: "loading" };
   emit();
-  getJson<NetworkInfo>("/api/network").then(
+  read("GET /api/network").then(
     (value) => {
       if (g !== gen) return;
       info = { state: "ready", value };
@@ -106,7 +108,7 @@ async function pollWatch() {
   const before = importedAtOf(info.value.status);
   const g = gen;
   try {
-    const value = await getJson<NetworkInfo>("/api/network");
+    const value = await read("GET /api/network");
     if (g !== gen) return;
     if (value.status.connected && value.status.importedAt !== before) {
       // The watch found and imported LinkedIn's file: refresh everything that shows your connections.
@@ -132,15 +134,13 @@ export const WATCH_ERROR = {
 /** Ask RawJobs to pick up LinkedIn's file from Downloads by itself. Returns an error to show, or null. */
 export async function startWatch(): Promise<string | null> {
   if (!canRunLocally) return null;
-  try {
-    const r = await fetch("/api/network/watch", { method: "POST", headers: { "content-type": "application/json" }, body: "{}" });
-    const res = (await r.json()) as { watch: WatchState | null; error?: string };
-    if (!res.watch) return res.error === "NO_ACCESS" || res.error === "NO_FOLDER" ? WATCH_ERROR[res.error] : WATCH_ERROR.FAILED;
-    setWatch(res.watch);
+  const r = await getJson("POST /api/network/watch", { headers: { "content-type": "application/json" }, body: "{}" });
+  if (r.ok) {
+    setWatch(r.data.watch);
     return null;
-  } catch {
-    return WATCH_ERROR.FAILED;
   }
+  const error = r.body && "error" in r.body ? r.body.error : undefined;
+  return error === "NO_ACCESS" || error === "NO_FOLDER" ? WATCH_ERROR[error] : WATCH_ERROR.FAILED;
 }
 
 /** Stop watching Downloads. */
@@ -168,7 +168,7 @@ function syncReminderTimer() {
   reminderTimer = setTimeout(() => {
     reminderTimer = undefined;
     const g = gen;
-    getJson<NetworkInfo>("/api/network").then(
+    read("GET /api/network").then(
       (value) => {
         if (g !== gen) return;
         info = { state: "ready", value };
@@ -191,14 +191,10 @@ function setReminderState(reminder: ReminderState | null) {
 /** "Remind me in 48 hours if I haven't added the file" (24 to snooze). Returns false when it couldn't be saved. */
 export async function setReminder(hours?: number): Promise<boolean> {
   if (!canRunLocally) return false;
-  try {
-    const r = await fetch("/api/network/reminder", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(hours ? { hours } : {}) });
-    if (!r.ok) throw new Error(String(r.status));
-    setReminderState(((await r.json()) as { reminder: ReminderState }).reminder);
-    return true;
-  } catch {
-    return false;
-  }
+  const r = await getJson("POST /api/network/reminder", { headers: { "content-type": "application/json" }, body: JSON.stringify(hours ? { hours } : {}) });
+  if (!r.ok) return false;
+  setReminderState(r.data.reminder);
+  return true;
 }
 
 /** Cancel or dismiss the reminder. */
@@ -224,7 +220,7 @@ function loadPeople(company: string, key: string) {
   const g = gen;
   people.set(key, { state: "loading" });
   emit();
-  getJson<NetworkPeople>(`/api/network/people?company=${encodeURIComponent(company)}`).then(
+  read("GET /api/network/people", `/api/network/people?company=${encodeURIComponent(company)}`).then(
     (value) => {
       if (g !== gen) return;
       people.set(key, { state: "ready", value });
@@ -247,7 +243,7 @@ function loadSummary() {
   if (!canRunLocally || summaryAsked) return;
   summaryAsked = true;
   const g = gen;
-  getJson<NetworkSummary>("/api/network/summary").then(
+  read("GET /api/network/summary").then(
     (value) => {
       if (g !== gen) return;
       summary = value;
@@ -328,18 +324,13 @@ export async function importNetworkFile(file: File): Promise<{ ok: true; status:
   if (files.connections === undefined) return { ok: false, code: "NO_CONNECTIONS" };
   const body = JSON.stringify({ fileName: file.name, files });
   if (body.length > IMPORT_MAX_CHARS) return { ok: false, code: "TOO_BIG" };
-  try {
-    const r = await fetch("/api/network/import", { method: "POST", headers: { "content-type": "application/json" }, body });
-    const res = (await r.json()) as { ok: true; status: NetworkStatus } | { ok: false; errors?: { code?: string }[] };
-    if (res.ok) {
-      networkChanged();
-      return res;
-    }
-    const code = res.errors?.[0]?.code;
-    return { ok: false, code: code && code in IMPORT_ERROR ? (code as ImportErrorCode) : "FAILED" };
-  } catch {
-    return { ok: false, code: "FAILED" };
+  const r = await getJson("POST /api/network/import", { headers: { "content-type": "application/json" }, body });
+  if (r.ok) {
+    networkChanged();
+    return r.data;
   }
+  const code = r.body?.errors?.[0]?.code;
+  return { ok: false, code: code && code in IMPORT_ERROR ? (code as ImportErrorCode) : "FAILED" };
 }
 
 /** Delete your connections from this computer. Returns an error to show, or null. */

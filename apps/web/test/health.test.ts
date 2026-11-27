@@ -9,7 +9,7 @@ let visibility: DocumentVisibilityState;
 beforeEach(() => {
   vi.useFakeTimers();
   health = { ok: true, version: "1.0.0", scanning: false, background: false, dataVersion: "A" };
-  fetchMock = vi.fn(async () => ({ json: async () => health }));
+  fetchMock = vi.fn(async () => ({ ok: true, status: 200, json: async () => health }));
   vi.stubGlobal("fetch", fetchMock);
   visibility = "visible";
   Object.defineProperty(document, "visibilityState", { configurable: true, get: () => visibility });

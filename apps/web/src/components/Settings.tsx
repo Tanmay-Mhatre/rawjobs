@@ -2,6 +2,7 @@ import { INDUSTRY_BY_ID } from "@rawjobs/core/catalog/industries";
 import { groupPlaces } from "@rawjobs/core/catalog/places";
 import { ArrowRight, Check, ChevronLeft, ChevronRight, Download, Layers, RefreshCw, RotateCcw, Save, Upload, X } from "lucide-react";
 import { Fragment, useEffect, useMemo, useRef, useState, type MouseEvent, type ReactNode } from "react";
+import { getJson, isHealth } from "../lib/api";
 import { canRunLocally, useDirectorySize } from "../lib/data";
 import { DealbreakersStep } from "./Dealbreakers";
 import { displayPlace, roughCount } from "../lib/format";
@@ -648,10 +649,7 @@ function Diagnostics() {
   const [safeMode, setSafeMode] = useState(false);
   useEffect(() => {
     let live = true;
-    fetch("/api/health", { cache: "no-store" })
-      .then((r) => r.json() as Promise<{ safeMode?: boolean }>)
-      .then((h) => live && setSafeMode(!!h.safeMode))
-      .catch(() => {});
+    void getJson("GET /api/health", { cache: "no-store" }).then((r) => live && r.ok && isHealth(r.data) && setSafeMode(!!r.data.safeMode));
     return () => {
       live = false;
     };
@@ -659,14 +657,9 @@ function Diagnostics() {
   const [state, setState] = useState<{ kind: "idle" | "saving" } | { kind: "saved"; path: string; problems: number } | { kind: "error" }>({ kind: "idle" });
   const save = async () => {
     setState({ kind: "saving" });
-    try {
-      const res = await fetch("/api/doctor", { method: "POST" });
-      const out = (await res.json()) as { zip?: string; checks?: { status: string }[] };
-      if (!res.ok || !out.zip) throw new Error("no file");
-      setState({ kind: "saved", path: out.zip, problems: out.checks?.filter((c) => c.status !== "ok").length ?? 0 });
-    } catch {
-      setState({ kind: "error" });
-    }
+    const r = await getJson("POST /api/doctor");
+    if (!r.ok || !r.data.zip) return setState({ kind: "error" });
+    setState({ kind: "saved", path: r.data.zip, problems: r.data.checks?.filter((c) => c.status !== "ok").length ?? 0 });
   };
   return (
     <div className="space-y-2">
