@@ -64,7 +64,7 @@ export function DesktopShortcutNotice({ status, onSeen }: { status: UpdateStatus
             <figcaption className="type-meta text-ink">RawJobs</figcaption>
           </figure>
           <div className="min-w-0 flex-1 space-y-2">
-            <h2 /* design-lint-ignore: weight moves into the type style in 6I */ id="shortcut-notice-title" className="type-subheading font-semibold text-balance">
+            <h2 id="shortcut-notice-title" className="type-subheading text-balance">
               {title}
             </h2>
             <p id="shortcut-notice-body" className="type-small text-ink">

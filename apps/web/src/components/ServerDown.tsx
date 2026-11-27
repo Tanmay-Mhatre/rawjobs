@@ -68,7 +68,7 @@ export function ServerDownWindow({ health }: { health: ServerHealth }) {
         {/* biome-ignore lint/security/noDangerouslySetInnerHtml: fixed markup from pages.ts, no input in it */}
         <div className="rjd-hero" data-p={scene} aria-hidden dangerouslySetInnerHTML={{ __html: picture }} />
         <div className="p-5 sm:p-6">
-          <h2 /* design-lint-ignore: weight moves into the type style in 6I */ id="server-down-title" key={title} className="rjd-title type-subheading font-semibold text-balance">
+          <h2 id="server-down-title" key={title} className="rjd-title type-subheading text-balance">
             {title}
           </h2>
           <p id="server-down-body" className="mt-1.5 type-small text-ink">

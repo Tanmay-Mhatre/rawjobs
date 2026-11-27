@@ -718,7 +718,7 @@ function ErrorState({ message, onRetry }: { message: string; onRetry: () => void
   return (
     <Card className="mx-auto max-w-lg p-8 text-center">
       <div role="alert">
-        <h2 /* design-lint-ignore: weight moves into the type style in 6I */ className="type-subheading font-semibold">Couldn't load your jobs</h2>
+        <h2 className="type-subheading">Couldn't load your jobs</h2>
         <p className="mt-1 type-small text-muted">The job data didn't load. This is usually a brief hiccup: try again. If it keeps happening, run a new scan.</p>
       </div>
       <Button variant="primary" className="mt-4" onClick={onRetry}>

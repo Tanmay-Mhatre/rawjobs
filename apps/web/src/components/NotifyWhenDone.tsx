@@ -108,7 +108,7 @@ export function TelegramSetupDialog({
       <Card className="relative max-h-[90vh] overflow-y-auto p-5 shadow-l3 sm:p-6">
         <div className="mb-4 flex items-start gap-3">
           <div className="min-w-0 flex-1">
-            <h2 /* design-lint-ignore: weight moves into the type style in 6I */ id="tg-setup-title" className="type-subheading font-semibold">
+            <h2 id="tg-setup-title" className="type-subheading">
               {title}
             </h2>
             <p className="mt-0.5 type-small text-muted">{intro}</p>

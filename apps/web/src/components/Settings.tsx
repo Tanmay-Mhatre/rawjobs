@@ -1019,7 +1019,7 @@ function TrackingData({ user, prefs, onImport }: { user: UserState; prefs: Prefs
       <Dialog open={!!pending} onClose={() => setPending(null)} labelledBy="import-title" initialFocus="[data-autofocus]">
         <Card className="p-5 shadow-l3 sm:p-6">
           <div className="flex items-start gap-3">
-            <h2 /* design-lint-ignore: weight moves into the type style in 6I */ id="import-title" className="min-w-0 flex-1 type-subheading font-semibold">
+            <h2 id="import-title" className="min-w-0 flex-1 type-subheading">
               Merge or replace your tracked jobs?
             </h2>
             <IconButton label="Close" className="-mr-2 -mt-1" onClick={() => setPending(null)}>

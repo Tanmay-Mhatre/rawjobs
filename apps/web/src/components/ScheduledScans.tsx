@@ -4,6 +4,7 @@ import { removeSchedule, runScheduleNow, saveSchedule, scheduleStatus, type Sche
 import { formatDateTime, timeAgo } from "../lib/format";
 import { aboutTime, SCAN_ENDED, scopeLabel } from "../lib/scan";
 import { scanPlan, type ScanPlan, type ScanScope } from "../lib/setup";
+import { IconButton } from "./primitives";
 import { toast } from "./Toast";
 import { Button, cx } from "./ui";
 
@@ -170,15 +171,9 @@ export function ScheduledScans() {
                   className="h-9 rounded-md border border-line bg-raised px-2 type-small"
                 />
                 {times.length > 1 && (
-                  <button
-                    type="button"
-                    aria-label={`Remove ${t}`}
-                    title="Remove this time"
-                    className="inline-flex size-8 items-center justify-center rounded-md text-muted hover:bg-inset hover:text-ink"
-                    onClick={() => setTimes(times.filter((_, j) => j !== i))}
-                  >
+                  <IconButton size="sm" label={`Remove ${t}`} onClick={() => setTimes(times.filter((_, j) => j !== i))}>
                     <X className="size-4" />
-                  </button>
+                  </IconButton>
                 )}
               </span>
             ))}
