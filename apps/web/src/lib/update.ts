@@ -1,8 +1,9 @@
 import type { Changelog, UpdateStatus } from "@rawjobs/core/protocol";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { PORTS } from "@rawjobs/server/pages";
+import { getJson, isHealth } from "./api";
 import { canRunLocally } from "./data";
-import { type Health, healthState, refreshHealth, requestFast, subscribeHealth, useHealth } from "./health";
+import { healthState, refreshHealth, requestFast, subscribeHealth, useHealth } from "./health";
 
 export type { Changelog, UpdateStatus };
 
@@ -17,12 +18,12 @@ export const INSTALL_LINE = {
 export const installLine = () => (/Windows/i.test(navigator.userAgent) ? INSTALL_LINE.windows : INSTALL_LINE.unix);
 
 async function call(path: string, init?: RequestInit): Promise<UpdateStatus | null> {
-  try {
-    const res = await fetch(path, { cache: "no-store", ...init });
-    return (await res.json()) as UpdateStatus;
-  } catch {
-    return null;
-  }
+  const method = init?.method ?? "GET";
+  const route = method === "PUT" ? "PUT /api/update/settings" : method === "POST" ? "POST /api/update/:action" : "GET /api/update";
+  const r = await getJson(route, { cache: "no-store", ...init, path });
+  if (r.ok) return r.data;
+  // A copy that updates with git answers its status with an error (400).
+  return r.body && "current" in r.body ? r.body : null;
 }
 
 export const updateStatus = () => call("/api/update");
@@ -76,12 +77,8 @@ export const markShortcutNoticeSeen = () => call("/api/update/shortcut-seen", { 
 export const checkOnFocus = () => fetch("/api/update/focus", { method: "POST" }).catch(() => null);
 
 export async function loadChangelog(): Promise<Changelog | null> {
-  try {
-    const res = await fetch("/api/update/changelog", { cache: "no-store" });
-    return res.ok ? ((await res.json()) as Changelog) : null;
-  } catch {
-    return null;
-  }
+  const r = await getJson("GET /api/update/changelog", { cache: "no-store" });
+  return r.ok ? r.data : null;
 }
 
 export const saveUpdateSettings = (s: Partial<UpdateStatus["settings"]>) => call("/api/update/settings", { method: "PUT", body: JSON.stringify(s) });
@@ -172,12 +169,8 @@ export async function findElsewhere(): Promise<string | null> {
   const others = PORTS.filter((p) => String(p) !== location.port).map((p) => `${location.protocol}//${location.hostname}:${p}`);
   const answers = await Promise.all(
     others.map(async (o) => {
-      try {
-        const res = await fetch(`${o}/api/health`, { cache: "no-store", signal: AbortSignal.timeout(1500) });
-        return ((await res.json()) as Health).ok ? o : null;
-      } catch {
-        return null;
-      }
+      const r = await getJson("GET /api/health", { path: `${o}/api/health`, cache: "no-store", signal: AbortSignal.timeout(1500) });
+      return r.ok && isHealth(r.data) && r.data.ok ? o : null;
     }),
   );
   return answers.find(Boolean) ?? null;

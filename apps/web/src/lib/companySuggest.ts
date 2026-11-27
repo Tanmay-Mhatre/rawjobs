@@ -4,6 +4,7 @@ import type { CompanySuggestion, HiresIn } from "@rawjobs/core/suggest";
 import { isPlaceholderBoard } from "@rawjobs/core/text";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { keyOf, type CompanyRef } from "./companies";
+import { getJson } from "./api";
 import { canRunLocally } from "./data";
 import { draftToConfig, type Draft } from "./setup";
 import { load, save } from "./storage";
@@ -60,19 +61,16 @@ export function useCompanySuggestions(draft: Draft, enabled = true): SuggestStat
       () => {
         first.current = false;
         const started = Date.now();
-        fetch("/api/companies/suggest", { method: "POST", body: JSON.stringify({ profile: JSON.parse(profile) }) })
-          .then(async (r) => {
-            const body = (await r.json()) as CompanySuggestions & { ok?: false; errors?: string };
-            if (!live) return;
-            if (!r.ok || body.ok === false) setState({ kind: "error", message: body.errors ?? `HTTP ${r.status}` });
-            else if (body.error) setState({ kind: "error", message: body.error });
-            else {
-              const took = Date.now() - started;
-              if (took >= WORKED_OUT_MS) save(MATCH_MS_KEY, took);
-              setState({ kind: "ready", data: body });
-            }
-          })
-          .catch((err: Error) => live && setState({ kind: "error", message: err.message }));
+        void getJson("POST /api/companies/suggest", { body: JSON.stringify({ profile: JSON.parse(profile) }) }).then((r) => {
+          if (!live) return;
+          if (!r.ok) setState({ kind: "error", message: r.error });
+          else if (r.data.error) setState({ kind: "error", message: r.data.error });
+          else {
+            const took = Date.now() - started;
+            if (took >= WORKED_OUT_MS) save(MATCH_MS_KEY, took);
+            setState({ kind: "ready", data: r.data });
+          }
+        });
       },
       first.current ? 0 : EDIT_PAUSE_MS,
     );
@@ -94,10 +92,7 @@ export function useSuggestPoolSize(enabled: boolean): number | null {
   useEffect(() => {
     if (!enabled || !canRunLocally) return;
     let live = true;
-    fetch("/api/companies/suggest/size", { cache: "no-store" })
-      .then((r) => (r.ok ? (r.json() as Promise<{ companies?: number | null }>) : null))
-      .then((b) => live && typeof b?.companies === "number" && b.companies > 0 && setN(b.companies))
-      .catch(() => {});
+    void getJson("GET /api/companies/suggest/size", { cache: "no-store" }).then((r) => live && r.ok && typeof r.data.companies === "number" && r.data.companies > 0 && setN(r.data.companies));
     return () => {
       live = false;
     };

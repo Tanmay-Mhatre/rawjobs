@@ -6,8 +6,9 @@ import type { CompanyCheck, RunEvent, SaveResult, ScanPlan, ScanOrigin, ScanScop
 import type { AtsType, Config } from "@rawjobs/core/schema";
 
 export type { CompanyCheck, RunEvent, SaveResult, ScanPlan, ScanOrigin, ScanScope, ScanSource, SetupStatus };
+import { getJson, isRunEvent } from "./api";
 import { canRunLocally } from "./data";
-import { fetchWithin } from "./net";
+import { READ_TIMEOUT_MS } from "./net";
 
 // ---------- API (dev server only, see apps/web/vite.config.ts) ----------
 
@@ -21,14 +22,10 @@ export function useSetupStatus() {
   const [failed, setFailed] = useState(false);
   const refresh = useCallback(async () => {
     if (!canRunLocally) return setStatus(null);
-    try {
-      const res = await fetchWithin("/api/setup", { cache: "no-store" });
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      setStatus((await res.json()) as SetupStatus);
-      setFailed(false);
-    } catch {
-      setFailed(true);
-    }
+    const r = await getJson("GET /api/setup", { cache: "no-store", timeoutMs: READ_TIMEOUT_MS });
+    if (!r.ok) return setFailed(true);
+    setStatus(r.data);
+    setFailed(false);
   }, []);
   useEffect(() => {
     void refresh();
@@ -37,18 +34,16 @@ export function useSetupStatus() {
 }
 
 export async function saveConfig(config: Config): Promise<SaveResult> {
-  const res = await fetch("/api/setup/config", { method: "POST", body: JSON.stringify(config) });
-  return (await res.json()) as SaveResult;
+  const r = await getJson("POST /api/setup/config", { body: JSON.stringify(config) });
+  if (r.ok) return r.data;
+  if (r.status === 0) throw new Error(r.error);
+  return { ok: false, errors: r.error, issues: [] };
 }
 
 /** Start setup over: the config is moved to a backup file; resume and Telegram alerts stay. */
 export async function resetSetup(): Promise<{ ok: true; backup: string | null } | { ok: false; errors: string }> {
-  try {
-    const res = await fetch("/api/setup/reset", { method: "POST" });
-    return (await res.json()) as { ok: true; backup: string | null } | { ok: false; errors: string };
-  } catch (err) {
-    return { ok: false, errors: (err as Error).message };
-  }
+  const r = await getJson("POST /api/setup/reset");
+  return r.ok ? r.data : { ok: false, errors: r.error };
 }
 
 /** Live check through the local API; offline (hosted) falls back to URL detection only. */
@@ -63,28 +58,20 @@ export async function checkCompanies(urls: string[]): Promise<CompanyCheck[]> {
       return { input, ...ref, key: companyKey(ref), careers_url: careersUrl(ref) || input, name_source: "slug", status: supported ? "live" : "soon" };
     });
   }
-  const res = await fetch("/api/setup/check", { method: "POST", body: JSON.stringify({ urls }) });
-  if (!res.ok) throw new Error(((await res.json()) as { errors?: string }).errors ?? `HTTP ${res.status}`);
-  return (await res.json()) as CompanyCheck[];
+  const r = await getJson("POST /api/setup/check", { body: JSON.stringify({ urls }) });
+  if (!r.ok) throw new Error(r.error);
+  return r.data;
 }
 
 export async function scanPlan(): Promise<ScanPlan | null> {
-  try {
-    const res = await fetch("/api/scan/plan", { cache: "no-store" });
-    return res.ok ? ((await res.json()) as ScanPlan) : null;
-  } catch {
-    return null;
-  }
+  const r = await getJson("GET /api/scan/plan", { cache: "no-store" });
+  return r.ok ? r.data : null;
 }
 
 /** Ask the running scan to send a Telegram message when it finishes. */
 export async function notifyWhenDone(): Promise<boolean> {
-  try {
-    const res = await fetch("/api/run/notify", { method: "POST" });
-    return ((await res.json()) as { ok?: boolean }).ok === true;
-  } catch {
-    return false;
-  }
+  const r = await getJson("POST /api/run/notify");
+  return r.ok && r.data.ok === true;
 }
 
 /** Ask the running scan to stop (within seconds); it can be resumed later. */
@@ -94,12 +81,8 @@ export async function stopScan(): Promise<void> {
 
 /** "Check now": fetch just these directory companies ("ats:slug") on this machine. */
 export async function checkNow(keys: string[]): Promise<Extract<RunEvent, { type: "done" | "error" }>> {
-  try {
-    const res = await fetch("/api/check", { method: "POST", body: JSON.stringify({ keys }) });
-    return (await res.json()) as Extract<RunEvent, { type: "done" | "error" }>;
-  } catch (err) {
-    return { type: "error", message: (err as Error).message };
-  }
+  const r = await getJson("POST /api/check", { body: JSON.stringify({ keys }) });
+  return r.ok ? r.data : { type: "error", message: r.body?.message ?? r.error };
 }
 
 /** Run a scan on this machine, reporting progress as it streams in. */
@@ -143,11 +126,13 @@ async function readEvents(body: ReadableStream<BufferSource>, onEvent: (e: RunEv
     buf = lines.pop() ?? "";
     for (const line of lines) {
       if (!line.trim()) continue;
+      let event: unknown;
       try {
-        onEvent(JSON.parse(line) as RunEvent);
+        event = JSON.parse(line);
       } catch {
-        // ignore stray output
+        continue; // stray output
       }
+      if (isRunEvent(event)) onEvent(event);
     }
   }
 }
