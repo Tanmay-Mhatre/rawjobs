@@ -4,7 +4,7 @@ import { dirname, join, resolve } from "node:path";
 import { parseArgs } from "node:util";
 import { build } from "esbuild";
 import { changelogFromTags, readTags } from "../release/changelog";
-import { nodeOnlyInEntry } from "./web-check";
+import { entryBytes, nodeOnlyInEntry } from "./web-check";
 
 /**
  * Build the copy of RawJobs that gets installed: it needs only Node, no pnpm or tsx.
@@ -38,6 +38,13 @@ for (const personal of ["jobs.json", "meta.json", "history.json", "catalog", "ru
 // `process.versions` when it loaded) left the dashboard blank in v0.7.13.
 const nodeOnly = nodeOnlyInEntry(join(root, "apps/web/dist"));
 if (nodeOnly) fail(`The dashboard loads Node-only code at start (${nodeOnly}). Import it lazily (await import()) or keep it out of what apps/web imports.`);
+// What the page parses before it shows anything. Lazy pages and lazy imports keep it down; the limit
+// trips if they slip back into the first load.
+const FIRST_LOAD_LIMIT_KB = 1000;
+const firstLoadKb = entryBytes(join(root, "apps/web/dist")) / 1000;
+console.log(`Dashboard first-load JS: ${firstLoadKb.toFixed(1)} KB (limit ${FIRST_LOAD_LIMIT_KB} KB)`);
+if (firstLoadKb > FIRST_LOAD_LIMIT_KB)
+  fail(`The dashboard's first-load JS is ${firstLoadKb.toFixed(1)} KB, over the ${FIRST_LOAD_LIMIT_KB} KB limit. Load the new code lazily (lazy() or await import()).`);
 
 rmSync(out, { recursive: true, force: true });
 mkdirSync(out, { recursive: true });
