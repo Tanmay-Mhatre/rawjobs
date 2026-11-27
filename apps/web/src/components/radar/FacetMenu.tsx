@@ -1,6 +1,7 @@
 import { Check, ChevronDown, Search } from "lucide-react";
-import { useEffect, useId, useRef, useState, type ReactNode } from "react";
+import { useId, useState, type ReactNode } from "react";
 import type { FacetOption } from "../../lib/filters";
+import { Popover, usePopover } from "../primitives";
 import { cx } from "../ui";
 
 type Props = {
@@ -20,30 +21,12 @@ type Props = {
 
 /**
  * A filter button that opens a popover of options with counts. Counts reflect the other active filters.
- * Plain popover (not an ARIA menu): Tab moves through it; Escape, a click outside or tabbing away closes it.
+ * Plain popover (not an ARIA menu): Tab moves through it; Escape, a press outside or tabbing away closes it.
  */
 export function FacetMenu({ label, options, selected, onChange, single, searchable, footer, optionsLabel }: Props) {
-  const [open, setOpen] = useState(false);
-  const ref = useRef<HTMLDivElement>(null);
-  const buttonRef = useRef<HTMLButtonElement>(null);
+  const pop = usePopover();
+  const { open, setOpen } = pop;
   const panelId = useId();
-
-  useEffect(() => {
-    if (!open) return;
-    const onDown = (e: MouseEvent) => !ref.current?.contains(e.target as Node) && setOpen(false);
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key !== "Escape") return;
-      // Escape from inside the popover puts focus back on its button.
-      if (ref.current?.contains(document.activeElement)) buttonRef.current?.focus();
-      setOpen(false);
-    };
-    document.addEventListener("mousedown", onDown);
-    document.addEventListener("keydown", onKey);
-    return () => {
-      document.removeEventListener("mousedown", onDown);
-      document.removeEventListener("keydown", onKey);
-    };
-  }, [open]);
 
   const active = selected.length > 0;
   const summary = active
@@ -57,14 +40,15 @@ export function FacetMenu({ label, options, selected, onChange, single, searchab
   return (
     // biome-ignore lint/a11y/noStaticElementInteractions: hover, focus or drop handling around real controls; nothing here is only reachable by mouse
     <div
-      ref={ref}
       className="relative"
       onBlur={(e) => {
         if (open && e.relatedTarget && !e.currentTarget.contains(e.relatedTarget as Node)) setOpen(false);
       }}
     >
       <button
-        ref={buttonRef}
+        ref={(el) => {
+          pop.triggerRef.current = el;
+        }}
         type="button"
         onClick={() => setOpen((v) => !v)}
         aria-expanded={open}
@@ -79,8 +63,7 @@ export function FacetMenu({ label, options, selected, onChange, single, searchab
         <ChevronDown className={cx("size-3.5 shrink-0 transition-transform", open && "rotate-180")} />
       </button>
       {open && (
-        // biome-ignore lint/a11y/useSemanticElements: an ARIA role on purpose: the native element (fieldset, output, input, hr, ul) would change layout or behaviour here
-        <div id={panelId} role="group" aria-label={label} className="absolute left-0 top-full z-menu mt-1 w-72 rounded-md border border-line bg-raised p-1.5 shadow-l3">
+        <Popover {...pop.props} id={panelId} role="group" aria-label={label} className="w-72 p-1.5">
           {optionsLabel && options.length > 0 && <p className="px-2 pb-0.5 pt-1 type-label">{optionsLabel}</p>}
           <OptionList label={label} options={options} selected={selected} onChange={onChange} single={single} searchable={searchable} autoFocus />
           {footer}
@@ -91,7 +74,7 @@ export function FacetMenu({ label, options, selected, onChange, single, searchab
               </button>
             </div>
           )}
-        </div>
+        </Popover>
       )}
     </div>
   );

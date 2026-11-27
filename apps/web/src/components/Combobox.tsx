@@ -1,5 +1,6 @@
 import { Plus, Search } from "lucide-react";
 import { useId, useMemo, useRef, useState, type ReactNode } from "react";
+import { usePopoverPlace } from "./primitives";
 import { cx } from "./ui";
 
 export type ComboItem = { key: string; label: string; hint?: ReactNode; group?: string };
@@ -20,7 +21,11 @@ export function Combobox({ label, placeholder, search, onPick, onFreeText }: Pro
   const [active, setActive] = useState(0);
   const listId = useId();
   const inputRef = useRef<HTMLInputElement>(null);
+  const listRef = useRef<HTMLUListElement>(null);
   const items = useMemo(() => (q.trim() ? search(q) : []), [q, search]);
+  const shown = open && !!q.trim();
+  // Under the field, or above it when there's no room; as wide as the field.
+  const place = usePopoverPlace(shown, inputRef, listRef, { matchWidth: true });
 
   const pick = (item: ComboItem) => {
     onPick(item);
@@ -69,9 +74,15 @@ export function Combobox({ label, placeholder, search, onPick, onFreeText }: Pro
         }}
         className="h-11 w-full rounded-md border border-line bg-raised pl-9 pr-3 type-small placeholder:text-muted"
       />
-      {open && q.trim() && (
-        // biome-ignore lint/a11y/noNoninteractiveElementToInteractiveRole: ARIA combobox: focus stays in the input and options are reached with aria-activedescendant
-        <ul id={listId} role="listbox" className="absolute inset-x-0 top-12 z-menu max-h-72 overflow-y-auto rounded-md border border-line bg-raised p-1 shadow-l3">
+      {shown && (
+        <ul
+          ref={listRef}
+          id={listId}
+          // biome-ignore lint/a11y/noNoninteractiveElementToInteractiveRole: ARIA combobox: focus stays in the input and options are reached with aria-activedescendant
+          role="listbox"
+          style={place ? { top: place.top, left: place.left, width: place.width } : { top: 0, left: 0, opacity: 0, pointerEvents: "none" }}
+          className="fixed z-menu max-h-72 overflow-y-auto rounded-md border border-line bg-overlay p-1 shadow-l3"
+        >
           {items.length === 0 ? (
             <li className="px-3 py-2 type-small text-muted">
               {onFreeText ? (
