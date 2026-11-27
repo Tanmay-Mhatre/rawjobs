@@ -206,7 +206,7 @@ describe("Starting and the background check", () => {
     expect(s.bg).toMatchObject({ done: 31, found: 2, failed: 1, last: "Gamma" });
     const pill = (scan: ScanState, onResume = () => {}) => render(<BackgroundPill scan={scan} bg={scan.bg!} onPause={() => {}} onResume={onResume} />);
     pill(s);
-    fireEvent.click(screen.getByRole("button", { name: /31% done: show details/ }));
+    fireEvent.click(screen.getByRole("button", { name: /^Checking the rest 31% ?, show details$/ }));
     expect(screen.getByText("Couldn't reach").nextElementSibling?.textContent).toBe("1");
     expect(screen.getByText("Checked fine").nextElementSibling?.textContent).toBe("30");
     expect(screen.getByText("Gamma")).toBeTruthy();
@@ -215,7 +215,7 @@ describe("Starting and the background check", () => {
     const onResume = vi.fn();
     const paused = play([{ type: "done", stage: "background", jobsFound: 9, matches: 3, strong: 0, newMatches: 3, failed: 1, stopped: true }], s);
     pill({ ...paused, phase: "done" }, onResume);
-    fireEvent.click(screen.getByRole("button", { name: /paused: show details/ }));
+    fireEvent.click(screen.getByRole("button", { name: /^Paused ?, show details$/ }));
     fireEvent.click(screen.getByRole("button", { name: "Resume now" }));
     expect(onResume).toHaveBeenCalled();
   });
@@ -223,7 +223,7 @@ describe("Starting and the background check", () => {
   it("shows the background check's steps before it knows how many are left", () => {
     const s = play([{ type: "start", companies: ["Acme"], total: 1 }, { type: "done", stage: "quick", jobsFound: 3, matches: 2, strong: 1, newMatches: 12, failed: 0 }, { type: "background" }]);
     render(<BackgroundPill scan={s} bg={s.bg!} onPause={() => {}} onResume={() => {}} />);
-    fireEvent.click(screen.getByRole("button", { name: /starting: show details/ }));
+    fireEvent.click(screen.getByRole("button", { name: /^Checking the rest ?, show details$/ }));
     expect(screen.getByText("12 new matches on your Radar")).toBeTruthy();
     expect(screen.getByText(/Listing the companies Scan now skipped/)).toBeTruthy();
     expect(screen.getByRole("button", { name: /Pause/ })).toBeTruthy();

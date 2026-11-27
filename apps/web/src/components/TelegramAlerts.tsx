@@ -243,7 +243,7 @@ export function TelegramAlerts({
 
 function Step({ n, title, done, muted, children }: { n: number; title: string; done: boolean; muted?: boolean; children?: ReactNode }) {
   return (
-    <li className={cx("flex gap-3", muted && "opacity-50")}>
+    <li className={cx("flex gap-3", muted && "text-muted")}>
       <span className={cx("flex size-6 shrink-0 items-center justify-center rounded-sm border type-label", done ? "border-ink bg-ink text-raised" : "border-line")}>
         {done ? <Check className="size-3.5" /> : n}
       </span>

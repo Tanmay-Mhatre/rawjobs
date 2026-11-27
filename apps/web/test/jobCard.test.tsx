@@ -63,7 +63,8 @@ describe("feed row (design/components/Feed)", () => {
     const { props } = renderRow({ entry: { status: "saved", updatedAt: "" } as never });
     const save = screen.getByRole("button", { name: "Save" });
     expect(save.getAttribute("aria-pressed")).toBe("true");
-    expect(save.querySelector(".rj-tip")?.textContent).toBe("SaveS");
+    expect(save.querySelector(".rj-tip")?.textContent).toBe("Save");
+    expect(save.querySelector<HTMLElement>(".rj-tip__kbd")?.dataset.key).toBe("S");
     await userEvent.click(screen.getByRole("button", { name: "Not interested" }));
     // The row's lead job, so the list can pass one handler to every row.
     expect(props.onStatus).toHaveBeenCalledWith(props.group.lead, "dismissed");
@@ -118,7 +119,23 @@ describe("feed row (design/components/Feed)", () => {
     expect(note.className).toBe("text-warning-text");
     expect(note.textContent).toBe("Pay below your floor: up to EUR 55k vs your 60k a year +1");
     expect(note.getAttribute("title")).toContain("About agency, which you avoid");
-    expect(container.querySelector("li")!.className).not.toContain("opacity-60");
+    expect(container.querySelector("li")!.className).not.toContain("rj-row--muted");
+  });
+
+  it('muted row has no opacity class and shows "Not interested" when dismissed', () => {
+    const { container } = renderRow({ entry: { status: "dismissed", updatedAt: "" } as never });
+    const row = container.querySelector("li")!;
+    // Quieter colour and weight (index.css), not opacity, so its text keeps its contrast.
+    expect(row.className).toContain("rj-row--muted");
+    expect(row.className).not.toMatch(/\bopacity-/);
+    expect(container.querySelector(".rj-row__meta")!.textContent).toBe("Acme Exchange·Dubai·Hybrid·Not interested");
+    cleanup();
+
+    // A closed job says so in words too.
+    const lead = job({ status: "closed" });
+    const closed = renderRow({ group: { key: lead.group, lead, jobs: [lead] } });
+    expect(closed.container.querySelector("li")!.className).toContain("rj-row--muted");
+    expect(closed.container.querySelector(".rj-row__meta")!.textContent).toBe("Acme Exchange·Dubai·Hybrid·Closed");
   });
 
   it("the title is the button that opens the job", async () => {

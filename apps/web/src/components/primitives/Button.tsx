@@ -51,12 +51,16 @@ export function IconButton({ label, shortcut, tip = "below", variant = "quiet", 
   );
 }
 
-/** The tooltip inside an icon button: decorative for screen readers, which already hear the button's name and key. */
+/**
+ * The tooltip inside an icon button: decorative for screen readers, which already hear the button's name
+ * and key (aria-keyshortcuts). The key is drawn by CSS (data-key), so the button's visible text is just
+ * its label and matches its name (WCAG 2.5.3, label in name).
+ */
 export function Tooltip({ label, shortcut, side = "below" }: { label: string; shortcut?: string; side?: "below" | "above" }) {
   return (
     <span className={cx("rj-tip", side === "above" && "rj-tip--above")} aria-hidden>
       {label}
-      {shortcut && <Kbd className="rj-tip__kbd">{shortcut}</Kbd>}
+      {shortcut && <kbd className="rj-kbd rj-tip__kbd" data-key={shortcut} aria-hidden />}
     </span>
   );
 }

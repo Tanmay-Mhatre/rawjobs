@@ -164,6 +164,18 @@ const clickView = (name: RegExp) => async (page: Page) => {
 const SCREENS: Screen[] = [
   { id: "radar", what: "Radar, All view (default)", scenario: "demo", hash: "#radar", ready: strong },
   {
+    id: "radar-muted",
+    what: "Radar, All view including closed and hidden jobs: a muted Closed row next to a muted Not interested row (contrast without opacity)",
+    scenario: "demo",
+    hash: "#radar?showClosed=true&showHidden=true",
+    // Not interested on the role listed right after the closed one, so both muted rows share the shot.
+    storage: { "rawjobs.state.v1": { ...demo.USER_STATE, ...Object.fromEntries([demo.entry("Principal Product Manager", "dismissed", 1)]) } },
+    ready: "Product Lead, Billing",
+    act: async (page) => {
+      await page.getByRole("button", { name: "Product Lead, Billing" }).scrollIntoViewIfNeeded();
+    },
+  },
+  {
     id: "radar-keys",
     what: "Radar after J/K presses: after every press the current row (aria-current) is the focused one (Feed: J/K move focus)",
     scenario: "demo",
@@ -300,6 +312,19 @@ const SCREENS: Screen[] = [
   },
   { id: "pipeline", what: "Pipeline", scenario: "demo", hash: "#pipeline", ready: strong },
   {
+    id: "pipeline-interview-add",
+    what: "Pipeline, a job's Interviews section adding a round: the day and time fields' borders (contrast)",
+    scenario: "demo",
+    hash: "#pipeline",
+    ready: "Senior Product Manager, Growth",
+    widths: [1280],
+    viewportOnly: true,
+    act: async (page) => {
+      await page.getByRole("button", { name: "Senior Product Manager, Growth" }).locator("visible=true").first().click();
+      await page.getByRole("button", { name: "Add interview" }).click();
+    },
+  },
+  {
     id: "radar-salary",
     what: "My companies sorted by salary (no folding): pounds first by yearly pay, then euros, then the hourly US-dollar contract, then no pay",
     scenario: "demo",
@@ -401,7 +426,7 @@ const SCREENS: Screen[] = [
     act: async (page) => {
       await page.getByRole("button", { name: "Scan now", exact: true }).click();
       await page.getByText("42%").waitFor();
-      await page.getByRole("button", { name: /^Scan 42% done/ }).click();
+      await page.getByRole("button", { name: /^Scanning\s+42%\s*, show details$/ }).click();
       await page.getByText("Feed picks").waitFor();
     },
   },
@@ -415,7 +440,7 @@ const SCREENS: Screen[] = [
     scan: BACKGROUND,
     act: async (page) => {
       await page.getByRole("button", { name: "Scan now", exact: true }).click();
-      await page.getByRole("button", { name: /^Background check/ }).click();
+      await page.getByRole("button", { name: /^Checking the rest.*, show details$/ }).click();
       await page.getByRole("button", { name: "Pause" }).waitFor();
     },
   },

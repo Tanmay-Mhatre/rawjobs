@@ -174,9 +174,11 @@ export const JobCard = memo(function JobCard({ group, entry, min, isNew, selecte
   if (referral) meta.push(<span className="text-ink">{referral}</span>);
   const flag = rowFlag(group);
   if (flag) meta.push(flag);
+  // A muted row says why in words, not just in colour: Closed and the filter come from rowFlag.
+  if (status === "dismissed") meta.push(<span>Not interested</span>);
 
   return (
-    <li ref={ref} className={cx("rj-row", muted && "opacity-60")} aria-current={selected ? "true" : undefined}>
+    <li ref={ref} className={cx("rj-row", muted && "rj-row--muted")} aria-current={selected ? "true" : undefined}>
       <span title={job.estimated ? "Estimated: scored on title, place and industry only, until the full posting is fetched" : undefined}>
         <ScoreBadge score={job.score} threshold={min} estimated={job.estimated} word />
       </span>
