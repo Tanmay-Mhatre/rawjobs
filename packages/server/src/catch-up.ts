@@ -1,12 +1,16 @@
-import { existsSync } from "node:fs";
+import { existsSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import {
   missedScan,
   OUTBOX_FILE,
+  OVERDUE_RUN,
+  overdueScheduledRun,
+  recordScheduledRun,
   readScheduledRuns,
   readScheduleSettings,
   runCommitted,
   scanLockHeld,
+  scanLockHolder,
   scheduleSavedAt,
   sendTelegramQueued,
   type TelegramSecrets,
@@ -37,7 +41,12 @@ export type CatchUpDeps = {
   platform?: NodeJS.Platform;
   /** Send alerts waiting in the Telegram outbox (default flushAlerts). */
   flush?: () => Promise<string | null>;
+  /** End a process (default process.kill); tests pass a fake. */
+  kill?: (pid: number) => void;
 };
+
+/** How long a scan far past its limit gets to stop by itself, once asked, before it's ended. */
+export const OVERDUE_GRACE_MS = 10 * 60_000;
 
 /**
  * Send the scan alerts waiting in the Telegram outbox: written ahead by a scan killed after it
@@ -73,13 +82,49 @@ export function watchMissedScans(d: CatchUpDeps): { tick: () => Promise<void>; s
   const windows = (d.platform ?? process.platform) === "win32";
   let lastTick = now();
   let checkAt = lastTick + SETTLE_MS;
-  let repairDue = windows;
+  // Once after start on every system: schedules installed by an older version are written again
+  // (refreshSchedules); on Windows the tasks' times are checked too, again after each wake.
+  let repairDue = true;
   let started: number | undefined;
   let running = false;
   const flush = d.flush ?? (() => flushAlerts(d.dataDir));
   let flushed = false;
+  /** The overdue scan asked to stop, and when. */
+  let asked: { pid: number; at: number } | undefined;
+
+  /**
+   * A scheduled scan still running long after its time limit (on Windows, Task Scheduler's limit
+   * ends only the console wrapper; a scan from before deadlines never stops by itself) holds the
+   * scan lock, so no other scan runs. Ask it to stop (it saves its progress); end it if it doesn't.
+   * True while one is being dealt with.
+   */
+  function stopOverdue(): boolean {
+    const runs = readScheduledRuns(d.dataDir);
+    const run = overdueScheduledRun(runs, scanLockHolder(d.dataDir), now());
+    if (!run?.pid) {
+      asked = undefined;
+      return false;
+    }
+    checkAt = now() + TICK_MS;
+    if (asked?.pid !== run.pid) {
+      asked = { pid: run.pid, at: now() };
+      writeFileSync(join(d.dataDir, "scan-stop"), "");
+      log(`A scheduled scan has run for ${Math.round((now() - Date.parse(run.startedAt)) / 3_600_000)} h, far past its time limit: asked it to stop.`);
+    } else if (now() - asked.at > OVERDUE_GRACE_MS) {
+      try {
+        (d.kill ?? process.kill)(run.pid);
+      } catch {
+        // gone already
+      }
+      recordScheduledRun(d.dataDir, { ...run, pid: undefined, running: undefined, finishedAt: new Date(now()).toISOString(), ok: false, error: OVERDUE_RUN });
+      log("The overdue scheduled scan didn't stop by itself: ended it.");
+      asked = undefined;
+    }
+    return true;
+  }
 
   async function check(): Promise<void> {
+    if (stopOverdue()) return;
     // Once after start (again only if a scan held the lock or the send failed): alerts a killed scan left.
     if (!flushed && !d.busy()) {
       const r = await flush();
@@ -92,6 +137,8 @@ export function watchMissedScans(d: CatchUpDeps): { tick: () => Promise<void>; s
       try {
         const fixed = (JSON.parse(r.stdout.trim()) as { fixed?: string[] }).fixed ?? [];
         if (fixed.length) log(`Put the scheduled tasks back on your local time: ${fixed.join("; ")}.`);
+        // A scan held the lock: write the schedules again at the next look.
+        if ((JSON.parse(r.stdout.trim()) as { refreshed?: boolean }).refreshed === false) repairDue = true;
       } catch {
         log(`Couldn't check the scheduled tasks' times: ${(r.stderr || r.stdout).trim().slice(0, 300)}`);
       }

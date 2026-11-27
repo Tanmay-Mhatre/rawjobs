@@ -21,6 +21,14 @@ describe("runLine", () => {
     expect(runLine(failed("Stopped before the end: it ran past its time limit, or the computer went to sleep or shut down."))).toMatch(/^Didn't finish\. It ran past its time limit/);
   });
 
+  it("says why a run stopped early: its time limit, its scheduler, or Stop; and one RawJobs ended", () => {
+    const stopped = (stopReason?: ScheduledRun["stopReason"]): ScheduledRun => ({ ...failed(), ok: true, matches: 3, newMatches: 1, stopped: true, stopReason });
+    expect(runLine(stopped("deadline"))).toBe("3 matches, 1 new · stopped at its time limit, the next scan carries on");
+    expect(runLine(stopped("scheduler"))).toBe("3 matches, 1 new · stopped when the computer's scheduler ended it, the next scan carries on");
+    expect(runLine(stopped())).toBe("3 matches, 1 new · stopped early");
+    expect(runLine(failed("Ran far past its time limit, so RawJobs stopped it. The next scan carries on where it stopped."))).toMatch(/^Didn't finish\. It ran far past its time limit/);
+  });
+
   it("calls a run that found another scan going skipped, not failed", () => {
     expect(runLine(failed("Another scan was already running."))).toBe("Skipped. Another scan was already running.");
   });

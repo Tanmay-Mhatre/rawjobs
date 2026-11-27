@@ -18,6 +18,7 @@ const ALLOWED: { file: string; line: string; why: string }[] = [
   { file: "cli/src/commands/run.ts", line: "writeFileSync(out,", why: "--json output the user asked for" },
   { file: "server/src/api.ts", line: '"scan-notify"), "")', why: "flag file: only its existence matters" },
   { file: "server/src/api.ts", line: '"scan-stop"), "")', why: "flag file: only its existence matters" },
+  { file: "server/src/catch-up.ts", line: '"scan-stop"), "")', why: "flag file: only its existence matters" },
   { file: "server/src/private-home.ts", line: "writeFileSync(marker,", why: "marker file: only its existence matters" },
   { file: "server/src/shortcuts.ts", line: "applet.icns", why: "OS shortcut file" },
   { file: "server/src/shortcuts.ts", line: "writeFileSync(join(apps, LINUX_LINK)", why: "OS shortcut file" },

@@ -42,7 +42,7 @@ import {
   type ScanScope,
   type TrackingDoc,
 } from "@rawjobs/core";
-import { CONNECTION_ID, createNetworkStore, createReminder, createWatcher, nodeWatchDeps, type ReminderDeps, sendTelegram, telegramSecrets, type WatchDeps } from "@rawjobs/core";
+import { awakeTimeout, CONNECTION_ID, createNetworkStore, createReminder, createWatcher, nodeWatchDeps, type ReminderDeps, sendTelegram, telegramSecrets, type WatchDeps } from "@rawjobs/core";
 import type { ScanOrigin } from "@rawjobs/core/protocol";
 import { folderId } from "@rawjobs/core/update";
 import { CSP_REPORT_PATH, cspReportLine } from "./csp";
@@ -223,7 +223,8 @@ export function createApi(opts: ApiOptions) {
       const child = cli(args, stdin);
       let stdout = "";
       let stderr = "";
-      const timer = setTimeout(() => {
+      // Awake time only: a run the computer slept through isn't stopped the moment it wakes.
+      const cancel = awakeTimeout(timeoutMs, () => {
         child.kill();
         done({
           code: 1,
@@ -231,9 +232,9 @@ export function createApi(opts: ApiOptions) {
           stderr: `${stderr}
 Stopped after ${Math.round(timeoutMs / 1000)} s without finishing.`.trim(),
         });
-      }, timeoutMs);
+      });
       const finish = (r: { code: number; stdout: string; stderr: string }) => {
-        clearTimeout(timer);
+        cancel();
         done(r);
       };
       child.stdout!.on("data", (d) => (stdout += d));

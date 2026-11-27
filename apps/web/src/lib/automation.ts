@@ -14,6 +14,8 @@ export type ScheduledRun = {
   newMatches?: number;
   notified?: string;
   stopped?: boolean;
+  /** Why it stopped: its time ran out ("deadline"), its scheduler ended it, or Stop ("stop"). */
+  stopReason?: "deadline" | "scheduler" | "stop";
   error?: string;
   /** Ran late, for a time missed while the computer was off or asleep. */
   catchUp?: boolean;
