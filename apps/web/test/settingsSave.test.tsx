@@ -34,7 +34,6 @@ function renderSettings(over: Partial<ComponentProps<typeof Settings>> = {}) {
     user: {},
     prefs: { views: [], hiddenCompanies: [], hideRules: [] } as unknown as ComponentProps<typeof Settings>["prefs"],
     onImport: vi.fn(),
-    suggest: undefined as unknown as ComponentProps<typeof Settings>["suggest"],
     resumeText: "",
     saveResume: vi.fn(),
     removeResume: vi.fn(),
@@ -104,5 +103,12 @@ describe("Settings › Notifications", () => {
     expect(config.alerts.only_new).toBe(false);
     expect(config.profile.titles.include).toEqual(["product manager"]);
     expect(props.update).toHaveBeenCalledWith({ alerts: { ...saved.alerts, only_new: false } });
+  });
+
+  it("reads the resume itself: Profile still offers what the resume says", async () => {
+    const resumeText = "# Jane Doe\n## Experience\n### Senior PM, Acme Exchange (Jan 2016 – Dec 2020)\n### Advisor, PayCo (Jun 2019 – Dec 2022)";
+    renderSettings({ resumeText });
+    await go("#settings/profile");
+    expect(screen.getByRole("button", { name: "Use 7", hidden: true })).toBeTruthy();
   });
 });

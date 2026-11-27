@@ -40,7 +40,6 @@ import { ProfileFixProvider, type ProfileFixApi } from "./lib/profileFix";
 import { draftToConfig, emptyDraft, resetSetup, saveConfig, setupProgress, STEP, useSetupStatus } from "./lib/setup";
 import { useOnline } from "./lib/net";
 import { ErrorBoundary } from "./components/ErrorBoundary";
-import { buildSuggestions } from "./lib/suggest";
 import { load, onSaveFailed, save } from "./lib/storage";
 import { timeAgo } from "./lib/format";
 import { hasNewTag } from "./lib/filters";
@@ -104,7 +103,6 @@ export function App() {
   const { saved, draft, setDraft, update, dirty, forgetBase, loaded: draftLoaded } = useSetupDraft(status, meta);
   const { resume, saveResume, removeResume } = useResume();
   const progress = setupProgress(draft, !!resume.text);
-  const suggest = useMemo(() => buildSuggestions(resume.text, draft.aiProfile), [resume.text, draft.aiProfile]);
 
   const afterScan = useCallback(async () => {
     await Promise.all([reload(), setup.refresh()]);
@@ -607,7 +605,6 @@ export function App() {
                         prefs.setRule(rule, false);
                         toast({ message: <>Showing {offerWhat({ kind: "rule", rule })} again.</>, actionLabel: "Undo", onAction: () => prefs.setRule(rule, true) });
                       }}
-                      suggest={suggest}
                       resumeText={resume.text}
                       saveResume={saveResume}
                       removeResume={removeResume}
