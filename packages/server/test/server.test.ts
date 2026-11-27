@@ -4,6 +4,7 @@ import type { AddressInfo } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import type { ApiRoutes, Health, TrackingRead } from "@rawjobs/core/protocol";
 import { folderId } from "@rawjobs/core/update";
 import { cmdAlerts } from "../../cli/src/commands/alerts";
 import { cmdSetup } from "../../cli/src/commands/setup";
@@ -233,6 +234,33 @@ console.log(JSON.stringify({ type: "done", scope: args[args.indexOf("--scope") +
     const r = await call(port, "POST", "/api/doctor");
     expect(r.status).toBe(200);
     expect(JSON.parse(r.text).args).toEqual(["doctor", "--json", "--zip", "--data", dataDir]);
+  });
+
+  it("answers health and tracking with exactly the fields ApiRoutes gives the dashboard", async () => {
+    // Every field of the protocol's types, checked by the compiler: a field added to one side only fails here.
+    const healthKeys = Object.keys({
+      ok: 1,
+      version: 1,
+      scanning: 1,
+      background: 1,
+      scanOrigin: 1,
+      dataVersion: 1,
+      trackingRev: 1,
+      update: 1,
+      startLink: 1,
+      safeMode: 1,
+      platform: 1,
+      home: 1,
+      pid: 1,
+    } satisfies Record<keyof Health, 1>);
+    const trackingKeys = Object.keys({ tracking: 1, rev: 1, epoch: 1 } satisfies Record<keyof TrackingRead, 1>);
+    const { port } = await start();
+    const health = JSON.parse((await call(port, "GET", "/api/health")).text) as ApiRoutes["GET /api/health"];
+    expect(Object.keys(health).sort()).toEqual(healthKeys.sort());
+    const tracking = JSON.parse((await call(port, "GET", "/api/tracking")).text) as ApiRoutes["GET /api/tracking"];
+    expect(Object.keys(tracking).sort()).toEqual(trackingKeys.sort());
+    expect(typeof tracking.rev).toBe("number");
+    expect(typeof tracking.epoch).toBe("string");
   });
 
   it("answers health with the version", async () => {

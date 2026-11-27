@@ -21,6 +21,7 @@ import {
   type UpdateRecord,
   type UpdateSettings,
 } from "@rawjobs/core/update";
+import type { ApiFailure, ApiRoute, ApiRoutes } from "@rawjobs/core/protocol";
 import { makeShortcuts, markShortcutNoticeSeen, shortcutState, type ShortcutState } from "./shortcuts";
 
 export type UpdateStatus = {
@@ -353,7 +354,8 @@ export function createUpdater(o: {
     clearInterval(waiter);
   }
 
-  function json(res: ServerResponse, body: unknown, code = 200) {
+  /** A route's JSON answer, as ApiRoutes (@rawjobs/core/protocol) says the dashboard reads it. */
+  function send<R extends ApiRoute>(res: ServerResponse, _route: R, body: ApiRoutes[R] | ApiFailure<R>, code = 200) {
     res.statusCode = code;
     res.setHeader("content-type", "application/json");
     res.end(JSON.stringify(body));
@@ -362,16 +364,16 @@ export function createUpdater(o: {
   /** /api/update routes. Returns false for other URLs. */
   async function route(url: string, req: IncomingMessage, res: ServerResponse, body: () => Promise<string>): Promise<boolean> {
     if (url === "/api/update" && req.method === "GET") {
-      json(res, status());
+      send(res, "GET /api/update", status());
       return true;
     }
     if (url === "/api/update/changelog" && req.method === "GET") {
-      json(res, changelog());
+      send(res, "GET /api/update/changelog", changelog());
       return true;
     }
     if (!url.startsWith("/api/update/")) return false;
     if (!installed) {
-      json(res, { ...status(), error: "This copy updates with git (git pull), not by itself." }, 400);
+      send(res, "POST /api/update/:action", { ...status(), error: "This copy updates with git (git pull), not by itself." }, 400);
       return true;
     }
     if (url === "/api/update/check" && req.method === "POST") {
@@ -407,7 +409,7 @@ export function createUpdater(o: {
       writeUpdateFile(home, channelChanged ? { ...patch, lastCheck: undefined, latest: undefined, beacon: undefined } : patch);
       if (channelChanged) watch(0);
     } else return false;
-    json(res, status());
+    send(res, url === "/api/update/settings" ? "PUT /api/update/settings" : "POST /api/update/:action", status());
     return true;
   }
 

@@ -5,6 +5,7 @@
  * are posted, so your messages and the rest of the export never leave the file.
  */
 import { networkKey } from "@rawjobs/core/network/company";
+import type { NetworkInfo } from "@rawjobs/core/protocol";
 import { type ExportFiles, exportFilesFromEntries, isAllowedEntry } from "@rawjobs/core/network/linkedin-export";
 import type { NetworkMe, NetworkPeople, NetworkPersonRow, NetworkStatus, ReminderState, WatchState } from "@rawjobs/core/network/types";
 import { readZipEntries, ZipError } from "@rawjobs/core/network/zip";
@@ -14,8 +15,7 @@ import { toast } from "../components/Toast";
 import { canRunLocally } from "./data";
 
 export type { NetworkMe, NetworkPeople, NetworkPersonRow, NetworkStatus, ReminderState, WatchState };
-/** watchable: this computer offers the Downloads watch (not macOS in this release). reminder: "Remind me in 48 hours". */
-export type NetworkInfo = { status: NetworkStatus; me: NetworkMe | null; watchable?: boolean; reminder?: ReminderState | null };
+export type { NetworkInfo };
 export type Loadable<T> = { state: "loading" } | { state: "ready"; value: T } | { state: "error" };
 
 /** From this many days after an import, Settings and the job panel suggest a fresh copy. */
