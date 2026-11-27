@@ -45,7 +45,7 @@ import {
   type TrackingDoc,
 } from "@rawjobs/core";
 import { awakeTimeout, CONNECTION_ID, createNetworkStore, createReminder, createWatcher, nodeWatchDeps, type ReminderDeps, sendTelegram, telegramSecrets, type WatchDeps } from "@rawjobs/core";
-import type { ScanOrigin } from "@rawjobs/core/protocol";
+import type { ApiFailure, ApiRoute, ApiRoutes, NetworkError, ScanOrigin } from "@rawjobs/core/protocol";
 import { folderId } from "@rawjobs/core/update";
 import { CSP_REPORT_PATH, cspReportLine } from "./csp";
 import { refuse, refuseHost } from "./guard";
@@ -208,18 +208,19 @@ export function createApi(opts: ApiOptions) {
     { idleMs: opts.searchIdleMs },
   );
   /** A search route: its JSON body to the search process, its answer back (a body too big or not JSON is a 400). */
-  async function searchRoute(res: ServerResponse, req: IncomingMessage, op: "search" | "names" | "warm") {
+  async function searchRoute<R extends `POST /api/directory/${"search" | "names" | "warm"}`>(res: ServerResponse, req: IncomingMessage, route: R, op: "search" | "names" | "warm") {
     let body: unknown;
     try {
       body = JSON.parse((await readBody(req, 4_000_000)) || "{}");
     } catch (err) {
-      return json(res, { ok: false, errors: (err as Error).message }, 400);
+      return fail(res, (err as Error).message, 400);
     }
-    if (!body || typeof body !== "object" || Array.isArray(body)) return json(res, { ok: false, errors: "Send a JSON object." }, 400);
+    if (!body || typeof body !== "object" || Array.isArray(body)) return fail(res, "Send a JSON object.", 400);
     try {
-      return json(res, await search.ask(op, body as Record<string, unknown>));
+      // The search process's own answer (packages/cli directory search --serve).
+      return send(res, route, await search.ask<ApiRoutes[R]>(op, body as Record<string, unknown>));
     } catch (err) {
-      return json(res, { ok: false, errors: (err as Error).message }, 503);
+      return fail(res, (err as Error).message, 503);
     }
   }
 
@@ -264,28 +265,31 @@ Stopped after ${Math.round(timeoutMs / 1000)} s without finishing.`.trim(),
    * Forgotten after a save to what they show (WRITES) and when a scan or check ends.
    */
   const readers = createReaders();
-  async function respondRead(res: ServerResponse, read: () => unknown) {
+  async function respondRead<R extends ApiRoute>(res: ServerResponse, route: R, read: () => ApiRoutes[R] | Promise<ApiRoutes[R]>) {
     try {
-      json(res, await read());
+      send(res, route, await read());
     } catch (err) {
-      json(res, { ok: false, errors: String((err as Error).message ?? err) }, 500);
+      fail(res, String((err as Error).message ?? err), 500);
     }
   }
-  /** The CLI's JSON answer, kept as `readers.memo` does; a run that fails isn't kept. */
-  const readCli = (key: string, ttlMs: number, args: string[]) =>
-    readers.memo(key, ttlMs, async () => {
+  /**
+   * The CLI's JSON answer, kept as `readers.memo` does; a run that fails isn't kept. Its type is what
+   * the CLI command prints (packages/cli), which this process can't check.
+   */
+  const readCli = <R extends ApiRoute>(_route: R, key: string, ttlMs: number, args: string[]) =>
+    readers.memo(key, ttlMs, async (): Promise<ApiRoutes[R]> => {
       const r = await collect(args);
       const out = r.stdout.trim();
       if (!out.startsWith("{") && !out.startsWith("[")) throw new Error((r.stderr || r.stdout || "rawjobs failed").trim().slice(-2000));
-      return JSON.parse(out) as unknown;
+      return JSON.parse(out) as ApiRoutes[R];
     });
 
-  /** Send the CLI's JSON stdout as the response, or a JSON error. */
-  async function respondJson(res: ServerResponse, args: string[], stdin?: string) {
-    respondOutput(res, await collect(args, stdin));
+  /** Send the CLI's JSON stdout as the response, or a JSON error. `route`: whose answer it is (ApiRoutes has what the CLI prints). */
+  async function respondJson(res: ServerResponse, route: ApiRoute, args: string[], stdin?: string) {
+    respondOutput(res, route, await collect(args, stdin));
   }
 
-  function respondOutput(res: ServerResponse, r: { code: number; stdout: string; stderr: string }) {
+  function respondOutput(res: ServerResponse, _route: ApiRoute, r: { code: number; stdout: string; stderr: string }) {
     res.setHeader("content-type", "application/json");
     const out = r.stdout.trim();
     if (out.startsWith("{") || out.startsWith("[")) {
@@ -555,10 +559,16 @@ Stopped after ${Math.round(timeoutMs / 1000)} s without finishing.`.trim(),
     child.on("close", (code) => finish(code));
   }
 
-  function json(res: ServerResponse, body: unknown, status = 200) {
-    res.statusCode = status;
-    res.setHeader("content-type", "application/json");
-    res.end(JSON.stringify(body));
+  /**
+   * A route's JSON answer. `route` names it in ApiRoutes (@rawjobs/core/protocol), which the dashboard
+   * reads it by: what it answers when it works, or its ApiFailure for an error status.
+   */
+  function send<R extends ApiRoute>(res: ServerResponse, _route: R, body: ApiRoutes[R] | ApiFailure<R>, status = 200) {
+    writeJson(res, body, status);
+  }
+  /** An error any route may answer: { ok: false, errors } (refused, failed, a body that isn't JSON). */
+  function fail(res: ServerResponse, errors: string, status: number) {
+    writeJson(res, { ok: false, errors }, status);
   }
 
   /** Answer an /api request. Returns false when the URL isn't ours (let the caller serve it). */
@@ -590,7 +600,7 @@ Stopped after ${Math.round(timeoutMs / 1000)} s without finishing.`.trim(),
       return true;
     }
     const why = refuse(req);
-    if (why) json(res, { ok: false, errors: why }, 403);
+    if (why) fail(res, why, 403);
     else {
       const writes = req.method !== "GET" && WRITES.test(url) && !READ_POSTS.has(url);
       if (writes) readers.clear();
@@ -599,7 +609,7 @@ Stopped after ${Math.round(timeoutMs / 1000)} s without finishing.`.trim(),
       } catch (err) {
         // Into logs/server.log, so a failure the dashboard only shows as "500" can be looked into.
         console.error(`${req.method} ${url} failed:`, err);
-        if (!res.headersSent) json(res, { ok: false, errors: String(err) }, 500);
+        if (!res.headersSent) fail(res, String(err), 500);
         else res.end();
       } finally {
         // Again once it's done: a read while it ran may have kept what it changed.
@@ -616,7 +626,7 @@ Stopped after ${Math.round(timeoutMs / 1000)} s without finishing.`.trim(),
       const origin = req.headers.origin;
       if (origin && LOCAL_ORIGIN.test(origin)) res.setHeader("access-control-allow-origin", origin);
       res.setHeader("vary", "origin");
-      return json(res, {
+      return send(res, "GET /api/health", {
         ok: true,
         version,
         scanning: scan !== null || checking,
@@ -637,8 +647,8 @@ Stopped after ${Math.round(timeoutMs / 1000)} s without finishing.`.trim(),
     if (url === "/api/update" || url.startsWith("/api/update/")) {
       if (opts.updater && (await opts.updater.route(url, req, res, () => readBody(req)))) return;
       if (url === "/api/update" && req.method === "GET")
-        return json(res, { installed: false, current: version, lastUpdate: null, available: null, tooOld: false, state: "idle", settings: { mode: "off", channel: "stable" } });
-      return json(res, { ok: false, errors: "This copy updates with git (git pull), not by itself." }, 400);
+        return send(res, "GET /api/update", { installed: false, current: version, lastUpdate: null, available: null, tooOld: false, state: "idle", settings: { mode: "off", channel: "stable" } });
+      return fail(res, "This copy updates with git (git pull), not by itself.", 400);
     }
     if (url === "/api/tracking" && req.method === "GET") {
       let doc: TrackingDoc | null;
@@ -646,67 +656,68 @@ Stopped after ${Math.round(timeoutMs / 1000)} s without finishing.`.trim(),
         doc = readTrackingStrict(home).doc;
       } catch (err) {
         // 503, not "nothing saved": the page then keeps its own copy instead of uploading it over the file.
-        if (err instanceof TrackingUnreadable) return json(res, { ok: false, errors: "Couldn't read your tracking file. Try again in a moment." }, 503);
+        if (err instanceof TrackingUnreadable) return send(res, "GET /api/tracking", { ok: false, errors: "Couldn't read your tracking file. Try again in a moment." }, 503);
         throw err;
       }
       const rev = doc?.rev ?? 0;
       const epoch = doc?.epoch ?? "";
       res.setHeader("etag", trackingTag(epoch, rev));
-      return json(res, { tracking: doc?.tracking ?? null, rev, epoch });
+      return send(res, "GET /api/tracking", { tracking: doc?.tracking ?? null, rev, epoch });
     }
     if (url === "/api/tracking" && (req.method === "PUT" || req.method === "PATCH")) {
       // PATCH: key-level changes on top of what the page last saw (If-Match "<epoch>:<rev>").
       // PUT: whole parts, from pages cached before PATCH existed.
       const base = req.method === "PATCH" ? parseTrackingTag(req.headers["if-match"]) : null;
-      if (req.method === "PATCH" && !base) return json(res, { ok: false, errors: 'Send If-Match: "<epoch>:<rev>" from the last GET.' }, 400);
+      if (req.method === "PATCH" && !base) return send(res, "PATCH /api/tracking", { ok: false, errors: 'Send If-Match: "<epoch>:<rev>" from the last GET.' }, 400);
       let body: unknown;
       try {
         body = JSON.parse(await readBody(req, 20_000_000));
       } catch (err) {
-        return json(res, { ok: false, errors: (err as Error).message }, 400);
+        return fail(res, (err as Error).message, 400);
       }
       if (base) {
         const r = patchTracking(body, base, home);
-        if (r.ok) return json(res, r);
-        if (r.status === 409) return json(res, { ok: false, rev: r.rev, epoch: r.epoch, tracking: r.tracking, conflicts: r.conflicts }, 409);
-        return json(res, { ok: false, errors: r.error }, r.status);
+        if (r.ok) return send(res, "PATCH /api/tracking", r);
+        if (r.status === 409) return send(res, "PATCH /api/tracking", { ok: false, rev: r.rev, epoch: r.epoch, tracking: r.tracking, conflicts: r.conflicts }, 409);
+        return send(res, "PATCH /api/tracking", { ok: false, errors: r.error }, r.status);
       }
       const r = saveTracking(body, home);
-      return r.ok ? json(res, { ok: true, updatedAt: r.tracking.updatedAt, rev: r.rev, epoch: r.epoch }) : json(res, { ok: false, errors: r.error }, r.status);
+      return r.ok ? send(res, "PUT /api/tracking", { ok: true, updatedAt: r.tracking.updatedAt, rev: r.rev, epoch: r.epoch }) : fail(res, r.error, r.status);
     }
     if (url === "/api/network" || url.startsWith("/api/network/")) return await networkRoute(url, req, res);
-    if (url === "/api/setup" && req.method === "GET") return await respondRead(res, () => readers.memo("setup", 10_000, () => setupStatus(home, dataDir)));
-    if (url === "/api/setup/config" && req.method === "POST") return await respondJson(res, ["setup", "save"], await readBody(req));
+    if (url === "/api/setup" && req.method === "GET") return await respondRead(res, "GET /api/setup", () => readers.memo("setup", 10_000, () => setupStatus(home, dataDir)));
+    if (url === "/api/setup/config" && req.method === "POST") return await respondJson(res, "POST /api/setup/config", ["setup", "save"], await readBody(req));
     if (url === "/api/setup/reset" && req.method === "POST") {
-      if (busy()) return json(res, { ok: false, errors: "A scan is running; try again when it's done." });
+      if (busy()) return send(res, "POST /api/setup/reset", { ok: false, errors: "A scan is running; try again when it's done." });
       // Starting over also deletes your LinkedIn connections.
       watcher.stop();
       reminder.clear();
       await network.remove();
-      return await respondJson(res, ["setup", "reset"]);
+      return await respondJson(res, "POST /api/setup/reset", ["setup", "reset"]);
     }
-    if (url === "/api/setup/resume" && req.method === "GET") return await respondRead(res, () => readResume(home));
-    if (url === "/api/setup/resume" && req.method === "POST") return await respondJson(res, ["setup", "resume", "save"], await readBody(req));
-    if (url === "/api/setup/resume" && req.method === "DELETE") return await respondJson(res, ["setup", "resume", "delete"]);
-    if (url === "/api/setup/check" && req.method === "POST") return await respondJson(res, ["setup", "check", "--data", dataDir], await readBody(req));
+    if (url === "/api/setup/resume" && req.method === "GET") return await respondRead(res, "GET /api/setup/resume", () => readResume(home));
+    if (url === "/api/setup/resume" && req.method === "POST") return await respondJson(res, "POST /api/setup/resume", ["setup", "resume", "save"], await readBody(req));
+    if (url === "/api/setup/resume" && req.method === "DELETE") return await respondJson(res, "DELETE /api/setup/resume", ["setup", "resume", "delete"]);
+    if (url === "/api/setup/check" && req.method === "POST") return await respondJson(res, "POST /api/setup/check", ["setup", "check", "--data", dataDir], await readBody(req));
     if (url === "/api/directory" && req.method === "GET") {
       // Kept while the local copy's files stay the same (an hour at most: it says how old it is).
       const stamp = ["manifest.json", "outbox.json", "moves-outbox.json", "directory.json"].map((f) => fileStamp(resolve(dataDir, "catalog", f))).join("|");
-      return await respondRead(res, () => readCli(`directory|${stamp}`, HOUR_MS, ["directory", "status", "--json", "--data", dataDir]));
+      return await respondRead(res, "GET /api/directory", () => readCli("GET /api/directory", `directory|${stamp}`, HOUR_MS, ["directory", "status", "--json", "--data", dataDir]));
     }
-    if (url === "/api/directory/search" && req.method === "POST") return await searchRoute(res, req, "search");
-    if (url === "/api/directory/names" && req.method === "POST") return await searchRoute(res, req, "names");
-    if (url === "/api/directory/warm" && req.method === "POST") return await searchRoute(res, req, "warm");
-    if (url === "/api/directory/update" && req.method === "POST") return respondOutput(res, await updateDirectoryOnce(["directory", "update", "--json", "--data", dataDir]));
+    if (url === "/api/directory/search" && req.method === "POST") return await searchRoute(res, req, "POST /api/directory/search", "search");
+    if (url === "/api/directory/names" && req.method === "POST") return await searchRoute(res, req, "POST /api/directory/names", "names");
+    if (url === "/api/directory/warm" && req.method === "POST") return await searchRoute(res, req, "POST /api/directory/warm", "warm");
+    if (url === "/api/directory/update" && req.method === "POST")
+      return respondOutput(res, "POST /api/directory/update", await updateDirectoryOnce(["directory", "update", "--json", "--data", dataDir]));
     if (url === "/api/directory/moves" && req.method === "POST") {
       let body: unknown;
       try {
         body = JSON.parse((await readBody(req, 10_000)) || "null");
       } catch (err) {
-        return json(res, { ok: false, errors: (err as Error).message }, 400);
+        return fail(res, (err as Error).message, 400);
       }
       const move = cleanMove(body);
-      if (typeof move === "string") return json(res, { ok: false, errors: move }, 400);
+      if (typeof move === "string") return fail(res, move, 400);
       const sharingOn = (() => {
         try {
           return loadConfig(findConfigPath(home)).config.directory.share_additions !== false;
@@ -714,25 +725,27 @@ Stopped after ${Math.round(timeoutMs / 1000)} s without finishing.`.trim(),
           return true;
         }
       })();
-      if (!sharingOn) return json(res, { queued: false, reason: "Sharing is off in your settings." });
-      if (!contributeUrl()) return json(res, { queued: false, reason: "Sharing isn't set up for this install." });
+      if (!sharingOn) return send(res, "POST /api/directory/moves", { queued: false, reason: "Sharing is off in your settings." });
+      if (!contributeUrl()) return send(res, "POST /api/directory/moves", { queued: false, reason: "Sharing isn't set up for this install." });
       queueMove(dataDir, move);
-      return json(res, { queued: true });
+      return send(res, "POST /api/directory/moves", { queued: true });
     }
-    if (url === "/api/companies/suggest/size" && req.method === "GET") return json(res, { companies: suggestSize() });
+    if (url === "/api/companies/suggest/size" && req.method === "GET") return send(res, "GET /api/companies/suggest/size", { companies: suggestSize() });
     if (url === "/api/companies/suggest" && req.method === "POST") {
       try {
         res.setHeader("content-type", "application/json");
         res.end(await suggestions(await readBody(req)));
       } catch (err) {
-        json(res, { ok: false, errors: (err as Error).message }, 500);
+        fail(res, (err as Error).message, 500);
       }
       return;
     }
     // In the few seconds RawJobs restarts into a new version, nothing new starts.
     if (opts.updater?.updating() && ((url === "/api/run" && req.method === "POST") || url === "/api/check" || url === "/api/schedule/run")) {
       const message = "RawJobs is updating; try again in a few seconds.";
-      if (url !== "/api/run") return json(res, { ok: false, type: "error", errors: message, message }, 503);
+      const busyBody = { ok: false as const, type: "error" as const, errors: message, message };
+      if (url === "/api/check") return send(res, "POST /api/check", busyBody, 503);
+      if (url === "/api/schedule/run") return send(res, "POST /api/schedule/run", busyBody, 503);
       res.setHeader("content-type", "application/x-ndjson");
       res.end(`${JSON.stringify({ type: "error", message })}
 `);
@@ -742,8 +755,8 @@ Stopped after ${Math.round(timeoutMs / 1000)} s without finishing.`.trim(),
       // "Check now" on a directory job: fetch just that company, answer with the final event.
       const keys = ((JSON.parse((await readBody(req)) || "{}") as { keys?: unknown }).keys ?? []) as unknown[];
       const valid = keys.filter((k): k is string => typeof k === "string" && /^[a-z]+:[^\s]+$/i.test(k)).slice(0, 5);
-      if (!valid.length) return json(res, { type: "error", message: "No company to check." }, 400);
-      if (busy()) return json(res, { type: "error", message: "A scan is running; try again when it's done." });
+      if (!valid.length) return send(res, "POST /api/check", { type: "error", message: "No company to check." }, 400);
+      if (busy()) return send(res, "POST /api/check", { type: "error", message: "A scan is running; try again when it's done." });
       checking = true;
       try {
         const r = await collect(["run", "--progress", "ndjson", "--data", dataDir, ...valid.flatMap((k) => ["--check", k])], undefined, 180_000);
@@ -756,10 +769,11 @@ Stopped after ${Math.round(timeoutMs / 1000)} s without finishing.`.trim(),
       }
       return;
     }
-    if (url === "/api/scan/plan" && req.method === "GET") return await respondRead(res, () => readCli("plan", 30_000, ["scan", "--plan", "--data", dataDir]));
-    if (url === "/api/alerts/telegram" && req.method === "GET") return await respondRead(res, () => readers.memo("telegram", 30_000, () => telegramStatus(home)));
+    if (url === "/api/scan/plan" && req.method === "GET")
+      return await respondRead(res, "GET /api/scan/plan", () => readCli("GET /api/scan/plan", "plan", 30_000, ["scan", "--plan", "--data", dataDir]));
+    if (url === "/api/alerts/telegram" && req.method === "GET") return await respondRead(res, "GET /api/alerts/telegram", () => readers.memo("telegram", 30_000, () => telegramStatus(home)));
     const alert = url.match(/^\/api\/alerts\/telegram\/(token|connect|test|on|off|forget)$/);
-    if (alert && req.method === "POST") return await respondJson(res, ["alerts", "telegram", alert[1]!], await readBody(req));
+    if (alert && req.method === "POST") return await respondJson(res, "POST /api/alerts/telegram/:action", ["alerts", "telegram", alert[1]!], await readBody(req));
     // Reading the scheduled tasks runs PowerShell on Windows: kept for 5 minutes.
     if (url === "/api/doctor" && req.method === "POST") {
       // A redacted diagnostics file in logs/, shown in the file manager. Nothing is uploaded.
@@ -770,33 +784,35 @@ Stopped after ${Math.round(timeoutMs / 1000)} s without finishing.`.trim(),
       } catch {
         // respondOutput says what went wrong
       }
-      return respondOutput(res, r);
+      return respondOutput(res, "POST /api/doctor", r);
     }
-    if (url === "/api/schedule" && req.method === "GET") return await respondRead(res, () => readCli("schedule", 5 * 60_000, ["schedule", "status", "--data", dataDir]));
-    if (url === "/api/schedule" && req.method === "POST") return await respondJson(res, ["schedule", "install", "--stdin", "--data", dataDir], await readBody(req));
-    if (url === "/api/schedule" && req.method === "DELETE") return await respondJson(res, ["schedule", "remove", "--data", dataDir]);
+    if (url === "/api/schedule" && req.method === "GET")
+      return await respondRead(res, "GET /api/schedule", () => readCli("GET /api/schedule", "schedule", 5 * 60_000, ["schedule", "status", "--data", dataDir]));
+    if (url === "/api/schedule" && req.method === "POST") return await respondJson(res, "POST /api/schedule", ["schedule", "install", "--stdin", "--data", dataDir], await readBody(req));
+    if (url === "/api/schedule" && req.method === "DELETE") return await respondJson(res, "DELETE /api/schedule", ["schedule", "remove", "--data", dataDir]);
     if (url === "/api/schedule/run" && req.method === "POST") {
       // Started now, it would find this scan running and log a failed run.
-      if (busy()) return json(res, { ok: false, errors: "A scan is running; try again when it's done." });
-      return await respondJson(res, ["schedule", "run", "--data", dataDir]);
+      if (busy()) return send(res, "POST /api/schedule/run", { ok: false, errors: "A scan is running; try again when it's done." });
+      return await respondJson(res, "POST /api/schedule/run", ["schedule", "run", "--data", dataDir]);
     }
-    if (url === "/api/daily-summary" && req.method === "GET") return await respondRead(res, () => readCli("daily", 5 * 60_000, ["today", "status", "--data", dataDir]));
-    if (url === "/api/daily-summary" && req.method === "POST") return await respondJson(res, ["today", "install", "--stdin", "--data", dataDir], await readBody(req));
-    if (url === "/api/daily-summary" && req.method === "DELETE") return await respondJson(res, ["today", "remove", "--data", dataDir]);
-    if (url === "/api/daily-summary/test" && req.method === "POST") return await respondJson(res, ["today", "--test", "--json", "--data", dataDir]);
+    if (url === "/api/daily-summary" && req.method === "GET")
+      return await respondRead(res, "GET /api/daily-summary", () => readCli("GET /api/daily-summary", "daily", 5 * 60_000, ["today", "status", "--data", dataDir]));
+    if (url === "/api/daily-summary" && req.method === "POST") return await respondJson(res, "POST /api/daily-summary", ["today", "install", "--stdin", "--data", dataDir], await readBody(req));
+    if (url === "/api/daily-summary" && req.method === "DELETE") return await respondJson(res, "DELETE /api/daily-summary", ["today", "remove", "--data", dataDir]);
+    if (url === "/api/daily-summary/test" && req.method === "POST") return await respondJson(res, "POST /api/daily-summary/test", ["today", "--test", "--json", "--data", dataDir]);
     if (url === "/api/run/notify" && req.method === "POST") {
       // The running scan sends a Telegram message when it finishes (it checks for this file at the end).
       // Any scan holding the lock: this server's, a scheduled one or a terminal's.
       const any = scan !== null || otherScan() !== null;
       if (any) writeFileSync(resolve(dataDir, "scan-notify"), "");
-      return json(res, { ok: any });
+      return send(res, "POST /api/run/notify", { ok: any });
     }
     if (url === "/api/run/stop" && req.method === "POST") {
       // The scan checks for this file between companies, saves its progress and stops.
       // Any scan holding the lock: this server's, a scheduled one or a terminal's.
       const any = scan !== null || otherScan() !== null;
       if (any) writeFileSync(resolve(dataDir, "scan-stop"), "");
-      return json(res, { ok: any });
+      return send(res, "POST /api/run/stop", { ok: any });
     }
     if (url === "/api/run" && req.method === "GET") {
       if (scan) follow(res);
@@ -890,10 +906,10 @@ Stopped after ${Math.round(timeoutMs / 1000)} s without finishing.`.trim(),
 
   /** /api/network*: your LinkedIn connections. Error answers never repeat the company asked about. */
   async function networkRoute(url: string, req: IncomingMessage, res: ServerResponse): Promise<void> {
-    const bad = (code: string, status = 400) => json(res, { ok: false, errors: [{ code }] }, status);
+    const bad = (code: string, status = 400) => writeJson(res, { ok: false, errors: [{ code }] } satisfies NetworkError, status);
     if (url === "/api/network" && req.method === "GET") {
       const watchable = watcher.supported();
-      return json(res, { status: { ...network.status(), watch: watcher.state() }, me: network.me(), watchable, reminder: reminder.state() });
+      return send(res, "GET /api/network", { status: { ...network.status(), watch: watcher.state() }, me: network.me(), watchable, reminder: reminder.state() });
     }
     if (url === "/api/network/watch" && req.method === "POST") {
       let body: { hours?: unknown };
@@ -903,11 +919,11 @@ Stopped after ${Math.round(timeoutMs / 1000)} s without finishing.`.trim(),
         return bad("BAD_REQUEST");
       }
       const r = await watcher.start(typeof body.hours === "number" ? body.hours : undefined);
-      return r.ok ? json(res, { watch: r.watch }) : json(res, { watch: null, error: r.code }, 400);
+      return r.ok ? send(res, "POST /api/network/watch", { watch: r.watch }) : send(res, "POST /api/network/watch", { watch: null, error: r.code }, 400);
     }
     if (url === "/api/network/watch" && req.method === "DELETE") {
       watcher.stop();
-      return json(res, { ok: true });
+      return send(res, "DELETE /api/network/watch", { ok: true });
     }
     if (url === "/api/network/reminder" && req.method === "POST") {
       let body: { hours?: unknown };
@@ -916,17 +932,17 @@ Stopped after ${Math.round(timeoutMs / 1000)} s without finishing.`.trim(),
       } catch {
         return bad("BAD_REQUEST");
       }
-      return json(res, { reminder: reminder.set(typeof body.hours === "number" ? body.hours : undefined) });
+      return send(res, "POST /api/network/reminder", { reminder: reminder.set(typeof body.hours === "number" ? body.hours : undefined) });
     }
     if (url === "/api/network/reminder" && req.method === "DELETE") {
       reminder.clear();
-      return json(res, { ok: true });
+      return send(res, "DELETE /api/network/reminder", { ok: true });
     }
     if (url === "/api/network" && req.method === "DELETE") {
       watcher.stop();
       reminder.clear();
       await network.remove();
-      return json(res, { ok: true });
+      return send(res, "DELETE /api/network", { ok: true });
     }
     if (url === "/api/network/summary" && req.method === "GET") {
       const summary = network.summary();
@@ -939,12 +955,12 @@ Stopped after ${Math.round(timeoutMs / 1000)} s without finishing.`.trim(),
           return;
         }
       }
-      return json(res, summary);
+      return send(res, "GET /api/network/summary", summary);
     }
     if (url === "/api/network/people" && req.method === "GET") {
       const company = new URL(req.url ?? "", "http://x").searchParams.get("company")?.trim() ?? "";
       if (!company || company.length > 200) return bad("BAD_REQUEST");
-      return json(res, network.people(company));
+      return send(res, "GET /api/network/people", network.people(company));
     }
     if (url === "/api/network/import" && req.method === "POST") {
       let body: unknown;
@@ -964,7 +980,7 @@ Stopped after ${Math.round(timeoutMs / 1000)} s without finishing.`.trim(),
       // You chose the file yourself: no need to keep watching for it, or to be reminded.
       watcher.stop();
       reminder.clear();
-      return json(res, { ...r, status: { ...r.status, watch: null } });
+      return send(res, "POST /api/network/import", { ...r, status: { ...r.status, watch: null } });
     }
     if (url === "/api/network/friends" && req.method === "PUT") {
       let body: { id?: unknown; friend?: unknown };
@@ -974,7 +990,7 @@ Stopped after ${Math.round(timeoutMs / 1000)} s without finishing.`.trim(),
         return bad("BAD_REQUEST");
       }
       if (typeof body.id !== "string" || !CONNECTION_ID.test(body.id) || typeof body.friend !== "boolean") return bad("BAD_REQUEST");
-      return (await network.setFriend(body.id, body.friend)) ? json(res, { ok: true }) : bad("NOT_FOUND", 404);
+      return (await network.setFriend(body.id, body.friend)) ? send(res, "PUT /api/network/friends", { ok: true }) : bad("NOT_FOUND", 404);
     }
     return bad("NOT_FOUND", 404);
   }
@@ -1012,6 +1028,12 @@ Stopped after ${Math.round(timeoutMs / 1000)} s without finishing.`.trim(),
   }
 
   return { handle, startBackground, version, scanning: busy, cli: collect, stop, pauseBackground };
+}
+
+function writeJson(res: ServerResponse, body: unknown, status: number) {
+  res.statusCode = status;
+  res.setHeader("content-type", "application/json");
+  res.end(JSON.stringify(body));
 }
 
 /** The largest LinkedIn import body: the three CSV texts. */

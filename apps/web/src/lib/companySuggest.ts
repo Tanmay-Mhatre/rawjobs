@@ -1,4 +1,5 @@
 import { INDUSTRY_BY_ID } from "@rawjobs/core/catalog/industries";
+import type { CompanySuggestions, Lookalike } from "@rawjobs/core/protocol";
 import type { CompanySuggestion, HiresIn } from "@rawjobs/core/suggest";
 import { isPlaceholderBoard } from "@rawjobs/core/text";
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -8,30 +9,7 @@ import { draftToConfig, type Draft } from "./setup";
 import { load, save } from "./storage";
 
 export type { CompanySuggestion };
-export type Lookalike = CompanySuggestion & { similarity: number; like: string };
-
-/** What `rawjobs companies suggest --json --stdin` answers (see packages/cli). */
-export type CompanySuggestions = {
-  hiringNow: CompanySuggestion[];
-  worthWatching: CompanySuggestion[];
-  notScannable: CompanySuggestion[];
-  scanned: number;
-  /** Each past employer, and the directory company it matched (left out when you watch it already). */
-  pastEmployers: { name: string; company?: CompanyRef & { key: string; open_jobs: number | null; status?: string }; watched: boolean }[];
-  /** Companies like a past employer, per employer. */
-  lookalikes: { seed: string; in_directory: boolean; items: Lookalike[] }[];
-  /** Best companies per industry you picked, and the next few after them (older answers have no `more`). */
-  packs: { industry: string; items: CompanySuggestion[]; more?: CompanySuggestion[] }[];
-  /** Companies in your industries in the directory, and how many we can check. */
-  coverage: { in_industries: number; trackable: number };
-  /**
-   * What each list left out because it's in My companies (so "all added" isn't "nothing found"): how
-   * many per list and per past employer, and each pack's companies by key. Older answers don't say: 0.
-   */
-  added?: { hiring: number; watching: number; soon: number; like: Record<string, number>; packs: Record<string, string[]> };
-  index_generated_at: string;
-  error?: string;
-};
+export type { CompanySuggestions, Lookalike };
 
 export type SuggestState = { kind: "off" } | { kind: "loading"; previous?: CompanySuggestions } | { kind: "ready"; data: CompanySuggestions } | { kind: "error"; message: string };
 

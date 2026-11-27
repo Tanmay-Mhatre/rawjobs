@@ -1,39 +1,8 @@
+import type { DailySummaryStatus, ScheduledRun, ScheduleStatus, TelegramAction, TelegramStatus } from "@rawjobs/core/protocol";
 import { ACTION_TIMEOUT_MS, fetchWithin, READ_TIMEOUT_MS } from "./net";
 import type { ScanScope } from "./setup";
 
-/** Telegram alerts as the local API reports them (the token is masked; it never comes back whole). */
-export type TelegramStatus = { ok: boolean; token: string | null; bot: string | null; connected: boolean; enabled: boolean; fromEnv: boolean; error?: string };
-export type TelegramAction = "token" | "connect" | "test" | "on" | "off" | "forget";
-
-export type ScheduledRun = {
-  startedAt: string;
-  finishedAt?: string;
-  scope: ScanScope;
-  ok: boolean;
-  matches?: number;
-  newMatches?: number;
-  notified?: string;
-  stopped?: boolean;
-  /** Why it stopped: its time ran out ("deadline"), its scheduler ended it, or Stop ("stop"). */
-  stopReason?: "deadline" | "scheduler" | "stop";
-  error?: string;
-  /** Ran late, for a time missed while the computer was off or asleep. */
-  catchUp?: boolean;
-  /** Still running now (it's logged when it starts). */
-  running?: boolean;
-};
-export type ScheduleStatus = {
-  ok: boolean;
-  error?: string;
-  installed: boolean;
-  supported: boolean;
-  platform: string;
-  settings?: { times: string[]; scope: ScanScope };
-  nextRun?: string;
-  lastRun?: ScheduledRun;
-  runs: ScheduledRun[];
-  problem?: string;
-};
+export type { DailySummaryStatus, ScheduledRun, ScheduleStatus, TelegramAction, TelegramStatus };
 
 async function call<T>(url: string, init?: RequestInit): Promise<T> {
   let res: Response;
@@ -58,20 +27,6 @@ export const saveSchedule = (times: string[], scope: ScanScope) => call<Schedule
 export const removeSchedule = () => call<ScheduleStatus>("/api/schedule", { method: "DELETE" });
 export const runScheduleNow = () => call<ScheduleStatus>("/api/schedule/run", { method: "POST" });
 
-/** "Today in your Pipeline" each morning on Telegram: its scheduled task, and the last day it ran. */
-export type DailySummaryStatus = {
-  ok: boolean;
-  error?: string;
-  installed: boolean;
-  supported: boolean;
-  platform: string;
-  settings?: { time: string };
-  nextRun?: string;
-  problem?: string;
-  last: { day: string; at: string; result: "sent" | "nothing-due" } | null;
-  /** Telegram is connected (a bot token and a chat). */
-  telegram: boolean;
-};
 export const dailySummaryStatus = () => call<DailySummaryStatus>("/api/daily-summary");
 export const saveDailySummary = (time: string) => call<DailySummaryStatus>("/api/daily-summary", { method: "POST", body: JSON.stringify({ time }) });
 export const removeDailySummary = () => call<DailySummaryStatus>("/api/daily-summary", { method: "DELETE" });
