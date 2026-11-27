@@ -5,6 +5,7 @@ import { dirname, join, resolve } from "node:path";
 import type { ScanScope } from "./scope";
 import { writeFileAtomic } from "./atomic";
 import { isRunning } from "./pid";
+import { lockHolder } from "./lock";
 
 /**
  * Scheduled scans on this computer: the operating system's own scheduler runs
@@ -14,6 +15,9 @@ import { isRunning } from "./pid";
  */
 
 export type ScheduleSettings = { times: string[]; scope: ScanScope };
+/** "deadline": its time ran out; "scheduler": the scheduler ended its task; "stop": Stop, Ctrl+C or a signal. */
+export type StopReason = "deadline" | "scheduler" | "stop";
+
 export type ScheduledRun = {
   startedAt: string;
   finishedAt?: string;
@@ -24,6 +28,8 @@ export type ScheduledRun = {
   /** Telegram: sent, nothing new, not set up, or why it failed. */
   notified?: "sent" | "nothing-new" | "off" | string;
   stopped?: boolean;
+  /** Why a stopped scan stopped: its time ran out, its scheduler ended it, or someone stopped it. */
+  stopReason?: StopReason;
   error?: string;
   /** A scan that ran late, for a time missed while the computer was off or asleep. */
   catchUp?: boolean;
@@ -79,6 +85,19 @@ export function scheduledRunsNow(runs: ScheduledRun[], alive: (pid: number) => b
   });
 }
 
+/** Said of a scheduled scan RawJobs ended because it ran far past its time limit. */
+export const OVERDUE_RUN = "Ran far past its time limit, so RawJobs stopped it. The next scan carries on where it stopped.";
+
+/**
+ * A scheduled scan still holding the scan lock long after its time limit: one whose scheduler
+ * wrapper was ended while the scan carried on (Windows), or that never checked its deadline.
+ * `holder` is the lock's live, recently touched holder, so a reused process id never matches.
+ */
+export function overdueScheduledRun(runs: readonly ScheduledRun[], holder: number | undefined, now = Date.now()): ScheduledRun | undefined {
+  if (holder === undefined) return undefined;
+  return runs.find((r) => !r.finishedAt && r.pid === holder && now - Date.parse(r.startedAt) > (scanLimits(r.scope).taskHours + 1) * 3_600_000);
+}
+
 export function readScheduledRuns(dataDir: string): ScheduledRun[] {
   try {
     return JSON.parse(readFileSync(join(dataDir, RUNS_FILE), "utf8")) as ScheduledRun[];
@@ -125,13 +144,20 @@ function launchCommand(ctx: ScheduleContext): string[] {
   return [launch.command, ...launch.args];
 }
 
-/** The scan command the scheduler runs. */
-export function scanCommand(ctx: ScheduleContext, scope: ScanScope): string[] {
-  return [...launchCommand(ctx), "scan", "--scope", scope, "--notify", "--scheduled", "--data", resolve(ctx.dataDir)];
+/**
+ * How long a scheduled scan may run. The scan stops itself after `deadlineMin` of wall-clock time
+ * (sleep counts), saving its progress so the next one carries on. The scheduler's own limit,
+ * `taskHours`, is only a backstop: on Windows it ends the console wrapper, not the scan (the scan
+ * notices and stops), and macOS has none.
+ */
+export function scanLimits(scope: ScanScope): { deadlineMin: number; taskHours: number } {
+  return scope === "all" ? { deadlineMin: 230, taskHours: 5 } : scope === "mine" ? { deadlineMin: 170, taskHours: 4 } : { deadlineMin: 50, taskHours: 2 };
 }
 
-/** Hours a scan may run before the scheduler stops it: "all", and "mine" with its background check, take an hour or more. */
-const timeLimitHours = (scope: ScanScope) => (scope === "all" ? 4 : scope === "mine" ? 3 : 1);
+/** The scan command the scheduler runs. */
+export function scanCommand(ctx: ScheduleContext, scope: ScanScope): string[] {
+  return [...launchCommand(ctx), "scan", "--scope", scope, "--notify", "--scheduled", "--data", resolve(ctx.dataDir), "--deadline", String(scanLimits(scope).deadlineMin)];
+}
 
 /** One entry in the operating system's scheduler: what it runs, when, and what it's called. */
 type SchedulerJob = {
@@ -152,7 +178,7 @@ const scanJob = (ctx: ScheduleContext, s: ScheduleSettings, names: SchedulerName
   names,
   command: scanCommand(ctx, s.scope),
   times: s.times,
-  hours: timeLimitHours(s.scope),
+  hours: scanLimits(s.scope).taskHours,
   description: "RawJobs: sync the company directory, scan, and send new jobs to Telegram.",
   title: "RawJobs scan",
   log: "schedule.log",
@@ -236,6 +262,7 @@ ${args}
   <array>
 ${times}
   </array>
+  <key>ExitTimeOut</key><integer>60</integer>
   <key>StandardOutPath</key><string>${log}</string>
   <key>StandardErrorPath</key><string>${log}</string>
 </dict>
@@ -268,7 +295,10 @@ function installLinux(ctx: ScheduleContext, job: SchedulerJob): void {
   const dir = unitDir(ctx);
   mkdirSync(dir, { recursive: true });
   const cmd = job.command.map((a) => (/\s/.test(a) ? `"${a}"` : a)).join(" ");
-  writeFileSync(join(dir, `${n.unit}.service`), `[Unit]\nDescription=${job.title}\n\n[Service]\nType=oneshot\nWorkingDirectory=${workDir(ctx)}\nExecStart=${cmd}\nTimeoutStartSec=${job.hours}h\n`);
+  writeFileSync(
+    join(dir, `${n.unit}.service`),
+    `[Unit]\nDescription=${job.title}\n\n[Service]\nType=oneshot\nWorkingDirectory=${workDir(ctx)}\nExecStart=${cmd}\nTimeoutStartSec=${job.hours}h\nTimeoutStopSec=2min\n`,
+  );
   // Persistent: a run missed while the computer was off happens at the next boot.
   writeFileSync(
     join(dir, `${n.unit}.timer`),
@@ -429,6 +459,37 @@ export function scheduledRunKind(times: readonly string[], runs: readonly Schedu
   const recent = runs.find((r) => r.catchUp && now.getTime() - Date.parse(r.startedAt) < CATCH_UP_COVERS_MS);
   if (recent) return { catchUp: false, skip: `A catch-up scan already ran at ${new Date(recent.startedAt).toLocaleTimeString()}, so this one is skipped.` };
   return { catchUp: false };
+}
+
+/**
+ * What the installed scheduler entries look like. Raise it when the command or the task settings
+ * change, so installed schedules are written again once (refreshSchedules).
+ * 2: scans stop themselves at a deadline (`--deadline`), longer backstop limits, ExitTimeOut/TimeoutStopSec.
+ */
+export const SCHEDULER_FORMAT = 2;
+const FORMAT_FILE = "scheduler-format.json";
+
+/**
+ * Write the saved schedule and daily summary to the scheduler again when they were installed by an
+ * older format, so they run today's command. Never while a scan runs (on macOS, reloading the
+ * job would stop it): false then, to try again later. True once the entries are current.
+ */
+export function refreshSchedules(ctx: ScheduleContext): boolean {
+  const file = join(ctx.dataDir, FORMAT_FILE);
+  try {
+    if ((JSON.parse(readFileSync(file, "utf8")) as { format?: number }).format === SCHEDULER_FORMAT) return true;
+  } catch {
+    // never written: installed by a version before formats, or nothing installed
+  }
+  const scan = readScheduleSettings(ctx.dataDir);
+  const daily = readDailySettings(ctx.dataDir);
+  if ((scan || daily) && lockHolder(join(ctx.dataDir, "scan.lock")) !== undefined) return false;
+  const platform = ctx.platform ?? process.platform;
+  if (scan) installJob(ctx, platform, scanJob(ctx, scan, activeNames(ctx, platform).names), "Scheduled scans");
+  if (daily) installJob(ctx, platform, dailyJob(ctx, daily), "Daily summaries");
+  mkdirSync(ctx.dataDir, { recursive: true });
+  writeFileAtomic(file, JSON.stringify({ format: SCHEDULER_FORMAT }));
+  return true;
 }
 
 /**

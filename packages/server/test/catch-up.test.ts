@@ -2,8 +2,9 @@ import { existsSync, mkdtempSync, utimesSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-import { OUTBOX_FILE, recordScheduledRun } from "@rawjobs/core";
-import { CHECK_EVERY_MS, flushAlerts, SETTLE_MS, watchMissedScans } from "../src/catch-up";
+import { spawn } from "node:child_process";
+import { OUTBOX_FILE, OVERDUE_RUN, readScheduledRuns, recordScheduledRun } from "@rawjobs/core";
+import { CHECK_EVERY_MS, flushAlerts, OVERDUE_GRACE_MS, SETTLE_MS, watchMissedScans } from "../src/catch-up";
 
 /** A data folder with a 10:00 schedule saved long ago, and a clock starting at 09:00 on 14 Nov. */
 function setup(o: { online?: boolean; busy?: boolean; platform?: NodeJS.Platform } = {}) {
@@ -85,6 +86,56 @@ describe("catching up on a missed scheduled scan", () => {
     await s.advance(3_600_000);
     await s.advance(SETTLE_MS);
     expect(repairs()).toBe(2);
+  });
+});
+
+describe("a scheduled scan far past its time limit", () => {
+  it("is asked to stop, then ended when it doesn't, and its run says so; no catch-up starts meanwhile", async () => {
+    const dataDir = mkdtempSync(join(tmpdir(), "rj-overdue-"));
+    writeFileSync(join(dataDir, "schedule.json"), JSON.stringify({ times: ["10:00"], scope: "mine" }));
+    let t = new Date(2026, 10, 14, 9).getTime();
+    // A scheduled "mine" scan started 6 h ago and still holds the lock (a sleeping child stands in for it).
+    const startedAt = new Date(t - 6 * 3_600_000).toISOString();
+    const holder = spawn(process.execPath, ["-e", "setTimeout(() => {}, 60000)"]);
+    const pid = holder.pid!;
+    recordScheduledRun(dataDir, { startedAt, scope: "mine", ok: false, pid });
+    writeFileSync(join(dataDir, "scan.lock"), String(pid));
+    const killed: number[] = [];
+    const calls: string[][] = [];
+    const w = watchMissedScans({
+      dataDir,
+      busy: () => false,
+      cli: async (args) => {
+        calls.push(args);
+        return { code: 0, stdout: '{"ok":true,"fixed":[]}', stderr: "" };
+      },
+      online: async () => true,
+      log: () => {},
+      now: () => t,
+      kill: (p) => killed.push(p),
+    });
+    w.stop();
+    try {
+      t += SETTLE_MS;
+      await w.tick();
+      expect(existsSync(join(dataDir, "scan-stop"))).toBe(true);
+      expect(killed).toEqual([]);
+      // It gets a while to save and stop; looked at every minute meanwhile.
+      for (let i = 0; i < OVERDUE_GRACE_MS / 60_000; i++) {
+        t += 60_000;
+        utimesSync(join(dataDir, "scan.lock"), new Date(), new Date());
+        await w.tick();
+      }
+      t += 60_000;
+      await w.tick();
+      expect(killed).toEqual([pid]);
+      const run = readScheduledRuns(dataDir).find((r) => r.startedAt === startedAt)!;
+      expect(run).toMatchObject({ ok: false, error: OVERDUE_RUN });
+      expect(run.finishedAt).toBeDefined();
+      expect(calls.filter((c) => c[1] === "run")).toEqual([]);
+    } finally {
+      holder.kill();
+    }
   });
 });
 

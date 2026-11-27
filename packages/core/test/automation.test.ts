@@ -1,4 +1,5 @@
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, utimesSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, utimesSync, writeFileSync } from "node:fs";
+import { spawn } from "node:child_process";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
@@ -9,8 +10,10 @@ import {
   lastDueSlot,
   missedScan,
   nextRunAt,
+  overdueScheduledRun,
   readScheduledRuns,
   recordScheduledRun,
+  refreshSchedules,
   removeSchedule,
   repairScheduleTimes,
   runScheduleNow,
@@ -164,7 +167,9 @@ describe("schedule", () => {
     expect(script).toContain("-StartWhenAvailable");
     // A scan never wakes a sleeping laptop.
     expect(script).not.toContain("WakeToRun");
-    expect(script).toContain("-ExecutionTimeLimit (New-TimeSpan -Hours 4)");
+    // The scan stops itself at its deadline; the task's limit (which ends only conhost) is a backstop past it.
+    expect(script).toContain("-ExecutionTimeLimit (New-TimeSpan -Hours 5)");
+    expect(script).toContain("--deadline 230");
     expect(script).toContain("New-ScheduledTaskTrigger -Daily -At '08:00'");
     expect(script).toContain("New-ScheduledTaskTrigger -Daily -At '20:00'");
     // Each start in local wall-clock time, no UTC offset: the times follow the computer's time zone.
@@ -200,6 +205,46 @@ describe("schedule", () => {
     installSchedule({ repoRoot: "/repo", dataDir, exec, platform: "linux", home }, { times: ["07:30", "19:00"], scope: "mine" });
     const timer = readFileSync(join(home, ".config/systemd/user/rawjobs-scan.timer"), "utf8");
     expect(timer).toContain("OnCalendar=*-*-* 07:30:00\nOnCalendar=*-*-* 19:00:00\nPersistent=true");
+    // Stopped gracefully (SIGTERM saves the scan's progress) with time to save, before the backstop's SIGKILL.
+    expect(plist).toContain("<key>ExitTimeOut</key><integer>60</integer>");
+    expect(plist).toContain("<string>--deadline</string>\n    <string>170</string>");
+    const service = readFileSync(join(home, ".config/systemd/user/rawjobs-scan.service"), "utf8");
+    expect(service).toContain("TimeoutStartSec=4h\nTimeoutStopSec=2min");
+    expect(service).toContain("--deadline 170");
+  });
+
+  it("writes schedules from an older version again once, never while a scan holds the lock", () => {
+    const home = mkdtempSync(join(tmpdir(), "jh-home-"));
+    const dataDir = mkdtempSync(join(tmpdir(), "jh-sched-"));
+    const calls: string[][] = [];
+    const exec = (cmd: string, args: string[]) => {
+      calls.push([cmd, ...args]);
+      return { status: 0, stdout: "", stderr: "" };
+    };
+    const ctx = { repoRoot: "/repo", dataDir, exec, platform: "linux" as const, home };
+    // Nothing installed: nothing to write, and it's current from now on.
+    expect(refreshSchedules(ctx)).toBe(true);
+    expect(calls).toEqual([]);
+    rmSync(join(dataDir, "scheduler-format.json"));
+    writeFileSync(join(dataDir, "schedule.json"), JSON.stringify({ times: ["07:30"], scope: "mine" }));
+    writeFileSync(join(dataDir, "daily-summary.json"), JSON.stringify({ time: "08:00" }));
+    // A scan is running (a sleeping child holds the lock for it): later.
+    const scan = spawn(process.execPath, ["-e", "setTimeout(() => {}, 60000)"]);
+    try {
+      writeFileSync(join(dataDir, "scan.lock"), String(scan.pid));
+      expect(refreshSchedules(ctx)).toBe(false);
+      expect(existsSync(join(home, ".config/systemd/user/rawjobs-scan.service"))).toBe(false);
+    } finally {
+      scan.kill();
+    }
+    rmSync(join(dataDir, "scan.lock"));
+    expect(refreshSchedules(ctx)).toBe(true);
+    expect(readFileSync(join(home, ".config/systemd/user/rawjobs-scan.service"), "utf8")).toContain("--deadline 170");
+    expect(existsSync(join(home, ".config/systemd/user/rawjobs-daily-summary.service"))).toBe(true);
+    // Once: the next start writes nothing.
+    const n = calls.length;
+    expect(refreshSchedules(ctx)).toBe(true);
+    expect(calls).toHaveLength(n);
   });
 
   it("keeps a schedule saved before the rename working until it's saved again, then replaces it", () => {
@@ -351,6 +396,26 @@ describe("scan lock", () => {
     expect(acquireScanLock(dataDir)).toBe(true);
     expect(readFileSync(lock, "utf8")).toBe(String(process.pid));
     releaseScanLock(dataDir);
+  });
+});
+
+describe("an overdue scheduled scan", () => {
+  const at = Date.parse("2026-11-20T10:00:00Z");
+  const run = (o: Partial<ScheduledRun> = {}): ScheduledRun => ({ startedAt: new Date(at).toISOString(), scope: "mine", ok: false, pid: 4242, ...o });
+  const h = 3_600_000;
+
+  it("is a scheduled run holding the lock more than an hour past its scheduler's limit", () => {
+    // mine: a 4 h backstop, so overdue after 5 h.
+    expect(overdueScheduledRun([run()], 4242, at + 5 * h - 1)).toBeUndefined();
+    expect(overdueScheduledRun([run()], 4242, at + 5 * h + 1)?.pid).toBe(4242);
+    expect(overdueScheduledRun([run({ scope: "all" })], 4242, at + 5 * h + 1)).toBeUndefined();
+  });
+
+  it("never one that finished, one whose process doesn't hold the lock, or when nobody does", () => {
+    const late = at + 48 * h;
+    expect(overdueScheduledRun([run({ finishedAt: new Date(at + h).toISOString() })], 4242, late)).toBeUndefined();
+    expect(overdueScheduledRun([run()], 999, late)).toBeUndefined();
+    expect(overdueScheduledRun([run()], undefined, late)).toBeUndefined();
   });
 });
 
