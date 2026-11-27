@@ -80,7 +80,7 @@ export function FacetMenu({ label, options, selected, onChange, single, searchab
       </button>
       {open && (
         // biome-ignore lint/a11y/useSemanticElements: an ARIA role on purpose: the native element (fieldset, output, input, hr, ul) would change layout or behaviour here
-        <div id={panelId} role="group" aria-label={label} className="absolute left-0 top-full z-30 mt-1 w-72 rounded-md border border-line bg-raised p-1.5 shadow-l3">
+        <div id={panelId} role="group" aria-label={label} className="absolute left-0 top-full z-menu mt-1 w-72 rounded-md border border-line bg-raised p-1.5 shadow-l3">
           {optionsLabel && options.length > 0 && <p className="px-2 pb-0.5 pt-1 type-label">{optionsLabel}</p>}
           <OptionList label={label} options={options} selected={selected} onChange={onChange} single={single} searchable={searchable} autoFocus />
           {footer}
@@ -139,7 +139,7 @@ export function OptionList({
                 aria-pressed={on}
                 onClick={() => toggle(o.value)}
                 disabled={!on && o.count === 0}
-                className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left type-small hover:bg-inset disabled:cursor-default disabled:opacity-40 disabled:hover:bg-transparent"
+                /* design-lint-ignore: muted state, reviewed in 6B */ className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left type-small hover:bg-inset disabled:cursor-default disabled:opacity-40 disabled:hover:bg-transparent"
               >
                 <span className={cx("flex size-4 shrink-0 items-center justify-center border", single ? "rounded-dot" : "rounded-sm", on ? "border-ink bg-ink text-raised" : "border-control")}>
                   {on && <Check className="size-3" />}

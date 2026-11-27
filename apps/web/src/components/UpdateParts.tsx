@@ -141,7 +141,7 @@ export function SeeAll({ count, children }: { count: number; children: ReactNode
       <summary className="-ml-2 inline-flex h-7 cursor-pointer list-none items-center gap-1 rounded-md px-2 type-label text-muted hover:bg-hover hover:text-ink [&::-webkit-details-marker]:hidden">
         <span className="group-open:hidden">See all {count} changes</span>
         <span className="hidden group-open:inline">Show fewer</span>
-        <ChevronDown className="size-4 transition-transform duration-150 group-open:rotate-180 motion-reduce:transition-none" aria-hidden />
+        <ChevronDown className="size-4 transition-transform duration-quick group-open:rotate-180 motion-reduce:transition-none" aria-hidden />
       </summary>
       <div className="mt-2">{children}</div>
     </details>

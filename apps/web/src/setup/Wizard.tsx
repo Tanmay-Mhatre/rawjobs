@@ -70,7 +70,7 @@ export function Wizard(props: Props) {
     <div className="mx-auto max-w-2xl">
       <Progress step={step} goStep={goStep} draft={draft} />
       <Card className="mt-4 p-5 sm:p-7">
-        <h1 ref={heading} tabIndex={-1} className="type-heading font-semibold tracking-tight outline-none sm:type-title">
+        <h1 /* design-lint-ignore: weight moves into the type style in 6I */ ref={heading} tabIndex={-1} className="type-heading font-semibold tracking-tight outline-none sm:type-title">
           {COPY[step]?.title}
         </h1>
         <p className="mt-1 type-small text-muted">{COPY[step]?.intro}</p>
@@ -121,7 +121,7 @@ export function Wizard(props: Props) {
 function StepFooter({ onBack, blocker, children }: { onBack: () => void; blocker?: string | null; children: ReactNode }) {
   return (
     // Sticky, so Continue is always on screen however long the step is.
-    <footer className="sticky bottom-0 z-10 -mx-5 -mb-5 mt-8 flex items-center justify-between gap-3 rounded-b-md border-t border-line bg-raised/95 px-5 py-3 backdrop-blur sm:-mx-7 sm:-mb-7 sm:px-7 sm:py-4">
+    <footer className="sticky bottom-0 z-sticky -mx-5 -mb-5 mt-8 flex items-center justify-between gap-3 rounded-b-md border-t border-line bg-raised/95 px-5 py-3 backdrop-blur sm:-mx-7 sm:-mb-7 sm:px-7 sm:py-4">
       <Button variant="ghost" className="h-11 sm:h-9" onClick={onBack}>
         <ArrowLeft className="size-4" /> Back
       </Button>
@@ -187,7 +187,7 @@ function Welcome({
   return (
     <div className="mx-auto max-w-xl">
       <Card className="p-6 sm:p-9">
-        <h1 ref={headingRef} tabIndex={-1} className="type-title font-semibold tracking-tight outline-none sm:type-title">
+        <h1 /* design-lint-ignore: weight moves into the type style in 6I */ ref={headingRef} tabIndex={-1} className="type-title font-semibold tracking-tight outline-none sm:type-title">
           {existing ? "Fix your setup" : resuming ? "Welcome back" : "Let's set up your job radar"}
         </h1>
         <p className="mt-2 text-muted">

@@ -7,7 +7,8 @@
  *
  * Scans apps/web/src (except src/design, where the tokens live), apps/web/index.html, and the marketing
  * site's sources in apps/site/src, which are plain CSS: SITE_RULES add CSS-aware checks for them.
- * A line can opt out with a `design-lint-ignore` comment saying why.
+ * A line can opt out with a `design-lint-ignore` comment saying why, or with a
+ * `design-lint-ignore-next-line` comment on the line above when the formatter has no room for it.
  */
 import { readdirSync, readFileSync, statSync } from "node:fs";
 import { join, relative } from "node:path";
@@ -44,6 +45,18 @@ export const RULES: { id: string; pattern: RegExp; message: string }[] = [
       "Orange is only for the primary button, the star, the new dot and the logo (design/README.md, One accent), which the primitives and kit classes already style. Selected, active and pressed states are ink.",
   },
   { id: "uppercase", pattern: /(?<![\w-])(?:[a-z-]+:)*uppercase(?![\w-])/, message: "No uppercase: headings are sentence case. Only source tags are uppercase, and the kit's rj-source styles them." },
+  { id: "z-raw", pattern: /\bz-(?:\d+|\[)/, message: "Raw z-index: use z-sticky / z-menu / z-drawer / z-modal / z-toast." },
+  { id: "duration-raw", pattern: /\bduration-(?:\d+|\[)/, message: "Raw duration: use duration-instant/quick/base/slow." },
+  {
+    id: "weight-override",
+    pattern: /type-(?:heading|subheading|title)\b[^"]*\bfont-(?:semibold|medium)/,
+    message: "Weight comes from the type style: drop the font-semibold/font-medium next to type-heading/subheading/title.",
+  },
+  {
+    id: "opacity-text",
+    pattern: /\bopacity-(?:[1-8]\d)\b/,
+    message: "Opacity on text lowers its contrast below the token's: use a muted color (text-muted, text-secondary) instead. Icons may opt out.",
+  },
 ];
 
 /** Plain-CSS checks for the marketing site, where the Tailwind-class rules above can't see var(--…) and px. */
@@ -66,8 +79,9 @@ export type Finding = { file: string; line: number; rule: string; message: strin
 
 export function lintText(text: string, file: string, rules = RULES): Finding[] {
   const out: Finding[] = [];
-  text.split(/\r?\n/).forEach((line, i) => {
-    if (line.includes("design-lint-ignore")) return;
+  const lines = text.split(/\r?\n/);
+  lines.forEach((line, i) => {
+    if (line.includes("design-lint-ignore") || lines[i - 1]?.includes("design-lint-ignore-next-line")) return;
     for (const r of rules) if (r.pattern.test(line)) out.push({ file, line: i + 1, rule: r.id, message: r.message, text: line.trim().slice(0, 140) });
   });
   return out;

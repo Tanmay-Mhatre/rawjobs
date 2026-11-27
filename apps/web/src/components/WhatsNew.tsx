@@ -126,7 +126,7 @@ export function WhatsNewDialog({ from, to, notes, onSeen }: { from: string; to: 
                   className="-ml-2 mt-2 inline-flex h-7 items-center gap-1 rounded-md px-2 type-label text-muted hover:bg-hover hover:text-ink"
                 >
                   {all ? "Show fewer" : `See all ${total} changes`}
-                  <ChevronDown className={cx("size-4 transition-transform duration-150 motion-reduce:transition-none", all && "rotate-180")} aria-hidden />
+                  <ChevronDown className={cx("size-4 transition-transform duration-quick motion-reduce:transition-none", all && "rotate-180")} aria-hidden />
                 </button>
               )}
             </>
@@ -277,7 +277,7 @@ export function UpdatePill() {
         aria-label={name}
         className={cx(
           // Quiet, so it doesn't compete with Scan now; a required update waiting on a scan keeps the outline.
-          "inline-flex h-7 min-w-7 shrink-0 items-center justify-center gap-1.5 rounded-md border px-1.5 type-label transition-colors duration-150 hover:bg-hover disabled:cursor-default disabled:text-muted xl:px-2",
+          "inline-flex h-7 min-w-7 shrink-0 items-center justify-center gap-1.5 rounded-md border px-1.5 type-label transition-colors duration-quick hover:bg-hover disabled:cursor-default disabled:text-muted xl:px-2",
           a.critical ? "border-control bg-raised text-ink" : "border-transparent text-muted hover:text-ink",
         )}
       >
@@ -319,7 +319,7 @@ export function UpdatePill() {
 }
 
 /** Under the pill, on phones across the page under the header. Wraps: the header row is nowrap. */
-const POP = "absolute top-full right-0 z-40 mt-2 whitespace-normal w-[min(20rem,calc(100vw-2rem))] rounded-md border border-line bg-overlay p-3 text-left shadow-l2";
+const POP = "absolute top-full right-0 z-menu mt-2 whitespace-normal w-[min(20rem,calc(100vw-2rem))] rounded-md border border-line bg-overlay p-3 text-left shadow-l2";
 
 /** The pill's click didn't get the update (offline, GitHub away): what happened, Try again, right where you clicked. */
 function CouldntUpdate({ from, to, error, onDismiss, onRetry }: { from: string; to: string; error: string; onDismiss: () => void; onRetry: () => void }) {

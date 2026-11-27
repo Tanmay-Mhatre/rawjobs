@@ -595,7 +595,7 @@ function RemoveResume({ onRemove }: { onRemove: () => Promise<SaveResult> }) {
       </Button>
       <Dialog open={asking} onClose={() => !working && setAsking(false)} labelledBy="remove-resume-title" initialFocus="[data-autofocus]">
         <Card className="p-5 shadow-l3 sm:p-6">
-          <h2 id="remove-resume-title" className="type-subheading font-semibold">
+          <h2 /* design-lint-ignore: weight moves into the type style in 6I */ id="remove-resume-title" className="type-subheading font-semibold">
             Remove your saved resume?
           </h2>
           <p className="mt-1 type-small text-muted">The resume is deleted from {canRunLocally ? "this computer" : "this browser"}. Roles, places and other answers it filled in stay as they are.</p>

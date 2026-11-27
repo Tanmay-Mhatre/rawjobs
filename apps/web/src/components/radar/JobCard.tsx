@@ -176,7 +176,7 @@ export const JobCard = memo(function JobCard({ group, entry, min, isNew, selecte
   if (flag) meta.push(flag);
 
   return (
-    <li ref={ref} className={cx("rj-row", muted && "opacity-60")} aria-current={selected ? "true" : undefined}>
+    <li /* design-lint-ignore: muted state, reviewed in 6B */ ref={ref} className={cx("rj-row", muted && "opacity-60")} aria-current={selected ? "true" : undefined}>
       <span title={job.estimated ? "Estimated: scored on title, place and industry only, until the full posting is fetched" : undefined}>
         <ScoreBadge score={job.score} threshold={min} estimated={job.estimated} word />
       </span>
