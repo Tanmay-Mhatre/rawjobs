@@ -321,10 +321,12 @@ export function ScanStatus({ scan, onStop, notify, notifyLine }: { scan: ScanSta
 
   return (
     <div {...rootProps} className="relative flex items-center gap-1">
-      <Button size="sm" {...triggerProps} aria-controls="scan-details" aria-label={`Scan ${percent === null ? "starting" : `${percent}% done`}: show details`}>
+      <Button size="sm" {...triggerProps} aria-controls="scan-details">
         <ProgressRing value={value} />
-        <span className="max-lg:hidden">{label}</span>
-        {percent !== null && <span className="tabular text-muted">{percent}%</span>}
+        {/* Its name is the text it shows plus ", show details"; on narrow screens the word is read, not shown. */}
+        <span className="max-lg:sr-only">{label}</span>
+        {percent !== null && <span className="tabular text-muted"> {percent}%</span>}
+        <span className="sr-only">, show details</span>
       </Button>
       {notify?.(() => setOpen("pinned"))}
       <RjIconButton size="sm" label={scan.stopping ? "Stopping scan" : "Stop scan"} onClick={onStop} disabled={scan.stopping}>
@@ -398,17 +400,13 @@ export function BackgroundPill({ scan, bg, onPause, onResume }: { scan: ScanStat
   );
   return (
     <div {...rootProps} className="relative">
-      <button
-        type="button"
-        {...triggerProps}
-        aria-controls="background-details"
-        aria-label={`Background check ${paused ? "paused" : percent === null ? "starting" : `${percent}% done`}: show details`}
-        className="rj-btn rj-btn--quiet rj-btn--sm gap-1.5 px-2 type-meta font-medium text-muted hover:text-ink"
-      >
+      <button type="button" {...triggerProps} aria-controls="background-details" className="rj-btn rj-btn--quiet rj-btn--sm gap-1.5 px-2 type-meta font-medium text-muted hover:text-ink">
         {paused ? <Pause className="rj-icon" aria-hidden /> : <ProgressRing value={value} />}
-        {/* "Checking the rest" is long: below 1280px the ring and percent say it; "Pausing…" and "Paused" stay. */}
-        <span className={cx("max-sm:hidden", !bg.pausing && !paused && "max-xl:hidden")}>{label}</span>
-        {percent !== null && !paused && <span className="tabular">{percent}%</span>}
+        {/* "Checking the rest" is long: below 1280px the ring and percent show it ("Pausing…" and "Paused"
+            stay). The word is hidden only from sight, so the name stays the text plus ", show details". */}
+        <span className={cx("max-sm:sr-only", !bg.pausing && !paused && "max-xl:sr-only")}>{label}</span>
+        {percent !== null && !paused && <span className="tabular"> {percent}%</span>}
+        <span className="sr-only">, show details</span>
       </button>
       {open && (
         <div

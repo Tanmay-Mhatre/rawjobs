@@ -166,6 +166,22 @@ h3 {
 .rj-row:focus-within {
   content-visibility: visible;
 }
+/* A closed, hidden or filtered-out row: quieter colour and weight instead of opacity, so its text keeps
+   enough contrast (opacity 60 % dropped secondary text to 2.65:1). The meta line says why in words. */
+.rj-row--muted .rj-row__title {
+  color: var(--text-secondary);
+  font-weight: 400;
+}
+.rj-row--muted .rj-score {
+  background: var(--chip-bg);
+  color: var(--text-secondary);
+  border-color: var(--border-default);
+}
+/* An icon button's tooltip key ("Save S"): drawn from data-key, so it isn't part of the button's text and
+   the visible label still matches the accessible name (Tooltip in primitives/Button.tsx). */
+.rj-tip__kbd::after {
+  content: attr(data-key);
+}
 @container (max-width: 560px) {
   .rj-row {
     align-items: start;

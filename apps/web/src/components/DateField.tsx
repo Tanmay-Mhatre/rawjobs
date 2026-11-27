@@ -4,7 +4,7 @@ import { dayAfter, isDay } from "../lib/userState";
 import { Chip } from "./primitives";
 import { cx, IconButton } from "./ui";
 
-const field = "inline-flex h-9 w-full min-w-0 items-center gap-2 rounded-md border border-line bg-raised px-2.5 text-left type-small text-ink hover:border-control aria-expanded:border-ink";
+const field = "inline-flex h-9 w-full min-w-0 items-center gap-2 rounded-md border border-control bg-raised px-2.5 text-left type-small text-ink hover:border-control-hover aria-expanded:border-ink";
 const WEEKDAYS = ["Mo", "Tu", "We", "Th", "Fr", "Sa", "Su"];
 
 const noon = (day: string) => new Date(`${day}T12:00:00`);

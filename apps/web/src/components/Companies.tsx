@@ -264,7 +264,7 @@ export function MyCompanies({
         className={linkClass}
         aria-expanded={editing?.id === x.r.id && !editing.url}
         aria-controls={panelId(x)}
-        aria-label={`Update ${companyLabel(x.r)}'s careers link`}
+        aria-label={`Update link for ${companyLabel(x.r)}`}
         onClick={(e) => {
           opener.current = e.currentTarget;
           setEditing((v) => (v?.id === x.r.id && !v.url ? null : { id: x.r.id }));
@@ -310,7 +310,7 @@ export function MyCompanies({
           className={linkClass}
           aria-expanded={open}
           aria-controls={panelId(x)}
-          aria-label={`Review ${name}'s possible new careers page`}
+          aria-label={`Review new careers page for ${name}`}
           onClick={(e) => {
             opener.current = e.currentTarget;
             setEditing(open ? null : { id: x.r.id, url, note });
@@ -319,7 +319,7 @@ export function MyCompanies({
           Review
         </button>
         {!m.checked_at && onDismissMove && (
-          <button type="button" className={linkClass} aria-label={`Not ${name}'s new careers page`} onClick={() => onDismissMove(m)}>
+          <button type="button" className={linkClass} aria-label={`Not this one: keep ${name}'s current careers page`} onClick={() => onDismissMove(m)}>
             Not this one
           </button>
         )}

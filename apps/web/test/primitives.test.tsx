@@ -49,7 +49,9 @@ describe("Button", () => {
     // A real tooltip (hover and keyboard focus), not a native title; hidden from screen readers, which hear the name and key.
     expect(b.title).toBe("");
     const tip = b.querySelector(".rj-tip")!;
-    expect(tip.textContent).toBe("Copy job descriptionC");
+    // The key is drawn by CSS, so the visible text matches the name (label in name).
+    expect(tip.textContent).toBe("Copy job description");
+    expect(tip.querySelector("kbd")!.dataset.key).toBe("C");
     expect(tip.getAttribute("aria-hidden")).toBe("true");
     expect(b.getAttribute("aria-keyshortcuts")).toBe("C");
     expect(b.className).toContain("rj-btn--icon");

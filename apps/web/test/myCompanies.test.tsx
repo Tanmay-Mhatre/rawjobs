@@ -214,10 +214,10 @@ describe("MyCompanies rows", () => {
     expect(rowOf("Initech").getByText("Moved to Lever, checked by RawJobs")).toBeTruthy();
     expect(rowOf("Initech").queryByRole("button", { name: /^Not / })).toBeNull();
 
-    fireEvent.click(rowOf("Globex").getByRole("button", { name: "Not Globex's new careers page" }));
+    fireEvent.click(rowOf("Globex").getByRole("button", { name: "Not this one: keep Globex's current careers page" }));
     expect(onDismissMove).toHaveBeenCalledWith(expect.objectContaining({ name: "Globex" }));
 
-    fireEvent.click(rowOf("Globex").getByRole("button", { name: "Review Globex's possible new careers page" }));
+    fireEvent.click(rowOf("Globex").getByRole("button", { name: "Review new careers page for Globex" }));
     expect((table.getByLabelText("New careers link for Globex") as HTMLInputElement).value).toBe("https://jobs.ashbyhq.com/globex-inc");
     expect(table.getByText(/Check it's really Globex/)).toBeTruthy();
     expect(await table.findByText(/Ashby · 14 open jobs/)).toBeTruthy();
@@ -242,7 +242,7 @@ describe("MyCompanies rows", () => {
     const onUpdateLink = vi.fn();
     const { container } = render(<MyCompanies rows={list} savedKeys={keys(list)} meta={m} onUpdateLink={onUpdateLink} onRemove={() => {}} onRemoveMany={() => {}} attention={1} />);
     const table = within(container.querySelector("table")!);
-    const open = table.getByRole("button", { name: "Update Globex's careers link" });
+    const open = table.getByRole("button", { name: "Update link for Globex" });
     expect(open.getAttribute("aria-expanded")).toBe("false");
     fireEvent.click(open);
     expect(open.getAttribute("aria-expanded")).toBe("true");
@@ -272,8 +272,8 @@ describe("MyCompanies rows", () => {
     const m = meta(3, ["initech", "hooli"], (s, i) => (s === "initech" && i < 2 ? { ok: false, error: "timeout" } : s === "hooli" && i === 0 ? { ok: false, error: "timeout" } : {}));
     const { container } = render(<MyCompanies rows={list} savedKeys={keys(list)} meta={m} onUpdateLink={() => {}} onRemove={() => {}} onRemoveMany={() => {}} />);
     const table = within(container.querySelector("table")!);
-    expect(table.getByRole("button", { name: "Update Initech's careers link" })).toBeTruthy();
-    expect(table.getByRole("button", { name: "Update Hooli's careers link" })).toBeTruthy();
+    expect(table.getByRole("button", { name: "Update link for Initech" })).toBeTruthy();
+    expect(table.getByRole("button", { name: "Update link for Hooli" })).toBeTruthy();
   });
 
   it("says the old page isn't answering (not that it's gone) when updating such a company", async () => {
@@ -281,7 +281,7 @@ describe("MyCompanies rows", () => {
     const m = meta(1, ["hooli"], () => ({ ok: false, error: "timeout" }));
     const { container } = render(<MyCompanies rows={list} savedKeys={keys(list)} meta={m} onUpdateLink={() => {}} onRemove={() => {}} onRemoveMany={() => {}} />);
     const table = within(container.querySelector("table")!);
-    fireEvent.click(table.getByRole("button", { name: "Update Hooli's careers link" }));
+    fireEvent.click(table.getByRole("button", { name: "Update link for Hooli" }));
     fireEvent.change(table.getByLabelText("New careers link for Hooli"), { target: { value: "https://jobs.ashbyhq.com/globex-inc" } });
     fireEvent.click(table.getByRole("button", { name: "Check link" }));
     await table.findByRole("button", { name: "Use this link" });
