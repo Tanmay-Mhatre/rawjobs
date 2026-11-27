@@ -1,4 +1,4 @@
-import { careersUrl, companyKey } from "@rawjobs/core/detect";
+import { careersUrl, companyKey } from "@rawjobs/core/company-key";
 import { type CompanyRef, SUPPORTED } from "@rawjobs/core/directory-search";
 import { rowId, type CompanyRow, type Draft } from "./setup";
 

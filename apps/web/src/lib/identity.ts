@@ -13,8 +13,21 @@ export function identityOf(j: Pick<Job, "company" | "identity" | "companyKey" | 
   return j.companyKey ?? `name:${companyNameKey(j.company)}`;
 }
 
+/**
+ * Kept per job object: filters, grouping and counts ask for it many times per job. Jobs aren't changed once
+ * loaded (attachFeedJobs() makes a new object when it sets `identity`), so the cached key stays right.
+ */
+const roleCache = new WeakMap<object, string>();
+
 /** One role at one company: the key the Radar groups postings by. */
-export const roleOf = (j: Pick<Job, "company" | "identity" | "companyKey" | "ats" | "title">) => `${identityOf(j)}|${roleKey(j.title)}`;
+export function roleOf(j: Pick<Job, "company" | "identity" | "companyKey" | "ats" | "title">): string {
+  let role = roleCache.get(j);
+  if (role === undefined) {
+    role = `${identityOf(j)}|${roleKey(j.title)}`;
+    roleCache.set(j, role);
+  }
+  return role;
+}
 
 const isRemote = (j: Job) => j.workplace === "remote" || /\bremote\b/i.test(j.location);
 const noPlace = (j: Job) => !j.countries.length && !j.cities.length && !isRemote(j);
