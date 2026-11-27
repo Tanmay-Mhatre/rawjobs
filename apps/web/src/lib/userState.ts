@@ -546,6 +546,35 @@ function withEntry(s: UserState, id: string, entry: Entry | null): UserState {
   return rest;
 }
 
+/** A job changed here and in another window at once: both sides' touches and people are kept. */
+const mergeEntry = (id: string, mine: unknown, theirs: unknown) => mergeStates({ [id]: mine as Entry }, { [id]: theirs as Entry })[id];
+
+/**
+ * This browser's copy of your tracking is written when the browser is idle, not on every click: a
+ * burst of changes is turned into JSON once. Leaving or hiding the page writes it straight away.
+ */
+let unsaved: UserState | undefined;
+let writeWaiting = false;
+function writeState() {
+  writeWaiting = false;
+  if (unsaved === undefined) return;
+  const s = unsaved;
+  unsaved = undefined;
+  if (!save(KEY, s)) saveFailed();
+}
+function saveSoon(s: UserState) {
+  unsaved = s;
+  if (writeWaiting) return;
+  writeWaiting = true;
+  if (typeof requestIdleCallback === "function") requestIdleCallback(writeState, { timeout: 250 });
+  else setTimeout(writeState, 0);
+}
+if (typeof window !== "undefined") window.addEventListener("pagehide", writeState);
+if (typeof document !== "undefined")
+  document.addEventListener("visibilitychange", () => {
+    if (document.visibilityState === "hidden") writeState();
+  });
+
 /**
  * Your tracking, with actions that never change identity (each reads the latest state when it
  * runs), so components that take them as props don't re-render on every status change.
@@ -555,10 +584,8 @@ export function useUserState() {
   const latest = useRef(state);
   latest.current = state;
 
-  useEffect(() => {
-    if (!save(KEY, state)) saveFailed();
-  }, [state]);
-  useSavedOnDisk<UserState>("state", state, (v) => setState(normalizeState(v)));
+  useEffect(() => saveSoon(state), [state]);
+  useSavedOnDisk<UserState>("state", state, (v) => setState(normalizeState(v)), mergeEntry);
 
   // Keep tabs in sync.
   useEffect(() => {

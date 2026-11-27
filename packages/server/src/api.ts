@@ -22,7 +22,9 @@ import {
   scanLockHolder,
   readLiveHead,
   liveInBackground,
+  limiter,
   LIVE_FILE,
+  readResume,
   setupStatus,
   suggestCacheDir,
   telegramStatus,
@@ -49,6 +51,7 @@ import { CSP_REPORT_PATH, cspReportLine } from "./csp";
 import { refuse, refuseHost } from "./guard";
 import { directorySearch } from "./directory-search";
 import { createReaders } from "./readers";
+import { scanLines, type ScanLines } from "./scan-lines";
 import type { Updater } from "./updater";
 
 export type ApiOptions = {
@@ -75,8 +78,10 @@ export type ApiOptions = {
 };
 
 const HOUR_MS = 60 * 60_000;
+/** Short CLI runs (reads, saves, a directory update) at once; more wait their turn. */
+const COLLECT_MAX = 3;
 /** Requests that may change what the kept read-only answers show (any but GET). */
-const WRITES = /^\/api\/(setup|directory|alerts|schedule|run|check)(\/|$)/;
+const WRITES = /^\/api\/(setup|directory|alerts|schedule|daily-summary|run|check)(\/|$)/;
 /** POSTs that only read (Browse all's search sends its filters as a body): they keep the kept answers. */
 const READ_POSTS = new Set(["/api/directory/search", "/api/directory/names", "/api/directory/warm"]);
 /** A page served from this computer (any port): may read /api/health from another port. */
@@ -218,9 +223,14 @@ export function createApi(opts: ApiOptions) {
 
   /**
    * Run the CLI and collect its output. A run that hangs (a stalled download, say) is stopped after
-   * `timeoutMs`, so a request (and the "checking" flag it holds) can't wait forever.
+   * `timeoutMs`, so a request (and the "checking" flag it holds) can't wait forever. At most
+   * COLLECT_MAX run at once, the rest waiting their turn (scans start through `cli` and aren't held up).
    */
+  const collectSlot = limiter(COLLECT_MAX);
   function collect(args: string[], stdin?: string, timeoutMs = 600_000): Promise<{ code: number; stdout: string; stderr: string }> {
+    return collectSlot(() => collectNow(args, stdin, timeoutMs));
+  }
+  function collectNow(args: string[], stdin: string | undefined, timeoutMs: number): Promise<{ code: number; stdout: string; stderr: string }> {
     return new Promise((done) => {
       const child = cli(args, stdin);
       let stdout = "";
@@ -292,6 +302,8 @@ Stopped after ${Math.round(timeoutMs / 1000)} s without finishing.`.trim(),
    */
   /** Bump when the answer's shape changes, so answers saved by an older version aren't served (2: `added`). */
   const ANSWER_FORMAT = 2;
+  /** In the suggestions cache: the inputs the last background ranking read. */
+  const WARM_FILE = "warm.json";
   const suggestCache = new Map<string, Promise<string>>();
   /**
    * Suggestion runs one at a time: a page request that comes while the background run ranks
@@ -334,10 +346,14 @@ Stopped after ${Math.round(timeoutMs / 1000)} s without finishing.`.trim(),
     return configPart.part;
   }
 
-  function suggestions(body: string): Promise<string> {
+  /** What a ranking reads: the code, the day, the index, directory, your additions, resume and config. */
+  function suggestStamp(): string {
     const inputs = [...["index.json", "directory.json", "additions.json"].map((f) => resolve(dataDir, "catalog", f)), resolve(home, "profile/resume.md")];
-    const stamp = [ANSWER_FORMAT, codeStamp(), new Date().toISOString().slice(0, 10), ...inputs.map(fileStamp), configKey()].join("|");
-    const key = `${stamp}|${body}`;
+    return [ANSWER_FORMAT, codeStamp(), new Date().toISOString().slice(0, 10), ...inputs.map(fileStamp), configKey()].join("|");
+  }
+
+  function suggestions(body: string): Promise<string> {
+    const key = `${suggestStamp()}|${body}`;
     let hit = suggestCache.get(key);
     if (!hit) {
       const dir = suggestCacheDir(dataDir);
@@ -377,8 +393,8 @@ Stopped after ${Math.round(timeoutMs / 1000)} s without finishing.`.trim(),
   }
 
   // ---------- the running scan ----------
-  /** The scan the server is running: its scope, every progress line so far, and the tabs following it. */
-  let scan: { scope: string; lines: Line[]; partial: string; followers: Set<ServerResponse>; child: ChildProcess; background?: boolean } | null = null;
+  /** The scan the server is running: its scope, its lines so far (bounded: scanLines), and the tabs following it. */
+  let scan: { scope: string; lines: ScanLines; partial: string; followers: Set<ServerResponse>; child: ChildProcess; background?: boolean } | null = null;
   /** "Check now" runs: they share the one-at-a-time rule with scans. */
   let checking = false;
   /**
@@ -439,7 +455,7 @@ Stopped after ${Math.round(timeoutMs / 1000)} s without finishing.`.trim(),
     res.setHeader("content-type", "application/x-ndjson");
     res.setHeader("cache-control", "no-cache");
     res.setHeader("x-rawjobs-scope", scan.scope);
-    for (const line of scan.lines) res.write(`${line}\n`);
+    for (const line of scan.lines.replay()) res.write(`${line}\n`);
     scan.followers.add(res);
     const current = scan;
     // A tab that goes away just stops following; the scan carries on.
@@ -512,7 +528,7 @@ Stopped after ${Math.round(timeoutMs / 1000)} s without finishing.`.trim(),
     const child = backgroundOnly
       ? cli(["scan", "--progress", "ndjson", "--background-only", "--data", dataDir])
       : cli(["scan", "--progress", "ndjson", "--scope", scope, ...(fresh ? ["--fresh"] : []), ...(scope === "all" ? ["--full"] : []), "--data", dataDir]);
-    scan = { scope, lines: [], partial: "", followers: new Set(), child, ...(backgroundOnly ? { background: true } : {}) };
+    scan = { scope, lines: scanLines(), partial: "", followers: new Set(), child, ...(backgroundOnly ? { background: true } : {}) };
     const current = scan;
     let stderr = "";
     // Always read the scan's output, whether or not a tab is listening: an unread pipe fills up
@@ -667,7 +683,7 @@ Stopped after ${Math.round(timeoutMs / 1000)} s without finishing.`.trim(),
       await network.remove();
       return await respondJson(res, ["setup", "reset"]);
     }
-    if (url === "/api/setup/resume" && req.method === "GET") return await respondJson(res, ["setup", "resume"]);
+    if (url === "/api/setup/resume" && req.method === "GET") return await respondRead(res, () => readResume(home));
     if (url === "/api/setup/resume" && req.method === "POST") return await respondJson(res, ["setup", "resume", "save"], await readBody(req));
     if (url === "/api/setup/resume" && req.method === "DELETE") return await respondJson(res, ["setup", "resume", "delete"]);
     if (url === "/api/setup/check" && req.method === "POST") return await respondJson(res, ["setup", "check", "--data", dataDir], await readBody(req));
@@ -751,7 +767,7 @@ Stopped after ${Math.round(timeoutMs / 1000)} s without finishing.`.trim(),
       if (busy()) return json(res, { ok: false, errors: "A scan is running; try again when it's done." });
       return await respondJson(res, ["schedule", "run", "--data", dataDir]);
     }
-    if (url === "/api/daily-summary" && req.method === "GET") return await respondJson(res, ["today", "status", "--data", dataDir]);
+    if (url === "/api/daily-summary" && req.method === "GET") return await respondRead(res, () => readCli("daily", 5 * 60_000, ["today", "status", "--data", dataDir]));
     if (url === "/api/daily-summary" && req.method === "POST") return await respondJson(res, ["today", "install", "--stdin", "--data", dataDir], await readBody(req));
     if (url === "/api/daily-summary" && req.method === "DELETE") return await respondJson(res, ["today", "remove", "--data", dataDir]);
     if (url === "/api/daily-summary/test" && req.method === "POST") return await respondJson(res, ["today", "--test", "--json", "--data", dataDir]);
@@ -822,7 +838,21 @@ Stopped after ${Math.round(timeoutMs / 1000)} s without finishing.`.trim(),
     watcher.resume();
     // A LinkedIn file reminder whose time came while RawJobs was off fires now.
     reminder.resume();
-    void updateDirectoryOnce(["directory", "update", "--auto", "--if-older", "7", "--data", dataDir]).then(() => oneSuggestRun(() => collect(["companies", "suggest", "--json", "--data", dataDir])));
+    void updateDirectoryOnce(["directory", "update", "--auto", "--if-older", "7", "--data", dataDir]).then(() => warmSuggestions());
+  }
+
+  /**
+   * Rank companies for the saved profile, unless the last background ranking read the same inputs
+   * (suggestStamp): a restart with nothing new doesn't read the 40 MB index again.
+   */
+  function warmSuggestions() {
+    const dir = suggestCacheDir(dataDir);
+    const file = resolve(dir, WARM_FILE);
+    const stamp = suggestStamp();
+    if (readSaved(file) === JSON.stringify({ stamp })) return Promise.resolve();
+    return oneSuggestRun(() => collect(["companies", "suggest", "--json", "--data", dataDir])).then((r) => {
+      if (r.code === 0 && r.stdout.trim().startsWith("{")) writeCacheFile(dir, file, JSON.stringify({ stamp }));
+    });
   }
 
   /**

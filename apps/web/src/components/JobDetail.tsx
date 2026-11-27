@@ -28,7 +28,7 @@ import {
   Users,
   X,
 } from "lucide-react";
-import { Fragment, type ReactNode, type RefObject, useEffect, useMemo, useRef, useState } from "react";
+import { Fragment, memo, type ReactNode, type RefObject, useEffect, useMemo, useRef, useState } from "react";
 import { copyText } from "../lib/clipboard";
 import { isAgencyPosting } from "../lib/agency";
 import { useDescription, useHiring, type Job, type Profile } from "../lib/data";
@@ -129,7 +129,7 @@ function MetaLine({ parts, className }: { parts: ReactNode[]; className?: string
 }
 
 /** Everything about one job (design/components/Drawer): head with source, title and meta; body with the score, status, description and details; foot with the actions. */
-export function JobDetail(p: JobDetailProps) {
+export const JobDetail = memo(function JobDetail(p: JobDetailProps) {
   const { job, entry, profile } = p;
   const description = useDescription(job);
   const hiringData = useHiring(job);
@@ -641,7 +641,7 @@ export function JobDetail(p: JobDetailProps) {
       )}
     </section>
   );
-}
+});
 
 /**
  * "3 you know" under the title once your LinkedIn connections are imported: jumps to the people section.

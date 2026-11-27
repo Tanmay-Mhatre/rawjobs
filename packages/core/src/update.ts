@@ -296,7 +296,7 @@ export async function prepareVersion(
 /** In data/, what downloads again by itself, so a backup leaves it out: caches and the company directory. */
 const REFETCHED = new Set(["cache", "catalog"]);
 /** A running scan's lock, stop flags and live progress belong to that scan, not to a backup. */
-const SCAN_FLAGS = new Set(["scan.lock", "scan-stop", "scan-notify", "scan-live.ndjson"]);
+const SCAN_FLAGS = new Set(["scan.lock", "scan-stop", "scan-notify", "scan-live.ndjson", "scan-live.stage"]);
 /** Logs older versions' scheduled runs kept in data/ (now in logs/): never backed up. */
 const OLD_LOGS = new Set(["schedule.log", "daily-summary.log"]);
 

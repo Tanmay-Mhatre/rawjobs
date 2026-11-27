@@ -3,11 +3,14 @@ import { telegramReady } from "../components/NotifyWhenDone";
 import { toast } from "../components/Toast";
 import { telegramStatus, type TelegramStatus } from "../lib/automation";
 import { canRunLocally } from "../lib/data";
-import type { ScanState } from "../lib/scan";
+import { useScanSelector } from "../lib/scanStore";
 
 /** Telegram: with it connected, every scan started here sends a message when it finishes. */
-export function useScanNotify(scan: ScanState, notifyScan: () => Promise<boolean>) {
-  const scanning = scan.phase === "running";
+export function useScanNotify(notifyScan: () => Promise<boolean>) {
+  // Just these parts of the scan, so the page doesn't re-render on its progress.
+  const scanning = useScanSelector((s) => s.phase === "running");
+  const total = useScanSelector((s) => s.total);
+  const notify = useScanSelector((s) => s.notify);
   /** undefined: not asked yet (or can't run scans here) · null: couldn't tell. */
   const [tg, setTg] = useState<TelegramStatus | null | undefined>(undefined);
   const refreshTg = useCallback(async () => setTg(await telegramStatus().catch(() => null)), []);
@@ -24,16 +27,16 @@ export function useScanNotify(scan: ScanState, notifyScan: () => Promise<boolean
       return;
     }
     // After the "start" event: the scan clears any earlier request just before it starts.
-    if (notifyAsked.current || scan.notify?.asked || !scan.total || !telegramReady(tg)) return;
+    if (notifyAsked.current || notify?.asked || !total || !telegramReady(tg)) return;
     notifyAsked.current = true;
     setNotifyFailed(false);
     void notifyScan().then((ok) => setNotifyFailed(!ok));
-  }, [scanning, scan.total, scan.notify, tg, notifyScan]);
+  }, [scanning, total, notify, tg, notifyScan]);
   // A message that went out is a toast; one that didn't stays on the page (NotifyFailed).
   // biome-ignore lint/correctness/useExhaustiveDependencies: fires when the notify result arrives; `tg` is only read for the bot's name
   useEffect(() => {
-    if (!scanning && scan.notify?.result === "sent") toast({ message: <>Sent the results to Telegram{tg?.bot ? <> ({tg.bot})</> : null}.</> });
-  }, [scanning, scan.notify?.result]);
+    if (!scanning && notify?.result === "sent") toast({ message: <>Sent the results to Telegram{tg?.bot ? <> ({tg.bot})</> : null}.</> });
+  }, [scanning, notify?.result]);
   /** Telegram was just connected during a scan: check it again and ask this scan to send its message. */
   const notifyNow = useCallback(() => {
     void refreshTg();

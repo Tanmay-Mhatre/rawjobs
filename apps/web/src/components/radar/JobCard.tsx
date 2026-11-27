@@ -2,7 +2,8 @@ import { surgeTitle } from "@rawjobs/core/activity";
 import { sponsorOf, sponsorTitle } from "@rawjobs/core/catalog/visa";
 import { fitLine } from "@rawjobs/core/fit";
 import { Bookmark, CircleCheck, CircleHelp, CircleX, Star, Users, X } from "lucide-react";
-import { forwardRef, type ReactNode } from "react";
+import { memo, type ReactNode, useCallback } from "react";
+import type { Job } from "../../lib/data";
 import type { JobGroup } from "../../lib/filters";
 import { atsLabel, evergreenReason, isOlder } from "../../lib/filters";
 import { isRoleStale, staleReasons } from "../../lib/stale";
@@ -17,8 +18,11 @@ type Props = {
   min: number;
   isNew: boolean;
   selected: boolean;
-  onSelect: () => void;
-  onStatus: (s: Status) => void;
+  /** Stable handlers (the same function for every row), so a row whose own props didn't change skips its render. */
+  onSelect: (job: Job) => void;
+  onStatus: (job: Job, s: Status) => void;
+  /** The list keeps each row's element by its group key, for J/K focus and scrolling. */
+  register?: (key: string, el: HTMLLIElement | null) => void;
   /** At one of your companies. */
   yours?: boolean;
   /** How many of your LinkedIn connections work at the company. */
@@ -143,8 +147,9 @@ function rowFlag(group: JobGroup): ReactNode {
  * where the job came from. The title is a real button whose click area stretches over the whole row;
  * Save and Not interested sit above it and show on hover or focus (always on touch screens and phones).
  */
-export const JobCard = forwardRef<HTMLLIElement, Props>(function JobCard({ group, entry, min, isNew, selected, onSelect, onStatus, yours, known }, ref) {
+export const JobCard = memo(function JobCard({ group, entry, min, isNew, selected, onSelect, onStatus, register, yours, known }: Props) {
   const job = group.lead;
+  const ref = useCallback((el: HTMLLIElement | null) => register?.(group.key, el), [register, group.key]);
   const status = entry?.status;
   const muted = job.status === "closed" || status === "dismissed" || !!job.why.gate;
 
@@ -178,7 +183,7 @@ export const JobCard = forwardRef<HTMLLIElement, Props>(function JobCard({ group
       <span className="rj-row__main">
         <span className="rj-row__title">
           {yours && <Star className="rj-star" role="img" aria-label="My company" />}
-          <button type="button" onClick={onSelect} className="rj-row__link min-w-0 cursor-pointer text-left" data-job-link>
+          <button type="button" onClick={() => onSelect(job)} className="rj-row__link min-w-0 cursor-pointer text-left" data-job-link>
             {jobTitle(job.title)}
           </button>
         </span>
@@ -188,7 +193,7 @@ export const JobCard = forwardRef<HTMLLIElement, Props>(function JobCard({ group
       <span className="rj-row__side">
         {/* Kept visible once used, so a saved or hidden row shows it at a glance. */}
         <span className={cx("rj-row__actions", (status === "saved" || status === "dismissed") && "opacity-100")}>
-          <IconButton label="Save" shortcut="S" size="sm" aria-pressed={status === "saved"} className={cx(status === "saved" && "bg-active text-ink")} onClick={() => onStatus("saved")}>
+          <IconButton label="Save" shortcut="S" size="sm" aria-pressed={status === "saved"} className={cx(status === "saved" && "bg-active text-ink")} onClick={() => onStatus(job, "saved")}>
             <Bookmark className={cx("rj-icon", status === "saved" && "fill-current")} aria-hidden />
           </IconButton>
           <IconButton
@@ -197,7 +202,7 @@ export const JobCard = forwardRef<HTMLLIElement, Props>(function JobCard({ group
             size="sm"
             aria-pressed={status === "dismissed"}
             className={cx(status === "dismissed" && "bg-active text-ink")}
-            onClick={() => onStatus("dismissed")}
+            onClick={() => onStatus(job, "dismissed")}
           >
             <X className="rj-icon" aria-hidden />
           </IconButton>
@@ -212,4 +217,16 @@ export const JobCard = forwardRef<HTMLLIElement, Props>(function JobCard({ group
       </span>
     </li>
   );
-});
+}, sameRow);
+
+/**
+ * The list groups its postings afresh on every change, so an unchanged role arrives as a new group object.
+ * Same key, lead and postings is the same row; every other prop must be the same value.
+ */
+function sameRow(a: Props, b: Props): boolean {
+  for (const k of Object.keys(b) as (keyof Props)[]) if (k !== "group" && !Object.is(a[k], b[k])) return false;
+  if (Object.keys(a).length !== Object.keys(b).length) return false;
+  const x = a.group;
+  const y = b.group;
+  return x === y || (x.key === y.key && x.lead === y.lead && x.jobs.length === y.jobs.length && x.jobs.every((j, i) => j === y.jobs[i]));
+}
