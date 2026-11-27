@@ -4,7 +4,7 @@ import { createServer, type Server } from "node:http";
 import { parseArgs } from "node:util";
 import { defaultDataDir, rawjobsHome } from "@rawjobs/core";
 import { APP_VERSION, BUNDLED, collectReports, migrateData, recentCrashes, recordCrash, reportFatalErrors, SAFE_MODE_CRASHES, scanLockHeld, WEB_DIR } from "@rawjobs/core";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { watchMissedScans } from "./catch-up";
 import { createApi } from "./api";
 import { createUpdater } from "./updater";
@@ -108,7 +108,7 @@ export async function serve(args: string[]): Promise<number> {
   const updater = createUpdater({ home, isBusy: () => api.scanning() || scanLockHeld(dataDir), pauseBackground: () => api.pauseBackground(), exit: () => shutdown() });
   // The "RawJobs isn't running" window and page offer a Start button only when rawjobs://open works here.
   const startLink = () => BUNDLED && startLinkInstalled(home);
-  const api = createApi({ home, dataDir, updater, startLink, safeMode: () => safeMode });
+  const api = createApi({ home, dataDir, updater, startLink, safeMode: () => safeMode, reveal: (file) => openBrowser(dirname(file)) });
   const pages = { startLink, platform: process.platform };
   const server = createServer(createHandler({ api, roots: [WEB_DIR, dataDir], pages }));
   // A promise nobody awaited that failed (a background task, a timer): logged, not fatal. Node would

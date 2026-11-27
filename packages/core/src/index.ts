@@ -60,6 +60,7 @@ export * from "./liveness";
 export * from "./schedule";
 export * from "./clock";
 export * from "./log";
+export * from "./doctor";
 export * from "./companies-page";
 export { fileZipSource, inflateRawNode } from "./network/zip-node";
 export * from "./network/store";

@@ -9,6 +9,7 @@ import { cmdToday } from "./commands/today";
 import { cmdDirectory } from "./commands/directory";
 import { cmdSetup } from "./commands/setup";
 import { cmdDetect, cmdValidate } from "./commands/check";
+import { cmdDoctor } from "./commands/doctor";
 
 const HELP = `RawJobs: self-hosted job radar
 
@@ -25,6 +26,7 @@ Usage:
   rawjobs today <status|install|remove> [--time 09:00]   Send it every morning at a time you pick
   rawjobs detect <url>...     Turn careers URLs into config lines
   rawjobs validate            Check your config file
+  rawjobs doctor [--json] [--zip [file]]   Check this copy of RawJobs; --zip saves a redacted diagnostics file (nothing is uploaded)
   rawjobs setup <status|save|check>   Used by the dashboard's setup wizard (JSON in/out)
   rawjobs companies suggest   Companies from the directory that fit your profile (industries, roles, places)
   rawjobs directory <status|update|share|search>   The shared company directory: download the latest, share additions
@@ -83,6 +85,8 @@ async function main(argv: string[]): Promise<number> {
       return cmdRun(rest);
     case "detect":
       return cmdDetect(rest);
+    case "doctor":
+      return cmdDoctor(rest);
     case "validate":
       return cmdValidate(rest);
     case "setup":

@@ -54,6 +54,7 @@ export const SETTINGS_SECTIONS: readonly SettingsSection[] = [
     words: "linkedin connections network referral referrals people close contacts friends who you know import export zip csv refresh delete",
   },
   { id: "sharing", page: "data", title: "Sharing", words: "privacy share send directory contribute companies added by link update careers link moved" },
+  { id: "diagnostics", page: "data", title: "Diagnostics", words: "doctor problem bug report crash logs help support troubleshoot debug zip issue" },
   { id: "tips", page: "data", title: "Tips you've closed", words: "dismissed notices checklist hints show again reset" },
   { id: "reset", page: "data", title: "Start setup over", words: "reset wizard clear restart onboarding danger zone" },
   { id: "version", page: "updates", title: "RawJobs", words: "version about check for updates install upgrade" },
