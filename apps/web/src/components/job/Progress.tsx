@@ -1,5 +1,5 @@
 import { FileText, StickyNote } from "lucide-react";
-import { Fragment, useEffect, useRef, useState } from "react";
+import { Fragment, useEffect, useLayoutEffect, useRef, useState } from "react";
 import type { Job } from "../../lib/data";
 import { CLOSED_AS, CLOSED_AS_COMMON, type Entry, type EntryPatch, dayAfter, followUpDue, hadOffer, isActive, PIPELINE, STATUS_LABEL, type Status, stageSince, statusLabel } from "../../lib/userState";
 import { DateField } from "../DateField";
@@ -102,13 +102,19 @@ export function CvField({ id, cv, onSave }: { id: string; cv: string; onSave: (c
 export function NotesField({ id, note, onSave }: { id: string; note: string; onSave: (note: string) => void }) {
   const pending = useRef<string | null>(null);
   const save = useRef(onSave);
-  save.current = onSave;
+  // Kept after each render (not during it), for handlers and effects that run later.
+  useLayoutEffect(() => {
+    save.current = onSave;
+  });
   const flush = () => {
     if (pending.current !== null && pending.current !== note) save.current(pending.current);
     pending.current = null;
   };
   const flushRef = useRef(flush);
-  flushRef.current = flush;
+  // Kept after each render (not during it), for handlers and effects that run later.
+  useLayoutEffect(() => {
+    flushRef.current = flush;
+  });
   useEffect(() => () => flushRef.current(), []);
   // Folded to one small button until there's a note, so the description starts higher.
   const [open, setOpen] = useState(!!note);
