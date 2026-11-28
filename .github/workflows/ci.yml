@@ -80,6 +80,9 @@ jobs:
         shell: bash
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          # A pull request checks out GitHub's merge commit: its first parent is the base branch.
+          fetch-depth: 2
       - uses: pnpm/action-setup@73e46992e05b19abd31f2f3c20e0e7370d762115 # v6.1.1
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
@@ -88,9 +91,7 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - name: Tests (the ones this pull request can reach)
         if: github.event_name == 'pull_request'
-        run: |
-          git fetch --no-tags --depth=1 origin "$GITHUB_BASE_REF"
-          pnpm vitest run --changed FETCH_HEAD --passWithNoTests packages services scripts
+        run: pnpm vitest run --changed HEAD^1 --passWithNoTests packages services scripts
         timeout-minutes: 15
       - name: Tests (all of them)
         if: github.event_name != 'pull_request'
