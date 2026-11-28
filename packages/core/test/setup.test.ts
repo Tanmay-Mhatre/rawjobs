@@ -2,7 +2,7 @@ import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
-import { findConfigPath, isLegacyConfig, parseConfig } from "../src/config";
+import { findConfigPath, parseConfig } from "../src/config";
 import { detectCompany } from "../src/connectors";
 import { diagnoseNoMatches } from "../src/diagnose";
 import type { Job } from "../src/schema";
@@ -206,18 +206,6 @@ describe("saveConfig / setupStatus", () => {
     expect(status.raw).toBeTruthy();
   });
 
-  it("keeps reading and saving a config under its pre-rename name until a rawjobs one exists", () => {
-    dir = mkdtempSync(join(tmpdir(), "rawjobs-setup-"));
-    const legacy = join(dir, "jobhunter.config.local.yaml");
-    writeFileSync(legacy, configToYaml(example));
-    expect(setupStatus(dir)).toMatchObject({ configPath: legacy, isPersonal: true, valid: true });
-    expect(saveConfig(example, dir)).toMatchObject({ ok: true, path: legacy });
-    expect(existsSync(join(dir, "rawjobs.config.local.yaml"))).toBe(false);
-
-    writeFileSync(join(dir, "rawjobs.config.local.yaml"), configToYaml(example));
-    expect(setupStatus(dir).configPath).toBe(join(dir, "rawjobs.config.local.yaml"));
-  });
-
   it("resetConfig moves the config to a backup and leaves the resume alone", () => {
     dir = mkdtempSync(join(tmpdir(), "rawjobs-setup-"));
     expect(resetConfig(dir)).toEqual({ ok: true, backup: null });
@@ -236,14 +224,12 @@ describe("saveConfig / setupStatus", () => {
     expect(parseConfig(readFileSync(backup, "utf8")).companies).toEqual([]);
   });
 
-  it("finds a config under the new names first, then the pre-rename ones", () => {
+  it("finds rawjobs.config files only (the pre-rename jobhunter names are gone)", () => {
     dir = mkdtempSync(join(tmpdir(), "rawjobs-setup-"));
     writeFileSync(join(dir, "jobhunter.config.yaml"), "");
-    expect(findConfigPath(dir)).toBe(join(dir, "jobhunter.config.yaml"));
-    expect(isLegacyConfig(findConfigPath(dir))).toBe(true);
+    expect(() => findConfigPath(dir)).toThrow(/No config found/);
     writeFileSync(join(dir, "rawjobs.config.yaml"), "");
     expect(findConfigPath(dir)).toBe(join(dir, "rawjobs.config.yaml"));
-    expect(isLegacyConfig(findConfigPath(dir))).toBe(false);
   });
 });
 

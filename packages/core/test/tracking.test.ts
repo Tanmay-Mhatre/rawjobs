@@ -32,7 +32,6 @@ describe("rawjobsHome", () => {
 
   it("keeps data in it unless RAWJOBS_DATA points elsewhere", () => {
     delete process.env.RAWJOBS_DATA;
-    delete process.env.JOBHUNTER_DATA;
     const home = join(tmpdir(), "rj-home");
     expect(defaultDataDir(home)).toBe(resolve(home, "data"));
     process.env.RAWJOBS_DATA = "out";

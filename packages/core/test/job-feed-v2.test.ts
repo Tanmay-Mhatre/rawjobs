@@ -31,7 +31,7 @@ const tmp = () => {
 afterEach(() => {
   for (const d of dirs) rmSync(d, { recursive: true, force: true });
   dirs = [];
-  delete process.env.JOBHUNTER_JOBS_URL;
+  delete process.env.RAWJOBS_JOBS_URL;
 });
 
 const row = (id: string, title: string, location = "Dubai"): FeedRow => [id, title, location, "onsite", null];
@@ -205,7 +205,7 @@ describe("the build", () => {
 
 describe("the app", () => {
   it("takes the full copy once, then only change files, and its copy matches the build's", async () => {
-    process.env.JOBHUNTER_JOBS_URL = "https://feed.example/jobs";
+    process.env.RAWJOBS_JOBS_URL = "https://feed.example/jobs";
     const rel = feedRelease();
     const app = tmp();
     await rel.publish(RUN1, run(1));
@@ -220,7 +220,7 @@ describe("the app", () => {
   });
 
   it("refuses a feed with a lower number than its copy, and takes a newer one", async () => {
-    process.env.JOBHUNTER_JOBS_URL = "https://feed.example/jobs";
+    process.env.RAWJOBS_JOBS_URL = "https://feed.example/jobs";
     const rel = feedRelease();
     const app = tmp();
     await rel.publish(RUN1, run(1));
@@ -239,7 +239,7 @@ describe("the app", () => {
   });
 
   it("takes a feed that started counting again when it is newer (its builder lost the last copy)", async () => {
-    process.env.JOBHUNTER_JOBS_URL = "https://feed.example/jobs";
+    process.env.RAWJOBS_JOBS_URL = "https://feed.example/jobs";
     const rel = feedRelease();
     const app = tmp();
     await rel.publish(RUN1, run(1));
@@ -255,7 +255,7 @@ describe("the app", () => {
   });
 
   it("falls back to the full copy when a change file is missing or wrong", async () => {
-    process.env.JOBHUNTER_JOBS_URL = "https://feed.example/jobs";
+    process.env.RAWJOBS_JOBS_URL = "https://feed.example/jobs";
     const rel = feedRelease();
     const app = tmp();
     await rel.publish(RUN1, run(1));
@@ -268,7 +268,7 @@ describe("the app", () => {
   });
 
   it("a change file that didn't arrive is tried again next time, not swapped for the full copy", async () => {
-    process.env.JOBHUNTER_JOBS_URL = "https://feed.example/jobs";
+    process.env.RAWJOBS_JOBS_URL = "https://feed.example/jobs";
     const rel = feedRelease();
     const app = tmp();
     await rel.publish(RUN1, run(1));
@@ -286,7 +286,7 @@ describe("the app", () => {
   });
 
   it("matching remembers its answer and rechecks only companies whose jobs changed", async () => {
-    process.env.JOBHUNTER_JOBS_URL = "https://feed.example/jobs";
+    process.env.RAWJOBS_JOBS_URL = "https://feed.example/jobs";
     const rel = feedRelease();
     const app = tmp();
     const at = (n: number) => Date.parse(run(n));
@@ -310,7 +310,7 @@ describe("the app", () => {
   });
 
   it("takes the full copy again once change files have grown its dictionary a lot", async () => {
-    process.env.JOBHUNTER_JOBS_URL = "https://feed.example/jobs";
+    process.env.RAWJOBS_JOBS_URL = "https://feed.example/jobs";
     const rel = feedRelease();
     const app = tmp();
     await rel.publish(RUN1, run(1));
@@ -324,7 +324,7 @@ describe("the app", () => {
   });
 
   it("uses where a vague location really is, and fetches capped boards live", async () => {
-    process.env.JOBHUNTER_JOBS_URL = "https://feed.example/jobs";
+    process.env.RAWJOBS_JOBS_URL = "https://feed.example/jobs";
     const rel = feedRelease();
     const app = tmp();
     await rel.publish(
@@ -344,7 +344,7 @@ describe("the app", () => {
   });
 
   it("an app whose profile changed checks everything again", async () => {
-    process.env.JOBHUNTER_JOBS_URL = "https://feed.example/jobs";
+    process.env.RAWJOBS_JOBS_URL = "https://feed.example/jobs";
     const rel = feedRelease();
     const app = tmp();
     await rel.publish(RUN1, run(1));
@@ -357,7 +357,7 @@ describe("the app", () => {
 
 describe("hiring activity", () => {
   it("downloads the activity file the signed manifest lists, once, and keeps it when a day has none", async () => {
-    process.env.JOBHUNTER_JOBS_URL = "https://feed.example/jobs";
+    process.env.RAWJOBS_JOBS_URL = "https://feed.example/jobs";
     const rel = feedRelease();
     const app = tmp();
     const publish = async (companies: Parameters<typeof rel.publish>[0], at: string, activity = true) => {
@@ -391,7 +391,7 @@ describe("hiring activity", () => {
   });
 
   it("refuses an activity file that doesn't match the manifest", async () => {
-    process.env.JOBHUNTER_JOBS_URL = "https://feed.example/jobs";
+    process.env.RAWJOBS_JOBS_URL = "https://feed.example/jobs";
     const rel = feedRelease();
     const app = tmp();
     await rel.publish(RUN1, run(1));
@@ -405,7 +405,7 @@ describe("hiring activity", () => {
 
 describe("old feeds", () => {
   it("an app still reads a feed that only has the first format", async () => {
-    process.env.JOBHUNTER_JOBS_URL = "https://feed.example/jobs";
+    process.env.RAWJOBS_JOBS_URL = "https://feed.example/jobs";
     const app = tmp();
     const fetchImpl = (async () => new Response("", { status: 404 })) as unknown as typeof fetch;
     expect((await syncJobFeed(app, { fetchImpl })).message).toMatch(/unavailable/);

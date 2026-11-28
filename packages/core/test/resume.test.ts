@@ -67,8 +67,8 @@ describe("parseAiAnswer", () => {
     expect(r.warnings).toEqual([]);
   });
 
-  it("reads a bare (unfenced) JSON block, also under the key from before the rename", () => {
-    const bare = `${RESUME}\n\n{"jobhunter_profile": {"target_titles": ["product lead"], "keywords": ["payments", "crypto"]}}`;
+  it("reads a bare (unfenced) JSON block", () => {
+    const bare = `${RESUME}\n\n{"rawjobs_profile": {"target_titles": ["product lead"], "keywords": ["payments", "crypto"]}}`;
     const r = parseAiAnswer(bare);
     expect(r.profile?.target_titles).toEqual(["product lead"]);
     expect(r.profile?.keywords).toEqual({ payments: 3, crypto: 3 });

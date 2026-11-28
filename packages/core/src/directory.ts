@@ -12,8 +12,7 @@ import { ATS_TYPES } from "./schema";
 /**
  * The shared company directory lives online (built weekly from public lists plus what users add)
  * and every install keeps a copy in data/catalog. These defaults point at the project's own
- * directory and inbox; set RAWJOBS_DIRECTORY_URL / RAWJOBS_CONTRIBUTE_URL to use your own
- * (the older JOBHUNTER_ names still work).
+ * directory and inbox; set RAWJOBS_DIRECTORY_URL / RAWJOBS_CONTRIBUTE_URL to use your own.
  */
 export const DEFAULT_DIRECTORY_URL = "https://github.com/Tanmay-Mhatre/rawjobs-directory/releases/latest/download";
 /** The contribution inbox (services/contribute); empty turns sharing off. */
