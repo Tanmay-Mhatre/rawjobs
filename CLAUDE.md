@@ -154,6 +154,9 @@ until they approve the `sign` job.
 5. Tell the user the version, the run link and what it ships. The `sign` job waits in Actions until
    they approve the `release` environment. Never approve a deployment yourself.
 6. After they approve, check that the release published and its jobs passed.
+7. Open a pull request that sets the source version to the new release, `pnpm release:bump 0.6.1`
+   (all package.json files; the release note is `none`), and queue it. A checkout then reports the
+   version it's on in Settings → About, `/api/health` and the User-Agent.
 
 Write a "Release note" section in every PR you open (`New:` / `Improved:` / `Fixed:` lines, or
 `none`): it becomes the app's "What's new".

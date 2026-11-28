@@ -36,12 +36,30 @@ function localApi(): Plugin {
   };
 }
 
+/**
+ * Build only: writes third-party-modules.json, every node_modules file the build put in, so the bundle
+ * can ship their licenses (scripts/bundle/notices.ts). scripts/bundle/build.ts reads it and drops it.
+ */
+function thirdPartyModules(): Plugin {
+  return {
+    name: "rawjobs-third-party-modules",
+    apply: "build",
+    generateBundle(_options, bundle) {
+      const ids = new Set<string>();
+      for (const chunk of Object.values(bundle)) {
+        if (chunk.type === "chunk") for (const id of chunk.moduleIds) if (id.includes("/node_modules/")) ids.add(id);
+      }
+      this.emitFile({ type: "asset", fileName: "third-party-modules.json", source: JSON.stringify([...ids].sort()) });
+    },
+  };
+}
+
 export default defineConfig(({ command }) => ({
   base: "./",
   // The dev server serves your run output at the site root. A build never copies it: the built
   // dashboard is shipped to other people, and the server serves data/ live next to it.
   publicDir: command === "serve" ? dataDir : false,
-  plugins: [react(), tailwindcss(), localApi()],
+  plugins: [react(), tailwindcss(), localApi(), thirdPartyModules()],
   // open: false, so `pnpm dev` never opens a browser tab by itself. Test runs start it on other
   // ports, and a stray tab in your browser can clash with the installed app. Open the URL yourself.
   server: { port: 5173, host: "127.0.0.1", open: false },
