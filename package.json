@@ -1,6 +1,6 @@
 {
   "name": "rawjobs",
-  "version": "0.6.0",
+  "version": "0.7.18",
   "private": true,
   "description": "Self-hosted job radar: scans company careers pages, scores openings against your profile, alerts you on new matches. Built by Tanmay Mhatre.",
   "author": "Tanmay Mhatre",
@@ -18,9 +18,10 @@
     "bundle": "tsx scripts/bundle/build.ts",
     "release:files": "tsx scripts/release/manifest.ts",
     "release:notes": "tsx scripts/release/notes.ts",
+    "release:bump": "tsx scripts/release/bump.ts",
     "site:build": "node apps/site/build.mjs",
     "site:og": "tsx scripts/site/og.ts",
-    "site:dev": "node apps/site/build.mjs && npx wrangler@4.151.1 dev --config apps/site/wrangler.toml",
+    "site:dev": "node apps/site/build.mjs && wrangler dev --config apps/site/wrangler.toml",
     "rawjobs": "tsx packages/cli/src/index.ts",
     "hooks:install": "git config core.hooksPath scripts/hooks",
     "test": "vitest run",
@@ -64,6 +65,7 @@
     "tsx": "^4.20.0",
     "typescript": "^7.0.2",
     "vitest": "^5.1.1",
+    "wrangler": "4.166.0",
     "yaml": "^2.9.1"
   }
 }

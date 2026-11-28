@@ -413,7 +413,7 @@ its User-Agent. It's off until the key is set: without it nothing changes.
 2. Add it to the repo's `data-repo` environment:
    `gh secret set WEB_BOT_AUTH_KEY --env data-repo < ~/rawjobs-web-bot-auth.pem`.
 3. Add it to the site's Worker: `cd apps/site`, then
-   `npx wrangler@4.151.1 secret put WEB_BOT_AUTH_KEY < ~/rawjobs-web-bot-auth.pem`. Then deploy the
+   `pnpm exec wrangler secret put WEB_BOT_AUTH_KEY < ~/rawjobs-web-bot-auth.pem`. Then deploy the
    site (push to `main`, or run **Site** from the Actions tab).
 4. Check: `pnpm feed:bot-auth check ~/rawjobs-web-bot-auth.pem`. Cloudflare's test endpoint
    (`crawltest.com/cdn-cgi/web-bot-auth`) answers 401 for a well-formed signature from a key it doesn't
@@ -467,9 +467,9 @@ the contributions workflow (`17 */3 * * *`) got about 110 of its about 238 slots
    access *Only select repositories*, `Tanmay-Mhatre/rawjobs`; permission *Actions: read and write*,
    nothing else. Note its expiry date: when it expires, the dispatches fail with HTTP 401 and the
    "Scheduler: no runs started" issue is what tells you. GitHub's own crons keep running meanwhile.
-2. `cd services/scheduler`, then `npx wrangler@4.151.1 secret put GITHUB_TOKEN` (paste the token) and
-   `npx wrangler@4.151.1 deploy`.
-3. Delete the old feed-only Worker it replaces: `npx wrangler@4.151.1 delete --name rawjobs-feed-trigger`
+2. `cd services/scheduler`, then `pnpm exec wrangler secret put GITHUB_TOKEN` (paste the token) and
+   `pnpm exec wrangler deploy`.
+3. Delete the old feed-only Worker it replaces: `pnpm exec wrangler delete --name rawjobs-feed-trigger`
    (then the `services/feed-trigger` folder can go too). Running both for a while is harmless: the
    feed's guard skips the second run of a slot.
 

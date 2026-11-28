@@ -1,7 +1,7 @@
 import { existsSync, readFileSync, renameSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { parse as parseYaml } from "yaml";
-import { z } from "zod";
+import * as z from "zod";
 import { CONFIG_CANDIDATES } from "./config";
 import { careersUrl, companyKey, detectCompany, getConnector, guessName, type DetectResult } from "./connectors";
 import { isPhenomSite } from "./connectors/phenom";
