@@ -68,6 +68,36 @@ jobs:
       - run: pnpm test
         timeout-minutes: 5
 
+  # The tests on Windows, the OS most users run: real file locks, paths, tar.exe and PowerShell.
+  # The web tests run in happy-dom and don't depend on the OS, so they stay on Linux. A pull request
+  # runs the tests its changes can reach (a change to package.json, the lockfile or the vitest
+  # config runs them all); a push to main runs every one. A job of its own, so it can be required.
+  test-windows:
+    runs-on: windows-2025
+    timeout-minutes: 20
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          # A pull request checks out GitHub's merge commit: its first parent is the base branch.
+          fetch-depth: 2
+      - uses: pnpm/action-setup@73e46992e05b19abd31f2f3c20e0e7370d762115 # v6.1.1
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Tests (the ones this pull request can reach)
+        if: github.event_name == 'pull_request'
+        run: pnpm vitest run --changed HEAD^1 --passWithNoTests packages services scripts
+        timeout-minutes: 15
+      - name: Tests (all of them)
+        if: github.event_name != 'pull_request'
+        run: pnpm vitest run packages services scripts
+        timeout-minutes: 15
+
   # Release files like a real release's, signed with a key made for this run (the real one stays
   # with releases), for the install test below. On a push to main its steps are skipped and the job
   # still succeeds: the same tree was tested on its pull request, and a release reruns the install test.
