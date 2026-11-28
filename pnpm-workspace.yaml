@@ -3,6 +3,12 @@ packages:
   - "apps/*"
   - "services/contribute"
 
+# The Node types follow the Node that installed copies run (the bundled runtime, 24), for every
+# package, so no tool pulls in newer ones. They move together with the @types/node rule in
+# .github/dependabot.yml and the bundled runtime (scripts/release/manifest.ts).
+overrides:
+  "@types/node": "^24.19.2"
+
 onlyBuiltDependencies:
   - esbuild
   - workerd

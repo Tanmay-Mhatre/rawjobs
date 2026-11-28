@@ -1,6 +1,6 @@
 import type { EmploymentType } from "./catalog/employment";
 import type { VisaInfo } from "./catalog/visa";
-import { z } from "zod";
+import * as z from "zod";
 
 export const ATS_TYPES = [
   "greenhouse",

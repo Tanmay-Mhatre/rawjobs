@@ -1,7 +1,7 @@
 import { existsSync, readFileSync } from "node:fs";
 import { basename, resolve } from "node:path";
 import { parse as parseYaml } from "yaml";
-import { z } from "zod";
+import * as z from "zod";
 import { ConfigSchema, type Config } from "./schema";
 import { rawjobsHome } from "./paths";
 
