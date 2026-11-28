@@ -22,9 +22,9 @@ queue_rules:
       - check-success = install / install (ubuntu-24.04)
       - check-success = install / install (macos-15)
       - check-success = install / install (windows-2025)
-      # Also required here, though not (yet) by branch protection: the tests on Windows, the
-      # accessibility pass over every screen, and the end-to-end smoke test. Each passes at once,
-      # with a "Skipped" step, on a pull request that changes nothing it covers.
+      # Also required here, though not (yet) by branch protection: the tests on Windows (only the
+      # ones a pull request can reach), the accessibility pass over every screen and the end-to-end
+      # smoke test (both pass at once, with a "Skipped" step, when nothing they cover changed).
       - check-success = test-windows
       - check-success = a11y
       - check-success = e2e
