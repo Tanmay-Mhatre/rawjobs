@@ -1,6 +1,6 @@
 {
   "name": "@rawjobs/server",
-  "version": "0.7.18",
+  "version": "0.7.19",
   "private": true,
   "type": "module",
   "description": "The local server behind the dashboard: the /api routes and the built web app, on 127.0.0.1.",
