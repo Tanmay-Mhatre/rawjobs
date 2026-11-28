@@ -10,5 +10,24 @@ export default defineConfig({
     testTimeout: process.platform === "win32" ? 60_000 : 20_000,
     setupFiles: ["test/no-network.ts"],
     include: ["packages/*/test/**/*.test.ts", "apps/web/test/**/*.test.{ts,tsx}", "services/*/test/**/*.test.ts", "scripts/**/*.test.ts"],
+    // `pnpm test:coverage`, or RAWJOBS_COVERAGE=1 (CI's check job). Only the code that ships counts.
+    coverage: {
+      enabled: process.env.RAWJOBS_COVERAGE === "1",
+      provider: "v8",
+      include: ["packages/*/src/**", "apps/web/src/**", "services/*/src/**"],
+      exclude: ["**/*.d.ts", "**/*.md"],
+      reporter: ["text-summary", "json-summary"],
+      reportOnFailure: true,
+      // Floors, not goals: just under the numbers when they were set. A pull request that adds tests
+      // raises them (pnpm test:coverage --coverage.thresholds.autoUpdate); none lowers them.
+      thresholds: {
+        lines: 82,
+        branches: 71,
+        "packages/core/src/**": { lines: 94, branches: 80 },
+        "packages/server/src/**": { lines: 69, branches: 61 },
+        "packages/cli/src/**": { lines: 11, branches: 9 },
+        "apps/web/src/**": { lines: 76, branches: 66 },
+      },
+    },
   },
 });
