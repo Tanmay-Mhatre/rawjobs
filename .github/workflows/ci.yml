@@ -68,6 +68,80 @@ jobs:
       - run: pnpm test
         timeout-minutes: 5
 
+  # Every dashboard screen in light and dark, at desktop and phone width, through axe (WCAG 2.1 AA and
+  # best practices) in the runner's Edge, on demo data. Fails on a screen that breaks or any
+  # violation; the screenshots and axe-report.md are kept as an artifact. A pull request that changes
+  # nothing the dashboard is built from passes at once, so the check can be required.
+  a11y:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          # A pull request checks out GitHub's merge commit: its first parent is the base branch.
+          fetch-depth: 2
+      - name: Does this change the dashboard?
+        id: changed
+        run: |
+          if [ "$GITHUB_EVENT_NAME" != pull_request ] || git diff --name-only HEAD^1 HEAD | grep -qE '^(apps/web/|design/|scripts/design/|package\.json$|pnpm-lock\.yaml$|\.github/workflows/ci\.yml$)'; then
+            echo "run=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "Skipped: this pull request changes nothing the dashboard is built from."
+          fi
+      - uses: pnpm/action-setup@73e46992e05b19abd31f2f3c20e0e7370d762115 # v6.1.1
+        if: steps.changed.outputs.run == 'true'
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        if: steps.changed.outputs.run == 'true'
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+        if: steps.changed.outputs.run == 'true'
+      - run: pnpm design:shots --axe --out "$RUNNER_TEMP/shots"
+        if: steps.changed.outputs.run == 'true'
+        timeout-minutes: 20
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        if: ${{ !cancelled() && steps.changed.outputs.run == 'true' }}
+        with:
+          name: shots
+          path: ${{ runner.temp }}/shots
+          if-no-files-found: ignore
+          retention-days: 7
+
+  # End-to-end smoke test: the real server on a seeded RawJobs folder, driven in the runner's Edge
+  # (scripts/e2e/smoke.ts): first-run setup, Radar, saving a job to Pipeline and to disk, Companies,
+  # the version. A pull request that changes none of the app's code passes at once.
+  e2e:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          # A pull request checks out GitHub's merge commit: its first parent is the base branch.
+          fetch-depth: 2
+      - name: Does this change the app?
+        id: changed
+        run: |
+          if [ "$GITHUB_EVENT_NAME" != pull_request ] || git diff --name-only HEAD^1 HEAD | grep -qE '^(apps/web/|packages/|design/|scripts/e2e/|scripts/design/demo-data\.ts$|package\.json$|pnpm-lock\.yaml$|\.github/workflows/ci\.yml$)'; then
+            echo "run=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "Skipped: this pull request changes none of the app's code."
+          fi
+      - uses: pnpm/action-setup@73e46992e05b19abd31f2f3c20e0e7370d762115 # v6.1.1
+        if: steps.changed.outputs.run == 'true'
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        if: steps.changed.outputs.run == 'true'
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+        if: steps.changed.outputs.run == 'true'
+      - run: pnpm build
+        if: steps.changed.outputs.run == 'true'
+      - run: pnpm e2e:smoke
+        if: steps.changed.outputs.run == 'true'
+        timeout-minutes: 5
+
   # Release files like a real release's, signed with a key made for this run (the real one stays
   # with releases), for the install test below. On a push to main its steps are skipped and the job
   # still succeeds: the same tree was tested on its pull request, and a release reruns the install test.
