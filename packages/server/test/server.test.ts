@@ -694,13 +694,19 @@ console.log(JSON.stringify({ type: "done", scope: args[args.indexOf("--scope") +
 
   it("asks a running scan to stop, or to send its message, through files the scan checks", async () => {
     const { api, port, dataDir } = await start();
-    const run = call(port, "POST", "/api/run", "{}");
-    await until(() => api.scanning());
-    expect(JSON.parse((await call(port, "POST", "/api/run/notify")).text)).toEqual({ ok: true });
-    expect(existsSync(join(dataDir, "scan-notify"))).toBe(true);
-    expect(JSON.parse((await call(port, "POST", "/api/run/stop")).text)).toEqual({ ok: true });
-    expect(existsSync(join(dataDir, "scan-stop"))).toBe(true);
-    await run;
+    // The slow fake scan (about 6 s): the quick one (0.3 s) could end before the requests below on
+    // a busy Windows runner, and a scan that has ended answers { ok: false }.
+    process.env.FAKE_SCAN_SLOW = "1";
+    try {
+      await call(port, "POST", "/api/run", "{}", (abort) => abort());
+      await until(() => api.scanning());
+      expect(JSON.parse((await call(port, "POST", "/api/run/notify")).text)).toEqual({ ok: true });
+      expect(existsSync(join(dataDir, "scan-notify"))).toBe(true);
+      expect(JSON.parse((await call(port, "POST", "/api/run/stop")).text)).toEqual({ ok: true });
+      expect(existsSync(join(dataDir, "scan-stop"))).toBe(true);
+    } finally {
+      delete process.env.FAKE_SCAN_SLOW;
+    }
   });
 
   it("starts nothing new while RawJobs is updating", async () => {
