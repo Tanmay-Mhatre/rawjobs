@@ -34,8 +34,18 @@ jobs:
           git show FETCH_HEAD:pnpm-lock.yaml > "$RUNNER_TEMP/base-lock.yaml"
           pnpm exec tsx scripts/ci/lockfile-age.ts "$RUNNER_TEMP/base-lock.yaml" pnpm-lock.yaml
       # Design tokens, design lint, typecheck and tests: the same gate as a release and the pre-push hook.
+      # Here the tests also measure coverage and fail below the floors in vitest.config.ts.
       - run: pnpm check
         timeout-minutes: 5
+        env:
+          RAWJOBS_COVERAGE: "1"
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        if: ${{ !cancelled() }}
+        with:
+          name: coverage
+          path: coverage/coverage-summary.json
+          if-no-files-found: ignore
+          retention-days: 7
       - name: Example config is valid
         run: pnpm rawjobs validate --config rawjobs.config.example.yaml
       - name: The bundle runs through its launcher (an installed copy, without pnpm or tsx)
