@@ -14,6 +14,14 @@ export const NODE_KEYRING = {
 
 export type SumsCheck = "ok" | "no-gpgv" | "not-signed" | "mismatch" | "bad-keyring";
 
+/** The hash lines, without the line-end and trailing-space differences a clearsigned copy can have. */
+const lines = (text: string) =>
+  text
+    .split(/\r?\n/)
+    .map((l) => l.trimEnd())
+    .filter(Boolean)
+    .join("\n");
+
 type Run = (args: string[], input: string, cwd: string) => { status: number | null; stdout: string; missing: boolean };
 
 const gpgv: Run = (args, input, cwd) => {
@@ -22,15 +30,15 @@ const gpgv: Run = (args, input, cwd) => {
 };
 
 /**
- * Whether `sums` (SHASUMS256.txt) is exactly what `asc` (SHASUMS256.txt.asc, clearsigned) says, signed
+ * Whether `sums` (SHASUMS256.txt) has the same lines as `asc` (SHASUMS256.txt.asc, clearsigned), signed
  * by one of the keys in `keyring` — the check from https://github.com/nodejs/node#verifying-binaries.
  * `keyringFile` is where `keyring` was written; gpgv reads it from there.
  */
 export function checkNodeSums(o: { sums: string; asc: string; keyring: Buffer; keyringFile: string; run?: Run; keyringSha256?: string }): SumsCheck {
   if (createHash("sha256").update(o.keyring).digest("hex") !== (o.keyringSha256 ?? NODE_KEYRING.sha256)) return "bad-keyring";
-  // Relative, from the keyring's folder: gpgv reads "C:..." as a URL ("invalid key resource URL").
+  // Relative, from the keyring's folder: gpgv reads "C:\..." as a URL ("invalid key resource URL").
   const r = (o.run ?? gpgv)(["--keyring", `./${basename(o.keyringFile)}`, "--output", "-"], o.asc, dirname(o.keyringFile));
   if (r.missing) return "no-gpgv";
   if (r.status !== 0) return "not-signed";
-  return r.stdout === o.sums ? "ok" : "mismatch";
+  return lines(r.stdout) === lines(o.sums) ? "ok" : "mismatch";
 }

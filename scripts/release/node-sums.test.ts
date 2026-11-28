@@ -14,6 +14,8 @@ const base = { sums, asc: "-----BEGIN PGP SIGNED MESSAGE-----", keyring, keyring
 describe("checkNodeSums", () => {
   it("passes sums that gpgv verifies and that match the signed text", () => {
     expect(checkNodeSums({ ...base, run: gpgv(0, sums) })).toBe("ok");
+    // gpgv on Linux can hand back the signed text with other line ends or without the last newline.
+    expect(checkNodeSums({ ...base, run: gpgv(0, `${sums.trimEnd().replace("\n", "\r\n")}  `) })).toBe("ok");
   });
 
   it("names each failure", () => {
