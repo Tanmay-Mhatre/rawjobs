@@ -15,7 +15,6 @@ import {
   loadConfig,
   type Command,
   fileStamp,
-  LEGACY_CONFIG_CANDIDATES,
   pruneCache,
   queueMove,
   scanLockHeld,
@@ -337,7 +336,7 @@ Stopped after ${Math.round(timeoutMs / 1000)} s without finishing.`.trim(),
    */
   let configPart: { stamp: string; part: string } | undefined;
   function configKey(): string {
-    const files = [...CONFIG_CANDIDATES, ...LEGACY_CONFIG_CANDIDATES].map((f) => resolve(home, f));
+    const files = CONFIG_CANDIDATES.map((f) => resolve(home, f));
     const stamp = files.map(fileStamp).join(":");
     if (configPart?.stamp !== stamp) {
       let part = stamp;

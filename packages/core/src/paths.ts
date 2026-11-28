@@ -11,5 +11,5 @@ export function rawjobsHome(): string {
 
 /** The run output folder: RAWJOBS_DATA (relative to your RawJobs folder), else data/ in it. */
 export function defaultDataDir(home = rawjobsHome()): string {
-  return resolve(home, process.env.RAWJOBS_DATA || process.env.JOBHUNTER_DATA || "data");
+  return resolve(home, process.env.RAWJOBS_DATA || "data");
 }

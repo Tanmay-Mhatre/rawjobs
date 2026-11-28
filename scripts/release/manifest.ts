@@ -1,9 +1,11 @@
 import { spawnSync } from "node:child_process";
 import { createHash, createPrivateKey, sign } from "node:crypto";
-import { copyFileSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { parseArgs } from "node:util";
 import { NODE_PLATFORMS, nodeArchive, parseReleaseNotes, verifyRelease, type ReleaseManifest } from "@rawjobs/core/release";
+import { checkNodeSums, NODE_KEYRING } from "./node-sums";
 
 /**
  * Turn a built bundle (pnpm bundle) into the files a release publishes, in dist/release/:
@@ -15,7 +17,10 @@ import { NODE_PLATFORMS, nodeArchive, parseReleaseNotes, verifyRelease, type Rel
  * against another key than the release key (tests sign with a throwaway one). --unsigned leaves
  * latest.json.sig out: the release workflow signs in a job of its own, with no dependencies
  * installed (scripts/catalog/sign.mjs), so no package can reach the key.
- * Without --node it uses the newest Node 24 LTS on nodejs.org.
+ * Without --node it uses the newest Node 24 LTS on nodejs.org. Its SHASUMS256.txt (the hashes that
+ * latest.json pins) must carry a Node releaser's signature (scripts/release/node-sums.ts); without
+ * gpgv on the computer that check is skipped with a warning, unless RAWJOBS_REQUIRE_NODE_SIG=1
+ * (the release workflow).
  * The notes (the tag's message) can carry "Update: mandatory" and "Min-version: x.y.z" lines: they
  * set --critical and --min-version and are left out of the notes (parseReleaseNotes).
  */
@@ -56,6 +61,7 @@ if (tar.status !== 0) fail("tar failed.");
 
 const nodeVersion = values.node ?? (await newestNode24());
 const sums = await text(`https://nodejs.org/dist/${nodeVersion}/SHASUMS256.txt`);
+await checkSums(nodeVersion, sums);
 const nodeSha256: Record<string, string> = {};
 for (const platform of Object.keys(NODE_PLATFORMS)) {
   const file = nodeArchive(nodeVersion, platform);
@@ -98,6 +104,31 @@ async function newestNode24(): Promise<string> {
   const v = list.find((r) => r.version.startsWith("v24.") && r.lts);
   if (!v) fail("No Node 24 LTS on nodejs.org.");
   return v.version;
+}
+
+/** Stop unless nodejs.org's SHASUMS256.txt is signed by a Node releaser (see NODE_KEYRING). */
+async function checkSums(nodeVersion: string, sums: string) {
+  const asc = await text(`https://nodejs.org/dist/${nodeVersion}/SHASUMS256.txt.asc`);
+  const res = await fetch(NODE_KEYRING.url);
+  if (!res.ok) fail(`${NODE_KEYRING.url}: HTTP ${res.status}`);
+  const keyring = Buffer.from(await res.arrayBuffer());
+  const dir = mkdtempSync(join(tmpdir(), "rawjobs-node-keys-"));
+  const keyringFile = join(dir, "pubring.kbx");
+  writeFileSync(keyringFile, keyring);
+  const result = checkNodeSums({ sums, asc, keyring, keyringFile });
+  rmSync(dir, { recursive: true, force: true });
+  if (result === "ok") return;
+  if (result === "no-gpgv" && process.env.RAWJOBS_REQUIRE_NODE_SIG !== "1") {
+    console.warn(`Warning: no gpgv on this computer, so Node ${nodeVersion}'s SHASUMS256.txt signature wasn't checked.`);
+    return;
+  }
+  const why = {
+    "no-gpgv": "gpgv isn't installed, and RAWJOBS_REQUIRE_NODE_SIG=1 needs it",
+    "bad-keyring": "the Node release keys file doesn't match its pinned sha256 (NODE_KEYRING in scripts/release/node-sums.ts)",
+    "not-signed": "it isn't signed by any of Node's active release keys (a new releaser? update NODE_KEYRING in scripts/release/node-sums.ts)",
+    mismatch: "SHASUMS256.txt differs from the signed SHASUMS256.txt.asc",
+  }[result];
+  fail(`Node ${nodeVersion}'s SHASUMS256.txt failed its signature check: ${why}.`);
 }
 
 async function text(url: string): Promise<string> {

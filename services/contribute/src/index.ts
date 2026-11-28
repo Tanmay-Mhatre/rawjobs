@@ -151,8 +151,8 @@ const SHARD: Record<string, RegExp> = {
 };
 /** Systems that need `site` (the rest may carry one). */
 const NEEDS_SITE = new Set(["workday", "taleo", "comeet", "ukg", "dayforce", "adp"]);
-/** The app's name and, optionally, its version ("rawjobs", "rawjobs/0.1.0"; apps from before the rename send "job-hunter"). Anything else is dropped. */
-const CLIENT = /^(rawjobs|job-hunter)(\/\d{1,3}\.\d{1,3}\.\d{1,4})?$/;
+/** The app's name and, optionally, its version ("rawjobs", "rawjobs/0.1.0"). Anything else is dropped. */
+const CLIENT = /^(rawjobs)(\/\d{1,3}\.\d{1,3}\.\d{1,4})?$/;
 const MAX_BODY = 20_000;
 const MAX_BOARDS = 25;
 const KEEP_DAYS = 30;

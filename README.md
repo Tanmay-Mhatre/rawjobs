@@ -304,7 +304,7 @@ design/             brand book, component specs and screenshots
 docs/               install, hiring systems, shared directory, self-hosting, plans
 ```
 
-Connector tests use saved feed responses in `packages/core/test/fixtures`, so tests never hit live sites. `pnpm jobhunter` still works as an alias of `pnpm rawjobs`, and old `jobhunter.config*.yaml` files are still read.
+Connector tests use saved feed responses in `packages/core/test/fixtures`, so tests never hit live sites.
 
 ## Roadmap
 

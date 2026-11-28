@@ -812,8 +812,7 @@ function entryFrom(v: unknown, id: string, now: Date): Entry | undefined {
 
 export async function readStateFile(file: File, now = new Date()): Promise<{ state: UserState; prefs?: Partial<Prefs>; skipped: number }> {
   const parsed = JSON.parse(await file.text()) as { app?: string; state?: unknown; prefs?: Partial<Prefs> };
-  // Exports made before the rename to RawJobs say "job-hunter".
-  if ((parsed.app !== "rawjobs" && parsed.app !== "job-hunter") || !parsed.state || typeof parsed.state !== "object") {
+  if (parsed.app !== "rawjobs" || !parsed.state || typeof parsed.state !== "object") {
     throw new Error("That file isn't a RawJobs export.");
   }
   const state: UserState = {};

@@ -34,8 +34,18 @@ jobs:
           git show FETCH_HEAD:pnpm-lock.yaml > "$RUNNER_TEMP/base-lock.yaml"
           pnpm exec tsx scripts/ci/lockfile-age.ts "$RUNNER_TEMP/base-lock.yaml" pnpm-lock.yaml
       # Design tokens, design lint, typecheck and tests: the same gate as a release and the pre-push hook.
+      # Here the tests also measure coverage and fail below the floors in vitest.config.ts.
       - run: pnpm check
         timeout-minutes: 5
+        env:
+          RAWJOBS_COVERAGE: "1"
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        if: ${{ !cancelled() }}
+        with:
+          name: coverage
+          path: coverage/coverage-summary.json
+          if-no-files-found: ignore
+          retention-days: 7
       - name: Example config is valid
         run: pnpm rawjobs validate --config rawjobs.config.example.yaml
       - name: The bundle runs through its launcher (an installed copy, without pnpm or tsx)
@@ -67,6 +77,36 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: pnpm test
         timeout-minutes: 5
+
+  # The tests on Windows, the OS most users run: real file locks, paths, tar.exe and PowerShell.
+  # The web tests run in happy-dom and don't depend on the OS, so they stay on Linux. A pull request
+  # runs the tests its changes can reach (a change to package.json, the lockfile or the vitest
+  # config runs them all); a push to main runs every one. A job of its own, so it can be required.
+  test-windows:
+    runs-on: windows-2025
+    timeout-minutes: 20
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          # A pull request checks out GitHub's merge commit: its first parent is the base branch.
+          fetch-depth: 2
+      - uses: pnpm/action-setup@73e46992e05b19abd31f2f3c20e0e7370d762115 # v6.1.1
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Tests (the ones this pull request can reach)
+        if: github.event_name == 'pull_request'
+        run: pnpm vitest run --changed HEAD^1 --passWithNoTests packages services scripts
+        timeout-minutes: 15
+      - name: Tests (all of them)
+        if: github.event_name != 'pull_request'
+        run: pnpm vitest run packages services scripts
+        timeout-minutes: 15
 
   # Every dashboard screen in light and dark, at desktop and phone width, through axe (WCAG 2.1 AA and
   # best practices) in the runner's Edge, on demo data. Fails on a screen that breaks or any
