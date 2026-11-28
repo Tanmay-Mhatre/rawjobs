@@ -25,7 +25,7 @@ export default defineConfig({
         branches: 72,
         "packages/core/src/**": { lines: 94, branches: 80 },
         "packages/server/src/**": { lines: 76, branches: 68 },
-        "packages/cli/src/**": { lines: 11, branches: 9 },
+        "packages/cli/src/**": { lines: 27, branches: 20 },
         "apps/web/src/**": { lines: 77, branches: 67 },
       },
     },
