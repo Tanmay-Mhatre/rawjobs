@@ -32,3 +32,14 @@ describe("runtime (from the sources)", () => {
     expect(cmd.slice(0, 4)).toEqual([resolve(launcher), "scan", "--scope", "mine"]);
   });
 });
+
+describe("this copy's version", () => {
+  it("is package.json's, and the User-Agent sends the same one", async () => {
+    const { readFileSync } = await import("node:fs");
+    const { APP_VERSION } = await import("../src/runtime");
+    const { defaultUserAgent } = await import("../src/http");
+    const pkg = JSON.parse(readFileSync(new URL("../../../package.json", import.meta.url), "utf8")) as { version: string };
+    expect(APP_VERSION).toBe(pkg.version);
+    expect(defaultUserAgent().startsWith(`RawJobs/${APP_VERSION} `)).toBe(true);
+  });
+});

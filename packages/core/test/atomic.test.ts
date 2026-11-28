@@ -129,3 +129,44 @@ describe("renameWithRetry", () => {
     expect(rename).toHaveBeenCalledTimes(1);
   });
 });
+
+// Real Windows file locks: another program (an antivirus, the search indexer, an editor) opens the
+// file without sharing delete, and Windows refuses to replace it until that program lets go.
+describe.runIf(process.platform === "win32")("writeFileAtomic against a real Windows lock", () => {
+  /** Hold `file` open in another process (no FILE_SHARE_DELETE) for `ms`. Resolves once it's open. */
+  async function holdOpen(file: string, ms: number): Promise<{ released: Promise<void> }> {
+    const { spawn } = await import("node:child_process");
+    const script = `$f = [System.IO.File]::Open('${file.replace(/'/g, "''")}', 'Open', 'Read', 'Read'); 'open'; Start-Sleep -Milliseconds ${ms}; $f.Close()`;
+    const child = spawn("powershell.exe", ["-NoProfile", "-NonInteractive", "-Command", script], { stdio: ["ignore", "pipe", "inherit"] });
+    const released = new Promise<void>((resolve) => child.on("exit", () => resolve()));
+    await new Promise<void>((resolve, reject) => {
+      child.stdout.on("data", (chunk: Buffer) => {
+        if (chunk.toString().includes("open")) resolve();
+      });
+      child.on("exit", () => reject(new Error("the lock holder exited before opening the file")));
+    });
+    return { released };
+  }
+
+  it("waits for a short lock to go, then replaces the file whole", async () => {
+    dir = mkdtempSync(join(tmpdir(), "atomic-lock-"));
+    const file = join(dir, "meta.json");
+    writeFileSync(file, "old");
+    const { released } = await holdOpen(file, 300);
+    writeFileAtomic(file, "new", "utf8", { retryMs: 5_000 });
+    await released;
+    expect(readFileSync(file, "utf8")).toBe("new");
+    expect(readdirSync(dir)).toEqual(["meta.json"]);
+  });
+
+  it("gives up on a lock that outlasts the retries, keeping the old file and no temp file", async () => {
+    dir = mkdtempSync(join(tmpdir(), "atomic-lock-"));
+    const file = join(dir, "meta.json");
+    writeFileSync(file, "old");
+    const { released } = await holdOpen(file, 1_500);
+    expect(() => writeFileAtomic(file, "new", "utf8", { retryMs: 200 })).toThrow(/EPERM|EACCES|EBUSY/);
+    await released;
+    expect(readFileSync(file, "utf8")).toBe("old");
+    expect(readdirSync(dir)).toEqual(["meta.json"]);
+  });
+});
