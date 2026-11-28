@@ -24,8 +24,8 @@ export type ParsedAnswer = {
   warnings: string[];
 };
 
-/** The profile block's key; answers made before the rename to RawJobs use jobhunter_profile. */
-const PROFILE_KEYS = ["rawjobs_profile", "jobhunter_profile"];
+/** The profile block's key. */
+const PROFILE_KEYS = ["rawjobs_profile"];
 const profileKeyIn = (text: string) => PROFILE_KEYS.find((k) => text.includes(k));
 
 const strList = (v: unknown, max = 40): string[] =>

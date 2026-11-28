@@ -1,5 +1,5 @@
 import { parseArgs } from "node:util";
-import { connectors, detectCompany, loadConfig, isLegacyConfig } from "@rawjobs/core";
+import { connectors, detectCompany, loadConfig } from "@rawjobs/core";
 
 export function cmdDetect(urls: string[]): number {
   if (!urls.length) {
@@ -31,7 +31,6 @@ export function cmdValidate(args: string[]): number {
   for (const c of config.companies) byAts.set(c.ats, (byAts.get(c.ats) ?? 0) + 1);
   const unsupported = config.companies.filter((c) => !connectors[c.ats]);
   console.log(`✓ ${path} is valid`);
-  if (isLegacyConfig(path)) console.log(`  note: rename it to ${path.replace("jobhunter.config", "rawjobs.config")}; the old name still works for now`);
   console.log(`  profile: ${config.profile.name}, min_score ${config.profile.min_score}, ${Object.keys(config.profile.keywords).length} keywords`);
   console.log(`  companies: ${config.companies.length} (${[...byAts].map(([a, n]) => `${a} ${n}`).join(", ")})`);
   if (unsupported.length) {
