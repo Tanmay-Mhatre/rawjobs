@@ -51,6 +51,9 @@ jobs:
       - run: pnpm bundle --version "${TAG#v}"
       # Unsigned here: this job ran `pnpm install`, so the key never comes near it (see sign).
       - name: Release files
+        # The Node hashes in latest.json come from a SHASUMS256.txt that must be signed by a Node releaser.
+        env:
+          RAWJOBS_REQUIRE_NODE_SIG: "1"
         run: |
           git tag -l --format='%(contents)' "$TAG" > "$RUNNER_TEMP/notes.md"
           pnpm release:files --unsigned --version "${TAG#v}" --notes-file "$RUNNER_TEMP/notes.md"
