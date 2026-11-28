@@ -3,7 +3,7 @@ import { createServer, request, type IncomingMessage, type Server } from "node:h
 import type { AddressInfo } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { type ReminderDeps, reminderMessage, type WatchDeps } from "@rawjobs/core";
 import { makeZip } from "../../core/test/fixtures/linkedin/make-zip";
 import { createApi } from "../src/api";
@@ -212,12 +212,10 @@ describe("the network API", () => {
     const { port } = await start();
     expect((await call(port, "DELETE", "/api/network", undefined, { origin: "https://evil.example" })).status).toBe(403);
   });
-  async function runTimers() {
+  function runTimers() {
     const fns = pending;
     pending = [];
     for (const fn of fns) fn();
-    // The poll reads the folder and the ZIP asynchronously.
-    await new Promise((r) => setTimeout(r, 200));
   }
 
   it("watches Downloads: start, state in GET, import from the folder, and stop", async () => {
@@ -233,7 +231,9 @@ describe("the network API", () => {
     expect(existsSync(join(home, "profile/network-watch.json"))).toBe(true);
 
     writeFileSync(join(downloads, "Basic_LinkedInDataExport_10-20-2026.zip"), makeZip([{ name: "Connections.csv", data: CONNECTIONS }]));
-    await runTimers();
+    runTimers();
+    // The poll reads the folder and the ZIP asynchronously: wait for the import it starts.
+    await vi.waitFor(async () => expect((await call(port, "GET", "/api/network")).json().status.connected).toBe(true), { timeout: 5_000 });
     const after = (await call(port, "GET", "/api/network")).json().status;
     expect(after).toMatchObject({ connected: true, source: "downloads", fileName: "Basic_LinkedInDataExport_10-20-2026.zip", watch: null });
     expect(logs.some((l) => l.startsWith("Found Basic_LinkedInDataExport_10-20-2026.zip ("))).toBe(true);

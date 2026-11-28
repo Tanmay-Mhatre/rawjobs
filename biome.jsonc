@@ -14,6 +14,11 @@
     "rules": {
       "preset": "recommended",
       "style": {
+        // esbuild (cli.mjs) can't tree-shake the named `z`: it pulls every Zod locale (~400 KB) into the bundle.
+        "noRestrictedImports": {
+          "level": "error",
+          "options": { "paths": { "zod": { "importNames": ["z"], "message": "Use import * as z from \"zod\": the named z pulls every Zod locale into cli.mjs." } } }
+        },
         // With noUncheckedIndexedAccess, `list[0]!` after a length check is the idiom, not a smell.
         "noNonNullAssertion": "off",
         "useTemplate": "off"

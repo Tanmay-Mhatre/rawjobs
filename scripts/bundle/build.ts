@@ -59,8 +59,9 @@ const server = await build({
   platform: "node",
   format: "esm",
   target: "node22",
-  // Tells the code it runs from the bundle (packages/core/src/runtime.ts), and which version it is (http.ts).
-  define: { __RAWJOBS_BUNDLE__: "true", __RAWJOBS_VERSION__: JSON.stringify(version) },
+  // Tells the code it runs from the bundle (packages/core/src/runtime.ts). Its version comes from the
+  // package.json written next to it below.
+  define: { __RAWJOBS_BUNDLE__: "true" },
   // Some dependencies still call require(); give the ES module one.
   banner: { js: 'import { createRequire as __rawjobsRequire } from "node:module"; const require = __rawjobsRequire(import.meta.url);' },
   legalComments: "linked",
@@ -93,7 +94,12 @@ writeFileSync(
 `,
 );
 
-const mb = (statSync(join(out, "cli.mjs")).size / 1e6).toFixed(1);
+const cliBytes = statSync(join(out, "cli.mjs")).size;
+// 2.6 MB today (undici, for the private-address guard, is 1 MB of it). A jump usually means a whole
+// library came in by mistake, such as `import { z } from "zod"` (every Zod locale): look at what grew
+// before raising the limit.
+if (!values.broken && cliBytes > 3e6) fail(`cli.mjs is ${(cliBytes / 1e6).toFixed(2)} MB, over the 3 MB limit: something pulled in more than it needs.`);
+const mb = (cliBytes / 1e6).toFixed(1);
 console.log(`Bundled RawJobs ${version} in ${Date.now() - started} ms: ${out} (cli.mjs ${mb} MB)`);
 
 if (values.try) tryInstall(resolve(values.try));

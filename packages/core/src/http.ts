@@ -1,11 +1,10 @@
 export { HostSkippedError, HttpError, NotModifiedError, StoppedError, TooLargeError } from "./http-error";
 import { HostSkippedError, HttpError, NotModifiedError, StoppedError, TooLargeError } from "./http-error";
 import { allowPrivate, privateAddressReason, privateHost, publicOnlyAgent } from "./network-guard";
+import { APP_VERSION } from "./runtime";
 
-/** Set by the bundle build (scripts/bundle/build.ts) to the release's version. */
-declare const __RAWJOBS_VERSION__: string | undefined;
-/** This version, for the User-Agent: the bundle's, or package.json's when running the sources. */
-export const VERSION = typeof __RAWJOBS_VERSION__ === "string" ? __RAWJOBS_VERSION__ : "0.6.0";
+/** This version, for the User-Agent: the same package.json version Settings → About shows. */
+export const VERSION = APP_VERSION;
 
 export function defaultUserAgent(): string {
   const repo = process.env.GITHUB_REPOSITORY;

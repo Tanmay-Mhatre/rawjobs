@@ -5,10 +5,10 @@
 #      Note its expiry date. When it expires the dispatches fail (HTTP 401) and Data · health opens
 #      a "Scheduler: no runs started" issue; GitHub's own crons keep running the workflows, late.
 #   2. cd services/scheduler
-#      npx wrangler@4.151.1 secret put GITHUB_TOKEN
-#      npx wrangler@4.151.1 deploy
-#   3. Delete the old Worker: npx wrangler@4.151.1 delete --name rawjobs-feed-trigger
-# Test once: npx wrangler@4.151.1 dev --test-scheduled, then
+#      pnpm exec wrangler secret put GITHUB_TOKEN
+#      pnpm exec wrangler deploy
+#   3. Delete the old Worker: pnpm exec wrangler delete --name rawjobs-feed-trigger
+# Test once: pnpm exec wrangler dev --test-scheduled, then
 #   curl "http://localhost:8787/__scheduled?cron=*/5+*+*+*+*"
 # (this really dispatches whatever is due in the last 5 minutes by the clock; usually nothing).
 name = "rawjobs-scheduler"
