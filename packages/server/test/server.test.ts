@@ -374,10 +374,13 @@ console.log(JSON.stringify({ type: "done", scope: args[args.indexOf("--scope") +
     expect(JSON.parse((await call(port, "GET", "/api/health")).text)).toMatchObject({ scanning: false, background: true, scanOrigin: "scheduled" });
 
     // A tab follows it from the start, then each new line, until it lets go of the lock.
-    const follow = call(port, "GET", "/api/run");
-    await new Promise((r) => setTimeout(r, 300));
+    // Each tick reads the file before it checks the lock, so the last line still goes out after the
+    // lock is gone: once the tab has its first lines, nothing needs a wait.
+    let following!: () => void;
+    const attached = new Promise<void>((r) => (following = r));
+    const follow = call(port, "GET", "/api/run", undefined, () => following());
+    await attached;
     appendFileSync(join(dataDir, "scan-live.ndjson"), `${JSON.stringify({ type: "done", stage: "quick" })}\n`);
-    await new Promise((r) => setTimeout(r, 1200));
     rmSync(join(dataDir, "scan.lock"));
     const followed = await follow;
     expect(followed.headers["x-rawjobs-scope"]).toBe("mine");
