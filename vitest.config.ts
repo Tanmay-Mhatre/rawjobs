@@ -21,12 +21,12 @@ export default defineConfig({
       // Floors, not goals: just under the numbers when they were set. A pull request that adds tests
       // raises them (pnpm test:coverage --coverage.thresholds.autoUpdate); none lowers them.
       thresholds: {
-        lines: 82,
-        branches: 71,
+        lines: 83,
+        branches: 72,
         "packages/core/src/**": { lines: 94, branches: 80 },
-        "packages/server/src/**": { lines: 69, branches: 61 },
+        "packages/server/src/**": { lines: 76, branches: 68 },
         "packages/cli/src/**": { lines: 11, branches: 9 },
-        "apps/web/src/**": { lines: 76, branches: 66 },
+        "apps/web/src/**": { lines: 77, branches: 67 },
       },
     },
   },
