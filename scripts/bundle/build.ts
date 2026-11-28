@@ -4,6 +4,7 @@ import { dirname, join, resolve } from "node:path";
 import { parseArgs } from "node:util";
 import { build } from "esbuild";
 import { changelogFromTags, readTags } from "../release/changelog";
+import { thirdPartyNotices } from "./notices";
 import { entryBytes, nodeOnlyInEntry } from "./web-check";
 
 /**
@@ -13,6 +14,7 @@ import { entryBytes, nodeOnlyInEntry } from "./web-check";
  *   bin/           the launchers (copied into the install's own bin/)
  *   package.json   the version
  *   changelog.json every release's notes up to this version, from the git tags (scripts/release/changelog.ts)
+ *   THIRD_PARTY_NOTICES.txt  the licenses of the third-party code and fonts inside (scripts/bundle/notices.ts)
  *
  *   pnpm bundle                 → dist/bundle/rawjobs-<version>/
  *   pnpm bundle --skip-web      reuse apps/web/dist as it is
@@ -50,7 +52,7 @@ rmSync(out, { recursive: true, force: true });
 mkdirSync(out, { recursive: true });
 
 const started = Date.now();
-await build({
+const server = await build({
   entryPoints: [join(root, "packages/cli/src/index.ts")],
   outfile: join(out, "cli.mjs"),
   bundle: true,
@@ -63,15 +65,27 @@ await build({
   banner: { js: 'import { createRequire as __rawjobsRequire } from "node:module"; const require = __rawjobsRequire(import.meta.url);' },
   legalComments: "linked",
   logLevel: "warning",
+  // Which files went in: the third-party notices below.
+  metafile: true,
 });
 
 // Update tests: a version that fails at once, so the update has to go back.
 if (values.broken) writeFileSync(join(out, "cli.mjs"), 'console.error("This test build never starts."); process.exit(3);\n');
 cpSync(join(root, "apps/web/dist"), join(out, "web"), { recursive: true });
+// The web build's list of bundled files (apps/web/vite.config.ts); only the notices need it.
+const webModulesFile = join(out, "web", "third-party-modules.json");
+if (!existsSync(webModulesFile)) fail("apps/web/dist/third-party-modules.json is missing: run without --skip-web.");
+const webModules = JSON.parse(readFileSync(webModulesFile, "utf8")) as string[];
+rmSync(webModulesFile);
 cpSync(join(root, "packaging/bin"), join(out, "bin"), { recursive: true });
 chmodSync(join(out, "bin/rawjobs"), 0o755);
 writeFileSync(join(out, "package.json"), `${JSON.stringify({ name: "rawjobs", version, type: "module", license: "MIT" }, null, 2)}\n`);
 copyFileSync(join(root, "LICENSE"), join(out, "LICENSE"));
+const notices = thirdPartyNotices(
+  [...Object.keys(server.metafile.inputs).map((f) => join(root, f)), ...webModules],
+  [{ title: "Geist and Geist Mono fonts (OFL-1.1)", text: readFileSync(join(root, "apps/web/src/design/fonts/OFL.txt"), "utf8") }],
+);
+writeFileSync(join(out, "THIRD_PARTY_NOTICES.txt"), notices.text);
 // What's new in each version, for the dashboard (a checkout without tags ships an empty one).
 writeFileSync(
   join(out, "changelog.json"),
