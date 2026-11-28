@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { changelogFromTags } from "./changelog";
+import { readFileSync } from "node:fs";
+import { PACKAGE_FILES, withVersion } from "./bump";
 import { draft, issueBody, nextVersion, releaseNoteLines } from "./draft";
 
 describe("the bundled changelog", () => {
@@ -62,5 +64,29 @@ describe("drafting a release", () => {
     expect(issue).toMatch(/git tag -a v0\.5\.4 -F - <<'EOF'/);
     expect(issue).toMatch(/#4 Faster scans \(no release note/);
     expect(issue).toMatch(/#3 Bump vitest \(dependency update\)/);
+  });
+});
+
+describe("release:bump", () => {
+  const pkg = '{\n  "name": "rawjobs",\n  "version": "0.6.0",\n  "devDependencies": {\n    "x": "1.0.0"\n  }\n}\n';
+
+  it("sets the top-level version and leaves the rest byte for byte", () => {
+    expect(withVersion(pkg, "0.7.19")).toBe(pkg.replace('"0.6.0"', '"0.7.19"'));
+  });
+
+  it("refuses something that isn't X.Y.Z, and a file without a version", () => {
+    expect(() => withVersion(pkg, "v0.7")).toThrow(/Not a version/);
+    expect(() => withVersion('{\n  "name": "x"\n}\n', "0.7.19")).toThrow(/No top-level/);
+  });
+
+  it("covers every package.json in the repo", async () => {
+    const { readdirSync, existsSync } = await import("node:fs");
+    const root = new URL("../..", import.meta.url);
+    const found = ["apps", "packages"].flatMap((d) =>
+      readdirSync(new URL(`${d}/`, root))
+        .filter((n) => existsSync(new URL(`${d}/${n}/package.json`, root)) && JSON.parse(readFileSync(new URL(`${d}/${n}/package.json`, root), "utf8")).version !== undefined)
+        .map((n) => `${d}/${n}/package.json`),
+    );
+    expect(PACKAGE_FILES.slice(1).sort()).toEqual(found.sort());
   });
 });
