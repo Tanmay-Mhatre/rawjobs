@@ -53,8 +53,6 @@ export type ScheduleStatus = {
 /** What the scheduled scan is called in each operating system's scheduler. */
 export type SchedulerNames = { task: string; label: string; unit: string };
 export const SCHEDULER_NAMES: SchedulerNames = { task: "RawJobs Scan", label: "com.rawjobs.scan", unit: "rawjobs-scan" };
-/** The names from before the rename to RawJobs: still found by status and "run now", removed on save or turn off. */
-export const LEGACY_SCHEDULER_NAMES: SchedulerNames = { task: "JobHunter Scan", label: "com.jobhunter.scan", unit: "jobhunter-scan" };
 const SETTINGS_FILE = "schedule.json";
 const RUNS_FILE = "schedule-runs.json";
 const KEEP_RUNS = 30;
@@ -368,20 +366,15 @@ function installedAs(ctx: ScheduleContext, platform: NodeJS.Platform, n: Schedul
   return { installed: false };
 }
 
-/** The names the schedule is installed under: the current ones, or the pre-rename ones until it's saved again. */
+/** The names the schedule is installed under. */
 function activeNames(ctx: ScheduleContext, platform: NodeJS.Platform): { names: SchedulerNames; installed: boolean; nextRun?: string } {
-  const current = installedAs(ctx, platform, SCHEDULER_NAMES);
-  if (current.installed) return { names: SCHEDULER_NAMES, ...current };
-  const legacy = installedAs(ctx, platform, LEGACY_SCHEDULER_NAMES);
-  return legacy.installed ? { names: LEGACY_SCHEDULER_NAMES, ...legacy } : { names: SCHEDULER_NAMES, ...current };
+  return { names: SCHEDULER_NAMES, ...installedAs(ctx, platform, SCHEDULER_NAMES) };
 }
 
 export function installSchedule(ctx: ScheduleContext, input: Partial<ScheduleSettings>): ScheduleSettings {
   const s = validateSchedule(input);
   const platform = ctx.platform ?? process.platform;
   installJob(ctx, platform, scanJob(ctx, s, SCHEDULER_NAMES), "Scheduled scans");
-  // A schedule saved before the rename would otherwise scan twice.
-  removeFrom(ctx, platform, LEGACY_SCHEDULER_NAMES);
   mkdirSync(ctx.dataDir, { recursive: true });
   writeFileAtomic(join(ctx.dataDir, SETTINGS_FILE), JSON.stringify(s, null, 1));
   return s;
@@ -390,7 +383,6 @@ export function installSchedule(ctx: ScheduleContext, input: Partial<ScheduleSet
 export function removeSchedule(ctx: ScheduleContext): void {
   const platform = ctx.platform ?? process.platform;
   removeFrom(ctx, platform, SCHEDULER_NAMES);
-  removeFrom(ctx, platform, LEGACY_SCHEDULER_NAMES);
   rmSync(join(ctx.dataDir, SETTINGS_FILE), { force: true });
 }
 

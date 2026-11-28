@@ -22,7 +22,6 @@
     "site:og": "tsx scripts/site/og.ts",
     "site:dev": "node apps/site/build.mjs && npx wrangler@4.151.1 dev --config apps/site/wrangler.toml",
     "rawjobs": "tsx packages/cli/src/index.ts",
-    "jobhunter": "tsx packages/cli/src/index.ts",
     "hooks:install": "git config core.hooksPath scripts/hooks",
     "test": "vitest run",
     "test:watch": "vitest",

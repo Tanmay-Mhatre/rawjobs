@@ -11,8 +11,6 @@ rawjobs.config.local.yaml
 rawjobs.config.local.backup.yaml
 rawjobs.config.yaml
 # The same, under the names from before the rename to RawJobs
-jobhunter.config.local.yaml
-jobhunter.config.yaml
 # Your master resume (saved by setup). Personal: never commit it.
 profile/
 

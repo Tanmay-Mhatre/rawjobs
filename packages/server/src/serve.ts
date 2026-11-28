@@ -46,7 +46,7 @@ export async function serve(args: string[]): Promise<number> {
   const dataDir = defaultDataDir(home);
   mkdirSync(dataDir, { recursive: true });
   if (BUNDLED) makeHomePrivate(home);
-  if (process.env.RAWJOBS_DATA_PUBLIC_KEY || process.env.JOBHUNTER_DATA_PUBLIC_KEY) console.log("Using a custom data signing key (RAWJOBS_DATA_PUBLIC_KEY).");
+  if (process.env.RAWJOBS_DATA_PUBLIC_KEY) console.log("Using a custom data signing key (RAWJOBS_DATA_PUBLIC_KEY).");
   if (!existsSync(`${WEB_DIR}/index.html`)) {
     console.error(
       BUNDLED

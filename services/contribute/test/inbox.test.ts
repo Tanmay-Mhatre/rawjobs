@@ -108,13 +108,13 @@ describe("contribution inbox", () => {
 
   it("keeps the client field only when it is the app name and version", async () => {
     const env = fakeEnv();
-    await post(env, "/v1/contributions", { client: "job-hunter/0.1.0", boards: [{ ats: "lever", slug: "a" }] });
-    await post(env, "/v1/contributions", { client: "job-hunter jane@example.com", boards: [{ ats: "lever", slug: "b" }] });
+    await post(env, "/v1/contributions", { client: "rawjobs/0.1.0", boards: [{ ats: "lever", slug: "a" }] });
+    await post(env, "/v1/contributions", { client: "rawjobs jane@example.com", boards: [{ ats: "lever", slug: "b" }] });
     await post(env, "/v1/contributions", { client: { id: 1 }, boards: [{ ats: "lever", slug: "c" }] });
     await post(env, "/v1/contributions", { client: "job-hunter", boards: [{ ats: "lever", slug: "d" }] });
     await post(env, "/v1/contributions", { client: "rawjobs/0.2.0", boards: [{ ats: "lever", slug: "e" }] });
     const bySlug = Object.fromEntries(contributions(env).map((s) => [(s.boards as { slug: string }[])[0]!.slug, s.client]));
-    expect(bySlug).toEqual({ a: "job-hunter/0.1.0", b: undefined, c: undefined, d: "job-hunter", e: "rawjobs/0.2.0" });
+    expect(bySlug).toEqual({ a: "rawjobs/0.1.0", b: undefined, c: undefined, d: undefined, e: "rawjobs/0.2.0" });
   });
 
   it("skips boards already received this week", async () => {

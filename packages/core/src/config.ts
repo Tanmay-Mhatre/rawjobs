@@ -1,5 +1,5 @@
 import { existsSync, readFileSync } from "node:fs";
-import { basename, resolve } from "node:path";
+import { resolve } from "node:path";
 import { parse as parseYaml } from "yaml";
 import { z } from "zod";
 import { ConfigSchema, type Config } from "./schema";
@@ -7,18 +7,12 @@ import { rawjobsHome } from "./paths";
 
 /** Looked up in this order when no --config is given. The .local file is gitignored. */
 export const CONFIG_CANDIDATES = ["rawjobs.config.local.yaml", "rawjobs.config.yaml"];
-/** The names from before the rename to RawJobs, still read when no rawjobs.config file exists. */
-export const LEGACY_CONFIG_CANDIDATES = ["jobhunter.config.local.yaml", "jobhunter.config.yaml"];
-
-/** A config under its pre-rename name: worth a hint to rename it. */
-export const isLegacyConfig = (path: string) => LEGACY_CONFIG_CANDIDATES.includes(basename(path));
-
 export class ConfigError extends Error {
   override name = "ConfigError";
 }
 
 export function findConfigPath(cwd = rawjobsHome()): string {
-  for (const name of [...CONFIG_CANDIDATES, ...LEGACY_CONFIG_CANDIDATES]) {
+  for (const name of CONFIG_CANDIDATES) {
     const p = resolve(cwd, name);
     if (existsSync(p)) return p;
   }

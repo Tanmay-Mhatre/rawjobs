@@ -14,7 +14,7 @@
         var theme = null;
         var contrast = null;
         try {
-          theme = localStorage.getItem("rawjobs.theme") || localStorage.getItem("jobhunter.theme");
+          theme = localStorage.getItem("rawjobs.theme");
           contrast = localStorage.getItem("rawjobs.contrast");
         } catch (e) {}
         var dark = theme === "dark" || (theme !== "light" && matchMedia("(prefers-color-scheme: dark)").matches);

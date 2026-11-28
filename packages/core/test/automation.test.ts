@@ -162,8 +162,6 @@ describe("schedule", () => {
     installSchedule({ repoRoot: repo, dataDir, exec, platform: "win32" }, { times: ["08:00", "20:00"], scope: "all" });
     const script = scripts[0]!;
     expect(script).toContain("Register-ScheduledTask -TaskName 'RawJobs Scan'");
-    // The task from before the rename goes, so nothing scans twice.
-    expect(scripts[1]).toContain("Unregister-ScheduledTask -TaskName 'JobHunter Scan'");
     expect(script).toContain("-StartWhenAvailable");
     // A scan never wakes a sleeping laptop.
     expect(script).not.toContain("WakeToRun");
@@ -184,11 +182,11 @@ describe("schedule", () => {
     // An installed copy keeps your config elsewhere: the scan runs there, the code stays where it is.
     const mine = join(tmpdir(), "My RawJobs");
     installSchedule({ repoRoot: repo, workDir: mine, dataDir, exec, platform: "win32" }, { times: ["08:00"], scope: "mine" });
-    expect(scripts.at(-2)).toContain(`-WorkingDirectory '${mine}'`);
-    expect(scripts.at(-2)).toContain(join(repo, "packages/cli/src/index.ts").replace(/'/g, "''"));
+    expect(scripts.at(-1)).toContain(`-WorkingDirectory '${mine}'`);
+    expect(scripts.at(-1)).toContain(join(repo, "packages/cli/src/index.ts").replace(/'/g, "''"));
 
     removeSchedule({ repoRoot: repo, dataDir, exec, platform: "win32" });
-    expect(scripts.slice(-2)).toEqual([expect.stringContaining("-TaskName 'RawJobs Scan'"), expect.stringContaining("-TaskName 'JobHunter Scan'")]);
+    expect(scripts.at(-1)).toContain("-TaskName 'RawJobs Scan'");
     expect(existsSync(join(dataDir, "schedule.json"))).toBe(false);
   });
 
@@ -252,31 +250,6 @@ describe("schedule", () => {
     const n = calls.length;
     expect(refreshSchedules(ctx)).toBe(true);
     expect(calls).toHaveLength(n);
-  });
-
-  it("keeps a schedule saved before the rename working until it's saved again, then replaces it", () => {
-    const home = mkdtempSync(join(tmpdir(), "jh-home-"));
-    const dataDir = mkdtempSync(join(tmpdir(), "jh-sched-"));
-    const calls: string[][] = [];
-    const exec = (cmd: string, args: string[]) => {
-      calls.push([cmd, ...args]);
-      return { status: 0, stdout: "", stderr: "" };
-    };
-    const ctx = { repoRoot: "/repo", workDir: home, dataDir, exec, platform: "darwin" as const, home };
-    const legacy = join(home, "Library/LaunchAgents/com.jobhunter.scan.plist");
-    mkdirSync(join(home, "Library/LaunchAgents"), { recursive: true });
-    writeFileSync(legacy, "<plist/>");
-    writeFileSync(join(dataDir, "schedule.json"), JSON.stringify({ times: ["07:30"], scope: "mine" }));
-
-    expect(scheduleStatus(ctx).installed).toBe(true);
-    runScheduleNow(ctx);
-    expect(calls.at(-1)).toEqual(["launchctl", "start", "com.jobhunter.scan"]);
-
-    installSchedule(ctx, { times: ["07:30"], scope: "mine" });
-    expect(existsSync(legacy)).toBe(false);
-    expect(existsSync(join(home, "Library/LaunchAgents/com.rawjobs.scan.plist"))).toBe(true);
-    runScheduleNow(ctx);
-    expect(calls.at(-1)).toEqual(["launchctl", "start", "com.rawjobs.scan"]);
   });
 
   it("logs scheduled runs, newest first", () => {

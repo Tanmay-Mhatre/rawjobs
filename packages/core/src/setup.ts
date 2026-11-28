@@ -2,7 +2,7 @@ import { existsSync, readFileSync, renameSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { parse as parseYaml } from "yaml";
 import { z } from "zod";
-import { CONFIG_CANDIDATES, LEGACY_CONFIG_CANDIDATES } from "./config";
+import { CONFIG_CANDIDATES } from "./config";
 import { careersUrl, companyKey, detectCompany, getConnector, guessName, type DetectResult } from "./connectors";
 import { isPhenomSite } from "./connectors/phenom";
 import { isRadancySite } from "./connectors/radancy";
@@ -23,11 +23,9 @@ export type { CompanyCheck, SaveResult, SetupStatus } from "./protocol";
 /** The user's own config. The shipped rawjobs.config.example.yaml is only an example. */
 export const PERSONAL_CONFIG = CONFIG_CANDIDATES[0]!;
 
-/** The personal config file: rawjobs.config.local.yaml, or the pre-rename jobhunter one while that's the only one there. */
+/** The personal config file: rawjobs.config.local.yaml. */
 export function personalConfigPath(cwd = rawjobsHome()): string {
-  const path = resolve(cwd, PERSONAL_CONFIG);
-  const legacy = resolve(cwd, LEGACY_CONFIG_CANDIDATES[0]!);
-  return !existsSync(path) && existsSync(legacy) ? legacy : path;
+  return resolve(cwd, PERSONAL_CONFIG);
 }
 
 export function setupStatus(cwd = rawjobsHome(), dataDir = defaultDataDir(cwd)): SetupStatus {

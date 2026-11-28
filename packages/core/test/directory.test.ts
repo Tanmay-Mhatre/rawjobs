@@ -22,16 +22,13 @@ afterEach(() => {
   delete process.env.RAWJOBS_DIRECTORY_URL;
   delete process.env.RAWJOBS_CONTRIBUTE_URL;
   delete process.env.JOBHUNTER_DIRECTORY_URL;
-  delete process.env.JOBHUNTER_CONTRIBUTE_URL;
 });
 
 describe("directory settings", () => {
-  it("reads RAWJOBS_ first, then the JOBHUNTER_ names from before the rename", () => {
+  it("ignores the JOBHUNTER_ names from before the rename", () => {
     delete process.env.RAWJOBS_DIRECTORY_URL;
     process.env.JOBHUNTER_DIRECTORY_URL = "https://old.example.test/latest/";
-    expect(directoryUrl()).toBe("https://old.example.test/latest");
-    process.env.JOBHUNTER_CONTRIBUTE_URL = "https://old-inbox.example.test";
-    expect(contributeUrl()).toBe("https://inbox.example.test");
+    expect(directoryUrl()).not.toContain("old.example.test");
   });
 });
 

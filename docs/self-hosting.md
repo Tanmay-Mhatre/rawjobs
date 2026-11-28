@@ -11,7 +11,7 @@ central inbox, like any other install. You only need the steps below if you want
 ### Point the app at your own data
 
 These environment variables are read by the CLI and the local server (`packages/core/src/directory.ts`
-unless noted; the older `JOBHUNTER_` names still work for the URLs, the key and `RAWJOBS_DATA`):
+unless noted):
 
 | Variable | Default | What it is |
 |---|---|---|

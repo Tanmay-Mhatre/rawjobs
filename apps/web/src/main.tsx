@@ -6,10 +6,7 @@ import { ErrorBoundary } from "./components/ErrorBoundary";
 import { CardPage } from "./components/referral/OutreachCard";
 import "./index.css";
 import { canRunLocally } from "./lib/data";
-import { migrateLegacyStorage } from "./lib/storage";
 import { restoreFromDisk } from "./lib/tracking";
-
-migrateLegacyStorage();
 
 // The local server's service worker keeps one page: "RawJobs isn't running", shown when the
 // dashboard's address doesn't answer (packages/server/src/pages.ts). Not in dev or the hosted copy.

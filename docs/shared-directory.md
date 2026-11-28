@@ -44,7 +44,7 @@ user is ever uploaded.
 | Visa sponsors | `scripts/catalog/visa.ts`, `lib/visa.ts`, `packages/core/src/catalog/visa.ts` | Government lists of employers that may sponsor work visas, matched to directory companies by name. See [Visa sponsors](#visa-sponsors). |
 | Public directory repo | `Tanmay-Mhatre/rawjobs-directory` | Releases (the files apps download), `contributions.json`, `coverage.md`, attribution. |
 
-Overrides: `RAWJOBS_DIRECTORY_URL` (download base) and `RAWJOBS_CONTRIBUTE_URL` (inbox) point an install at your own copies (the older `JOBHUNTER_` names still work). See [self-hosting.md](self-hosting.md).
+Overrides: `RAWJOBS_DIRECTORY_URL` (download base) and `RAWJOBS_CONTRIBUTE_URL` (inbox) point an install at your own copies. See [self-hosting.md](self-hosting.md).
 
 ## Coverage
 
@@ -138,7 +138,7 @@ an industry as their monthly recheck keeps titles. The publish log has the curre
 
 Shared (on by default, off with `directory.share_additions: false` or Settings → Data & privacy → Sharing): hiring
 system, board slug (plus Workday shard/site, EU region), company name, and the app name
-(`rawjobs`, optionally `/version`; older apps send `job-hunter`; any other value is dropped).
+(`rawjobs`, optionally `/version`; any other value is dropped).
 Confirmed careers-link moves (same switch): the company name and its old and new board, sent with
 the next directory update. A move names a company the user follows, which additions don't.
 Never shared: profile, resume, searches, statuses, which jobs you open. The inbox uses the IP
